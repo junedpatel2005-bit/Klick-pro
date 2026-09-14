@@ -17,6 +17,34 @@ const bodySchema = z.discriminatedUnion("action", [
     description: z.string().trim().max(2000).nullish(),
     deadline: z.string().datetime().nullish(),
   }),
+  z.object({
+    action: z.literal("create-milestones"),
+    projectId: z.number().int().positive(),
+    milestones: z
+      .array(
+        z.object({
+          title: z.string().trim().min(1).max(160),
+          amount: z.number().int().min(0),
+          description: z.string().trim().max(2000).nullish(),
+          deadline: z.string().datetime().nullish(),
+        }),
+      )
+      .min(1)
+      .max(50),
+  }),
+  z.object({
+    action: z.literal("update-milestone"),
+    projectId: z.number().int().positive(),
+    milestoneId: z.number().int().positive(),
+    title: z.string().trim().min(1).max(160),
+    amount: z.number().int().min(0),
+    description: z.string().trim().max(2000).nullish(),
+  }),
+  z.object({
+    action: z.literal("delete-milestone"),
+    projectId: z.number().int().positive(),
+    milestoneId: z.number().int().positive(),
+  }),
   z.object({ action: z.literal("start-work"), projectId: z.number().int().positive() }),
   z.object({
     action: z.literal("update-progress"),
@@ -90,6 +118,9 @@ const bodySchema = z.discriminatedUnion("action", [
 
 const clientActions = new Set([
   "create-milestone",
+  "create-milestones",
+  "update-milestone",
+  "delete-milestone",
   "start-work",
   "request-revision",
   "approve-milestone",
@@ -264,20 +295,19 @@ export async function POST(request: NextRequest) {
         where: { id: project.requestId },
         select: { bidAmount: true },
       });
-      if (projectRequest?.bidAmount != null) {
-        const existingMilestones = await db.projectMilestone.aggregate({
-          where: { trackingId: project.id },
-          _sum: { amount: true },
-        });
-        const existingTotal = existingMilestones._sum.amount ?? 0;
-        if (existingTotal + input.amount > projectRequest.bidAmount)
-          return NextResponse.json(
-            {
-              error: `Milestone total cannot exceed the agreed project amount of ₹${projectRequest.bidAmount.toLocaleString("en-IN")}. Remaining amount: ₹${Math.max(0, projectRequest.bidAmount - existingTotal).toLocaleString("en-IN")}.`,
-            },
-            { status: 400 },
-          );
-      }
+      const existingMilestones = await db.projectMilestone.aggregate({
+        where: { trackingId: project.id },
+        _sum: { amount: true },
+      });
+      const existingTotal = existingMilestones._sum.amount ?? 0;
+      const budgetCeiling = Math.max(projectRequest?.bidAmount ?? 0, existingTotal);
+      if (budgetCeiling > 0 && existingTotal + input.amount > budgetCeiling)
+        return NextResponse.json(
+          {
+            error: `Milestone total cannot exceed the project budget of ₹${budgetCeiling.toLocaleString("en-IN")}. Remaining amount: ₹${Math.max(0, budgetCeiling - existingTotal).toLocaleString("en-IN")}.`,
+          },
+          { status: 400 },
+        );
       const jobDates = await db.clientJob.findUnique({
         where: { id: project.jobId },
         select: { title: true, jobDate: true, deadline: true },
@@ -318,6 +348,139 @@ export async function POST(request: NextRequest) {
       await event("MILESTONE_CREATED", `Milestone created · ${jobTitle}`, input.title, {
         milestoneId: milestone.id,
       });
+    }
+    if (input.action === "create-milestones") {
+      const projectRequest = await db.projectRequest.findUnique({
+        where: { id: project.requestId },
+        select: { bidAmount: true },
+      });
+      const totalNewAmount = input.milestones.reduce((acc, m) => acc + m.amount, 0);
+      const existingMilestones = await db.projectMilestone.aggregate({
+        where: { trackingId: project.id },
+        _sum: { amount: true },
+      });
+      const existingTotal = existingMilestones._sum.amount ?? 0;
+      const budgetCeiling = Math.max(projectRequest?.bidAmount ?? 0, existingTotal);
+      if (budgetCeiling > 0 && existingTotal + totalNewAmount > budgetCeiling)
+        return NextResponse.json(
+          {
+            error: `Milestones total cannot exceed the project amount of ₹${budgetCeiling.toLocaleString("en-IN")}. Remaining amount: ₹${Math.max(0, budgetCeiling - existingTotal).toLocaleString("en-IN")}.`,
+          },
+          { status: 400 },
+        );
+      const jobDates = await db.clientJob.findUnique({
+        where: { id: project.jobId },
+        select: { title: true, jobDate: true, deadline: true },
+      });
+      for (const m of input.milestones) {
+        if (
+          m.deadline &&
+          jobDates &&
+          ((jobDates.jobDate && new Date(m.deadline) < jobDates.jobDate) ||
+            (jobDates.deadline && new Date(m.deadline) > jobDates.deadline))
+        )
+          return NextResponse.json(
+            { error: "Milestone date must be between the preferred job date and deadline." },
+            { status: 400 },
+          );
+      }
+      const activeCount = await db.projectMilestone.count({
+        where: {
+          trackingId: project.id,
+          status: { in: ["IN_PROGRESS", "REVISION_REQUESTED", "AWAITING_CLIENT_REVIEW"] },
+        },
+      });
+      let currentlyActive = activeCount > 0;
+      const jobTitle = jobDates?.title?.trim() || `Project #${project.id}`;
+      for (const m of input.milestones) {
+        const status = !currentlyActive ? "IN_PROGRESS" : "UPCOMING";
+        if (status === "IN_PROGRESS") currentlyActive = true;
+        const created = await db.projectMilestone.create({
+          data: {
+            trackingId: project.id,
+            clientId: project.clientId,
+            professionalId: project.professionalId,
+            title: m.title,
+            amount: m.amount,
+            description: m.description ?? null,
+            dueDate: m.deadline ? new Date(m.deadline) : null,
+            status,
+          },
+        });
+        await event("MILESTONE_CREATED", `Milestone created · ${jobTitle}`, m.title, {
+          milestoneId: created.id,
+        });
+      }
+    }
+    if (input.action === "update-milestone") {
+      const milestone = await db.projectMilestone.findUnique({
+        where: { id: input.milestoneId },
+      });
+      if (!milestone || milestone.trackingId !== project.id) {
+        return NextResponse.json({ error: "Milestone not found." }, { status: 404 });
+      }
+      if (milestone.status === "APPROVED") {
+        return NextResponse.json(
+          { error: "Approved milestones cannot be modified." },
+          { status: 400 },
+        );
+      }
+      const projectRequest = await db.projectRequest.findUnique({
+        where: { id: project.requestId },
+        select: { bidAmount: true },
+      });
+      if (projectRequest?.bidAmount != null) {
+        const allMilestones = await db.projectMilestone.findMany({
+          where: { trackingId: project.id },
+          select: { id: true, amount: true },
+        });
+        const otherTotal = allMilestones
+          .filter((m) => m.id !== input.milestoneId)
+          .reduce((sum, m) => sum + m.amount, 0);
+        if (otherTotal + input.amount > projectRequest.bidAmount) {
+          const maxAllowed = Math.max(0, projectRequest.bidAmount - otherTotal);
+          return NextResponse.json(
+            {
+              error: `Milestone total cannot exceed the agreed project amount of ₹${projectRequest.bidAmount.toLocaleString("en-IN")}. Max allowed for this milestone is ₹${maxAllowed.toLocaleString("en-IN")}.`,
+            },
+            { status: 400 },
+          );
+        }
+      }
+      await db.projectMilestone.update({
+        where: { id: input.milestoneId },
+        data: {
+          title: input.title,
+          amount: input.amount,
+          description: input.description ?? null,
+        },
+      });
+      await event(
+        "MILESTONE_UPDATED",
+        `Milestone updated · ${input.title}`,
+        input.description ?? undefined,
+        {
+          milestoneId: input.milestoneId,
+        },
+      );
+    }
+    if (input.action === "delete-milestone") {
+      const milestone = await db.projectMilestone.findUnique({
+        where: { id: input.milestoneId },
+      });
+      if (!milestone || milestone.trackingId !== project.id) {
+        return NextResponse.json({ error: "Milestone not found." }, { status: 404 });
+      }
+      if (milestone.status === "APPROVED" || milestone.status === "AWAITING_CLIENT_REVIEW") {
+        return NextResponse.json(
+          { error: "This milestone is active or approved and cannot be deleted." },
+          { status: 400 },
+        );
+      }
+      await db.projectMilestone.delete({
+        where: { id: input.milestoneId },
+      });
+      await event("MILESTONE_DELETED", `Milestone removed · ${milestone.title}`);
     }
     if (input.action === "upload-work") {
       if (!["IN_PROGRESS", "REVISION_REQUESTED"].includes(project.status))

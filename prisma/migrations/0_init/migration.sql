@@ -1,5 +1,6 @@
 -- Baseline schema initialization for Servio
 -- Creates initial enums, base tables, and core relations
+-- Columns and tables introduced by later migrations belong to those migrations.
 
 -- CreateEnums
 DO $$ BEGIN
@@ -52,8 +53,6 @@ CREATE TABLE IF NOT EXISTS "User" (
     "address" TEXT,
     "professionalCategory" TEXT,
     "professionalCity" TEXT,
-    "professionalState" TEXT,
-    "professionalDistrict" TEXT,
     "professionalSkillsJson" TEXT,
     "experienceYears" INTEGER,
     "hourlyRate" INTEGER,
@@ -82,7 +81,6 @@ CREATE TABLE IF NOT EXISTS "User" (
     "biometricType" TEXT,
     "browserNotificationsEnabled" BOOLEAN NOT NULL DEFAULT true,
     "emailNotificationsEnabled" BOOLEAN NOT NULL DEFAULT true,
-    "razorpay_account_id" TEXT,
     "emailVerifiedAt" TIMESTAMP(3),
     "phoneVerifiedAt" TIMESTAMP(3),
     "projectActivityNotificationsEnabled" BOOLEAN NOT NULL DEFAULT true,
@@ -139,8 +137,6 @@ CREATE TABLE IF NOT EXISTS "ClientJob" (
     "workMode" "JobWorkMode" NOT NULL DEFAULT 'BOTH',
     "locationLabel" TEXT,
     "locationAddress" TEXT,
-    "locationState" TEXT,
-    "locationDistrict" TEXT,
     "locationLat" DOUBLE PRECISION,
     "locationLng" DOUBLE PRECISION,
     "status" "JobStatus" NOT NULL DEFAULT 'OPEN',
@@ -148,7 +144,6 @@ CREATE TABLE IF NOT EXISTS "ClientJob" (
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "hourlyRate" INTEGER,
     "timingType" TEXT NOT NULL DEFAULT 'FIXED',
-    "paymentMethod" TEXT NOT NULL DEFAULT 'WALLET',
     CONSTRAINT "ClientJob_pkey" PRIMARY KEY ("id")
 );
 
@@ -341,6 +336,35 @@ CREATE TABLE IF NOT EXISTS "direct_hire_negotiations" (
     CONSTRAINT "direct_hire_negotiations_pkey" PRIMARY KEY ("id")
 );
 
+-- These base tables are referenced by the payout and integrity migrations.
+CREATE TABLE IF NOT EXISTS "ProjectWithdrawal" (
+    "id" SERIAL NOT NULL,
+    "professionalId" INTEGER NOT NULL,
+    "amount" INTEGER NOT NULL,
+    "currency" TEXT NOT NULL DEFAULT 'INR',
+    "destinationType" TEXT NOT NULL,
+    "destinationLabel" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "note" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ProjectWithdrawal_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE IF NOT EXISTS "ProjectReview" (
+    "id" SERIAL NOT NULL,
+    "trackingId" INTEGER NOT NULL,
+    "clientId" INTEGER NOT NULL,
+    "professionalId" INTEGER NOT NULL,
+    "rating" INTEGER NOT NULL,
+    "comment" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "professionalResponse" TEXT,
+    "professionalResponseAt" TIMESTAMP(3),
+    CONSTRAINT "ProjectReview_pkey" PRIMARY KEY ("id")
+);
+
 CREATE TABLE IF NOT EXISTS "Wallet" (
     "id" SERIAL NOT NULL,
     "userId" INTEGER NOT NULL,
@@ -380,13 +404,6 @@ CREATE TABLE IF NOT EXISTS "Payment" (
     "currency" TEXT NOT NULL DEFAULT 'INR',
     "provider" TEXT NOT NULL,
     "providerReference" TEXT,
-    "razorpay_order_id" TEXT,
-    "razorpay_payment_id" TEXT,
-    "razorpay_signature" TEXT,
-    "project_tracking_id" INTEGER,
-    "milestone_id" INTEGER,
-    "captured_at" TIMESTAMP(3),
-    "failure_reason" TEXT,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "idempotencyKey" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -394,27 +411,15 @@ CREATE TABLE IF NOT EXISTS "Payment" (
     CONSTRAINT "Payment_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS "razorpay_webhook_events" (
-    "id" SERIAL NOT NULL,
-    "event_id" TEXT NOT NULL,
-    "event_name" TEXT NOT NULL,
-    "payload_json" TEXT NOT NULL,
-    "processing_status" TEXT NOT NULL DEFAULT 'RECEIVED',
-    "processing_attempts" INTEGER NOT NULL DEFAULT 0,
-    "last_error" TEXT,
-    "received_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "processing_started_at" TIMESTAMP(3),
-    "processed_at" TIMESTAMP(3),
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "razorpay_webhook_events_pkey" PRIMARY KEY ("id")
-);
-
 -- Unique indexes
+CREATE INDEX IF NOT EXISTS "ProjectWithdrawal_professionalId_idx" ON "ProjectWithdrawal"("professionalId");
+CREATE UNIQUE INDEX IF NOT EXISTS "ProjectReview_trackingId_key" ON "ProjectReview"("trackingId");
+CREATE INDEX IF NOT EXISTS "ProjectReview_clientId_idx" ON "ProjectReview"("clientId");
+CREATE INDEX IF NOT EXISTS "ProjectReview_professionalId_idx" ON "ProjectReview"("professionalId");
 CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email");
 CREATE UNIQUE INDEX IF NOT EXISTS "User_username_key" ON "User"("username");
 CREATE UNIQUE INDEX IF NOT EXISTS "User_phone_key" ON "User"("phone");
 CREATE UNIQUE INDEX IF NOT EXISTS "User_googleId_key" ON "User"("googleId");
-CREATE UNIQUE INDEX IF NOT EXISTS "User_razorpay_account_id_key" ON "User"("razorpay_account_id");
 CREATE UNIQUE INDEX IF NOT EXISTS "ServiceCategory_name_key" ON "ServiceCategory"("name");
 CREATE UNIQUE INDEX IF NOT EXISTS "ServiceCategory_slug_key" ON "ServiceCategory"("slug");
 CREATE UNIQUE INDEX IF NOT EXISTS "FavoriteJob_userId_jobId_key" ON "FavoriteJob"("userId", "jobId");
@@ -424,8 +429,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS "WebsitePage_path_key" ON "WebsitePage"("path"
 CREATE UNIQUE INDEX IF NOT EXISTS "Wallet_userId_key" ON "Wallet"("userId");
 CREATE UNIQUE INDEX IF NOT EXISTS "WalletTransaction_idempotency_key_key" ON "WalletTransaction"("idempotency_key");
 CREATE UNIQUE INDEX IF NOT EXISTS "WalletTransaction_provider_reference_key" ON "WalletTransaction"("provider_reference");
-CREATE UNIQUE INDEX IF NOT EXISTS "Payment_razorpay_order_id_key" ON "Payment"("razorpay_order_id");
-CREATE UNIQUE INDEX IF NOT EXISTS "Payment_razorpay_payment_id_key" ON "Payment"("razorpay_payment_id");
 CREATE UNIQUE INDEX IF NOT EXISTS "Payment_idempotencyKey_key" ON "Payment"("idempotencyKey");
-CREATE UNIQUE INDEX IF NOT EXISTS "Payment_milestone_id_key" ON "Payment"("milestone_id");
-CREATE UNIQUE INDEX IF NOT EXISTS "razorpay_webhook_events_event_id_key" ON "razorpay_webhook_events"("event_id");

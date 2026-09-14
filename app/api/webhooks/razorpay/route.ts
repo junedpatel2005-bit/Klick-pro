@@ -38,37 +38,41 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid webhook payload." }, { status: 400 });
   }
 
-  const existing = await db.razorpayWebhookEvent.findUnique({
-    where: { eventId: payload.id },
-    select: { processingStatus: true, processingStartedAt: true },
-  });
-  if (existing?.processingStatus === "PROCESSED") return NextResponse.json({ received: true });
-  if (
-    existing?.processingStatus === "PROCESSING" &&
-    existing.processingStartedAt &&
-    Date.now() - existing.processingStartedAt.getTime() < 5 * 60 * 1000
-  )
-    return NextResponse.json({ received: true, processing: true });
-  if (existing?.processingStatus === "PROCESSING") {
-    await db.razorpayWebhookEvent.updateMany({
-      where: { eventId: payload.id, processingStatus: "PROCESSING" },
-      data: { processingStatus: "RECEIVED", processingStartedAt: null },
-    });
-  }
-
   try {
-    await db.$transaction(async (tx) => {
-      const event = await tx.razorpayWebhookEvent.upsert({
-        where: { eventId: payload.id },
-        create: {
+    // Persist receipt outside the processing transaction so a rollback retains a
+    // retryable event. ON CONFLICT also handles simultaneous first deliveries.
+    await db.razorpayWebhookEvent.createMany({
+      data: {
+        eventId: payload.id,
+        eventName: payload.event,
+        payloadJson: rawBody,
+        processingStatus: "RECEIVED",
+      },
+      skipDuplicates: true,
+    });
+    const existing = await db.razorpayWebhookEvent.findUnique({
+      where: { eventId: payload.id },
+      select: { processingStatus: true, processingStartedAt: true },
+    });
+    if (existing?.processingStatus === "PROCESSED") return NextResponse.json({ received: true });
+    if (
+      existing?.processingStatus === "PROCESSING" &&
+      existing.processingStartedAt &&
+      Date.now() - existing.processingStartedAt.getTime() < 5 * 60 * 1000
+    )
+      return NextResponse.json({ received: true, processing: true });
+    if (existing?.processingStatus === "PROCESSING") {
+      await db.razorpayWebhookEvent.updateMany({
+        where: {
           eventId: payload.id,
-          eventName: payload.event,
-          payloadJson: rawBody,
-          processingStatus: "RECEIVED",
+          processingStatus: "PROCESSING",
+          processingStartedAt: existing.processingStartedAt,
         },
-        update: {},
+        data: { processingStatus: "RECEIVED", processingStartedAt: null },
       });
-      if (event.processingStatus === "PROCESSED") return;
+    }
+
+    await db.$transaction(async (tx) => {
       const claim = await tx.razorpayWebhookEvent.updateMany({
         where: { eventId: payload.id, processingStatus: { in: retryableStatuses } },
         data: {

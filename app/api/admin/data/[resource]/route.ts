@@ -134,28 +134,80 @@ export async function GET(
         db.projectWithdrawal.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
         db.payment.findMany({
           orderBy: { createdAt: "desc" },
-          take: 100,
-          select: {
-            id: true,
-            clientId: true,
-            professionalId: true,
-            amount: true,
-            baseAmount: true,
-            clientFeeAmount: true,
-            professionalPayoutAmount: true,
-            adminNetAmount: true,
-            commissionAmount: true,
-            currency: true,
-            provider: true,
-            razorpayOrderId: true,
-            razorpayPaymentId: true,
-            projectTrackingId: true,
-            milestoneId: true,
-            status: true,
-            failureReason: true,
-            capturedAt: true,
-            createdAt: true,
-            updatedAt: true,
+          take: 200,
+          include: {
+            client: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+                avatarUrl: true,
+                companyName: true,
+              },
+            },
+            professional: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+                avatarUrl: true,
+              },
+            },
+            job: {
+              select: {
+                id: true,
+                title: true,
+                category: true,
+                budgetMin: true,
+                budgetMax: true,
+                status: true,
+              },
+            },
+            milestone: {
+              select: {
+                id: true,
+                title: true,
+                amount: true,
+                status: true,
+                dueDate: true,
+                submittedAt: true,
+                approvedAt: true,
+              },
+            },
+            projectTracking: {
+              select: {
+                id: true,
+                status: true,
+                progress: true,
+                currentStage: true,
+                job: {
+                  select: {
+                    id: true,
+                    title: true,
+                    category: true,
+                    budgetMin: true,
+                    budgetMax: true,
+                    status: true,
+                  },
+                },
+                milestones: {
+                  select: {
+                    id: true,
+                    title: true,
+                    amount: true,
+                    status: true,
+                    dueDate: true,
+                    submittedAt: true,
+                    approvedAt: true,
+                  },
+                  orderBy: { createdAt: "asc" },
+                },
+              },
+            },
           },
         }),
         db.walletTransaction.findMany({
@@ -227,7 +279,16 @@ export async function GET(
     const [users, legacyProfiles] = await Promise.all([
       db.user.findMany({
         where: { id: { in: ids } },
-        select: { id: true, firstName: true, lastName: true },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+          avatarUrl: true,
+          role: true,
+          companyName: true,
+        },
       }),
       db.legacyUserProfile.findMany({
         where: { userId: { in: ids.map(String) } },
@@ -239,10 +300,79 @@ export async function GET(
     );
     for (const profile of legacyProfiles)
       if (profile.fullName && !names[profile.userId]) names[profile.userId] = profile.fullName;
+
+    const usersById = Object.fromEntries(
+      users.map((u) => [
+        u.id,
+        {
+          id: u.id,
+          name: `${u.firstName} ${u.lastName}`.trim(),
+          email: u.email,
+          phone: u.phone,
+          avatarUrl: u.avatarUrl,
+          role: u.role,
+          companyName: u.companyName,
+        },
+      ]),
+    );
+
+    const enrichedPayments = payments.map((p) => {
+      const job = p.job ?? p.projectTracking?.job ?? null;
+      const tracking = p.projectTracking;
+      const allMilestones = tracking?.milestones ?? (p.milestone ? [p.milestone] : []);
+
+      const milestoneIndex = p.milestoneId
+        ? allMilestones.findIndex((m) => m.id === p.milestoneId)
+        : -1;
+      const milestoneNumber = milestoneIndex >= 0 ? milestoneIndex + 1 : null;
+      const totalMilestonesCount = allMilestones.length;
+
+      const projectTotalMilestonesAmount = allMilestones.reduce((sum, m) => sum + m.amount, 0);
+      const projectTotalBudget =
+        projectTotalMilestonesAmount > 0
+          ? projectTotalMilestonesAmount
+          : (job?.budgetMax ?? job?.budgetMin ?? p.baseAmount);
+
+      const approvedMilestones = allMilestones.filter((m) => m.status === "APPROVED");
+      const projectPaidAmount = approvedMilestones.reduce((sum, m) => sum + m.amount, 0);
+      const projectRemainingAmount = Math.max(0, projectTotalBudget - projectPaidAmount);
+      const remainingMilestonesCount = allMilestones.filter((m) => m.status !== "APPROVED").length;
+
+      const clientFee = p.clientFeeAmount || Math.ceil(p.baseAmount * 0.1);
+      const proCommission = p.commissionAmount || Math.ceil(p.baseAmount * 0.1);
+      const adminNet = p.adminNetAmount || clientFee + proCommission;
+      const proPayout = p.professionalPayoutAmount || Math.max(0, p.baseAmount - proCommission);
+
+      return {
+        ...p,
+        jobTitle: job?.title ?? (p.jobId ? `Job #${p.jobId}` : "Direct Milestone Project"),
+        jobCategory: job?.category ?? null,
+        milestoneTitle:
+          p.milestone?.title ??
+          (p.milestoneId ? `Milestone #${p.milestoneId}` : "Milestone Payment"),
+        milestoneStatus: p.milestone?.status ?? p.status,
+        milestoneNumber,
+        totalMilestonesCount,
+        projectTotalBudget,
+        projectPaidAmount,
+        projectRemainingAmount,
+        remainingMilestonesCount,
+        milestonesList: allMilestones,
+        financials: {
+          grossClientAmount: p.amount,
+          baseAmount: p.baseAmount,
+          clientFeeAmount: clientFee,
+          commissionAmount: proCommission,
+          professionalPayoutAmount: proPayout,
+          adminNetAmount: adminNet,
+        },
+      };
+    });
+
     return NextResponse.json({
       transactions,
       withdrawals,
-      payments,
+      payments: enrichedPayments,
       walletTransactions,
       platformWallet: platformWallet
         ? {
@@ -254,6 +384,7 @@ export async function GET(
         : null,
       platformWalletTransactions,
       names,
+      usersById,
     });
   }
   if (resource === "support") {

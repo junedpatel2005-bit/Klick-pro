@@ -83,14 +83,11 @@ DATABASE_URL="postgresql://servio:servio_password@localhost:5432/servio"
 DIRECT_URL="postgresql://servio:servio_password@localhost:5432/servio"
 ```
 
-The checked-in `docker-compose.test.yml` is for integration tests and uses a separate temporary test database; it is not required for normal development.
-
 ## Useful commands
 
 ```bash
 npm run lint
 npm run typecheck
-npm test
 npm run build
 npm start
 ```

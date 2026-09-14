@@ -9,13 +9,6 @@
     "start": "cross-env NODE_ENV=production node server.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:db:up": "tsx scripts/test-db.ts up",
-    "test:db:down": "cross-env NODE_ENV=test TEST_DATABASE_URL=postgresql://servio_test:servio_test_password@127.0.0.1:55432/servio_integration_test tsx scripts/test-db.ts down",
-    "test:integration": "cross-env NODE_ENV=test tsx scripts/test-db.ts integration",
-    "test:migrations": "cross-env NODE_ENV=test tsx scripts/test-db.ts migrate-replay",
-    "test:project-flow": "tsx scripts/test-professional-proposal-flow.ts",
-    "test:all-flows": "tsx scripts/test-all-flows.ts",
     "check:razorpay": "tsx scripts/check-razorpay-sandbox.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:add-subcategory-jobs": "tsx scripts/add-faker-subcategory-jobs.ts",
@@ -117,8 +110,7 @@
     "prisma": "^7.9.1",
     "tsx": "^4.23.11",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.56.1",
-    "vitest": "^4.1.10"
+    "typescript-eslint": "^8.56.1"
   },
   "overrides": {
     "lodash-es": "4.18.1"
