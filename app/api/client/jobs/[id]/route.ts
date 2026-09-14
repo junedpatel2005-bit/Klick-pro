@@ -13,6 +13,15 @@ const milestoneInput = z.object({
     .min(1, "Percentage must be at least 1%.")
     .max(100, "Percentage cannot exceed 100%."),
 });
+const milestonesInput = z.array(milestoneInput).superRefine((milestones, context) => {
+  const total = milestones.reduce((sum, milestone) => sum + milestone.percentage, 0);
+  if (total > 100) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Total milestone percentage cannot exceed 100% (currently ${total}%).`,
+    });
+  }
+});
 
 const bodySchema = z.object({
   title: z.string().trim().max(160).optional().or(z.literal("")),
@@ -34,7 +43,7 @@ const bodySchema = z.object({
   locationLat: z.coerce.number().min(-90).max(90).nullable().optional(),
   locationLng: z.coerce.number().min(-180).max(180).nullable().optional(),
   status: z.enum(["OPEN", "CLOSED"]).optional(),
-  milestones: z.array(milestoneInput).optional(),
+  milestones: milestonesInput.optional(),
   mode: z.enum(["draft", "publish"]).optional(),
 });
 async function client(request: NextRequest) {

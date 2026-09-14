@@ -9,13 +9,21 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Coins,
+  FileText,
   Flag,
   History,
+  Layers,
   LayoutGrid,
   MapPin,
   MessageSquare,
+  Pencil,
+  Plus,
+  RefreshCw,
   SlidersHorizontal,
   Sparkles,
+  Split,
+  Trash2,
   Upload,
   Wallet,
 } from "lucide-react";
@@ -33,6 +41,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Person = { firstName: string; lastName: string } | null;
+export type DraftMilestone = {
+  title: string;
+  amount: number | "";
+  percentage: number | "";
+  description: string;
+};
 type Milestone = {
   id: number;
   title: string;
@@ -201,10 +215,14 @@ export default function SharedProjectTrackingPage() {
     platformEarnings: number;
     remainingBalance: number;
   } | null>(null);
-  const [milestoneTitle, setMilestoneTitle] = useState("");
-  const [milestoneAmount, setMilestoneAmount] = useState<number | "">("");
-  const [milestoneNote, setMilestoneNote] = useState("");
-  const [milestoneDate, setMilestoneDate] = useState("");
+  const [draftMilestones, setDraftMilestones] = useState<DraftMilestone[]>([]);
+  const [milestoneModalError, setMilestoneModalError] = useState<string | null>(null);
+  const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
+  const [editMilestoneTitle, setEditMilestoneTitle] = useState("");
+  const [editMilestoneAmount, setEditMilestoneAmount] = useState<number | "">("");
+  const [editMilestonePercentage, setEditMilestonePercentage] = useState<number | "">("");
+  const [editMilestoneDescription, setEditMilestoneDescription] = useState("");
+  const [editMilestoneError, setEditMilestoneError] = useState<string | null>(null);
   const [showProgress, setShowProgress] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
@@ -448,9 +466,304 @@ export default function SharedProjectTrackingPage() {
     (total, milestone) => total + milestone.amount,
     0,
   );
-  const totalAgreed = data.agreedAmount ?? totalMilestoneValue ?? 0;
+  const totalAgreed = Math.max(data.agreedAmount ?? 0, totalMilestoneValue);
   const unassignedMilestoneAmount = Math.max(0, totalAgreed - totalMilestoneValue);
   const remainingMilestoneAmount = unassignedMilestoneAmount;
+
+  const resetDraftMilestones = (customUnallocated?: number) => {
+    const unallocated =
+      customUnallocated !== undefined ? customUnallocated : unassignedMilestoneAmount;
+    const agreed = totalAgreed;
+    const initialAmt = unallocated > 0 ? unallocated : "";
+    const initialPct =
+      agreed > 0 && typeof initialAmt === "number"
+        ? Math.min(100, Math.round((initialAmt / agreed) * 100))
+        : "";
+    const nextIdx = (data?.milestones?.length ?? 0) + 1;
+
+    setDraftMilestones([
+      {
+        title: `Milestone ${nextIdx}`,
+        amount: initialAmt,
+        percentage: initialPct,
+        description: "",
+      },
+    ]);
+    setMilestoneModalError(null);
+  };
+
+  const openCreateMilestoneModal = () => {
+    resetDraftMilestones();
+    setShowMilestoneModal(true);
+  };
+
+  const closeCreateMilestoneModal = () => {
+    setShowMilestoneModal(false);
+    setDraftMilestones([]);
+    setMilestoneModalError(null);
+  };
+
+  const updateDraftMilestone = (
+    index: number,
+    field: keyof DraftMilestone,
+    val: string | number,
+  ) => {
+    setDraftMilestones((prev) => {
+      const current = prev[index];
+      if (!current) return prev;
+      const next = [...prev];
+      const item: DraftMilestone = { ...current };
+      if (field === "title" || field === "description") {
+        item[field] = String(val);
+      } else if (field === "percentage") {
+        if (val === "" || val === null) {
+          item.percentage = "";
+          item.amount = "";
+        } else {
+          const pct = Math.min(100, Math.max(0, Number(val) || 0));
+          item.percentage = pct;
+          item.amount = totalAgreed > 0 ? Math.round((totalAgreed * pct) / 100) : "";
+        }
+      } else if (field === "amount") {
+        if (val === "" || val === null) {
+          item.amount = "";
+          item.percentage = "";
+        } else {
+          const amt = Math.max(0, Number(val) || 0);
+          item.amount = amt;
+          item.percentage =
+            totalAgreed > 0 ? Math.min(100, Math.round((amt / totalAgreed) * 100)) : "";
+        }
+      }
+      next[index] = item;
+      return next;
+    });
+    setMilestoneModalError(null);
+  };
+
+  const addDraftMilestone = () => {
+    const currentSum = draftMilestones.reduce((acc, m) => acc + (Number(m.amount) || 0), 0);
+    const left = Math.max(0, remainingMilestoneAmount - currentSum);
+    const leftPct = totalAgreed > 0 && left > 0 ? Math.round((left / totalAgreed) * 100) : "";
+    const nextIndex = (data?.milestones?.length ?? 0) + draftMilestones.length + 1;
+    setDraftMilestones((prev) => [
+      ...prev,
+      {
+        title: `Milestone ${nextIndex}`,
+        amount: left > 0 ? left : "",
+        percentage: leftPct || "",
+        description: "",
+      },
+    ]);
+  };
+
+  const removeDraftMilestone = (index: number) => {
+    setDraftMilestones((prev) => prev.filter((_, i) => i !== index));
+    setMilestoneModalError(null);
+  };
+
+  const autoFillRemaining = () => {
+    const currentSum = draftMilestones.reduce((acc, m) => acc + (Number(m.amount) || 0), 0);
+    const remainingToAllocate = Math.max(0, remainingMilestoneAmount - currentSum);
+    if (remainingToAllocate <= 0) return;
+    setDraftMilestones((prev) => {
+      const last = prev.length > 0 ? prev[prev.length - 1] : undefined;
+      if (last && (!last.amount || last.amount === 0)) {
+        const next = [...prev];
+        const updatedLast: DraftMilestone = { ...last };
+        const newAmt = (Number(updatedLast.amount) || 0) + remainingToAllocate;
+        updatedLast.amount = newAmt;
+        updatedLast.percentage = totalAgreed > 0 ? Math.round((newAmt / totalAgreed) * 100) : 100;
+        next[next.length - 1] = updatedLast;
+        return next;
+      }
+      const nextIndex = (data?.milestones?.length ?? 0) + prev.length + 1;
+      return [
+        ...prev,
+        {
+          title: `Milestone ${nextIndex}`,
+          amount: remainingToAllocate,
+          percentage: totalAgreed > 0 ? Math.round((remainingToAllocate / totalAgreed) * 100) : 100,
+          description: "",
+        },
+      ];
+    });
+  };
+
+  const splitDraftEvenly = () => {
+    if (draftMilestones.length === 0) return;
+    const count = draftMilestones.length;
+    const base = Math.floor(remainingMilestoneAmount / count);
+    const rem = remainingMilestoneAmount % count;
+    setDraftMilestones((prev) =>
+      prev.map((m, i) => {
+        const amt = i === 0 ? base + rem : base;
+        const pct =
+          totalAgreed > 0 ? Math.round((amt / totalAgreed) * 100) : Math.floor(100 / count);
+        return {
+          ...m,
+          amount: amt,
+          percentage: pct,
+        };
+      }),
+    );
+  };
+
+  const saveDraftMilestones = async () => {
+    const valid = draftMilestones.filter((m) => m.title.trim().length > 0 && Number(m.amount) > 0);
+    if (valid.length === 0) {
+      setMilestoneModalError("Please provide a milestone title and valid amount.");
+      return;
+    }
+    const totalAmount = valid.reduce((sum, m) => sum + Number(m.amount), 0);
+    if (totalAmount > remainingMilestoneAmount) {
+      setMilestoneModalError(
+        `Total milestone amount (₹${totalAmount.toLocaleString("en-IN")}) exceeds remaining project amount (₹${remainingMilestoneAmount.toLocaleString("en-IN")}).`,
+      );
+      return;
+    }
+    setMilestoneModalError(null);
+    try {
+      if (valid.length === 1 && valid[0]) {
+        const first = valid[0];
+        await action("create-milestone", {
+          title: first.title.trim(),
+          amount: Number(first.amount),
+          description: first.description.trim() || null,
+        });
+      } else {
+        await action("create-milestones", {
+          milestones: valid.map((m) => ({
+            title: m.title.trim(),
+            amount: Number(m.amount),
+            description: m.description.trim() || null,
+          })),
+        });
+      }
+      closeCreateMilestoneModal();
+    } catch (e) {
+      setMilestoneModalError(e instanceof Error ? e.message : "Failed to create milestone(s).");
+    }
+  };
+
+  const totalDraftAmount = draftMilestones.reduce((acc, m) => acc + (Number(m.amount) || 0), 0);
+  const totalDraftPercentage =
+    totalAgreed > 0 ? Math.round((totalDraftAmount / totalAgreed) * 100) : 0;
+  const totalCommittedInProject = totalMilestoneValue + totalDraftAmount;
+  const projectAllocationPercentage =
+    totalAgreed > 0
+      ? Math.min(100, Math.round((totalCommittedInProject / totalAgreed) * 100))
+      : 100;
+  const isMilestoneExceeded = totalDraftAmount > remainingMilestoneAmount;
+  const isFullyAllocated = totalAgreed > 0 && totalCommittedInProject >= totalAgreed;
+  const remainingInModal = Math.max(0, remainingMilestoneAmount - totalDraftAmount);
+
+  const openEditMilestoneModal = (milestone: Milestone) => {
+    setEditingMilestone(milestone);
+    setEditMilestoneTitle(milestone.title);
+    setEditMilestoneAmount(milestone.amount);
+    const pct = totalAgreed > 0 ? Math.round((milestone.amount / totalAgreed) * 100) : "";
+    setEditMilestonePercentage(pct);
+    setEditMilestoneDescription(milestone.description || "");
+    setEditMilestoneError(null);
+  };
+
+  const closeEditMilestoneModal = () => {
+    setEditingMilestone(null);
+    setEditMilestoneTitle("");
+    setEditMilestoneAmount("");
+    setEditMilestonePercentage("");
+    setEditMilestoneDescription("");
+    setEditMilestoneError(null);
+  };
+
+  const handleEditAmountChange = (val: string) => {
+    if (val === "" || val === null) {
+      setEditMilestoneAmount("");
+      setEditMilestonePercentage("");
+    } else {
+      const amt = Math.max(0, Number(val) || 0);
+      setEditMilestoneAmount(amt);
+      setEditMilestonePercentage(
+        totalAgreed > 0 ? Math.min(100, Math.round((amt / totalAgreed) * 100)) : "",
+      );
+    }
+    setEditMilestoneError(null);
+  };
+
+  const handleEditPercentageChange = (val: string) => {
+    if (val === "" || val === null) {
+      setEditMilestonePercentage("");
+      setEditMilestoneAmount("");
+    } else {
+      const pct = Math.min(100, Math.max(0, Number(val) || 0));
+      setEditMilestonePercentage(pct);
+      setEditMilestoneAmount(totalAgreed > 0 ? Math.round((totalAgreed * pct) / 100) : "");
+    }
+    setEditMilestoneError(null);
+  };
+
+  const saveEditMilestone = async () => {
+    if (!editingMilestone) return;
+    const title = editMilestoneTitle.trim();
+    const amount = Number(editMilestoneAmount);
+    if (!title) {
+      setEditMilestoneError("Milestone title is required.");
+      return;
+    }
+    if (isNaN(amount) || amount <= 0) {
+      setEditMilestoneError("Milestone amount must be greater than 0.");
+      return;
+    }
+    const otherMilestonesTotal = data.milestones
+      .filter((m) => m.id !== editingMilestone.id)
+      .reduce((sum, m) => sum + m.amount, 0);
+    if (otherMilestonesTotal + amount > totalAgreed) {
+      const maxAllowed = Math.max(0, totalAgreed - otherMilestonesTotal);
+      setEditMilestoneError(
+        `Total milestone amount cannot exceed project budget of ₹${totalAgreed.toLocaleString("en-IN")}. Maximum allowed for this milestone is ₹${maxAllowed.toLocaleString("en-IN")}.`,
+      );
+      return;
+    }
+    setEditMilestoneError(null);
+    try {
+      await action("update-milestone", {
+        milestoneId: editingMilestone.id,
+        title,
+        amount,
+        description: editMilestoneDescription.trim() || null,
+      });
+      closeEditMilestoneModal();
+    } catch (e) {
+      setEditMilestoneError(e instanceof Error ? e.message : "Failed to update milestone.");
+    }
+  };
+
+  const deleteCurrentMilestone = async () => {
+    if (!editingMilestone) return;
+    if (
+      !confirm(
+        `Are you sure you want to delete "${editingMilestone.title}"? This cannot be undone.`,
+      )
+    )
+      return;
+    setEditMilestoneError(null);
+    try {
+      await action("delete-milestone", {
+        milestoneId: editingMilestone.id,
+      });
+      closeEditMilestoneModal();
+    } catch (e) {
+      setEditMilestoneError(e instanceof Error ? e.message : "Failed to delete milestone.");
+    }
+  };
+
+  const otherMilestonesTotal = editingMilestone
+    ? data.milestones
+        .filter((m) => m.id !== editingMilestone.id)
+        .reduce((sum, m) => sum + m.amount, 0)
+    : 0;
+  const editMaxAllowed = Math.max(0, totalAgreed - otherMilestonesTotal);
   const milestoneMinDate = dateInputValue(data.job?.jobDate);
   const milestoneMaxDate = dateInputValue(data.job?.deadline);
   const paidToProfessional = data.milestones.reduce(
@@ -766,16 +1079,35 @@ export default function SharedProjectTrackingPage() {
             </section>
 
             {isClient && data.project.status !== "COMPLETED" && (
-              <section className="rounded-2xl border bg-card p-5 shadow-soft">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-semibold">Add milestone</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Add as many delivery checkpoints as this project needs. Set the amount for
-                      each milestone when you create it.
-                    </p>
+              <section className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-card p-5 sm:p-6 shadow-soft">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <Flag className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-bold text-foreground">Project Milestones</h2>
+                        {unassignedMilestoneAmount > 0 ? (
+                          <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary border border-primary/20">
+                            ₹{unassignedMilestoneAmount.toLocaleString("en-IN")} Unallocated
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                            100% Budget Allocated
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground max-w-xl">
+                        {unassignedMilestoneAmount > 0
+                          ? "Define milestones and deliverables to release escrow payments in phases, just like when posting a job."
+                          : "All project funds are allocated across milestones. You can add further delivery checkpoints if needed."}
+                      </p>
+                    </div>
                   </div>
-                  <Button onClick={() => setShowMilestoneModal(true)}>Create milestone</Button>
+                  <Button onClick={openCreateMilestoneModal} className="gap-2 shrink-0">
+                    <Plus className="h-4 w-4" /> Add Milestones
+                  </Button>
                 </div>
               </section>
             )}
@@ -1092,97 +1424,225 @@ export default function SharedProjectTrackingPage() {
           </TabsContent>
 
           {/* Milestones Tab */}
-          <TabsContent value="milestones">
-            <section className="rounded-2xl border bg-card p-5 shadow-soft">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold">Milestones</h2>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-muted-foreground">
+          <TabsContent value="milestones" className="space-y-6">
+            <section className="rounded-3xl border bg-card p-6 shadow-soft">
+              {/* Header & Overview */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <Flag className="h-4 w-4" />
+                    </div>
+                    <h2 className="text-xl font-bold text-foreground">Project Milestones</h2>
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Deliverables, progress checkpoints, and released escrow payouts.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="rounded-full border border-border bg-muted/60 px-3 py-1 text-xs font-semibold text-foreground">
                     {completed} of {data.milestones.length} completed
                   </span>
+                  {unassignedMilestoneAmount > 0 ? (
+                    <span className="rounded-full bg-amber-500/10 border border-amber-500/20 px-3 py-1 text-xs font-bold text-amber-700 dark:text-amber-400">
+                      ₹{unassignedMilestoneAmount.toLocaleString("en-IN")} unassigned
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      100% Budget Allocated
+                    </span>
+                  )}
                   {isClient && data.project.status !== "COMPLETED" && (
-                    <Button size="sm" onClick={() => setShowMilestoneModal(true)}>
-                      Add milestone
+                    <Button onClick={openCreateMilestoneModal} size="sm" className="gap-1.5">
+                      <Plus className="h-4 w-4" /> Add Milestone
                     </Button>
                   )}
                 </div>
               </div>
-              <div className="mt-4 flex items-center gap-1.5">
-                {data.milestones.map((milestone, index) => {
-                  const filled = milestone?.status === "APPROVED";
-                  const active =
-                    milestone &&
-                    ["IN_PROGRESS", "REVISION_REQUESTED", "AWAITING_CLIENT_REVIEW"].includes(
-                      milestone.status,
-                    );
-                  return (
-                    <div
-                      key={index}
-                      className={`h-1.5 flex-1 rounded-full transition-colors ${
-                        filled
-                          ? "bg-emerald-500"
-                          : milestone?.status === "REVISION_REQUESTED"
-                            ? "bg-red-500"
-                            : active
-                              ? "bg-amber-400"
-                              : milestone
-                                ? "bg-primary/40"
-                                : "bg-muted"
-                      }`}
-                    />
-                  );
-                })}
-              </div>
-              <div className="mt-5 space-y-3">
-                {data.milestones.map((m) => {
+
+              {/* Progress track */}
+              {data.milestones.length > 0 && (
+                <div className="mt-5 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
+                    <span>Milestone Progress</span>
+                    <span className="font-bold text-foreground">
+                      {Math.round((completed / (data.milestones.length || 1)) * 100)}% Completed
+                    </span>
+                  </div>
+                  <div className="flex h-2.5 w-full items-center gap-1.5 rounded-full bg-muted/40 p-0.5">
+                    {data.milestones.map((milestone, index) => {
+                      const filled = milestone?.status === "APPROVED";
+                      const active =
+                        milestone &&
+                        ["IN_PROGRESS", "REVISION_REQUESTED", "AWAITING_CLIENT_REVIEW"].includes(
+                          milestone.status,
+                        );
+                      return (
+                        <div
+                          key={index}
+                          className={`h-full flex-1 rounded-full transition-all duration-300 ${
+                            filled
+                              ? "bg-emerald-500"
+                              : milestone?.status === "REVISION_REQUESTED"
+                                ? "bg-rose-500"
+                                : active
+                                  ? "bg-amber-400"
+                                  : "bg-muted-foreground/20"
+                          }`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Milestones Cards List */}
+              <div className="mt-6 space-y-4">
+                {data.milestones.map((m, index) => {
                   const overdueDays = milestoneOverdueDays(m);
                   const milestoneUploads = data.uploads.filter(
                     (upload) => upload.milestoneId === m.id,
                   );
+                  const pct = totalAgreed > 0 ? Math.round((m.amount / totalAgreed) * 100) : 0;
+                  const isApproved = m.status === "APPROVED";
+                  const isAwaitingReview = m.status === "AWAITING_CLIENT_REVIEW";
+                  const isRevision = m.status === "REVISION_REQUESTED";
+                  const isInProgress = m.status === "IN_PROGRESS";
+
                   return (
                     <div
                       key={m.id}
-                      className={`rounded-xl border-l-4 bg-muted p-4 ${milestoneAccent(m.status)}`}
+                      className={`relative rounded-2xl border bg-card p-5 sm:p-6 shadow-xs transition-all hover:shadow-soft space-y-4 ${
+                        isApproved
+                          ? "border-emerald-500/30 hover:border-emerald-500/50"
+                          : isAwaitingReview
+                            ? "border-purple-500/30 hover:border-purple-500/50"
+                            : isRevision
+                              ? "border-rose-500/30 hover:border-rose-500/50"
+                              : isInProgress
+                                ? "border-amber-500/30 hover:border-amber-500/50"
+                                : "border-border"
+                      }`}
                     >
-                      <div className="flex flex-wrap justify-between gap-3">
-                        <div>
-                          <p className="font-semibold">{m.title}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {m.description || "No description"} · ₹{m.amount.toLocaleString()}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {m.dueDate
-                              ? `Due ${new Date(m.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
-                              : "No due date set"}
-                          </p>
-                        </div>
-                        <div className="flex h-fit flex-col items-end gap-1.5">
+                      {/* Top Row: Index, Title, Amount & Status */}
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="flex items-start gap-3">
                           <span
-                            className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${milestoneStatusStyle(m.status)}`}
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${
+                              isApproved
+                                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                                : isAwaitingReview
+                                  ? "bg-purple-500/10 text-purple-700 dark:text-purple-400"
+                                  : isInProgress
+                                    ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                    : "bg-primary/10 text-primary"
+                            }`}
                           >
+                            {index + 1}
+                          </span>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-bold text-base sm:text-lg text-foreground">
+                                {m.title}
+                              </h3>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary border border-primary/20">
+                                ₹{m.amount.toLocaleString("en-IN")}
+                              </span>
+                              {pct > 0 && (
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                                  {pct}% of project
+                                </span>
+                              )}
+                            </div>
+                            {m.payment && (
+                              <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Wallet className="h-3.5 w-3.5 text-emerald-600" />
+                                <span>
+                                  Payout:{" "}
+                                  <strong className="text-foreground font-semibold">
+                                    {m.payment.status === "COMPLETED"
+                                      ? "Paid Out"
+                                      : m.payment.status}
+                                  </strong>
+                                </span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Status Badge & Edit */}
+                        <div className="flex h-fit flex-wrap items-center gap-2">
+                          {isClient &&
+                            data.project.status !== "COMPLETED" &&
+                            m.status !== "APPROVED" && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openEditMilestoneModal(m)}
+                                className="h-7 gap-1.5 px-2.5 text-xs font-semibold hover:border-primary hover:text-primary"
+                              >
+                                <Pencil className="h-3 w-3" />
+                                Edit
+                              </Button>
+                            )}
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${
+                              isApproved
+                                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                                : isAwaitingReview
+                                  ? "border-purple-500/20 bg-purple-500/10 text-purple-700 dark:text-purple-400"
+                                  : isRevision
+                                    ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
+                                    : isInProgress
+                                      ? "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                      : "border-border bg-muted/60 text-muted-foreground"
+                            }`}
+                          >
+                            {isApproved && <CheckCircle2 className="h-3.5 w-3.5" />}
+                            {isAwaitingReview && <Sparkles className="h-3.5 w-3.5" />}
+                            {isRevision && <AlertCircle className="h-3.5 w-3.5" />}
+                            {isInProgress && <Clock3 className="h-3.5 w-3.5" />}
+                            {!isApproved && !isAwaitingReview && !isRevision && !isInProgress && (
+                              <Layers className="h-3.5 w-3.5" />
+                            )}
                             {label(m.status)}
                           </span>
                           {overdueDays !== null && (
-                            <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
-                              {overdueDays} day{overdueDays === 1 ? "" : "s"} overdue
+                            <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">
+                              {overdueDays}d overdue
                             </span>
                           )}
                         </div>
                       </div>
+
+                      {/* Deliverables / Scope Note */}
+                      {m.description && (
+                        <div className="rounded-xl border border-border/70 bg-muted/30 p-3.5 text-xs sm:text-sm text-foreground/90">
+                          <span className="font-bold text-muted-foreground uppercase text-[10px] tracking-wider block mb-1 flex items-center gap-1.5">
+                            <FileText className="h-3.5 w-3.5 text-primary" /> Deliverables & Scope
+                          </span>
+                          <p className="leading-relaxed">{m.description}</p>
+                        </div>
+                      )}
+
+                      {/* Uploads history */}
                       {milestoneUploads.length > 0 && (
-                        <div className="mt-3 space-y-2">
+                        <div className="space-y-2 pt-1">
                           {milestoneUploads.map((upload) => {
                             const uploadFiles = uploadAttachments(upload);
                             return (
                               <div
                                 key={upload.id}
-                                className="rounded-lg border border-border bg-background p-3"
+                                className="rounded-xl border border-border/80 bg-muted/20 p-3.5"
                               >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                  <p className="text-xs font-bold uppercase tracking-wide text-foreground/80 flex items-center gap-1.5">
+                                    <Upload className="h-3.5 w-3.5 text-primary" />
                                     {upload.roundNumber > 1
-                                      ? "Revised work submitted"
-                                      : "Work submitted"}
+                                      ? `Revised Deliverable (Round ${upload.roundNumber})`
+                                      : "Milestone Deliverable Submitted"}
                                   </p>
                                   <span className="text-xs text-muted-foreground">
                                     {date(upload.createdAt)}
@@ -1192,10 +1652,17 @@ export default function SharedProjectTrackingPage() {
                                   <p className="mt-1.5 text-sm text-foreground">{upload.note}</p>
                                 )}
                                 {uploadFiles.length > 0 && (
-                                  <div className="mt-2 flex flex-wrap gap-2">
+                                  <div className="mt-2.5 flex flex-wrap gap-2">
                                     {uploadFiles.map((file) => (
-                                      <Button key={file.id} size="sm" variant="outline" asChild>
+                                      <Button
+                                        key={file.id}
+                                        size="sm"
+                                        variant="outline"
+                                        asChild
+                                        className="h-8 gap-1.5 text-xs"
+                                      >
                                         <a href={file.url} target="_blank" rel="noreferrer">
+                                          <FileText className="h-3.5 w-3.5" />
                                           {file.name}
                                         </a>
                                       </Button>
@@ -1207,62 +1674,77 @@ export default function SharedProjectTrackingPage() {
                           })}
                         </div>
                       )}
+
+                      {/* Revision Feedback */}
                       {m.status === "REVISION_REQUESTED" && data.revisions[0] && (
-                        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-red-800">
+                        <div className="rounded-xl border border-rose-300/60 bg-rose-50/70 dark:bg-rose-950/30 p-4 text-rose-900 dark:text-rose-200">
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-xs font-bold uppercase tracking-wide">
-                              Client requested changes
+                            <p className="text-xs font-bold uppercase tracking-wide flex items-center gap-1.5">
+                              <AlertCircle className="h-4 w-4 text-rose-600" />
+                              Revision Requested by Client
                             </p>
-                            <span className="text-xs text-red-700/75">
+                            <span className="text-xs text-rose-700/75 dark:text-rose-300/75">
                               {date(data.revisions[0].createdAt)}
                             </span>
                           </div>
-                          <p className="mt-1.5 text-sm">
+                          <p className="mt-2 text-sm leading-relaxed">
                             {data.revisions[0].note ||
-                              "Please review the requested changes and resubmit your work."}
+                              "Please review the requested changes and submit your revised deliverables."}
                           </p>
                         </div>
                       )}
+
+                      {/* Actions: Professional Submit */}
                       {!isClient && ["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status) && (
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="pt-2 border-t flex flex-col sm:flex-row sm:items-center gap-2">
                           <FilePicker
                             inputId={`milestone-${m.id}-files`}
                             files={files}
                             setFiles={setFiles}
                           />
-                          <textarea
+                          <Input
                             value={note}
                             onChange={(e) => setNote(e.target.value)}
-                            placeholder="Completion note"
-                            className="min-h-10 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+                            placeholder="Deliverable note or comment for client"
+                            className="flex-1"
                           />
                           <Button
                             disabled={busy === "submit-milestone"}
                             onClick={() => submit(m.id)}
+                            className="gap-1.5 shrink-0"
                           >
-                            Request payment
+                            <Upload className="h-4 w-4" />
+                            {busy === "submit-milestone" ? "Submitting…" : "Request Payment"}
                           </Button>
                         </div>
                       )}
+
+                      {/* Actions: Client Review */}
                       {isClient && m.status === "AWAITING_CLIENT_REVIEW" && (
-                        <div className="mt-3 flex gap-2">
+                        <div className="pt-2 border-t flex flex-wrap gap-2.5">
                           <Button
                             disabled={busy === "approve-milestone"}
                             onClick={() => setApprovalMilestone(m)}
+                            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
                           >
-                            Approve
+                            <CheckCircle2 className="h-4 w-4" />
+                            Approve & Pay (₹{m.amount.toLocaleString("en-IN")})
                           </Button>
                           <Button
                             variant="outline"
                             onClick={() => {
-                              const feedback = prompt("Revision feedback")?.trim();
+                              const feedback = prompt(
+                                "Enter revision feedback for professional:",
+                              )?.trim();
                               if (feedback)
                                 void action("request-revision", {
                                   milestoneId: m.id,
                                   note: feedback,
                                 });
                             }}
+                            className="gap-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 border-rose-200"
                           >
+                            <AlertCircle className="h-4 w-4" />
                             Request Revision
                           </Button>
                         </div>
@@ -1270,17 +1752,21 @@ export default function SharedProjectTrackingPage() {
                     </div>
                   );
                 })}
+
+                {/* Empty State */}
                 {data.milestones.length === 0 && (
-                  <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-                    <Flag className="mx-auto h-8 w-8 text-muted-foreground/60" />
-                    <p className="mt-2">No milestones yet.</p>
+                  <div className="rounded-2xl border-2 border-dashed border-muted-foreground/20 p-8 text-center bg-muted/20">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-3">
+                      <Flag className="h-6 w-6" />
+                    </div>
+                    <h3 className="text-base font-bold">No Milestones Yet</h3>
+                    <p className="mt-1 text-sm text-muted-foreground max-w-md mx-auto">
+                      Break this project into structured milestones with deliverables and payments,
+                      just like in your job posting.
+                    </p>
                     {isClient && data.project.status !== "COMPLETED" && (
-                      <Button
-                        size="sm"
-                        className="mt-4"
-                        onClick={() => setShowMilestoneModal(true)}
-                      >
-                        Add milestone
+                      <Button size="sm" className="mt-4 gap-2" onClick={openCreateMilestoneModal}>
+                        <Plus className="h-4 w-4" /> Create First Milestone
                       </Button>
                     )}
                   </div>
@@ -1767,96 +2253,289 @@ export default function SharedProjectTrackingPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showMilestoneModal} onOpenChange={setShowMilestoneModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create milestone</DialogTitle>
-            <DialogDescription>
-              Add a milestone name, amount, note, and date for this project.
+      <Dialog
+        open={showMilestoneModal}
+        onOpenChange={(open) => {
+          if (!open) closeCreateMilestoneModal();
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-2xl">
+          <DialogHeader className="p-6 pb-4 border-b">
+            <div className="flex items-center gap-2 text-primary font-semibold text-xs uppercase tracking-wider">
+              <Sparkles className="h-4 w-4" />
+              <span>Milestone Builder</span>
+            </div>
+            <DialogTitle className="text-xl font-bold mt-1">Create Project Milestones</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm text-muted-foreground mt-1">
+              Add delivery milestones with clear deliverables and payments, just like in your job
+              posting.
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-4 grid gap-4">
-            <label className="grid gap-2 text-sm font-medium">
-              Milestone name
-              <input
-                value={milestoneTitle}
-                onChange={(event) => setMilestoneTitle(event.target.value)}
-                placeholder="Milestone name"
-                className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="grid gap-2 text-sm font-medium">
-              Amount
-              <input
-                type="number"
-                min="0"
-                max={remainingMilestoneAmount ?? undefined}
-                value={milestoneAmount}
-                onChange={(event) => setMilestoneAmount(Number(event.target.value) || "")}
-                placeholder="Amount"
-                className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
-              {remainingMilestoneAmount != null && (
-                <span className="text-xs text-muted-foreground">
-                  Remaining project amount: ₹{remainingMilestoneAmount.toLocaleString("en-IN")}
+
+          <div className="p-6 space-y-5 overflow-y-auto max-h-[calc(90vh-140px)]">
+            {/* Budget Allocation Tracker */}
+            <div className="rounded-xl border bg-muted/40 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold">
+                <span className="text-muted-foreground">Project Budget Allocation</span>
+                <span
+                  className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                    isMilestoneExceeded
+                      ? "bg-destructive/10 text-destructive border border-destructive/20"
+                      : isFullyAllocated
+                        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
+                        : "bg-primary/10 text-primary border border-primary/20"
+                  }`}
+                >
+                  {isMilestoneExceeded
+                    ? `Exceeds available budget by ₹${(totalDraftAmount - remainingMilestoneAmount).toLocaleString("en-IN")}`
+                    : isFullyAllocated
+                      ? `100% Allocated (₹${totalCommittedInProject.toLocaleString("en-IN")} / ₹${totalAgreed.toLocaleString("en-IN")})`
+                      : `${projectAllocationPercentage}% allocated (₹${remainingInModal.toLocaleString("en-IN")} unallocated)`}
                 </span>
-              )}
-              {remainingMilestoneAmount != null &&
-                Number(milestoneAmount) > remainingMilestoneAmount && (
-                  <span className="text-xs text-destructive">
-                    This milestone exceeds the remaining project amount.
-                  </span>
+              </div>
+
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full transition-all duration-300 ${
+                    isMilestoneExceeded
+                      ? "bg-destructive"
+                      : isFullyAllocated
+                        ? "bg-emerald-500"
+                        : "bg-primary"
+                  }`}
+                  style={{
+                    width: `${projectAllocationPercentage}%`,
+                  }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground font-medium">
+                <span>
+                  Project Budget:{" "}
+                  <strong className="text-foreground">
+                    ₹{totalAgreed.toLocaleString("en-IN")}
+                  </strong>
+                </span>
+                <span>
+                  Available to Assign:{" "}
+                  <strong
+                    className={`font-bold ${remainingMilestoneAmount > 0 ? "text-primary" : "text-emerald-600"}`}
+                  >
+                    ₹{remainingMilestoneAmount.toLocaleString("en-IN")}
+                  </strong>
+                </span>
+              </div>
+            </div>
+
+            {remainingMilestoneAmount === 0 && (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">100% of project budget is currently allocated</p>
+                  <p className="mt-0.5 text-emerald-700/90 dark:text-emerald-400/90">
+                    All ₹{totalAgreed.toLocaleString("en-IN")} is allocated among your existing{" "}
+                    {data.milestones.length} milestones. You can edit any existing milestone
+                    directly from the Milestones tab to adjust amounts or deliverables.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Milestone Cards */}
+            <div className="space-y-4">
+              {draftMilestones.map((m, index) => {
+                const milestoneNumber = (data?.milestones?.length ?? 0) + index + 1;
+                return (
+                  <div
+                    key={index}
+                    className="relative rounded-xl border bg-card p-4 sm:p-5 shadow-xs transition hover:border-muted-foreground/40 space-y-3.5"
+                  >
+                    <div className="flex items-center justify-between gap-3 border-b pb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                          {milestoneNumber}
+                        </span>
+                        <span className="text-sm font-semibold">Milestone {milestoneNumber}</span>
+                        {Number(m.amount) > 0 && (
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                            ₹{Number(m.amount).toLocaleString("en-IN")}
+                          </span>
+                        )}
+                        {Number(m.percentage) > 0 && (
+                          <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                            {m.percentage}% of project
+                          </span>
+                        )}
+                      </div>
+                      {draftMilestones.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeDraftMilestone(index)}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                          title="Remove milestone"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-semibold text-foreground block mb-1">
+                          Milestone Title <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          value={m.title}
+                          onChange={(e) => updateDraftMilestone(index, "title", e.target.value)}
+                          placeholder="e.g. Design & Planning Phase"
+                          maxLength={160}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-foreground block mb-1">
+                          Percentage (%)
+                        </label>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={m.percentage}
+                            onChange={(e) =>
+                              updateDraftMilestone(index, "percentage", e.target.value)
+                            }
+                            placeholder="0"
+                            className="pr-7"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-semibold pointer-events-none">
+                            %
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div>
+                        <label className="text-xs font-semibold text-foreground block mb-1">
+                          Amount (₹) <span className="text-destructive">*</span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-semibold pointer-events-none">
+                            ₹
+                          </span>
+                          <Input
+                            type="number"
+                            min="1"
+                            max={remainingMilestoneAmount}
+                            value={m.amount}
+                            onChange={(e) => updateDraftMilestone(index, "amount", e.target.value)}
+                            placeholder="0"
+                            className="pl-7"
+                          />
+                        </div>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-semibold text-foreground block mb-1">
+                          Deliverables / Description (Optional)
+                        </label>
+                        <Input
+                          value={m.description}
+                          onChange={(e) =>
+                            updateDraftMilestone(index, "description", e.target.value)
+                          }
+                          placeholder="Brief summary of deliverables for this milestone"
+                          maxLength={500}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addDraftMilestone}
+                  className="gap-1.5"
+                >
+                  <Plus className="h-4 w-4" /> Add Milestone
+                </Button>
+                {remainingInModal > 0 && draftMilestones.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={autoFillRemaining}
+                    className="text-xs"
+                  >
+                    Auto-fill remaining (₹{remainingInModal.toLocaleString("en-IN")})
+                  </Button>
                 )}
-            </label>
-            <label className="grid gap-2 text-sm font-medium">
-              Note
-              <textarea
-                value={milestoneNote}
-                onChange={(event) => setMilestoneNote(event.target.value)}
-                placeholder="Optional note"
-                className="min-h-[96px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="grid gap-2 text-sm font-medium">
-              Due date
-              <input
-                type="date"
-                value={milestoneDate}
-                min={milestoneMinDate}
-                max={milestoneMaxDate}
-                onChange={(event) => setMilestoneDate(event.target.value)}
-                className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
-            </label>
+                {draftMilestones.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={splitDraftEvenly}
+                    className="text-xs"
+                  >
+                    Split evenly
+                  </Button>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => resetDraftMilestones()}
+                className="text-xs text-muted-foreground hover:text-destructive"
+              >
+                Reset
+              </Button>
+            </div>
+
+            {milestoneModalError && (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{milestoneModalError}</span>
+              </div>
+            )}
           </div>
-          <DialogFooter className="mt-6 flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setShowMilestoneModal(false)}>
+
+          <DialogFooter className="p-4 border-t bg-muted/20 flex flex-wrap items-center justify-between gap-2">
+            <Button variant="outline" onClick={closeCreateMilestoneModal}>
               Cancel
             </Button>
             <Button
               disabled={
                 busy === "create-milestone" ||
-                !milestoneTitle.trim() ||
-                !milestoneAmount ||
-                (remainingMilestoneAmount != null &&
-                  Number(milestoneAmount) > remainingMilestoneAmount)
+                busy === "create-milestones" ||
+                draftMilestones.length === 0 ||
+                draftMilestones.some(
+                  (m) => !m.title.trim() || !m.amount || Number(m.amount) <= 0,
+                ) ||
+                isMilestoneExceeded
               }
-              onClick={async () => {
-                if (!milestoneTitle.trim() || !milestoneAmount) return;
-                await action("create-milestone", {
-                  title: milestoneTitle.trim(),
-                  amount: Number(milestoneAmount),
-                  description: milestoneNote.trim() || null,
-                  deadline: milestoneDate ? new Date(milestoneDate).toISOString() : null,
-                });
-                setShowMilestoneModal(false);
-                setMilestoneTitle("");
-                setMilestoneAmount("");
-                setMilestoneNote("");
-                setMilestoneDate("");
-              }}
+              onClick={saveDraftMilestones}
+              className="gap-2"
             >
-              {busy === "create-milestone" ? "Creating…" : "Create milestone"}
+              {busy === "create-milestone" || busy === "create-milestones" ? (
+                "Creating…"
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4" />
+                  {draftMilestones.length > 1
+                    ? `Create ${draftMilestones.length} Milestones`
+                    : "Create Milestone"}
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1947,6 +2626,176 @@ export default function SharedProjectTrackingPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={Boolean(editingMilestone)}
+        onOpenChange={(open) => {
+          if (!open) closeEditMilestoneModal();
+        }}
+      >
+        <DialogContent className="max-w-xl p-0 overflow-hidden sm:rounded-2xl">
+          <DialogHeader className="p-6 pb-4 border-b bg-muted/20">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Pencil className="h-4 w-4" />
+                </div>
+                <div>
+                  <DialogTitle className="text-lg font-bold">Edit Milestone</DialogTitle>
+                  <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                    Modify milestone title, budget allocation, and deliverables.
+                  </DialogDescription>
+                </div>
+              </div>
+              {editingMilestone && (
+                <span className="rounded-full border border-border bg-muted/60 px-2.5 py-1 text-[11px] font-semibold text-foreground shrink-0">
+                  {label(editingMilestone.status)}
+                </span>
+              )}
+            </div>
+          </DialogHeader>
+
+          <div className="p-6 space-y-4">
+            {/* Allocation summary info */}
+            <div className="rounded-xl border bg-muted/30 p-3.5 flex items-center justify-between text-xs">
+              <div>
+                <span className="text-muted-foreground block">Project Agreed Budget</span>
+                <strong className="text-foreground font-bold">
+                  ₹{totalAgreed.toLocaleString("en-IN")}
+                </strong>
+              </div>
+              <div className="text-right">
+                <span className="text-muted-foreground block">Max Allowed for this Milestone</span>
+                <strong className="text-primary font-bold">
+                  ₹{editMaxAllowed.toLocaleString("en-IN")}
+                </strong>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-foreground block mb-1">
+                  Milestone Title <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  value={editMilestoneTitle}
+                  onChange={(e) => {
+                    setEditMilestoneTitle(e.target.value);
+                    setEditMilestoneError(null);
+                  }}
+                  placeholder="e.g. Design & Planning Phase"
+                  maxLength={160}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-foreground block mb-1">
+                    Amount (₹) <span className="text-destructive">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-semibold pointer-events-none">
+                      ₹
+                    </span>
+                    <Input
+                      type="number"
+                      min="1"
+                      max={editMaxAllowed}
+                      value={editMilestoneAmount}
+                      onChange={(e) => handleEditAmountChange(e.target.value)}
+                      placeholder="0"
+                      className="pl-7"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-foreground block mb-1">
+                    Percentage (%)
+                  </label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min="1"
+                      max={100}
+                      value={editMilestonePercentage}
+                      onChange={(e) => handleEditPercentageChange(e.target.value)}
+                      placeholder="0"
+                      className="pr-7"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-semibold pointer-events-none">
+                      %
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-foreground block mb-1">
+                  Deliverables / Scope (Optional)
+                </label>
+                <textarea
+                  value={editMilestoneDescription}
+                  onChange={(e) => {
+                    setEditMilestoneDescription(e.target.value);
+                    setEditMilestoneError(null);
+                  }}
+                  placeholder="Summary of deliverables, requirements, or scope for this milestone…"
+                  rows={3}
+                  maxLength={1000}
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs focus:outline-hidden"
+                />
+              </div>
+            </div>
+
+            {editMilestoneError && (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{editMilestoneError}</span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="p-4 border-t bg-muted/20 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              {editingMilestone &&
+                !["APPROVED", "AWAITING_CLIENT_REVIEW"].includes(editingMilestone.status) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy === "delete-milestone"}
+                    onClick={deleteCurrentMilestone}
+                    className="text-xs text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {busy === "delete-milestone" ? "Deleting…" : "Delete Milestone"}
+                  </Button>
+                )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={closeEditMilestoneModal}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={
+                  busy === "update-milestone" ||
+                  !editMilestoneTitle.trim() ||
+                  !editMilestoneAmount ||
+                  Number(editMilestoneAmount) <= 0 ||
+                  Number(editMilestoneAmount) > editMaxAllowed
+                }
+                onClick={saveEditMilestone}
+                className="gap-1.5"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {busy === "update-milestone" ? "Saving…" : "Save Changes"}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
@@ -1963,13 +2812,19 @@ function Info({
   tone?: string;
 }) {
   return (
-    <div className="flex items-start gap-2.5 rounded-xl border border-border/60 bg-background/60 p-3">
-      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-        <Icon className="h-4 w-4" />
+    <div className="flex items-center gap-3.5 rounded-2xl border border-border/80 bg-card p-3.5 sm:p-4 shadow-xs transition-all hover:border-primary/30 hover:shadow-soft">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+        <Icon className="h-5 w-5" />
       </div>
-      <div className="min-w-0">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className={`mt-0.5 truncate font-medium ${tone ?? ""}`}>{value}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </p>
+        <p
+          className={`mt-0.5 truncate text-sm sm:text-base font-bold ${tone ?? "text-foreground"}`}
+        >
+          {value}
+        </p>
       </div>
     </div>
   );

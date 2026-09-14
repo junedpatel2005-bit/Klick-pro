@@ -351,7 +351,7 @@ export default function ProfessionalHome({
                 {jobs.slice(0, 4).map((job) => (
                   <Link
                     key={job.id}
-                    href={cmsMode ? "#" : `/job/${job.id}`}
+                    href={cmsMode ? "#" : `/professional/job/${job.id}`}
                     onClick={cmsMode ? (e) => e.preventDefault() : undefined}
                     className="flex min-h-64 flex-col rounded-2xl border border-border bg-card p-5 shadow-soft transition-all hover:-translate-y-1 hover:border-primary/30 hover:shadow-elevated"
                   >

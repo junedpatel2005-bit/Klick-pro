@@ -28,7 +28,16 @@ export async function respondToProjectRequest(
   const otherPartyId = actor.role === "CLIENT" ? hireRequest.professionalId : hireRequest.clientId;
   const job = await db.clientJob.findUnique({
     where: { id: hireRequest.jobId },
-    select: { id: true, title: true, status: true, userId: true },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      userId: true,
+      milestones: {
+        orderBy: { sortOrder: "asc" },
+        select: { title: true, description: true, amount: true, percentage: true, sortOrder: true },
+      },
+    },
   });
 
   if (action === "reject") {
@@ -109,6 +118,20 @@ export async function respondToProjectRequest(
       status: "READY_TO_START",
     },
   });
+  if (job.milestones.length > 0) {
+    await db.projectMilestone.createMany({
+      data: job.milestones.map((milestone) => ({
+        trackingId: tracking.id,
+        clientId: hireRequest.clientId,
+        professionalId: hireRequest.professionalId,
+        title: milestone.title,
+        description: milestone.description,
+        amount:
+          milestone.amount ?? Math.round((hireRequest.bidAmount * milestone.percentage) / 100),
+        status: "UPCOMING",
+      })),
+    });
+  }
   await db.projectTimelineEvent.create({
     data: {
       trackingId: tracking.id,

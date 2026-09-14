@@ -216,24 +216,41 @@ export default function PostJob() {
     localStorage.setItem(postJobDraftKey, JSON.stringify({ form, step, maxStep }));
   }, [editJobId, form, hydrated, maxStep, step]);
 
+  const rebalanceMilestones = (milestones: JobFormMilestone[]) => {
+    if (milestones.length === 0) return milestones;
+    const base = Math.floor(100 / milestones.length);
+    const remainder = 100 % milestones.length;
+    return milestones.map((milestone, index) => ({
+      ...milestone,
+      percentage: index === 0 ? base + remainder : base,
+    }));
+  };
+
   const addMilestone = () => {
     const currentSum = form.milestones.reduce((acc, m) => acc + (Number(m.percentage) || 0), 0);
-    const remaining = Math.max(0, 100 - currentSum);
-    const newPercentage = remaining > 0 ? (remaining >= 25 ? 25 : remaining) : 10;
+    if (form.milestones.length === 1 && currentSum >= 100) {
+      setErrors((old) => ({
+        ...old,
+        milestones:
+          "Milestone percentage is already 100% complete. Reduce an existing milestone before adding another.",
+      }));
+      return;
+    }
     const nextIndex = form.milestones.length + 1;
-    update("milestones", [
+    const next = [
       ...form.milestones,
       {
         title: `Milestone ${nextIndex}`,
-        percentage: newPercentage,
+        percentage: 0,
         description: "",
       },
-    ]);
+    ];
+    update("milestones", rebalanceMilestones(next));
   };
 
   const removeMilestone = (index: number) => {
     const next = form.milestones.filter((_, i) => i !== index);
-    update("milestones", next);
+    update("milestones", rebalanceMilestones(next));
   };
 
   const updateMilestone = <K extends keyof JobFormMilestone>(
@@ -261,15 +278,7 @@ export default function PostJob() {
   };
 
   const splitMilestonesEvenly = () => {
-    const count = form.milestones.length;
-    if (count === 0) return;
-    const base = Math.floor(100 / count);
-    const remainder = 100 % count;
-    const next = form.milestones.map((m, i) => ({
-      ...m,
-      percentage: i === 0 ? base + remainder : base,
-    }));
-    update("milestones", next);
+    update("milestones", rebalanceMilestones(form.milestones));
   };
 
   const totalMilestonePercentage = useMemo(

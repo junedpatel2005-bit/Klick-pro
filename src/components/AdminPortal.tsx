@@ -11,13 +11,21 @@ export function AdminPortal({ children }: { children: React.ReactNode }) {
 
   if (pathname === "/admin/login") return <>{children}</>;
 
+  const isFullWidth = pathname?.startsWith("/admin/finance");
+
   return (
     <div className="min-h-screen bg-slate-50/70 text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
       <AdminRealtime />
       <AdminSidebar />
       <main className="lg:pl-64 flex flex-col min-h-screen">
         <AdminHeader />
-        <div className="flex-1 mx-auto w-full max-w-7xl p-5 sm:p-8">{children}</div>
+        <div
+          className={`flex-1 mx-auto w-full p-4 sm:p-6 lg:p-8 transition-all ${
+            isFullWidth ? "max-w-[1720px]" : "max-w-7xl"
+          }`}
+        >
+          {children}
+        </div>
       </main>
     </div>
   );

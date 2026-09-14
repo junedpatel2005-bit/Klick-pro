@@ -139,7 +139,7 @@ async function runAudit() {
   >(Prisma.sql`
     SELECT id, amount, base_amount, client_fee_amount, status FROM "Payment"
     WHERE amount <> base_amount + client_fee_amount
-       OR professional_payout_amount + admin_net_amount <> base_amount;
+       OR professional_payout_amount + admin_net_amount <> amount;
   `);
   console.log(`  Payment Fee / Math Mismatches: ${feeMismatches.length}`);
   if (feeMismatches.length > 0) {

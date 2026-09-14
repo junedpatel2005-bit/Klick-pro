@@ -836,7 +836,7 @@ export async function GET(
       const viewerRole = session.userId === project.clientId ? "CLIENT" : "PROFESSIONAL";
       const milestones = await db.projectMilestone.findMany({
         where: { trackingId: project.id },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         include: { payment: { select: { status: true, professionalPayoutAmount: true } } },
       });
       const [
