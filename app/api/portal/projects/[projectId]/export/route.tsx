@@ -21,7 +21,12 @@ function formatDate(value: Date | string | null | undefined) {
 }
 
 function formatStatus(value: string | null | undefined) {
-  return value ? value.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : "Not recorded";
+  return value
+    ? value
+        .replaceAll("_", " ")
+        .toLowerCase()
+        .replace(/\b\w/g, (c) => c.toUpperCase())
+    : "Not recorded";
 }
 
 function formatMoney(amount: number | null | undefined, currency = "INR") {
@@ -129,34 +134,41 @@ export async function GET(
       { status: 409 },
     );
 
-  const [negotiations, revisions, completionRequests, reviewRequests, transactions, review, dispute] =
-    await Promise.all([
-      db.projectNegotiation.findMany({
-        where: { requestId: project.requestId },
-        orderBy: { createdAt: "asc" },
-      }),
-      db.projectRevisionRequest.findMany({
-        where: { trackingId: project.id },
-        orderBy: { createdAt: "asc" },
-      }),
-      db.projectCompletionRequest.findMany({
-        where: { trackingId: project.id },
-        orderBy: { submittedAt: "asc" },
-      }),
-      db.projectReviewRequest.findMany({
-        where: { trackingId: project.id },
-        orderBy: { createdAt: "asc" },
-      }),
-      db.projectTransaction.findMany({
-        where: { trackingId: project.id },
-        orderBy: { createdAt: "asc" },
-      }),
-      db.projectReview.findUnique({ where: { trackingId: project.id } }),
-      db.projectDispute.findFirst({
-        where: { trackingId: project.id },
-        orderBy: { createdAt: "desc" },
-      }),
-    ]);
+  const [
+    negotiations,
+    revisions,
+    completionRequests,
+    reviewRequests,
+    transactions,
+    review,
+    dispute,
+  ] = await Promise.all([
+    db.projectNegotiation.findMany({
+      where: { requestId: project.requestId },
+      orderBy: { createdAt: "asc" },
+    }),
+    db.projectRevisionRequest.findMany({
+      where: { trackingId: project.id },
+      orderBy: { createdAt: "asc" },
+    }),
+    db.projectCompletionRequest.findMany({
+      where: { trackingId: project.id },
+      orderBy: { submittedAt: "asc" },
+    }),
+    db.projectReviewRequest.findMany({
+      where: { trackingId: project.id },
+      orderBy: { createdAt: "asc" },
+    }),
+    db.projectTransaction.findMany({
+      where: { trackingId: project.id },
+      orderBy: { createdAt: "asc" },
+    }),
+    db.projectReview.findUnique({ where: { trackingId: project.id } }),
+    db.projectDispute.findFirst({
+      where: { trackingId: project.id },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
   const disputeMessages = dispute
     ? await db.projectDisputeMessage.findMany({
@@ -333,7 +345,8 @@ export async function GET(
       ],
       body: item.note ?? "No note provided.",
       files: [item.fileName, ...extractFileNames(item.filesJson)].filter(
-        (value, index, values): value is string => Boolean(value) && values.indexOf(value) === index,
+        (value, index, values): value is string =>
+          Boolean(value) && values.indexOf(value) === index,
       ),
     })),
     requests: requestEntries,

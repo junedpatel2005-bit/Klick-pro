@@ -291,9 +291,7 @@ export function ProjectArchiveDocument({ data }: { data: ProjectArchiveData }) {
         <Section title="Complete activity timeline" entries={data.timeline} />
         <Section title="Participant reviews" entries={data.reviews} />
         {data.dispute ? <Section title="Dispute" entries={[data.dispute]} /> : null}
-        {data.dispute ? (
-          <Section title="Dispute messages" entries={data.disputeMessages} />
-        ) : null}
+        {data.dispute ? <Section title="Dispute messages" entries={data.disputeMessages} /> : null}
         <Footer />
       </Page>
     </Document>

@@ -56,6 +56,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@react-google-maps/api": "^2.20.7",
     "@react-pdf/renderer": "^4.6.1",
+    "@sentry/core": "^10.70.0",
     "@sentry/nextjs": "^10.70.0",
     "@tanstack/react-query": "^5.83.0",
     "@vercel/functions": "^3.9.5",
@@ -114,5 +115,8 @@
   },
   "overrides": {
     "lodash-es": "4.18.1"
+  },
+  "optionalDependencies": {
+    "@next/swc-win32-x64-msvc": "^16.3.0"
   }
 }

@@ -32,6 +32,7 @@ export type ProjectReviewAvgAggregateOutputType = {
   clientId: number | null
   professionalId: number | null
   rating: number | null
+  professionalRating: number | null
 }
 
 export type ProjectReviewSumAggregateOutputType = {
@@ -40,6 +41,7 @@ export type ProjectReviewSumAggregateOutputType = {
   clientId: number | null
   professionalId: number | null
   rating: number | null
+  professionalRating: number | null
 }
 
 export type ProjectReviewMinAggregateOutputType = {
@@ -49,6 +51,10 @@ export type ProjectReviewMinAggregateOutputType = {
   professionalId: number | null
   rating: number | null
   comment: string | null
+  clientReviewedAt: Date | null
+  professionalRating: number | null
+  professionalComment: string | null
+  professionalReviewedAt: Date | null
   createdAt: Date | null
   updatedAt: Date | null
   professionalResponse: string | null
@@ -62,6 +68,10 @@ export type ProjectReviewMaxAggregateOutputType = {
   professionalId: number | null
   rating: number | null
   comment: string | null
+  clientReviewedAt: Date | null
+  professionalRating: number | null
+  professionalComment: string | null
+  professionalReviewedAt: Date | null
   createdAt: Date | null
   updatedAt: Date | null
   professionalResponse: string | null
@@ -75,6 +85,10 @@ export type ProjectReviewCountAggregateOutputType = {
   professionalId: number
   rating: number
   comment: number
+  clientReviewedAt: number
+  professionalRating: number
+  professionalComment: number
+  professionalReviewedAt: number
   createdAt: number
   updatedAt: number
   professionalResponse: number
@@ -89,6 +103,7 @@ export type ProjectReviewAvgAggregateInputType = {
   clientId?: true
   professionalId?: true
   rating?: true
+  professionalRating?: true
 }
 
 export type ProjectReviewSumAggregateInputType = {
@@ -97,6 +112,7 @@ export type ProjectReviewSumAggregateInputType = {
   clientId?: true
   professionalId?: true
   rating?: true
+  professionalRating?: true
 }
 
 export type ProjectReviewMinAggregateInputType = {
@@ -106,6 +122,10 @@ export type ProjectReviewMinAggregateInputType = {
   professionalId?: true
   rating?: true
   comment?: true
+  clientReviewedAt?: true
+  professionalRating?: true
+  professionalComment?: true
+  professionalReviewedAt?: true
   createdAt?: true
   updatedAt?: true
   professionalResponse?: true
@@ -119,6 +139,10 @@ export type ProjectReviewMaxAggregateInputType = {
   professionalId?: true
   rating?: true
   comment?: true
+  clientReviewedAt?: true
+  professionalRating?: true
+  professionalComment?: true
+  professionalReviewedAt?: true
   createdAt?: true
   updatedAt?: true
   professionalResponse?: true
@@ -132,6 +156,10 @@ export type ProjectReviewCountAggregateInputType = {
   professionalId?: true
   rating?: true
   comment?: true
+  clientReviewedAt?: true
+  professionalRating?: true
+  professionalComment?: true
+  professionalReviewedAt?: true
   createdAt?: true
   updatedAt?: true
   professionalResponse?: true
@@ -230,8 +258,12 @@ export type ProjectReviewGroupByOutputType = {
   trackingId: number
   clientId: number
   professionalId: number
-  rating: number
+  rating: number | null
   comment: string | null
+  clientReviewedAt: Date | null
+  professionalRating: number | null
+  professionalComment: string | null
+  professionalReviewedAt: Date | null
   createdAt: Date
   updatedAt: Date
   professionalResponse: string | null
@@ -266,8 +298,12 @@ export type ProjectReviewWhereInput = {
   trackingId?: Prisma.IntFilter<"ProjectReview"> | number
   clientId?: Prisma.IntFilter<"ProjectReview"> | number
   professionalId?: Prisma.IntFilter<"ProjectReview"> | number
-  rating?: Prisma.IntFilter<"ProjectReview"> | number
+  rating?: Prisma.IntNullableFilter<"ProjectReview"> | number | null
   comment?: Prisma.StringNullableFilter<"ProjectReview"> | string | null
+  clientReviewedAt?: Prisma.DateTimeNullableFilter<"ProjectReview"> | Date | string | null
+  professionalRating?: Prisma.IntNullableFilter<"ProjectReview"> | number | null
+  professionalComment?: Prisma.StringNullableFilter<"ProjectReview"> | string | null
+  professionalReviewedAt?: Prisma.DateTimeNullableFilter<"ProjectReview"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"ProjectReview"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"ProjectReview"> | Date | string
   professionalResponse?: Prisma.StringNullableFilter<"ProjectReview"> | string | null
@@ -279,8 +315,12 @@ export type ProjectReviewOrderByWithRelationInput = {
   trackingId?: Prisma.SortOrder
   clientId?: Prisma.SortOrder
   professionalId?: Prisma.SortOrder
-  rating?: Prisma.SortOrder
+  rating?: Prisma.SortOrderInput | Prisma.SortOrder
   comment?: Prisma.SortOrderInput | Prisma.SortOrder
+  clientReviewedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  professionalRating?: Prisma.SortOrderInput | Prisma.SortOrder
+  professionalComment?: Prisma.SortOrderInput | Prisma.SortOrder
+  professionalReviewedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   professionalResponse?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -295,8 +335,12 @@ export type ProjectReviewWhereUniqueInput = Prisma.AtLeast<{
   NOT?: Prisma.ProjectReviewWhereInput | Prisma.ProjectReviewWhereInput[]
   clientId?: Prisma.IntFilter<"ProjectReview"> | number
   professionalId?: Prisma.IntFilter<"ProjectReview"> | number
-  rating?: Prisma.IntFilter<"ProjectReview"> | number
+  rating?: Prisma.IntNullableFilter<"ProjectReview"> | number | null
   comment?: Prisma.StringNullableFilter<"ProjectReview"> | string | null
+  clientReviewedAt?: Prisma.DateTimeNullableFilter<"ProjectReview"> | Date | string | null
+  professionalRating?: Prisma.IntNullableFilter<"ProjectReview"> | number | null
+  professionalComment?: Prisma.StringNullableFilter<"ProjectReview"> | string | null
+  professionalReviewedAt?: Prisma.DateTimeNullableFilter<"ProjectReview"> | Date | string | null
   createdAt?: Prisma.DateTimeFilter<"ProjectReview"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"ProjectReview"> | Date | string
   professionalResponse?: Prisma.StringNullableFilter<"ProjectReview"> | string | null
@@ -308,8 +352,12 @@ export type ProjectReviewOrderByWithAggregationInput = {
   trackingId?: Prisma.SortOrder
   clientId?: Prisma.SortOrder
   professionalId?: Prisma.SortOrder
-  rating?: Prisma.SortOrder
+  rating?: Prisma.SortOrderInput | Prisma.SortOrder
   comment?: Prisma.SortOrderInput | Prisma.SortOrder
+  clientReviewedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  professionalRating?: Prisma.SortOrderInput | Prisma.SortOrder
+  professionalComment?: Prisma.SortOrderInput | Prisma.SortOrder
+  professionalReviewedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   professionalResponse?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -329,8 +377,12 @@ export type ProjectReviewScalarWhereWithAggregatesInput = {
   trackingId?: Prisma.IntWithAggregatesFilter<"ProjectReview"> | number
   clientId?: Prisma.IntWithAggregatesFilter<"ProjectReview"> | number
   professionalId?: Prisma.IntWithAggregatesFilter<"ProjectReview"> | number
-  rating?: Prisma.IntWithAggregatesFilter<"ProjectReview"> | number
+  rating?: Prisma.IntNullableWithAggregatesFilter<"ProjectReview"> | number | null
   comment?: Prisma.StringNullableWithAggregatesFilter<"ProjectReview"> | string | null
+  clientReviewedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"ProjectReview"> | Date | string | null
+  professionalRating?: Prisma.IntNullableWithAggregatesFilter<"ProjectReview"> | number | null
+  professionalComment?: Prisma.StringNullableWithAggregatesFilter<"ProjectReview"> | string | null
+  professionalReviewedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"ProjectReview"> | Date | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"ProjectReview"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"ProjectReview"> | Date | string
   professionalResponse?: Prisma.StringNullableWithAggregatesFilter<"ProjectReview"> | string | null
@@ -341,8 +393,12 @@ export type ProjectReviewCreateInput = {
   trackingId: number
   clientId: number
   professionalId: number
-  rating: number
+  rating?: number | null
   comment?: string | null
+  clientReviewedAt?: Date | string | null
+  professionalRating?: number | null
+  professionalComment?: string | null
+  professionalReviewedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   professionalResponse?: string | null
@@ -354,8 +410,12 @@ export type ProjectReviewUncheckedCreateInput = {
   trackingId: number
   clientId: number
   professionalId: number
-  rating: number
+  rating?: number | null
   comment?: string | null
+  clientReviewedAt?: Date | string | null
+  professionalRating?: number | null
+  professionalComment?: string | null
+  professionalReviewedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   professionalResponse?: string | null
@@ -366,8 +426,12 @@ export type ProjectReviewUpdateInput = {
   trackingId?: Prisma.IntFieldUpdateOperationsInput | number
   clientId?: Prisma.IntFieldUpdateOperationsInput | number
   professionalId?: Prisma.IntFieldUpdateOperationsInput | number
-  rating?: Prisma.IntFieldUpdateOperationsInput | number
+  rating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  clientReviewedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  professionalRating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  professionalComment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  professionalReviewedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   professionalResponse?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -379,8 +443,12 @@ export type ProjectReviewUncheckedUpdateInput = {
   trackingId?: Prisma.IntFieldUpdateOperationsInput | number
   clientId?: Prisma.IntFieldUpdateOperationsInput | number
   professionalId?: Prisma.IntFieldUpdateOperationsInput | number
-  rating?: Prisma.IntFieldUpdateOperationsInput | number
+  rating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  clientReviewedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  professionalRating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  professionalComment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  professionalReviewedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   professionalResponse?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -392,8 +460,12 @@ export type ProjectReviewCreateManyInput = {
   trackingId: number
   clientId: number
   professionalId: number
-  rating: number
+  rating?: number | null
   comment?: string | null
+  clientReviewedAt?: Date | string | null
+  professionalRating?: number | null
+  professionalComment?: string | null
+  professionalReviewedAt?: Date | string | null
   createdAt?: Date | string
   updatedAt?: Date | string
   professionalResponse?: string | null
@@ -404,8 +476,12 @@ export type ProjectReviewUpdateManyMutationInput = {
   trackingId?: Prisma.IntFieldUpdateOperationsInput | number
   clientId?: Prisma.IntFieldUpdateOperationsInput | number
   professionalId?: Prisma.IntFieldUpdateOperationsInput | number
-  rating?: Prisma.IntFieldUpdateOperationsInput | number
+  rating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  clientReviewedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  professionalRating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  professionalComment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  professionalReviewedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   professionalResponse?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -417,8 +493,12 @@ export type ProjectReviewUncheckedUpdateManyInput = {
   trackingId?: Prisma.IntFieldUpdateOperationsInput | number
   clientId?: Prisma.IntFieldUpdateOperationsInput | number
   professionalId?: Prisma.IntFieldUpdateOperationsInput | number
-  rating?: Prisma.IntFieldUpdateOperationsInput | number
+  rating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  clientReviewedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  professionalRating?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  professionalComment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  professionalReviewedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   professionalResponse?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -432,6 +512,10 @@ export type ProjectReviewCountOrderByAggregateInput = {
   professionalId?: Prisma.SortOrder
   rating?: Prisma.SortOrder
   comment?: Prisma.SortOrder
+  clientReviewedAt?: Prisma.SortOrder
+  professionalRating?: Prisma.SortOrder
+  professionalComment?: Prisma.SortOrder
+  professionalReviewedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   professionalResponse?: Prisma.SortOrder
@@ -444,6 +528,7 @@ export type ProjectReviewAvgOrderByAggregateInput = {
   clientId?: Prisma.SortOrder
   professionalId?: Prisma.SortOrder
   rating?: Prisma.SortOrder
+  professionalRating?: Prisma.SortOrder
 }
 
 export type ProjectReviewMaxOrderByAggregateInput = {
@@ -453,6 +538,10 @@ export type ProjectReviewMaxOrderByAggregateInput = {
   professionalId?: Prisma.SortOrder
   rating?: Prisma.SortOrder
   comment?: Prisma.SortOrder
+  clientReviewedAt?: Prisma.SortOrder
+  professionalRating?: Prisma.SortOrder
+  professionalComment?: Prisma.SortOrder
+  professionalReviewedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   professionalResponse?: Prisma.SortOrder
@@ -466,6 +555,10 @@ export type ProjectReviewMinOrderByAggregateInput = {
   professionalId?: Prisma.SortOrder
   rating?: Prisma.SortOrder
   comment?: Prisma.SortOrder
+  clientReviewedAt?: Prisma.SortOrder
+  professionalRating?: Prisma.SortOrder
+  professionalComment?: Prisma.SortOrder
+  professionalReviewedAt?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   professionalResponse?: Prisma.SortOrder
@@ -478,6 +571,7 @@ export type ProjectReviewSumOrderByAggregateInput = {
   clientId?: Prisma.SortOrder
   professionalId?: Prisma.SortOrder
   rating?: Prisma.SortOrder
+  professionalRating?: Prisma.SortOrder
 }
 
 
@@ -489,6 +583,10 @@ export type ProjectReviewSelect<ExtArgs extends runtime.Types.Extensions.Interna
   professionalId?: boolean
   rating?: boolean
   comment?: boolean
+  clientReviewedAt?: boolean
+  professionalRating?: boolean
+  professionalComment?: boolean
+  professionalReviewedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   professionalResponse?: boolean
@@ -502,6 +600,10 @@ export type ProjectReviewSelectCreateManyAndReturn<ExtArgs extends runtime.Types
   professionalId?: boolean
   rating?: boolean
   comment?: boolean
+  clientReviewedAt?: boolean
+  professionalRating?: boolean
+  professionalComment?: boolean
+  professionalReviewedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   professionalResponse?: boolean
@@ -515,6 +617,10 @@ export type ProjectReviewSelectUpdateManyAndReturn<ExtArgs extends runtime.Types
   professionalId?: boolean
   rating?: boolean
   comment?: boolean
+  clientReviewedAt?: boolean
+  professionalRating?: boolean
+  professionalComment?: boolean
+  professionalReviewedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   professionalResponse?: boolean
@@ -528,13 +634,17 @@ export type ProjectReviewSelectScalar = {
   professionalId?: boolean
   rating?: boolean
   comment?: boolean
+  clientReviewedAt?: boolean
+  professionalRating?: boolean
+  professionalComment?: boolean
+  professionalReviewedAt?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   professionalResponse?: boolean
   professionalResponseAt?: boolean
 }
 
-export type ProjectReviewOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "trackingId" | "clientId" | "professionalId" | "rating" | "comment" | "createdAt" | "updatedAt" | "professionalResponse" | "professionalResponseAt", ExtArgs["result"]["projectReview"]>
+export type ProjectReviewOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "trackingId" | "clientId" | "professionalId" | "rating" | "comment" | "clientReviewedAt" | "professionalRating" | "professionalComment" | "professionalReviewedAt" | "createdAt" | "updatedAt" | "professionalResponse" | "professionalResponseAt", ExtArgs["result"]["projectReview"]>
 
 export type $ProjectReviewPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   name: "ProjectReview"
@@ -544,8 +654,12 @@ export type $ProjectReviewPayload<ExtArgs extends runtime.Types.Extensions.Inter
     trackingId: number
     clientId: number
     professionalId: number
-    rating: number
+    rating: number | null
     comment: string | null
+    clientReviewedAt: Date | null
+    professionalRating: number | null
+    professionalComment: string | null
+    professionalReviewedAt: Date | null
     createdAt: Date
     updatedAt: Date
     professionalResponse: string | null
@@ -979,6 +1093,10 @@ export interface ProjectReviewFieldRefs {
   readonly professionalId: Prisma.FieldRef<"ProjectReview", 'Int'>
   readonly rating: Prisma.FieldRef<"ProjectReview", 'Int'>
   readonly comment: Prisma.FieldRef<"ProjectReview", 'String'>
+  readonly clientReviewedAt: Prisma.FieldRef<"ProjectReview", 'DateTime'>
+  readonly professionalRating: Prisma.FieldRef<"ProjectReview", 'Int'>
+  readonly professionalComment: Prisma.FieldRef<"ProjectReview", 'String'>
+  readonly professionalReviewedAt: Prisma.FieldRef<"ProjectReview", 'DateTime'>
   readonly createdAt: Prisma.FieldRef<"ProjectReview", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"ProjectReview", 'DateTime'>
   readonly professionalResponse: Prisma.FieldRef<"ProjectReview", 'String'>
