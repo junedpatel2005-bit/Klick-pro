@@ -830,50 +830,100 @@ export async function POST(request: NextRequest) {
       });
     }
     if (input.action === "submit-review") {
-      if (session.role !== "CLIENT")
+      if (!["CLIENT", "PROFESSIONAL"].includes(session.role))
         return NextResponse.json(
-          { error: "Only clients can submit a professional review." },
+          { error: "Only project clients and professionals can submit reviews." },
           { status: 403 },
         );
-      const review = await db.projectReview.upsert({
-        where: { trackingId: project.id },
-        update: {
-          rating: input.rating,
-          comment: input.comment ?? null,
-          updatedAt: new Date(),
-        },
-        create: {
-          trackingId: project.id,
-          clientId: project.clientId,
-          professionalId: project.professionalId,
-          rating: input.rating,
-          comment: input.comment ?? null,
-        },
-      });
-      const targetReviews = await db.projectReview.findMany({
-        where: { professionalId: project.professionalId },
-      });
-      if (targetReviews.length > 0) {
-        const average =
-          targetReviews.reduce((sum, item) => sum + item.rating, 0) / targetReviews.length;
-        await db.user.update({
-          where: { id: project.professionalId },
-          data: {
-            averageRating: Number(average.toFixed(1)),
-            reviewCount: targetReviews.length,
+      const isClientReview = session.role === "CLIENT";
+      const isProjectParticipant = isClientReview
+        ? project.clientId === session.userId
+        : project.professionalId === session.userId;
+      if (!isProjectParticipant)
+        return NextResponse.json(
+          { error: "You can only review projects you participated in." },
+          { status: 403 },
+        );
+      if (!["COMPLETED", "CLOSED"].includes(project.status))
+        return NextResponse.json(
+          { error: "Reviews can be submitted after the project is complete." },
+          { status: 409 },
+        );
+
+      const reviewedAt = new Date();
+      const review = await db.$transaction(async (tx) => {
+        const savedReview = await tx.projectReview.upsert({
+          where: { trackingId: project.id },
+          update: isClientReview
+            ? {
+                rating: input.rating,
+                comment: input.comment ?? null,
+                clientReviewedAt: reviewedAt,
+              }
+            : {
+                professionalRating: input.rating,
+                professionalComment: input.comment ?? null,
+                professionalReviewedAt: reviewedAt,
+              },
+          create: {
+            trackingId: project.id,
+            clientId: project.clientId,
+            professionalId: project.professionalId,
+            ...(isClientReview
+              ? {
+                  rating: input.rating,
+                  comment: input.comment ?? null,
+                  clientReviewedAt: reviewedAt,
+                }
+              : {
+                  professionalRating: input.rating,
+                  professionalComment: input.comment ?? null,
+                  professionalReviewedAt: reviewedAt,
+                }),
           },
         });
-      }
+
+        const recipientId = isClientReview ? project.professionalId : project.clientId;
+        let averageRating = 0;
+        let reviewCount = 0;
+        if (isClientReview) {
+          const reviewStats = await tx.projectReview.aggregate({
+            where: { professionalId: recipientId, rating: { not: null } },
+            _avg: { rating: true },
+            _count: { rating: true },
+          });
+          averageRating = reviewStats._avg.rating ?? 0;
+          reviewCount = reviewStats._count.rating;
+        } else {
+          const reviewStats = await tx.projectReview.aggregate({
+            where: { clientId: recipientId, professionalRating: { not: null } },
+            _avg: { professionalRating: true },
+            _count: { professionalRating: true },
+          });
+          averageRating = reviewStats._avg.professionalRating ?? 0;
+          reviewCount = reviewStats._count.professionalRating;
+        }
+
+        await tx.user.update({
+          where: { id: recipientId },
+          data: {
+            averageRating: Number(averageRating.toFixed(1)),
+            reviewCount,
+          },
+        });
+        return savedReview;
+      });
       await event(
         "PROJECT_REVIEW_SUBMITTED",
-        "Professional review submitted",
-        input.comment ?? `Rated the project ${input.rating}/5.`,
+        `${isClientReview ? "Professional" : "Client"} review submitted`,
+        input.comment ??
+          `Rated the ${isClientReview ? "professional" : "client"} ${input.rating}/5.`,
       );
       return NextResponse.json({ ok: true, reviewId: review.id });
     }
     if (input.action === "respond-to-review") {
       const review = await db.projectReview.findUnique({ where: { trackingId: project.id } });
-      if (!review)
+      if (!review || review.rating === null)
         return NextResponse.json({ error: "No client review is available yet." }, { status: 409 });
       await db.projectReview.update({
         where: { trackingId: project.id },
