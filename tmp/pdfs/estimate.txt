@@ -1,0 +1,306 @@
+PAGES 6
+
+--- PAGE 1 ---
+  
+PROJECT  ESTIMATION  DOCUMENT  Phase  1  –  Service  Marketplace  Platform  Web  Portal   +   Admin  Panel   (No  iOS  /  Android  App)    
+Scope  of  This  Estimate  This  estimate  covers  Web  Portal  (client-facing  +  professional-facing)  and  Admin  Panel  development  only.  iOS  and  Android  
+mobile
+ 
+apps
+ 
+are
+ 
+excluded
+ 
+from
+ 
+this
+ 
+phase.
+  Included  in  This  Estimate  ✅   Public  Website  ✅   Client  Web  Portal  ✅   Professional  Web  Portal  ✅   Admin  Panel  (Web)  ✅   Backend  APIs  &  Database  ✅   Google  Maps  (Web)  ✅   Email  &  Browser  Notifications   
+Estimation  Summary   Total  Hours   
+382  hrs    Hourly  Rate  Standard  Timeline  USD  /  hour  ~2.5  to  3  months   
+Detailed  Task-Wise  Estimation   Task  Details  Breakdown  #  Module  Feature  /  Task  Platform  Hrs   
+ 1.1  Website  –  Public  /  Pre-Login  Pages  Home  Page  Web  
+7  hrs   1.2  Website  –  Public  /  Pre-Login  Pages  About  Us  Web  
+4  hrs   1.3  Website  –  Public  /  Pre-Login  Pages  How  It  Works  Web  
+4  hrs   1.4  Website  –  Public  /  Pre-Login  Pages  Services  /  Categories  Web  
+5  hrs   1.5  Website  –  Public  /  Pre-Login  Pages  For  Clients  Page  Web  
+3  hrs   1.6  Website  –  Public  /  Pre-Login  Pages  For  Professionals  Page  Web  
+3  hrs   1.7  Website  –  Public  /  Pre-Login  Pages  
+Pricing  /  Fees  /  Commission  
+Web  
+4  hrs   1.8  Website  –  Public  /  Pre-Login  Pages  FAQ  Page  Web  
+3  hrs   1.9  Website  –  Public  /  Pre-Login  Pages  Contact  Us  Web  
+3  hrs   1.10  Website  –  Public  /  Pre-Login  Pages  Privacy  Policy  &  T&C  Web  
+2  hrs   1.11  Website  –  Public  /  Pre-Login  Pages  
+Responsive  /  Mobile  Optimization  
+Web  
+5  hrs   
+--- PAGE 2 ---
+Task  Details  Breakdown  #  Module  Feature  /  Task  Platform  Hrs   Subtotal  –  Website  –  Public  /  Pre-Login  Pages  43  hrs    2.1  Client  Side  –  Registration  &  Profile  Email  &  Phone  Signup  Web  
+4  hrs   2.2  Client  Side  –  Registration  &  Profile  Google  Login  (OAuth)  Web  
+3  hrs   2.3  Client  Side  –  Registration  &  Profile  
+Forgot  Password  /  OTP  Reset  
+Web  
+2  hrs   2.4  Client  Side  –  Registration  &  Profile  Client  Profile  Setup  Web  
+4  hrs   Subtotal  –  Client  Side  –  Registration  &  Profile  13  hrs    3.1  Client  Side  –  Job  /  Project  Posting  Create  New  Job  /  Project  Web  
+5  hrs   3.2  Client  Side  –  Job  /  Project  Posting  
+Budget,  Urgency,  Date  &  Deadline  
+Web  
+3  hrs   3.3  Client  Side  –  Job  /  Project  Posting  Job  Type  Selection  Web  
+2  hrs   3.4  Client  Side  –  Job  /  Project  Posting  
+Google  Maps  Location  Picker  
+Web  
+5  hrs   
+3.5  Client  Side  –  Job  /  Project  Posting  
+Save  &  Manage  Jobs  (Draft/Active)  
+Web  
+3  hrs   Subtotal  –  Client  Side  –  Job  /  Project  Posting  18  hrs    4.1  Client  Side  –  Professional  Discovery  Search  Professionals  Web  
+3  hrs   
+4.2  Client  Side  –  Professional  Discovery  
+Filters  (City,  Distance,  Rating,  Verified,  Availability)  
+Web  
+6  hrs   
+4.3  Client  Side  –  Professional  Discovery  
+View  Professionals  on  Map  
+Web  
+5  hrs   Subtotal  –  Client  Side  –  Professional  Discovery  14  hrs    5.1  Client  Side  –  Hiring  Flow  View  Professional  Profile  Web  
+3  hrs   5.2  Client  Side  –  Hiring  Flow  View  Pricing  Web  
+2  hrs   5.3  Client  Side  –  Hiring  Flow  Shortlist  Professional  Web  
+2  hrs   5.4  Client  Side  –  Hiring  Flow  Hire  Professional  Web  
+4  hrs   Subtotal  –  Client  Side  –  Hiring  Flow  11  hrs    6.1  Client  Side  –  Project  Tracking  Track  Project  Status  Web  
+3  hrs   6.2  Client  Side  –  Project  Tracking  View  Timeline  Web  
+2  hrs   6.3  Client  Side  –  Project  Tracking  View  Uploaded  Work  Proof  Web  
+2  hrs   6.4  Client  Side  –  Project  Tracking  Request  Revision  Web  
+2  hrs   6.5  Client  Side  –  Project  Tracking  Mark  Milestone  Complete  Web  
+3  hrs   Subtotal  –  Client  Side  –  Project  Tracking  12  hrs    7.1  Client  Side  –  Review  &  Rating  Rate  Professional  Web  
+2  hrs   7.2  Client  Side  –  Review  &  Rating  Leave  Review  Web  
+2  hrs   7.3  Client  Side  –  Review  &  Rating  
+Report  Issue  /  Raise  Dispute  
+Web  
+3  hrs   Subtotal  –  Client  Side  –  Review  &  Rating  7  hrs    8.1  Professional  Side  –  Registration  &  Profile  
+Signup  /  Login  (Email  &  Phone)  
+Web  
+4  hrs   8.2  Professional  Side  –  Registration  &  Profile  Forgot  Password  Web  
+1  hrs   8.3  Professional  Side  –  Registration  &  Profile  Professional  Profile  Setup  Web  
+5  hrs   Subtotal  –  Professional  Side  –  Registration  &  Profile  10  hrs    
+9.1  Professional  Side  –  Verification  Module  
+Document  Upload  (Gov  ID,  License,  Certs,  Insurance)  
+Web  
+6  hrs   
+9.2  Professional  Side  –  Verification  Module  
+Selfie  Verification  (Optional)  
+Web  
+2  hrs   
+9.3  Professional  Side  –  Verification  Module  
+Verification  Status  Tracking  
+Web  
+2  hrs   
+--- PAGE 3 ---
+Task  Details  Breakdown  #  Module  Feature  /  Task  Platform  Hrs   9.4  Professional  Side  –  Verification  Module  
+Verification  Badges  Display  
+Web  
+2  hrs   Subtotal  –  Professional  Side  –  Verification  Module  12  hrs    10.1  Professional  Side  –  Job  Discovery  Search  Available  Jobs  Web  
+3  hrs   10.2  Professional  Side  –  Job  Discovery  
+Filters  (Distance,  City,  Budget,  Urgency,  Type)  
+Web  
+4  hrs   10.3  Professional  Side  –  Job  Discovery  View  Jobs  on  Map  Web  
+5  hrs   10.4  Professional  Side  –  Job  Discovery  Save  Favourite  Jobs  Web  
+1  hrs   Subtotal  –  Professional  Side  –  Job  Discovery  13  hrs    11.1  Professional  Side  –  Proposal  &  Bidding  
+Apply  to  Jobs  /  Submit  Proposal  
+Web  
+4  hrs   11.2  Professional  Side  –  Proposal  &  Bidding  Negotiation  Flow  Web  
+4  hrs   Subtotal  –  Professional  Side  –  Proposal  &  Bidding  8  hrs    12.1  Professional  Side  –  Work  Management  Accept  /  Reject  Job  Web  
+2  hrs   12.2  Professional  Side  –  Work  Management  Track  Active  Jobs  Web  
+3  hrs   12.3  Professional  Side  –  Work  Management  
+Update  Progress  &  Upload  Work  Proof  
+Web  
+3  hrs   12.4  Professional  Side  –  Work  Management  Mark  Job  Complete  Web  
+2  hrs   12.5  Professional  Side  –  Work  Management  
+Request  Milestone  Payment  
+Web  
+3  hrs   Subtotal  –  Professional  Side  –  Work  Management  13  hrs    13.1  Professional  Side  –  Earnings  &  Wallet  View  Earnings  Dashboard  Web  
+3  hrs   13.2  Professional  Side  –  Earnings  &  Wallet  
+View  Completed  Jobs  &  Pending  Payouts  
+Web  
+2  hrs   13.3  Professional  Side  –  Earnings  &  Wallet  Withdraw  Money  Web  
+4  hrs   13.4  Professional  Side  –  Earnings  &  Wallet  
+View  Invoices  &  Commission  Deduction  
+Web  
+3  hrs   Subtotal  –  Professional  Side  –  Earnings  &  Wallet  12  hrs    14.1  
+Professional  Side  –  Reviews,  Ratings  &  Notifications  
+View  Ratings  &  Client  Reviews  
+Web  
+2  hrs   
+14.2  
+Professional  Side  –  Reviews,  Ratings  &  Notifications  
+Respond  to  Reviews  (Optional)  
+Web  
+2  hrs   
+14.3  
+Professional  Side  –  Reviews,  Ratings  &  Notifications  
+Email  &  Browser  Notifications  
+Web  
+4  hrs   Subtotal  –  Professional  Side  –  Reviews,  Ratings  &  Notifications  8  hrs    
+15.1  Google  Maps  &  Location  Features  
+Client  –  Job  Location  Picker  (Pin  Drop  +  Address  Search)  
+Web  
+5  hrs   
+15.2  Google  Maps  &  Location  Features  
+Client  –  View  Nearby  Professionals  &  Distance  
+Web  
+4  hrs   
+15.3  Google  Maps  &  Location  Features  
+Professional  –  Service  Radius  Setup  
+Web  
+4  hrs   
+15.4  Google  Maps  &  Location  Features  
+Professional  –  View  Nearby  Jobs  on  Map  
+Web  
+4  hrs   
+15.5  Google  Maps  &  Location  Features  
+Privacy  –  Approximate  Location  Display  
+Web  
+3  hrs   Subtotal  –  Google  Maps  &  Location  Features  20  hrs    16.1  Backend  –  API,  Database  &  Infrastructure  
+Project  Architecture  &  Setup  
+Backend  
+9  hrs   
+16.2  Backend  –  API,  Database  &  Infrastructure  
+Authentication  &  Authorization  
+Backend  
+6  hrs   
+16.3  Backend  –  API,  Database  &  Infrastructure  
+Database  Schema  Design  &  Setup  
+Backend  
+9  hrs   
+--- PAGE 4 ---
+Task  Details  Breakdown  #  Module  Feature  /  Task  Platform  Hrs   16.4  Backend  –  API,  Database  &  Infrastructure  
+REST  APIs  –  Client  Module  
+Backend  
+14  hrs   
+16.5  Backend  –  API,  Database  &  Infrastructure  
+REST  APIs  –  Professional  Module  
+Backend  
+14  hrs   
+16.6  Backend  –  API,  Database  &  Infrastructure  
+REST  APIs  –  Maps  &  Location  
+Backend  
+7  hrs   
+16.7  Backend  –  API,  Database  &  Infrastructure  
+File  Storage  (S3  /  Cloud)  &  CDN  
+Backend  
+6  hrs   
+16.8  Backend  –  API,  Database  &  Infrastructure  
+Email  &  Browser  Notification  Service  
+Backend  
+5  hrs   
+16.9  Backend  –  API,  Database  &  Infrastructure  
+Payment  /  Wallet  &  Payout  Logic  
+Backend  
+12  hrs   16.10  
+Backend  –  API,  Database  &  Infrastructure  
+Admin  APIs  &  Dashboard  Backend  
+Backend  
+10  hrs   Subtotal  –  Backend  –  API,  Database  &  Infrastructure  92  hrs    17.1  Admin  Panel  
+Admin  Login  &  Role  Management  
+Web  (Admin)  
+5  hrs   
+17.2  Admin  Panel  
+User  Management  (Clients  &  Professionals)  
+Web  (Admin)  
+5  hrs   
+17.3  Admin  Panel  
+Verification  Management  Dashboard  
+Web  (Admin)  
+8  hrs   
+17.4  Admin  Panel  
+Job  &  Dispute  Management  
+Web  (Admin)  
+8  hrs   
+17.5  Admin  Panel  
+Earnings,  Commission  &  Payout  Reports  
+Web  (Admin)  
+8  hrs   
+17.6  Admin  Panel  
+CMS  for  Website  Pages  (FAQ,  T&C,  Privacy)  
+Web  (Admin)  
+6  hrs   Subtotal  –  Admin  Panel  40  hrs    18.1  QA,  Testing  &  Deployment  
+Unit  &  Integration  Testing  (Backend)  
+Web  +  Backend  
+11  hrs   
+18.2  QA,  Testing  &  Deployment  
+Frontend  /  Web  QA  &  Bug  Fixing  
+Web  
+12  hrs   
+18.3  QA,  Testing  &  Deployment  
+Performance  &  Security  Testing  
+Web  +  Backend  
+7  hrs   
+18.4  QA,  Testing  &  Deployment  Production  Deployment  
+Web  +  Backend  
+6  hrs   Subtotal  –  QA,  Testing  &  Deployment  36  hrs   GRAND  TOTAL  –  PHASE  1  (Web  +  Admin)  382  hrs     
+ 
+--- PAGE 5 ---
+Module-Wise  Summary   #  Module  Hours   1  Website  –  Public  /  Pre-Login  Pages  43  hrs   2  Client  Side  –  Registration  &  Profile  13  hrs   3  Client  Side  –  Job  /  Project  Posting  18  hrs   4  Client  Side  –  Professional  Discovery  12  hrs   5  Client  Side  –  Hiring  Flow  11  hrs   6  Client  Side  –  Project  Tracking  12  hrs   7  Client  Side  –  Review  &  Rating  6  hrs   8  Professional  Side  –  Registration  &  Profile  10  hrs   9  Professional  Side  –  Verification  Module  10  hrs   10  Professional  Side  –  Job  Discovery  13  hrs   11  Professional  Side  –  Proposal  &  Bidding  8  hrs   12  Professional  Side  –  Work  Management  13  hrs   13  Professional  Side  –  Earnings  &  Wallet  12  hrs   14  
+Professional  Side  –  Reviews,  Ratings  &  Notifications  
+7  hrs   15  Google  Maps  &  Location  Features  19  hrs   16  Backend  –  API,  Database  &  Infrastructure  92  hrs   17  Admin  Panel  39  hrs   18  QA,  Testing  &  Deployment  44  hrs   GRAND  TOTAL  382  hrs     
+Milestone-Based  Payment  Plan  The  project  is  divided  into  8  milestones  aligned  with  key  deliverables.  Payment  is  released  upon  client  approval  of  each  
+milestone.
+ 
+This
+ 
+protects
+ 
+both
+ 
+parties
+ 
+—
+ 
+you
+ 
+pay
+ 
+for
+ 
+what
+ 
+you
+ 
+receive,
+ 
+and
+ 
+we
+ 
+deliver
+ 
+in
+ 
+structured,
+ 
+reviewable
+ 
+phases.
+  #  Milestone  Timeline  Breakdown  Key  Deliverables  #  Title  Period   %  Summary  
+M1  Project  Kickoff  &  Foundation  Week  1–2   10%  
+•   Signed  contract  &  NDA  •   Requirement  finalization  &  UI/UX  wireframes  •   Tech  stack  setup,  cloud  infrastructure,  CI/CD  pipeline  
+M2  Public  Website  +  Auth  &  Profiles  Week  3–5   20%  
+•   All  11  public  website  pages  (Home,  About,  How  It  Works,  Services,  Pricing,  FAQ,  Contact,  T&C,  Privacy  Policy)  •   Fully  responsive  design  across  desktop,  tablet  &  mobile  •   Client  &  Professional  registration,  login,  OTP,  Google  OAuth  
+M3  Job  Posting,  Discovery  &  Maps  Week  6–8   20%  
+•   Client  job/project  posting  with  multi-step  form,  photos,  deadline  &  budget  •   Google  Maps  location  picker  (pin  drop  +  address  search)  •   Professional  discovery  —  search,  filters  (city,  
+--- PAGE 6 ---
+#  Milestone  Timeline  Breakdown  Key  Deliverables  #  Title  Period   %  Summary  distance,  rating,  verified)  
+M4  Hiring,  Work  Management  &  Proposals  Week  9–11   20%  
+•   View  professional  full  profile,  pricing,  hire  flow  &  contract  initiation  •   Professional  proposal  submission  &  negotiation  flow  •   Accept/reject  job,  track  active  jobs,  upload  work  proof  
+M5  Earnings,  Reviews  &  Notifications  Week  12–13   15%  
+•   Professional  earnings  dashboard,  pending  payouts,  withdrawal  flow  •   Invoice  generation  with  commission  deduction  breakdown  •   Client  —  rate  professional,  leave  review,  raise  dispute  
+M6  Admin  Panel  Week  14–15   10%  
+•   Admin  login  &  role  management  (super  admin  /  sub-admin)  •   User  management  —  view,  enable/disable,  delete  clients  &  professionals  •   Verification  management  —  review  documents,  approve/reject,  assign  badges  
+M7  QA,  Testing,  Deployment  &  Go-Live  Week  16–17   5%  
+•   Full  QA  cycle  —  frontend  web,  backend  APIs,  cross-browser  testing  •   Performance  &  security  testing  (load  testing,  OWASP  checks)  •   All  critical  bug  fixes  resolved  
+M8  Post-Launch  Support  (2  Weeks)  Week  18–19   0%  
+•   Critical  bug  resolution  &  hotfixes  post  go-live  •   Performance  monitoring  &  optimization  •   Minor  UI/UX  adjustments  based  on  live  feedback  
+TOTAL  PROJECT  COST   100%   
+ 

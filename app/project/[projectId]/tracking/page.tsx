@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock3,
   Coins,
+  Download,
   FileText,
   Flag,
   History,
@@ -115,9 +116,13 @@ type Data = {
   agreedAmount: number | null;
   review: {
     id: number;
-    rating: number;
+    rating: number | null;
     comment: string | null;
     createdAt: string;
+    clientReviewedAt: string | null;
+    professionalRating: number | null;
+    professionalComment: string | null;
+    professionalReviewedAt: string | null;
     professionalResponse: string | null;
     professionalResponseAt: string | null;
   } | null;
@@ -453,6 +458,13 @@ export default function SharedProjectTrackingPage() {
   const client = name(data.client, "Client"),
     professional = name(data.professional, "Professional");
   const isClient = data.viewerRole === "CLIENT";
+  const reviewRecipient = isClient ? professional : client;
+  const ownRating = isClient ? data.review?.rating : data.review?.professionalRating;
+  const ownComment = isClient ? data.review?.comment : data.review?.professionalComment;
+  const receivedRating = isClient ? data.review?.professionalRating : data.review?.rating;
+  const receivedComment = isClient ? data.review?.professionalComment : data.review?.comment;
+  const hasOwnReview = ownRating != null;
+  const hasReceivedReview = receivedRating != null;
   const current = data.milestones.find((m) =>
     ["IN_PROGRESS", "REVISION_REQUESTED", "AWAITING_CLIENT_REVIEW"].includes(m.status),
   );
@@ -1136,7 +1148,7 @@ export default function SharedProjectTrackingPage() {
               </section>
             )}
 
-            {data.project.status === "COMPLETED" && (
+            {["COMPLETED", "CLOSED"].includes(data.project.status) && (
               <section
                 id="project-feedback"
                 className="scroll-mt-24 rounded-3xl border border-emerald-200 bg-emerald-50/50 p-5 sm:p-6"
@@ -1156,57 +1168,80 @@ export default function SharedProjectTrackingPage() {
                       </p>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      if (!data.dispute) setShowDisputeForm(true);
-                      document.getElementById("project-dispute")?.scrollIntoView({
-                        behavior: "smooth",
-                        block: "start",
-                      });
-                    }}
-                  >
-                    Report issue / Raise dispute
-                  </Button>
-                </div>
-
-                <div className="mt-5 rounded-xl border bg-card p-4 shadow-soft">
-                  <p className="font-medium">
-                    {isClient ? "Rate professional" : "View ratings & client reviews"}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {isClient
-                      ? data.review
-                        ? `Submitted: ${data.review.rating}/5`
-                        : "Share your feedback and experience."
-                      : data.review
-                        ? `${data.review.rating}/5${data.review.comment ? ` · “${data.review.comment}”` : ""}`
-                        : "The client has not left a review yet."}
-                  </p>
-                  {isClient && !data.review && (
-                    <Button className="mt-4" size="sm" onClick={() => setShowReviewForm(true)}>
-                      {isClient ? "Rate professional" : "Rate client"}
+                  <div className="flex flex-wrap gap-2">
+                    <Button asChild size="sm">
+                      <a href={`/api/v1/portal/projects/${projectId}/export`}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Download full project PDF
+                      </a>
                     </Button>
-                  )}
-                  {!isClient && data.review && !data.review.professionalResponse && (
                     <Button
-                      className="mt-4"
                       variant="outline"
                       size="sm"
-                      onClick={() => setShowReviewResponseForm(true)}
+                      onClick={() => {
+                        if (!data.dispute) setShowDisputeForm(true);
+                        document.getElementById("project-dispute")?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      }}
                     >
-                      Respond to review
+                      Report issue / Raise dispute
                     </Button>
-                  )}
-                  {!isClient && data.review?.professionalResponse && (
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      Your response: {data.review.professionalResponse}
-                    </p>
-                  )}
+                  </div>
                 </div>
 
-                {showReviewForm && !data.review && (
+                <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-xl border bg-card p-4 shadow-soft">
+                    <p className="font-medium">Your review of {reviewRecipient}</p>
+                    {hasOwnReview ? (
+                      <div className="mt-2 text-sm text-muted-foreground">
+                        <p className="font-semibold text-foreground">{ownRating}/5</p>
+                        <p className="mt-1">{ownComment || "No comment provided."}</p>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Share your feedback about working with {reviewRecipient}.
+                        </p>
+                        <Button className="mt-4" size="sm" onClick={() => setShowReviewForm(true)}>
+                          {isClient ? "Rate professional" : "Rate client"}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border bg-card p-4 shadow-soft">
+                    <p className="font-medium">Review from {reviewRecipient}</p>
+                    {hasReceivedReview ? (
+                      <div className="mt-2 text-sm text-muted-foreground">
+                        <p className="font-semibold text-foreground">{receivedRating}/5</p>
+                        <p className="mt-1">{receivedComment || "No comment provided."}</p>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {reviewRecipient} has not left a review yet.
+                      </p>
+                    )}
+                    {!isClient && hasReceivedReview && !data.review?.professionalResponse && (
+                      <Button
+                        className="mt-4"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowReviewResponseForm(true)}
+                      >
+                        Respond to review
+                      </Button>
+                    )}
+                    {!isClient && data.review?.professionalResponse && (
+                      <p className="mt-3 border-l-2 border-primary/30 pl-3 text-sm text-muted-foreground">
+                        Your response: {data.review.professionalResponse}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {showReviewForm && !hasOwnReview && (
                   <div className="mt-4 rounded-xl border bg-card p-4">
                     <div className="grid gap-3">
                       <label className="grid gap-2 text-sm font-medium">
@@ -1263,6 +1298,7 @@ export default function SharedProjectTrackingPage() {
                 {showReviewResponseForm &&
                   !isClient &&
                   data.review &&
+                  hasReceivedReview &&
                   !data.review.professionalResponse && (
                     <div className="mt-4 rounded-xl border bg-card p-4">
                       <label className="grid gap-2 text-sm font-medium">

@@ -365,8 +365,12 @@ model ProjectReview {
   trackingId             Int       @unique
   clientId               Int
   professionalId         Int
-  rating                 Int
+  rating                 Int?
   comment                String?
+  clientReviewedAt       DateTime?
+  professionalRating     Int?
+  professionalComment    String?
+  professionalReviewedAt DateTime?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
   professionalResponse   String?

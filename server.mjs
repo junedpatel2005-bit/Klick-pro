@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { createServer } from "node:http";
 import { parse } from "node:url";
 import { jwtVerify } from "jose";
@@ -13,7 +14,13 @@ const dbPool = process.env.DATABASE_URL
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME ?? "0.0.0.0";
 const port = Number(process.env.PORT ?? 3000);
-const app = next({ dev, hostname, port });
+const useTurbopack = process.env.TURBOPACK === "1" || process.env.TURBOPACK === "true";
+const app = next({
+  dev,
+  hostname,
+  port,
+  ...(dev && !useTurbopack ? { webpack: true } : {}),
+});
 const handler = app.getRequestHandler();
 const allowedOrigin = process.env.REALTIME_ALLOWED_ORIGIN ?? process.env.APP_URL;
 

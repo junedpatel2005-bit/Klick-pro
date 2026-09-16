@@ -343,8 +343,8 @@ export async function GET(
       if (session.role !== "PROFESSIONAL")
         return NextResponse.json({ error: "Professional access required." }, { status: 403 });
       const reviews = await db.projectReview.findMany({
-        where: { professionalId: session.userId },
-        orderBy: { createdAt: "desc" },
+        where: { professionalId: session.userId, rating: { not: null } },
+        orderBy: { clientReviewedAt: "desc" },
       });
       const [clients, projects] = await Promise.all([
         db.user.findMany({
@@ -364,13 +364,13 @@ export async function GET(
         reviews.map((review) => ({
           id: review.id,
           trackingId: review.trackingId,
-          rating: review.rating,
+          rating: review.rating!,
           comment: review.comment,
           professionalResponse: review.professionalResponse,
           clientName: clientMap.get(review.clientId) ?? null,
           projectId: projectMap.get(review.trackingId)?.job.id ?? null,
           projectTitle: projectMap.get(review.trackingId)?.job.title ?? null,
-          createdAt: review.createdAt.toISOString(),
+          createdAt: (review.clientReviewedAt ?? review.createdAt).toISOString(),
         })),
       );
     }

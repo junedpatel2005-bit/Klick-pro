@@ -5,7 +5,15 @@ import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 
 const config = tseslint.config(
-  { ignores: [".next", "node_modules", "src/generated"] },
+  {
+    ignores: [
+      ".next/**",
+      ".project-work-files/**",
+      "**/node_modules/**",
+      "src/generated/**",
+      "tmp/**",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
