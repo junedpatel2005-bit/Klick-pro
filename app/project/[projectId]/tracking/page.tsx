@@ -14,6 +14,7 @@ import {
   FileText,
   Flag,
   History,
+  Info as InfoIcon,
   Layers,
   LayoutGrid,
   MapPin,
@@ -261,8 +262,6 @@ export default function SharedProjectTrackingPage() {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
     const socket = io(origin, {
       path: "/api/realtime",
-      withCredentials: true,
-      transports: ["websocket", "polling"],
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
@@ -523,8 +522,17 @@ export default function SharedProjectTrackingPage() {
     setDraftMilestones((prev) => {
       const current = prev[index];
       if (!current) return prev;
-      const next = [...prev];
-      const item: DraftMilestone = { ...current };
+
+      const next: DraftMilestone[] = prev.map((m) => ({ ...m }));
+      const item = next[index];
+      if (!item) return prev;
+
+      const n = next.length;
+      const maxTotalPct =
+        totalAgreed > 0
+          ? Math.min(100, Math.round((remainingMilestoneAmount / totalAgreed) * 100))
+          : 100;
+
       if (field === "title" || field === "description") {
         item[field] = String(val);
       } else if (field === "percentage") {
@@ -532,45 +540,200 @@ export default function SharedProjectTrackingPage() {
           item.percentage = "";
           item.amount = "";
         } else {
-          const pct = Math.min(100, Math.max(0, Number(val) || 0));
+          const isLast = index === n - 1;
+          let priorSum = 0;
+          if (!isLast) {
+            for (let i = 0; i < index; i++) {
+              const previous = next[i];
+              if (previous) {
+                priorSum += Math.max(1, Number(previous.percentage) || 1);
+              }
+            }
+          }
+
+          const targetIndices: number[] = [];
+          if (!isLast) {
+            for (let i = index + 1; i < n; i++) {
+              targetIndices.push(i);
+            }
+          } else {
+            for (let i = 0; i < n - 1; i++) {
+              targetIndices.push(i);
+            }
+          }
+
+          const k = targetIndices.length;
+          const minNeededForOthers = k * 1;
+          const maxAllowed = isLast
+            ? Math.max(1, maxTotalPct - minNeededForOthers)
+            : Math.max(1, maxTotalPct - priorSum - minNeededForOthers);
+          const pct = Math.min(maxAllowed, Math.max(1, Number(val) || 1));
+
           item.percentage = pct;
-          item.amount = totalAgreed > 0 ? Math.round((totalAgreed * pct) / 100) : "";
+          item.amount =
+            totalAgreed > 0
+              ? Math.min(remainingMilestoneAmount, Math.round((totalAgreed * pct) / 100))
+              : "";
+
+          if (n > 1) {
+            const fixedSum = isLast ? pct : priorSum + pct;
+            const remainingPct = Math.max(k, maxTotalPct - fixedSum);
+
+            if (k > 0) {
+              const base = Math.floor(remainingPct / k);
+              const remainder = remainingPct % k;
+              targetIndices.forEach((targetIdx, mIdx) => {
+                const targetMilestone = next[targetIdx];
+                if (!targetMilestone) return;
+                const targetPct = Math.max(1, base + (mIdx < remainder ? 1 : 0));
+                targetMilestone.percentage = targetPct;
+                targetMilestone.amount =
+                  totalAgreed > 0
+                    ? Math.min(
+                        remainingMilestoneAmount,
+                        Math.round((totalAgreed * targetPct) / 100),
+                      )
+                    : "";
+              });
+            }
+          }
         }
       } else if (field === "amount") {
         if (val === "" || val === null) {
           item.amount = "";
           item.percentage = "";
         } else {
-          const amt = Math.max(0, Number(val) || 0);
+          const isLast = index === n - 1;
+          let priorAmtSum = 0;
+          if (!isLast) {
+            for (let i = 0; i < index; i++) {
+              const previous = next[i];
+              if (previous) {
+                priorAmtSum += Math.max(1, Number(previous.amount) || 1);
+              }
+            }
+          }
+
+          const targetIndices: number[] = [];
+          if (!isLast) {
+            for (let i = index + 1; i < n; i++) {
+              targetIndices.push(i);
+            }
+          } else {
+            for (let i = 0; i < n - 1; i++) {
+              targetIndices.push(i);
+            }
+          }
+
+          const k = targetIndices.length;
+          const minAmtForOthers = k * 1;
+          const maxAllowedAmt = isLast
+            ? Math.max(1, remainingMilestoneAmount - minAmtForOthers)
+            : Math.max(1, remainingMilestoneAmount - priorAmtSum - minAmtForOthers);
+          const amt = Math.min(maxAllowedAmt, Math.max(1, Number(val) || 1));
+
           item.amount = amt;
-          item.percentage =
-            totalAgreed > 0 ? Math.min(100, Math.round((amt / totalAgreed) * 100)) : "";
+          const pct =
+            totalAgreed > 0 ? Math.min(maxTotalPct, Math.round((amt / totalAgreed) * 100)) : "";
+          item.percentage = pct;
+
+          if (n > 1 && remainingMilestoneAmount > 0) {
+            const fixedAmtSum = isLast ? amt : priorAmtSum + amt;
+            const remainingAmt = Math.max(k, remainingMilestoneAmount - fixedAmtSum);
+
+            if (k > 0) {
+              const baseAmt = Math.floor(remainingAmt / k);
+              const remainderAmt = remainingAmt % k;
+              targetIndices.forEach((targetIdx, mIdx) => {
+                const targetMilestone = next[targetIdx];
+                if (!targetMilestone) return;
+                const targetAmt = Math.max(1, baseAmt + (mIdx < remainderAmt ? 1 : 0));
+                targetMilestone.amount = targetAmt;
+                targetMilestone.percentage =
+                  totalAgreed > 0
+                    ? Math.min(maxTotalPct, Math.round((targetAmt / totalAgreed) * 100))
+                    : "";
+              });
+            }
+          }
         }
       }
-      next[index] = item;
       return next;
     });
     setMilestoneModalError(null);
   };
 
   const addDraftMilestone = () => {
-    const currentSum = draftMilestones.reduce((acc, m) => acc + (Number(m.amount) || 0), 0);
-    const left = Math.max(0, remainingMilestoneAmount - currentSum);
-    const leftPct = totalAgreed > 0 && left > 0 ? Math.round((left / totalAgreed) * 100) : "";
     const nextIndex = (data?.milestones?.length ?? 0) + draftMilestones.length + 1;
-    setDraftMilestones((prev) => [
-      ...prev,
+    const next: DraftMilestone[] = [
+      ...draftMilestones,
       {
         title: `Milestone ${nextIndex}`,
-        amount: left > 0 ? left : "",
-        percentage: leftPct || "",
+        amount: "",
+        percentage: "",
         description: "",
       },
-    ]);
+    ];
+    const count = next.length;
+    const baseAmt = Math.floor(remainingMilestoneAmount / count);
+    const remainderAmt = remainingMilestoneAmount % count;
+    setDraftMilestones(
+      next.map((m, i) => {
+        const amt = Math.max(1, baseAmt + (i < remainderAmt ? 1 : 0));
+        const pct =
+          totalAgreed > 0
+            ? Math.max(1, Math.round((amt / totalAgreed) * 100))
+            : Math.floor(100 / count);
+        return {
+          ...m,
+          amount: amt,
+          percentage: pct,
+        };
+      }),
+    );
   };
 
   const removeDraftMilestone = (index: number) => {
-    setDraftMilestones((prev) => prev.filter((_, i) => i !== index));
+    setDraftMilestones((prev) => {
+      const next: DraftMilestone[] = prev.filter((_, i) => i !== index);
+      if (next.length === 0) return next;
+      if (next.length === 1) {
+        const amt = remainingMilestoneAmount;
+        const pct = totalAgreed > 0 ? Math.min(100, Math.round((amt / totalAgreed) * 100)) : 100;
+        const only = next[0];
+        if (!only) return next;
+        return [{ ...only, amount: amt, percentage: pct }];
+      }
+      const currentSum = next.reduce((sum, m) => sum + Math.max(1, Number(m.amount) || 1), 0);
+      const diff = remainingMilestoneAmount - currentSum;
+      if (diff > 0) {
+        const targetIdx = 0;
+        return next.map((m, i) => {
+          if (i === targetIdx) {
+            const newAmt = Math.max(1, (Number(m.amount) || 1) + diff);
+            const newPct =
+              totalAgreed > 0 ? Math.min(100, Math.round((newAmt / totalAgreed) * 100)) : "";
+            return { ...m, amount: newAmt, percentage: newPct };
+          }
+          return m;
+        });
+      }
+      const count = next.length;
+      const baseAmt = Math.floor(remainingMilestoneAmount / count);
+      const remainderAmt = remainingMilestoneAmount % count;
+      return next.map((m, i) => {
+        const amt = Math.max(1, baseAmt + (i < remainderAmt ? 1 : 0));
+        const pct =
+          totalAgreed > 0
+            ? Math.max(1, Math.round((amt / totalAgreed) * 100))
+            : Math.floor(100 / count);
+        return {
+          ...m,
+          amount: amt,
+          percentage: pct,
+        };
+      });
+    });
     setMilestoneModalError(null);
   };
 
@@ -581,7 +744,7 @@ export default function SharedProjectTrackingPage() {
     setDraftMilestones((prev) => {
       const last = prev.length > 0 ? prev[prev.length - 1] : undefined;
       if (last && (!last.amount || last.amount === 0)) {
-        const next = [...prev];
+        const next: DraftMilestone[] = [...prev];
         const updatedLast: DraftMilestone = { ...last };
         const newAmt = (Number(updatedLast.amount) || 0) + remainingToAllocate;
         updatedLast.amount = newAmt;
@@ -598,7 +761,7 @@ export default function SharedProjectTrackingPage() {
           percentage: totalAgreed > 0 ? Math.round((remainingToAllocate / totalAgreed) * 100) : 100,
           description: "",
         },
-      ];
+      ] satisfies DraftMilestone[];
     });
   };
 
@@ -670,7 +833,25 @@ export default function SharedProjectTrackingPage() {
   const isFullyAllocated = totalAgreed > 0 && totalCommittedInProject >= totalAgreed;
   const remainingInModal = Math.max(0, remainingMilestoneAmount - totalDraftAmount);
 
+  const isMilestoneCompleted = (m?: Milestone | null) => {
+    if (!m) return false;
+    return (
+      m.status === "APPROVED" ||
+      m.status === "COMPLETED" ||
+      m.payment?.status === "COMPLETED" ||
+      data.project.status === "COMPLETED"
+    );
+  };
+
+  const otherMilestonesTotal = editingMilestone
+    ? data.milestones
+        .filter((m) => m.id !== editingMilestone.id)
+        .reduce((sum, m) => sum + m.amount, 0)
+    : 0;
+  const editMaxAllowed = Math.max(0, totalAgreed - otherMilestonesTotal);
+
   const openEditMilestoneModal = (milestone: Milestone) => {
+    if (isMilestoneCompleted(milestone)) return;
     setEditingMilestone(milestone);
     setEditMilestoneTitle(milestone.title);
     setEditMilestoneAmount(milestone.amount);
@@ -694,7 +875,7 @@ export default function SharedProjectTrackingPage() {
       setEditMilestoneAmount("");
       setEditMilestonePercentage("");
     } else {
-      const amt = Math.max(0, Number(val) || 0);
+      const amt = Math.min(editMaxAllowed, Math.max(0, Number(val) || 0));
       setEditMilestoneAmount(amt);
       setEditMilestonePercentage(
         totalAgreed > 0 ? Math.min(100, Math.round((amt / totalAgreed) * 100)) : "",
@@ -708,15 +889,23 @@ export default function SharedProjectTrackingPage() {
       setEditMilestonePercentage("");
       setEditMilestoneAmount("");
     } else {
-      const pct = Math.min(100, Math.max(0, Number(val) || 0));
+      const maxPct =
+        totalAgreed > 0 ? Math.min(100, Math.floor((editMaxAllowed / totalAgreed) * 100)) : 100;
+      const pct = Math.min(maxPct, Math.max(0, Number(val) || 0));
       setEditMilestonePercentage(pct);
-      setEditMilestoneAmount(totalAgreed > 0 ? Math.round((totalAgreed * pct) / 100) : "");
+      setEditMilestoneAmount(
+        totalAgreed > 0 ? Math.min(editMaxAllowed, Math.round((totalAgreed * pct) / 100)) : "",
+      );
     }
     setEditMilestoneError(null);
   };
 
   const saveEditMilestone = async () => {
     if (!editingMilestone) return;
+    if (isMilestoneCompleted(editingMilestone)) {
+      setEditMilestoneError("Completed or approved milestones cannot be edited.");
+      return;
+    }
     const title = editMilestoneTitle.trim();
     const amount = Number(editMilestoneAmount);
     if (!title) {
@@ -727,13 +916,9 @@ export default function SharedProjectTrackingPage() {
       setEditMilestoneError("Milestone amount must be greater than 0.");
       return;
     }
-    const otherMilestonesTotal = data.milestones
-      .filter((m) => m.id !== editingMilestone.id)
-      .reduce((sum, m) => sum + m.amount, 0);
     if (otherMilestonesTotal + amount > totalAgreed) {
-      const maxAllowed = Math.max(0, totalAgreed - otherMilestonesTotal);
       setEditMilestoneError(
-        `Total milestone amount cannot exceed project budget of ₹${totalAgreed.toLocaleString("en-IN")}. Maximum allowed for this milestone is ₹${maxAllowed.toLocaleString("en-IN")}.`,
+        `Total milestone amount cannot exceed project budget of ₹${totalAgreed.toLocaleString("en-IN")}. Maximum allowed for this milestone is ₹${editMaxAllowed.toLocaleString("en-IN")}.`,
       );
       return;
     }
@@ -754,6 +939,13 @@ export default function SharedProjectTrackingPage() {
   const deleteCurrentMilestone = async () => {
     if (!editingMilestone) return;
     if (
+      isMilestoneCompleted(editingMilestone) ||
+      editingMilestone.status === "AWAITING_CLIENT_REVIEW"
+    ) {
+      setEditMilestoneError("Active, completed, or approved milestones cannot be deleted.");
+      return;
+    }
+    if (
       !confirm(
         `Are you sure you want to delete "${editingMilestone.title}"? This cannot be undone.`,
       )
@@ -769,13 +961,6 @@ export default function SharedProjectTrackingPage() {
       setEditMilestoneError(e instanceof Error ? e.message : "Failed to delete milestone.");
     }
   };
-
-  const otherMilestonesTotal = editingMilestone
-    ? data.milestones
-        .filter((m) => m.id !== editingMilestone.id)
-        .reduce((sum, m) => sum + m.amount, 0)
-    : 0;
-  const editMaxAllowed = Math.max(0, totalAgreed - otherMilestonesTotal);
   const milestoneMinDate = dateInputValue(data.job?.jobDate);
   const milestoneMaxDate = dateInputValue(data.job?.deadline);
   const paidToProfessional = data.milestones.reduce(
@@ -1609,20 +1794,18 @@ export default function SharedProjectTrackingPage() {
 
                         {/* Status Badge & Edit */}
                         <div className="flex h-fit flex-wrap items-center gap-2">
-                          {isClient &&
-                            data.project.status !== "COMPLETED" &&
-                            m.status !== "APPROVED" && (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => openEditMilestoneModal(m)}
-                                className="h-7 gap-1.5 px-2.5 text-xs font-semibold hover:border-primary hover:text-primary"
-                              >
-                                <Pencil className="h-3 w-3" />
-                                Edit
-                              </Button>
-                            )}
+                          {isClient && !isMilestoneCompleted(m) && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditMilestoneModal(m)}
+                              className="h-7 gap-1.5 px-2.5 text-xs font-semibold hover:border-primary hover:text-primary"
+                            >
+                              <Pencil className="h-3 w-3" />
+                              Edit
+                            </Button>
+                          )}
                           <span
                             className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${
                               isApproved
@@ -2377,6 +2560,45 @@ export default function SharedProjectTrackingPage() {
               </div>
             )}
 
+            {remainingMilestoneAmount > 0 && draftMilestones.length > 0 && (
+              <div className="rounded-xl border border-blue-500/20 bg-blue-50/50 dark:bg-blue-950/20 p-3.5 text-xs text-muted-foreground flex items-start gap-2.5">
+                <InfoIcon className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-foreground">
+                    Milestone Rule: Minimum 1% per milestone (no 0% or empty space)
+                  </p>
+                  <p>
+                    Every milestone must be set to at least <strong>1%</strong>. When you adjust one
+                    milestone, the remaining budget is automatically split evenly across the other
+                    milestones without exceeding the project total.
+                  </p>
+                  {draftMilestones.length === 3 && (
+                    <p className="text-foreground/90 font-medium">
+                      💡 Tip: With 3 milestones, the maximum for any single milestone is{" "}
+                      <strong>98%</strong> (so the other 2 each have at least 1%). If you want to
+                      allocate <strong>99%</strong> to the first milestone, delete the 3rd milestone
+                      so only 2 milestones remain (e.g. 99% and 1%).
+                    </p>
+                  )}
+                  {draftMilestones.length > 3 && (
+                    <p className="text-foreground/90 font-medium">
+                      💡 Tip: With {draftMilestones.length} milestones, the maximum for any single
+                      milestone is <strong>{100 - (draftMilestones.length - 1)}%</strong> so
+                      remaining milestones each have at least 1%. To assign a higher percentage
+                      (e.g. 99%), delete extra milestones.
+                    </p>
+                  )}
+                  {draftMilestones.length === 2 && (
+                    <p className="text-foreground/90 font-medium">
+                      💡 Tip: With 2 milestones, you can assign up to <strong>99%</strong> to the
+                      first milestone, and the second milestone automatically becomes{" "}
+                      <strong>1%</strong>.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Milestone Cards */}
             <div className="space-y-4">
               {draftMilestones.map((m, index) => {
@@ -2442,7 +2664,12 @@ export default function SharedProjectTrackingPage() {
                             onChange={(e) =>
                               updateDraftMilestone(index, "percentage", e.target.value)
                             }
-                            placeholder="0"
+                            onBlur={() => {
+                              if (!m.percentage || Number(m.percentage) < 1) {
+                                updateDraftMilestone(index, "percentage", 1);
+                              }
+                            }}
+                            placeholder="1"
                             className="pr-7"
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-semibold pointer-events-none">
@@ -2467,7 +2694,12 @@ export default function SharedProjectTrackingPage() {
                             max={remainingMilestoneAmount}
                             value={m.amount}
                             onChange={(e) => updateDraftMilestone(index, "amount", e.target.value)}
-                            placeholder="0"
+                            onBlur={() => {
+                              if (!m.amount || Number(m.amount) < 1) {
+                                updateDraftMilestone(index, "amount", 1);
+                              }
+                            }}
+                            placeholder="1"
                             className="pl-7"
                           />
                         </div>
@@ -2784,6 +3016,13 @@ export default function SharedProjectTrackingPage() {
               </div>
             </div>
 
+            {isMilestoneCompleted(editingMilestone) && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>This milestone has been completed or approved and cannot be modified.</span>
+              </div>
+            )}
+
             {editMilestoneError && (
               <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-center gap-2">
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -2795,7 +3034,8 @@ export default function SharedProjectTrackingPage() {
           <DialogFooter className="p-4 border-t bg-muted/20 flex flex-wrap items-center justify-between gap-2">
             <div>
               {editingMilestone &&
-                !["APPROVED", "AWAITING_CLIENT_REVIEW"].includes(editingMilestone.status) && (
+                !isMilestoneCompleted(editingMilestone) &&
+                editingMilestone.status !== "AWAITING_CLIENT_REVIEW" && (
                   <Button
                     type="button"
                     variant="ghost"
@@ -2817,6 +3057,7 @@ export default function SharedProjectTrackingPage() {
                 size="sm"
                 disabled={
                   busy === "update-milestone" ||
+                  isMilestoneCompleted(editingMilestone) ||
                   !editMilestoneTitle.trim() ||
                   !editMilestoneAmount ||
                   Number(editMilestoneAmount) <= 0 ||

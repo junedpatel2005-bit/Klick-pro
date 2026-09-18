@@ -870,7 +870,6 @@ async function seedWalletActivity(client: { id: number }, professional: { id: nu
         commissionAmount: money.adminNetAmount,
         currency: "INR",
         provider: "wallet",
-        milestoneId,
         status: "COMPLETED",
         capturedAt: new Date(),
         idempotencyKey,
