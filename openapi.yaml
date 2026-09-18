@@ -1,0 +1,69 @@
+openapi: 3.1.0
+info:
+  title: Servio API
+  version: 1.0.0
+  description: Initial contract for authenticated web and mobile clients.
+servers:
+  - url: /api/v1
+paths:
+  /auth/me:
+    get:
+      summary: Get the current authenticated user
+      responses:
+        "200": { description: Current user or null }
+  /client/jobs:
+    get:
+      summary: List the current client's jobs
+      responses:
+        "200": { description: Client jobs }
+    post:
+      summary: Create a client job
+      responses:
+        "201": { description: Job created }
+  /professional/proposals:
+    get:
+      summary: Get the current professional's proposal for a job
+      parameters:
+        - in: query
+          name: jobId
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200": { description: Proposal or null }
+    post:
+      summary: Send a proposal for an open job
+      responses:
+        "201": { description: Proposal created }
+  /client/proposals/{id}:
+    patch:
+      summary: Accept or reject a client-owned proposal
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200": { description: Proposal updated }
+  /portal/project:
+    get:
+      summary: Get a shared project visible to the current client or professional
+      responses:
+        "200": { description: Shared project data }
+  /portal/project-actions:
+    post:
+      summary: Perform an authorized project state transition
+      responses:
+        "200": { description: Project updated }
+components:
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}

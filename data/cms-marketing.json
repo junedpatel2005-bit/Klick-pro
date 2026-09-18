@@ -1,0 +1,235 @@
+{
+  "how-it-works": {
+    "hero": {
+      "label": "How it works",
+      "title": "A simpler way to hire & get hired",
+      "description": "Klick-Pro handles the busywork — discovery, vetting, payments, and tracking — so you can focus on the work."
+    },
+    "items": [
+      {
+        "id": "post",
+        "title": "Post your job",
+        "description": "Describe the work, set your budget and timeline. It's free and takes 2 minutes.",
+        "icon": "clipboard"
+      },
+      {
+        "id": "hire",
+        "title": "Hire safely",
+        "description": "Funds are held in escrow and released only when each milestone is approved.",
+        "icon": "shield"
+      },
+      {
+        "id": "compare",
+        "title": "Compare proposals",
+        "description": "Receive quotes from vetted pros. Chat, compare ratings, and shortlist the best.",
+        "icon": "message"
+      },
+      {
+        "id": "pay",
+        "title": "Pay & review",
+        "description": "Release final payment and rate your pro to help our community.",
+        "icon": "wallet"
+      }
+    ]
+  },
+  "services": {
+    "hero": {
+      "label": "Marketplace jobs",
+      "title": "Browse client jobs",
+      "description": "Explore open work posted by clients and find the right service category for you."
+    },
+    "items": [
+      {
+        "id": "local",
+        "title": "Local services",
+        "description": "Find trusted professionals near you for work that needs a local touch.",
+        "icon": "map"
+      },
+      {
+        "id": "digital",
+        "title": "Digital projects",
+        "description": "Connect with skilled remote professionals for flexible project work.",
+        "icon": "search"
+      },
+      {
+        "id": "managed",
+        "title": "Managed projects",
+        "description": "Track communication, milestones, and payments in one place.",
+        "icon": "briefcase"
+      }
+    ]
+  },
+  "professional-home": {
+    "hero": {
+      "label": "Grow your professional business",
+      "title": "Find projects that match your skills",
+      "description": "Browse available projects, bid on work, and build your reputation with satisfied clients worldwide."
+    },
+    "features": {
+      "label": "Why Professionals Choose Us",
+      "title": "Everything you need to grow",
+      "description": "Find quality projects, get paid safely, and build a reputation clients trust."
+    },
+    "items": [
+      {
+        "id": "grow",
+        "title": "Grow",
+        "description": "Find quality projects and build your professional business.",
+        "icon": "trend"
+      },
+      {
+        "id": "safe",
+        "title": "Get paid safely",
+        "description": "Work with clear milestones and reliable payments.",
+        "icon": "shield"
+      },
+      {
+        "id": "reputation",
+        "title": "Build your reputation",
+        "description": "Deliver great work and earn reviews clients trust.",
+        "icon": "star"
+      }
+    ]
+  },
+  "for-clients": {
+    "hero": {
+      "label": "For clients",
+      "title": "Hire trusted pros — without the back-and-forth",
+      "description": "Post once. Get qualified, vetted proposals fast. Pay only when work is done. It's the modern way to get things done."
+    },
+    "items": [
+      {
+        "id": "vetted",
+        "title": "Vetted professionals",
+        "description": "Every pro is ID-verified. Background checks for in-home services.",
+        "icon": "shield"
+      },
+      {
+        "id": "escrow",
+        "title": "Escrow payments",
+        "description": "Your money is safe. Released only when you approve a milestone.",
+        "icon": "wallet"
+      },
+      {
+        "id": "matches",
+        "title": "Fast matches",
+        "description": "Get your first proposal in under 2 hours, on average.",
+        "icon": "clock"
+      },
+      {
+        "id": "support",
+        "title": "World-class support",
+        "description": "Real humans, 24/7 — never a bot.",
+        "icon": "users"
+      }
+    ]
+  },
+  "for-professionals": {
+    "hero": {
+      "label": "For professionals",
+      "title": "Find quality jobs. Get paid safely. Grow your business.",
+      "description": "No more chasing leads or waiting on payments. Klick-Pro brings nearby and remote jobs straight to you."
+    },
+    "items": [
+      {
+        "id": "grow",
+        "title": "Grow",
+        "description": "Algorithmic match-making puts you in front of the right clients.",
+        "icon": "trend"
+      },
+      {
+        "id": "trusted",
+        "title": "Trusted",
+        "description": "Verified badges and ratings build long-term reputation.",
+        "icon": "shield"
+      },
+      {
+        "id": "nearby",
+        "title": "Nearby",
+        "description": "See jobs by distance, urgency, and budget — at a glance.",
+        "icon": "map"
+      },
+      {
+        "id": "paid",
+        "title": "Paid weekly",
+        "description": "Withdraw earnings to your bank or wallet, anytime.",
+        "icon": "wallet"
+      }
+    ]
+  },
+  "contact": {
+    "hero": {
+      "label": "Contact Klick-Pro",
+      "title": "How can we help?",
+      "description": "Tell us what you need and our marketplace team will be in touch."
+    },
+    "items": [
+      {
+        "id": "email",
+        "title": "Email support",
+        "description": "For account, project, or payment questions, send us a message any time.",
+        "icon": "mail"
+      },
+      {
+        "id": "safe",
+        "title": "Safe & private",
+        "description": "Your request is only visible to the Klick-Pro support team.",
+        "icon": "shield"
+      }
+    ]
+  },
+  "pricing": {
+    "hero": {
+      "label": "Pricing",
+      "title": "Simple, transparent pricing",
+      "description": "Free for clients. Pros pay only when they get paid. No hidden fees."
+    },
+    "items": [
+      {
+        "id": "starter",
+        "title": "Starter",
+        "description": "Post jobs and apply for free. Pay only when you hire or are hired.",
+        "icon": "check"
+      },
+      {
+        "id": "pro",
+        "title": "Pro",
+        "description": "Win more work with priority placement and unlimited proposals.",
+        "icon": "star"
+      },
+      {
+        "id": "business",
+        "title": "Business",
+        "description": "Hire at scale with team seats, contracts, and dedicated support.",
+        "icon": "briefcase"
+      }
+    ]
+  },
+  "faq": {
+    "hero": {
+      "label": "Help center",
+      "title": "Frequently asked questions",
+      "description": "Can't find what you're looking for? Our team is one click away."
+    },
+    "items": [
+      {
+        "id": "what",
+        "title": "What is Klick-Pro?",
+        "description": "Klick-Pro is a marketplace that connects clients with verified professionals for local and remote work.",
+        "icon": "shield"
+      },
+      {
+        "id": "free",
+        "title": "Is it free to use?",
+        "description": "Posting jobs and creating a profile are free. Clients pay only the agreed price.",
+        "icon": "shield"
+      },
+      {
+        "id": "vet",
+        "title": "How are professionals vetted?",
+        "description": "Every pro completes ID verification. For in-home services, we also run background checks.",
+        "icon": "shield"
+      }
+    ]
+  }
+}

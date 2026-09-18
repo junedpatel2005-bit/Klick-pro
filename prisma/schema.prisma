@@ -1,0 +1,1182 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model CmsPage {
+  id              Int           @id @default(autoincrement())
+  title           String
+  slug            String        @unique
+  content         String        @default("")
+  metaTitle       String        @default("")
+  metaDescription String        @default("")
+  status          CmsPageStatus @default(DRAFT)
+  pageKey         String        @default("")
+  sections        String        @default("{}")
+  keywords        String        @default("")
+  ogTitle         String        @default("")
+  ogDescription   String        @default("")
+  ogImage         String        @default("")
+  canonicalUrl    String        @default("")
+  createdAt       DateTime
+  updatedAt       DateTime
+
+  @@index([slug])
+  @@index([status])
+  @@map("cms_pages")
+}
+
+model CmsPageVersion {
+  id        Int      @id @default(autoincrement())
+  pageId    Int      @map("page_id")
+  versionNo Int      @map("version_no")
+  content   String
+  createdBy Int?     @map("created_by")
+  createdAt DateTime @map("created_at")
+
+  @@unique([pageId, versionNo])
+  @@index([pageId])
+  @@map("cms_page_versions")
+}
+
+model CmsMedia {
+  id        Int      @id @default(autoincrement())
+  name      String
+  mimeType  String
+  url       String
+  createdBy Int?
+  createdAt DateTime
+
+  @@index([createdAt])
+  @@map("cms_media")
+}
+
+model SQLiteMigrationTableArchive {
+  sourceTable String   @id
+  rows        Json
+  sourceCount Int
+  migratedAt  DateTime @default(now())
+}
+
+model SQLiteMigrationAudit {
+  sourceTable   String   @id
+  sourceCount   Int
+  archivedCount Int
+  migratedAt    DateTime @default(now())
+}
+
+model WebsitePage {
+  pageKey   String        @id @map("pageKey")
+  path      String        @unique
+  title     String
+  content   String        @default("")
+  status    CmsPageStatus @default(DRAFT)
+  updatedAt DateTime
+  css       String        @default("")
+}
+
+model LegalPage {
+  slug      String        @id @map("slug")
+  title     String
+  content   String        @default("")
+  status    CmsPageStatus @default(PUBLISHED)
+  updatedAt DateTime
+}
+
+model ServiceCategory {
+  id                Int               @id @default(autoincrement())
+  name              String            @unique
+  slug              String            @unique
+  description       String            @default("")
+  iconName          String            @default("")
+  sortOrder         Int               @default(0)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @default(now())
+  segment           String            @default("RESIDENTIAL")
+  parentId          Int?
+  services          Service[]
+  parent            ServiceCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children          ServiceCategory[] @relation("CategoryHierarchy")
+  professionalUsers User[]            @relation("ProfessionalPrimaryCategory")
+
+  @@index([parentId])
+}
+
+model User {
+  id                                  Int                   @id @default(autoincrement())
+  role                                UserRole              @default(CLIENT)
+  firstName                           String
+  lastName                            String
+  email                               String                @unique
+  phone                               String?               @unique
+  passwordHash                        String?
+  googleId                            String?               @unique
+  avatarUrl                           String?
+  companyName                         String?
+  companyWebsite                      String?
+  industry                            String?
+  teamSize                            String?
+  companyDescription                  String?
+  address                             String?
+  professionalCategory                String?
+  professionalCity                    String?
+  professionalSkillsJson              String?
+  experienceYears                     Int?
+  hourlyRate                          Int?
+  fixedRate                           Int?
+  portfolioUrl                        String?
+  workPhotosJson                      String?
+  certificationsJson                  String?
+  tradeLicenseUrl                     String?
+  serviceArea                         String?
+  workMode                            String                @default("both")
+  serviceRadiusKm                     Int?
+  averageRating                       Float                 @default(0)
+  reviewCount                         Int                   @default(0)
+  isVerified                          Boolean               @default(false)
+  availabilityStatus                  String                @default("available")
+  savedLocationsJson                  String?
+  hiringNeedsJson                     String?
+  authProvider                        String                @default("LOCAL")
+  isActive                            Boolean               @default(true)
+  lastLoginAt                         DateTime?
+  createdAt                           DateTime              @default(now())
+  updatedAt                           DateTime              @updatedAt
+  professionalLatitude                Float?
+  professionalLongitude               Float?
+  biometricEnabled                    Boolean               @default(false)
+  biometricType                       String?
+  browserNotificationsEnabled         Boolean               @default(true)
+  emailNotificationsEnabled           Boolean               @default(true)
+  emailVerifiedAt                     DateTime?
+  projectActivityNotificationsEnabled Boolean               @default(true)
+  phoneVerifiedAt                     DateTime?
+  username                            String?               @unique
+  razorpayAccountId                   String?               @unique @map("razorpay_account_id")
+  professionalState                   String?
+  professionalDistrict                String?
+  professionalCategoryId              Int?                  @map("professional_category_id")
+  clientJobs                          ClientJob[]
+  clientProfiles                      ClientProfile?
+  favoriteJobs                        FavoriteJob[]
+  clientPayments                      Payment[]             @relation("PaymentClient")
+  professionalPayments                Payment[]             @relation("PaymentProfessional")
+  clientProjectRequests               ProjectRequest[]      @relation("ProjectRequestClient")
+  professionalProjectRequests         ProjectRequest[]      @relation("ProjectRequestProfessional")
+  clientProjectTrackings              ProjectTracking[]     @relation("ProjectTrackingClient")
+  professionalProjectTrackings        ProjectTracking[]     @relation("ProjectTrackingProfessional")
+  professionalCategoryRecord          ServiceCategory?      @relation("ProfessionalPrimaryCategory", fields: [professionalCategoryId], references: [id])
+  services                            Service[]             @relation("ProfessionalServices")
+  verification                        ProfessionalVerification?
+  auditLogs                           AuditLog[]            @relation("AuditActor")
+  personaVerifications                PersonaVerification[]
+  sessions                            Session[]
+
+  @@index([professionalState, professionalDistrict])
+  @@index([professionalCategoryId])
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    Int       @map("user_id")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@map("sessions")
+}
+
+model ClientProfile {
+  id                 Int                  @id @default(autoincrement())
+  userId             Int                  @unique
+  fullName           String
+  email              String
+  phone              String
+  companyName        String?
+  companyWebsite     String?
+  industry           String?
+  teamSize           String?
+  companyDescription String?
+  address            String
+  profilePhotoUrl    String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  hiringNeeds        ClientHiringNeed[]
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  savedLocations     ClientSavedLocation?
+
+  @@index([userId])
+}
+
+model ClientSavedLocation {
+  id              Int           @id @default(autoincrement())
+  clientProfileId Int           @unique(map: "ClientSavedLocation_one_primary_idx", where: raw("(\"isPrimary\" = true)"))
+  label           String
+  address         String
+  createdAt       DateTime      @default(now())
+  isPrimary       Boolean       @default(false)
+  clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([clientProfileId])
+}
+
+model ClientHiringNeed {
+  id              Int           @id @default(autoincrement())
+  clientProfileId Int
+  value           String
+  createdAt       DateTime      @default(now())
+  clientProfile   ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@index([clientProfileId])
+}
+
+model ClientJob {
+  id               Int                   @id @default(autoincrement())
+  userId           Int
+  category         String?
+  title            String?
+  description      String?
+  budgetMin        Int?
+  budgetMax        Int?
+  urgency          JobUrgency            @default(MEDIUM)
+  jobDate          DateTime?
+  deadline         DateTime?
+  workMode         JobWorkMode           @default(BOTH)
+  locationLabel    String?
+  locationAddress  String?
+  locationLat      Float?
+  locationLng      Float?
+  status           JobStatus             @default(OPEN)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  hourlyRate       Int?
+  timingType       String                @default("FIXED")
+  paymentMethod    String                @default("WALLET")
+  locationState    String?
+  locationDistrict String?
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attachments      ClientJobAttachment[]
+  favoriteJobs     FavoriteJob[]
+  payments         Payment[]             @relation("PaymentJob")
+  projectRequests  ProjectRequest[]
+  projectTrackings ProjectTracking[]
+  milestones       ClientJobMilestone[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([locationState, locationDistrict])
+}
+
+model FavoriteJob {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  jobId     Int
+  createdAt DateTime  @default(now())
+  job       ClientJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobId])
+  @@index([userId])
+  @@index([jobId])
+}
+
+model ClientJobAttachment {
+  id         Int       @id @default(autoincrement())
+  jobId      Int
+  fileName   String
+  fileType   String?
+  fileSize   Int?
+  previewUrl String?
+  createdAt  DateTime  @default(now())
+  job        ClientJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+}
+
+model ClientJobMilestone {
+  id          Int       @id @default(autoincrement())
+  jobId       Int
+  title       String
+  description String?
+  percentage  Int
+  amount      Int?
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  job         ClientJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("ClientJobMilestone")
+}
+
+model ProjectTransaction {
+  id             Int      @id @default(autoincrement())
+  trackingId     Int
+  milestoneId    Int?
+  completionId   Int?
+  clientId       Int
+  professionalId Int
+  amount         Int
+  currency       String   @default("INR")
+  type           String
+  status         String   @default("COMPLETED")
+  description    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([trackingId])
+  @@index([clientId])
+  @@index([professionalId])
+  @@index([status])
+  @@map("ProjectTransaction")
+}
+
+model ProjectNegotiation {
+  id                Int      @id @default(autoincrement())
+  requestId         Int
+  jobId             Int
+  clientId          Int
+  professionalId    Int
+  senderId          Int
+  senderRole        String
+  bidAmount         Int?
+  duration          String?
+  message           String
+  createdAt         DateTime @default(now())
+  previousBidAmount Int?
+  previousDuration  String?
+  previousMessage   String?
+
+  @@index([requestId])
+  @@index([clientId])
+  @@index([professionalId])
+  @@map("ProjectNegotiation")
+}
+
+model ProjectReview {
+  id                     Int       @id @default(autoincrement())
+  trackingId             Int       @unique
+  clientId               Int
+  professionalId         Int
+  rating                 Int?
+  comment                String?
+  clientReviewedAt       DateTime?
+  professionalRating     Int?
+  professionalComment    String?
+  professionalReviewedAt DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  professionalResponse   String?
+  professionalResponseAt DateTime?
+
+  @@index([clientId])
+  @@index([professionalId])
+  @@map("ProjectReview")
+}
+
+model ProjectRequest {
+  id              Int              @id @default(autoincrement())
+  jobId           Int
+  clientId        Int
+  professionalId  Int
+  bidAmount       Int
+  duration        String
+  coverLetter     String
+  status          String           @default("PENDING")
+  attachmentsJson String?          @default("[]")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  origin          String           @default("CLIENT_HIRE")
+  client          User             @relation("ProjectRequestClient", fields: [clientId], references: [id])
+  job             ClientJob        @relation(fields: [jobId], references: [id])
+  professional    User             @relation("ProjectRequestProfessional", fields: [professionalId], references: [id])
+  tracking        ProjectTracking?
+
+  @@index([jobId])
+  @@index([clientId])
+  @@index([professionalId])
+  @@map("ProjectRequest")
+}
+
+model ProjectTracking {
+  id             Int                    @id @default(autoincrement())
+  requestId      Int                    @unique
+  jobId          Int
+  clientId       Int
+  professionalId Int
+  status         String                 @default("READY_TO_START")
+  acceptedAt     DateTime               @default(now())
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  progress       Int                    @default(0)
+  currentStage   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  payments       Payment[]              @relation("PaymentProjectTracking")
+  milestones     ProjectMilestone[]
+  timelineEvents ProjectTimelineEvent[]
+  client         User                   @relation("ProjectTrackingClient", fields: [clientId], references: [id])
+  job            ClientJob              @relation(fields: [jobId], references: [id])
+  professional   User                   @relation("ProjectTrackingProfessional", fields: [professionalId], references: [id])
+  request        ProjectRequest         @relation(fields: [requestId], references: [id])
+  workUploads    ProjectWorkUpload[]
+
+  @@index([jobId])
+  @@index([clientId])
+  @@index([professionalId])
+  @@map("ProjectTracking")
+}
+
+model ProjectTimelineEvent {
+  id             Int             @id @default(autoincrement())
+  trackingId     Int
+  milestoneId    Int?
+  actorId        Int
+  actorRole      String
+  type           String
+  title          String
+  description    String?
+  progress       Int?
+  stage          String?
+  attachmentJson String?         @default("[]")
+  createdAt      DateTime        @default(now())
+  tracking       ProjectTracking @relation(fields: [trackingId], references: [id])
+
+  @@index([trackingId, createdAt])
+  @@map("ProjectTimelineEvent")
+}
+
+model ProjectMilestone {
+  id             Int                 @id @default(autoincrement())
+  trackingId     Int
+  clientId       Int
+  professionalId Int
+  title          String
+  description    String?
+  amount         Int
+  dueDate        DateTime?
+  status         String              @default("UPCOMING")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  submittedAt    DateTime?
+  approvedAt     DateTime?
+  tracking       ProjectTracking     @relation(fields: [trackingId], references: [id])
+  payment        Payment?
+  workUploads    ProjectWorkUpload[]
+
+  @@index([trackingId])
+  @@map("ProjectMilestone")
+}
+
+model ProjectWorkUpload {
+  id          Int               @id @default(autoincrement())
+  trackingId  Int
+  roundNumber Int               @default(1)
+  title       String
+  note        String?
+  fileName    String?
+  fileUrl     String?
+  filesJson   String?           @default("[]")
+  createdAt   DateTime          @default(now())
+  milestoneId Int?
+  status      String            @default("UPLOADED")
+  milestone   ProjectMilestone? @relation(fields: [milestoneId], references: [id], onDelete: Restrict)
+  tracking    ProjectTracking   @relation(fields: [trackingId], references: [id])
+
+  @@index([trackingId])
+  @@map("ProjectWorkUpload")
+}
+
+model HireJob {
+  id          String           @id
+  clientId    String           @map("client_id")
+  title       String
+  description String?
+  budgetMin   Int?             @map("budget_min")
+  budgetMax   Int?             @map("budget_max")
+  currency    String           @default("INR")
+  jobType     String?          @map("job_type")
+  city        String?
+  jobDate     DateTime?        @map("job_date")
+  deadline    DateTime?
+  urgency     String?
+  status      String           @default("draft")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  categoryId  Int?             @map("category_id")
+  contracts   HireContract[]
+  attachments HireAttachment[]
+
+  @@map("hire_jobs")
+}
+
+model HireContract {
+  id              String          @id
+  jobId           String          @map("job_id")
+  clientId        String          @map("client_id")
+  professionalId  String          @map("professional_id")
+  clientProjectId Int?            @map("client_project_id")
+  trackingId      Int?            @map("tracking_id")
+  totalAmount     Int?            @map("total_amount")
+  platformFee     Int?            @map("platform_fee")
+  status          String          @default("pending")
+  startDate       DateTime?       @map("start_date")
+  endDate         DateTime?       @map("end_date")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  job             HireJob         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  milestones      HireMilestone[]
+
+  @@index([clientId])
+  @@index([professionalId])
+  @@index([jobId])
+  @@map("hire_contracts")
+}
+
+model HireAttachment {
+  id         String  @id
+  jobId      String  @map("job_id")
+  fileUrl    String? @map("file_url")
+  fileType   String? @map("file_type")
+  uploadedBy String? @map("uploaded_by")
+  job        HireJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("hire_job_attachments")
+}
+
+model HireMilestone {
+  id             String       @id
+  contractId     String       @map("contract_id")
+  title          String?
+  amount         Int?
+  dueDate        DateTime?    @map("due_date")
+  status         String       @default("pending")
+  completedProof String?      @map("completed_proof")
+  contract       HireContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@map("hire_milestones")
+}
+
+model DirectHireNegotiation {
+  id             Int      @id @default(autoincrement())
+  contractId     String
+  jobId          String
+  clientId       String
+  professionalId String
+  senderId       String
+  senderRole     String
+  bidAmount      Float?
+  duration       String?
+  message        String
+  createdAt      DateTime @default(now())
+
+  @@index([contractId])
+  @@index([professionalId])
+}
+
+model SocketConversation {
+  id             String                    @id
+  userAId        Int
+  userBId        Int
+  userAName      String
+  userBName      String
+  userAAvatarUrl String?
+  userBAvatarUrl String?
+  job            String                    @default("Direct message")
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  clears         SocketConversationClear[]
+  messages       SocketMessage[]
+
+  @@index([userAId])
+  @@index([userBId])
+}
+
+model SocketMessage {
+  id             String             @id
+  conversationId String
+  senderId       Int
+  receiverId     Int
+  body           String
+  kind           String             @default("text")
+  createdAt      DateTime           @default(now())
+  readAt         DateTime?
+  conversation   SocketConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+model SocketConversationClear {
+  conversationId String
+  userId         Int
+  clearedAt      DateTime           @default(now())
+  conversation   SocketConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+}
+
+model CallSession {
+  conversationId String   @id
+  startedBy      Int
+  mode           String
+  status         String   @default("PENDING")
+  offerSdp       String?
+  answerSdp      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model MessageConversation {
+  id             String    @id @default(cuid())
+  clientId       Int
+  professionalId Int
+  contractId     String?
+  jobTitle       String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  lastMessageAt  DateTime?
+  messages       Message[]
+
+  @@index([clientId])
+  @@index([professionalId])
+}
+
+model Message {
+  id             String              @id @default(cuid())
+  conversationId String
+  senderId       Int
+  body           String
+  createdAt      DateTime            @default(now())
+  readAt         DateTime?
+  conversation   MessageConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([senderId])
+}
+
+model UserNotification {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  type        String
+  title       String
+  description String?
+  href        String?
+  createdAt   DateTime  @default(now())
+  readAt      DateTime?
+  clearedAt   DateTime?
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model UserNotificationState {
+  userId          Int
+  notificationKey String
+  readAt          DateTime?
+  clearedAt       DateTime?
+
+  @@id([userId, notificationKey])
+}
+
+model Payment {
+  id                       Int              @id @default(autoincrement())
+  clientId                 Int
+  professionalId           Int
+  jobId                    Int?
+  amount                   Int
+  commissionAmount         Int              @default(0)
+  currency                 String           @default("INR")
+  provider                 String
+  providerReference        String?
+  status                   String           @default("PENDING")
+  idempotencyKey           String           @unique
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+  razorpayOrderId          String?          @unique @map("razorpay_order_id")
+  razorpayPaymentId        String?          @unique @map("razorpay_payment_id")
+  razorpaySignature        String?          @map("razorpay_signature")
+  projectTrackingId        Int?             @map("project_tracking_id")
+  milestoneId              Int?             @unique @map("milestone_id")
+  capturedAt               DateTime?        @map("captured_at")
+  failureReason            String?          @map("failure_reason")
+  baseAmount               Int              @default(0) @map("base_amount")
+  clientFeeAmount          Int              @default(0) @map("client_fee_amount")
+  professionalPayoutAmount Int              @default(0) @map("professional_payout_amount")
+  adminNetAmount           Int              @default(0) @map("admin_net_amount")
+  client                   User             @relation("PaymentClient", fields: [clientId], references: [id])
+  job                      ClientJob?       @relation("PaymentJob", fields: [jobId], references: [id], onDelete: Restrict)
+  professional             User             @relation("PaymentProfessional", fields: [professionalId], references: [id])
+  projectTracking          ProjectTracking? @relation("PaymentProjectTracking", fields: [projectTrackingId], references: [id], onDelete: Restrict, map: "Payment_projectTrackingId_fkey")
+  milestone                ProjectMilestone? @relation(fields: [milestoneId], references: [id])
+
+  @@index([clientId])
+  @@index([professionalId])
+}
+
+model RazorpayWebhookEvent {
+  id                  Int       @id @default(autoincrement())
+  eventId             String    @unique @map("event_id")
+  eventName           String    @map("event_name")
+  payloadJson         String    @map("payload_json")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  processingStatus    String    @default("RECEIVED") @map("processing_status")
+  processingAttempts  Int       @default(0) @map("processing_attempts")
+  lastError           String?   @map("last_error")
+  receivedAt          DateTime  @default(now()) @map("received_at")
+  processingStartedAt DateTime? @map("processing_started_at")
+  processedAt         DateTime? @map("processed_at")
+
+  @@index([processingStatus, receivedAt])
+  @@map("razorpay_webhook_events")
+}
+
+model Wallet {
+  id             Int                 @id @default(autoincrement())
+  userId         Int                 @unique
+  currency       String              @default("INR")
+  balance        Int                 @default(0)
+  pendingBalance Int                 @default(0)
+  updatedAt      DateTime            @updatedAt
+  transactions   WalletTransaction[]
+}
+
+model WalletTransaction {
+  id                Int      @id @default(autoincrement())
+  walletId          Int
+  paymentId         Int?
+  type              String
+  amount            Int
+  status            String
+  description       String
+  metadataJson      String?
+  createdAt         DateTime @default(now())
+  idempotencyKey    String   @unique @map("idempotency_key")
+  providerReference String?  @unique(where: raw("(provider_reference IS NOT NULL)")) @map("provider_reference")
+  wallet            Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+}
+
+model ProjectWithdrawal {
+  id                 Int       @id @default(autoincrement())
+  professionalId     Int
+  amount             Int
+  currency           String    @default("INR")
+  destinationType    String
+  destinationLabel   String?
+  status             String    @default("PENDING")
+  note               String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  paymentId          Int?      @map("payment_id")
+  providerTransferId String?   @map("provider_transfer_id")
+  failureReason      String?   @map("failure_reason")
+  processedAt        DateTime? @map("processed_at")
+
+  @@index([professionalId])
+  @@index([paymentId])
+}
+
+model Invoice {
+  id               Int      @id @default(autoincrement())
+  invoiceNumber    String   @unique @map("invoice_number")
+  paymentId        Int      @unique @map("payment_id")
+  clientId         Int      @map("client_id")
+  professionalId   Int      @map("professional_id")
+  amount           Int
+  commissionAmount Int      @default(0) @map("commission_amount")
+  netAmount        Int      @map("net_amount")
+  currency         String   @default("INR")
+  status           String   @default("ISSUED")
+  issuedAt         DateTime @default(now()) @map("issued_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([clientId])
+  @@index([professionalId])
+  @@map("invoices")
+}
+
+model ProjectDispute {
+  id              Int      @id @default(autoincrement())
+  trackingId      Int
+  reporterId      Int
+  reporterRole    String
+  clientId        Int
+  professionalId  Int
+  issueType       String
+  priority        String   @default("MEDIUM")
+  message         String
+  attachmentsJson String?  @default("[]")
+  status          String   @default("OPEN")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([trackingId])
+  @@index([clientId])
+  @@index([professionalId])
+}
+
+model ProjectDisputeMessage {
+  id          Int      @id @default(autoincrement())
+  disputeId   Int      @map("dispute_id")
+  senderId    Int      @map("sender_id")
+  senderRole  String   @map("sender_role")
+  recipientId Int      @map("recipient_id")
+  message     String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([disputeId, createdAt])
+  @@index([recipientId, createdAt])
+  @@map("project_dispute_messages")
+}
+
+model ProjectCompletionRequest {
+  id             Int      @id @default(autoincrement())
+  trackingId     Int
+  clientId       Int
+  professionalId Int
+  note           String?
+  status         String   @default("PENDING")
+  submittedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([trackingId])
+}
+
+model ProjectRevisionRequest {
+  id             Int      @id @default(autoincrement())
+  trackingId     Int
+  clientId       Int
+  professionalId Int
+  note           String?
+  status         String   @default("PENDING")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([trackingId])
+}
+
+model ProjectReviewRequest {
+  id             Int      @id @default(autoincrement())
+  trackingId     Int
+  clientId       Int
+  professionalId Int
+  note           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([trackingId])
+}
+
+model ProfessionalVerification {
+  userId             Int      @id
+  governmentIdUrl    String?
+  licenseUrl         String?
+  certificationsJson String?
+  insuranceUrl       String?
+  selfieUrl          String?
+  status             String   @default("PENDING")
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationDocumentReview {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  documentKey String
+  status      String    @default("PENDING")
+  reviewedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, documentKey])
+  @@index([userId])
+  @@map("verification_document_reviews")
+}
+
+model PersonaVerification {
+  id                  Int       @id @default(autoincrement())
+  userId              Int       @map("user_id")
+  provider            String    @default("persona")
+  providerInquiryId   String    @unique @map("provider_inquiry_id")
+  providerStatus      String    @map("provider_status")
+  lastProviderEventAt DateTime? @map("last_provider_event_at")
+  adminStatus         String    @default("PENDING") @map("admin_status")
+  submittedAt         DateTime? @map("submitted_at")
+  reviewedAt          DateTime? @map("reviewed_at")
+  reviewedBy          Int?      @map("reviewed_by")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([providerStatus])
+  @@index([adminStatus])
+  @@map("persona_verifications")
+}
+
+model PersonaWebhookEvent {
+  id              Int      @id @default(autoincrement())
+  provider        String   @default("persona")
+  providerEventId String   @unique @map("provider_event_id")
+  eventName       String   @map("event_name")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("persona_webhook_events")
+}
+
+model StoredFile {
+  id         Int      @id @default(autoincrement())
+  ownerId    Int
+  purpose    String
+  fileName   String
+  mimeType   String
+  sizeBytes  Int
+  storageKey String   @unique
+  isPublic   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([ownerId])
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  actorId    Int?
+  action     String
+  entityType String
+  entityId   String
+  requestId  String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model ApiToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  tokenHash String    @unique
+  kind      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, kind])
+}
+
+model OtpCode {
+  id         Int       @id @default(autoincrement())
+  phone      String
+  codeHash   String
+  role       String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, role, expiresAt])
+  @@index([phone, role, consumedAt])
+}
+
+model BrowserSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Faq {
+  id           Int      @id @default(autoincrement())
+  question     String
+  answer       String
+  displayOrder Int      @default(0)
+  status       String   @default("PUBLISHED")
+  category     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ContactRequest {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String
+  subject   String
+  message   String
+  status    String   @default("OPEN")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Service {
+  id             Int             @id @default(autoincrement())
+  categoryId     Int
+  professionalId Int
+  name           String
+  description    String
+  price          Int?
+  imageUrl       String?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  category       ServiceCategory @relation(fields: [categoryId], references: [id])
+  professional   User            @relation("ProfessionalServices", fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@index([professionalId])
+}
+
+model PageConfiguration {
+  id              Int       @id @default(autoincrement())
+  pageId          String
+  config          String
+  publishedConfig String?
+  status          String    @default("DRAFT")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  publishedAt     DateTime?
+
+  @@index([pageId])
+  @@map("page_configurations")
+}
+
+model WebsitePageOverride {
+  id        Int      @id @default(autoincrement())
+  title     String
+  path      String
+  html      String?
+  css       String?
+  status    String   @default("DRAFT")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("website_page_overrides")
+}
+
+model PageTextOverride {
+  pagePath   String
+  elementKey String
+  text       String
+  updatedAt  DateTime
+
+  @@id([pagePath, elementKey])
+  @@map("page_text_overrides")
+}
+
+model LegacyUser {
+  id              String    @id
+  role            String?
+  email           String?
+  phone           String?
+  passwordHash    String?
+  googleId        String?
+  isEmailVerified Boolean?
+  isPhoneVerified Boolean?
+  status          String?
+  createdAt       DateTime?
+  updatedAt       DateTime?
+  lastLogin       DateTime?
+
+  @@map("legacy_users")
+}
+
+model LegacyUserProfile {
+  userId       String  @id
+  fullName     String?
+  companyName  String?
+  profilePhoto String?
+  address      String?
+  bio          String?
+  timezone     String?
+  language     String?
+
+  @@map("legacy_user_profiles")
+}
+
+model LegacyProfessionalDetail {
+  userId             String   @id
+  hourlyRate         Int?
+  fixedRate          Int?
+  experienceYears    Int?
+  skills             String?
+  serviceType        String?
+  serviceRadiusKm    Int?
+  availabilityStatus String?
+  portfolioUrl       String?
+  isVerified         Boolean?
+
+  @@map("legacy_professional_details")
+}
+
+model LegacyLocation {
+  id              String   @id
+  userId          String?
+  lat             Float?
+  lng             Float?
+  city            String?
+  state           String?
+  country         String?
+  addressApprox   String?
+  serviceRadiusKm Int?
+  isBaseLocation  Boolean?
+
+  @@map("legacy_locations")
+}
+
+model LegacyVerification {
+  id             String    @id
+  professionalId String?
+  documentType   String?
+  documentUrl    String?
+  status         String?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  notes          String?
+
+  @@map("legacy_verifications")
+}
+
+enum UserRole {
+  ADMIN
+  CLIENT
+  PROFESSIONAL
+}
+
+enum JobUrgency {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum JobWorkMode {
+  ON_SITE
+  REMOTE
+  BOTH
+}
+
+enum JobStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+enum CmsPageStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}

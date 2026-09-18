@@ -1,0 +1,40 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: servio_quality
+          POSTGRES_USER: servio_quality
+          POSTGRES_PASSWORD: servio_quality_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U servio_quality -d servio_quality"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://servio_quality:servio_quality_password@127.0.0.1:5432/servio_quality
+      DIRECT_URL: postgresql://servio_quality:servio_quality_password@127.0.0.1:5432/servio_quality
+      AUTH_SECRET: ci-only-test-secret
+      APP_URL: http://localhost:3000
+      REALTIME_ALLOWED_ORIGIN: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
