@@ -1001,7 +1001,11 @@ export default function PostJob() {
                                 value={milestone.percentage ?? ""}
                                 onChange={(e) => {
                                   const val = e.target.value;
-                                  updateMilestone(index, "percentage", val === "" ? "" : Number(val));
+                                  updateMilestone(
+                                    index,
+                                    "percentage",
+                                    val === "" ? "" : Number(val),
+                                  );
                                 }}
                                 onBlur={() => {
                                   if (!milestone.percentage || Number(milestone.percentage) < 1) {
@@ -1268,16 +1272,14 @@ export default function PostJob() {
               value={
                 form.milestones.length > 0
                   ? form.milestones
-                      .map(
-                        (m, idx) => {
-                          const milestonePercent = Number(m.percentage) || 0;
-                          return `${idx + 1}. ${m.title} (${m.percentage}%${
-                            form.budgetMax
-                              ? ` • ₹${Math.round((Number(form.budgetMax) * milestonePercent) / 100).toLocaleString("en-IN")}`
-                              : ""
-                          })${m.description ? `\n   ${m.description}` : ""}`;
-                        },
-                      )
+                      .map((m, idx) => {
+                        const milestonePercent = Number(m.percentage) || 0;
+                        return `${idx + 1}. ${m.title} (${m.percentage}%${
+                          form.budgetMax
+                            ? ` • ₹${Math.round((Number(form.budgetMax) * milestonePercent) / 100).toLocaleString("en-IN")}`
+                            : ""
+                        })${m.description ? `\n   ${m.description}` : ""}`;
+                      })
                       .join("\n")
                   : "Default: 100% on Project Completion"
               }
