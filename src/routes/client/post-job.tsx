@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, Plus, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, Plus, Trash2 } from "lucide-react";
 import { AddressMapPicker } from "@/components/AddressMapPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { getAllStates } from "@/lib/india-locations";
 export type JobFormMilestone = {
   id?: number;
   title: string;
-  percentage: number;
+  percentage: number | "";
   description?: string;
 };
 
@@ -222,20 +222,11 @@ export default function PostJob() {
     const remainder = 100 % milestones.length;
     return milestones.map((milestone, index) => ({
       ...milestone,
-      percentage: index === 0 ? base + remainder : base,
+      percentage: base + (index < remainder ? 1 : 0),
     }));
   };
 
   const addMilestone = () => {
-    const currentSum = form.milestones.reduce((acc, m) => acc + (Number(m.percentage) || 0), 0);
-    if (form.milestones.length === 1 && currentSum >= 100) {
-      setErrors((old) => ({
-        ...old,
-        milestones:
-          "Milestone percentage is already 100% complete. Reduce an existing milestone before adding another.",
-      }));
-      return;
-    }
     const nextIndex = form.milestones.length + 1;
     const next = [
       ...form.milestones,
@@ -248,17 +239,150 @@ export default function PostJob() {
     update("milestones", rebalanceMilestones(next));
   };
 
-  const removeMilestone = (index: number) => {
-    const next = form.milestones.filter((_, i) => i !== index);
-    update("milestones", rebalanceMilestones(next));
+  const getMaxPercentageForMilestone = (milestones: JobFormMilestone[], index: number) => {
+    const n = milestones.length;
+    if (n <= 1) return 100;
+    const isLast = index === n - 1;
+    let priorSum = 0;
+    if (!isLast) {
+      for (let i = 0; i < index; i++) {
+        const m = milestones[i];
+        if (m) {
+          priorSum += Math.max(1, Number(m.percentage) || 1);
+        }
+      }
+    }
+    const k = isLast ? n - 1 : n - 1 - index;
+    const minNeededForOthers = k * 1;
+    return isLast
+      ? Math.max(1, 100 - minNeededForOthers)
+      : Math.max(1, 100 - priorSum - minNeededForOthers);
   };
 
-  const updateMilestone = <K extends keyof JobFormMilestone>(
+  const removeMilestone = (index: number) => {
+    const next = form.milestones.filter((_, i) => i !== index);
+    if (next.length === 0) {
+      update("milestones", []);
+      return;
+    }
+    if (next.length === 1) {
+      const first = next[0];
+      if (first) {
+        update("milestones", [{ ...first, percentage: 100 }]);
+      }
+      return;
+    }
+    // Maintain exactly 100% total by allocating the deleted milestone's percentage
+    // e.g. If user had 3 milestones: [98%, 1%, 1%] and deletes 3rd milestone,
+    // the first milestone automatically absorbs the 1% and becomes 99%!
+    const currentSum = next.reduce((sum, m) => sum + Math.max(1, Number(m.percentage) || 1), 0);
+    const diff = 100 - currentSum;
+    if (diff > 0) {
+      const targetIdx = 0;
+      const updated = next.map((m, i) =>
+        i === targetIdx ? { ...m, percentage: Math.max(1, (Number(m.percentage) || 1) + diff) } : m,
+      );
+      update("milestones", updated);
+    } else {
+      update("milestones", rebalanceMilestones(next));
+    }
+  };
+
+  const distributeMilestonePercentages = (
+    milestones: JobFormMilestone[],
+    editedIndex: number,
+    newPercentage: number,
+  ): JobFormMilestone[] => {
+    const n = milestones.length;
+    if (n <= 1) {
+      return milestones.map((m, i) => (i === editedIndex ? { ...m, percentage: 100 } : m));
+    }
+
+    const isLast = editedIndex === n - 1;
+    let priorSum = 0;
+    if (!isLast) {
+      for (let i = 0; i < editedIndex; i++) {
+        const m = milestones[i];
+        if (m) {
+          priorSum += Math.max(1, Number(m.percentage) || 1);
+        }
+      }
+    }
+
+    const targetIndices: number[] = [];
+    if (!isLast) {
+      for (let i = editedIndex + 1; i < n; i++) {
+        targetIndices.push(i);
+      }
+    } else {
+      for (let i = 0; i < n - 1; i++) {
+        targetIndices.push(i);
+      }
+    }
+
+    const k = targetIndices.length;
+    // Each other milestone must receive AT LEAST 1% (no 0% or empty space)
+    const minNeededForOthers = k * 1;
+    const maxAllowed = isLast
+      ? Math.max(1, 100 - minNeededForOthers)
+      : Math.max(1, 100 - priorSum - minNeededForOthers);
+
+    // Each milestone must be at least 1%, and at most maxAllowed
+    const clampedVal = Math.min(maxAllowed, Math.max(1, newPercentage));
+
+    const result = milestones.map((m, i) =>
+      i === editedIndex ? { ...m, percentage: clampedVal } : { ...m },
+    );
+
+    const fixedSum = isLast ? clampedVal : priorSum + clampedVal;
+    const remaining = Math.max(k, 100 - fixedSum);
+
+    if (k > 0) {
+      const base = Math.floor(remaining / k);
+      const remainder = remaining % k;
+      targetIndices.forEach((targetIdx, mIdx) => {
+        const item = result[targetIdx];
+        if (item) {
+          result[targetIdx] = {
+            ...item,
+            percentage: Math.max(1, base + (mIdx < remainder ? 1 : 0)),
+          };
+        }
+      });
+    }
+
+    return result;
+  };
+
+  const updateMilestone = (
     index: number,
-    field: K,
-    val: JobFormMilestone[K],
+    field: keyof JobFormMilestone,
+    val: string | number | "",
   ) => {
-    const next = form.milestones.map((m, i) => (i === index ? { ...m, [field]: val } : m));
+    if (field === "percentage") {
+      if (val === "" || val === null) {
+        const next = form.milestones.map((m, i) => (i === index ? { ...m, percentage: "" } : m));
+        update("milestones", next as JobFormMilestone[]);
+        return;
+      }
+      const numVal = typeof val === "number" ? val : parseInt(String(val), 10) || 0;
+      if (form.milestones.length > 1) {
+        const next = distributeMilestonePercentages(form.milestones, index, numVal);
+        update("milestones", next as JobFormMilestone[]);
+        return;
+      } else if (form.milestones.length === 1) {
+        const first = form.milestones[0];
+        if (first) {
+          const clamped = Math.min(100, Math.max(0, numVal));
+          const next = [{ ...first, percentage: clamped }];
+          update("milestones", next as JobFormMilestone[]);
+        }
+        return;
+      }
+    }
+    const next = form.milestones.map((m, i) =>
+      i === index ? { ...m, [field]: val } : m,
+    ) as JobFormMilestone[];
     update("milestones", next);
   };
 
@@ -740,6 +864,45 @@ export default function PostJob() {
               </div>
             )}
 
+            {form.milestones.length > 0 && (
+              <div className="rounded-xl border border-blue-500/20 bg-blue-50/50 dark:bg-blue-950/20 p-3.5 text-xs text-muted-foreground flex items-start gap-2.5">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-foreground">
+                    Milestone Rule: Minimum 1% per milestone (no 0% or empty space)
+                  </p>
+                  <p>
+                    Every milestone must be set to at least <strong>1%</strong>. When you adjust one
+                    milestone, the remaining percentage is automatically split evenly across the
+                    other milestones without exceeding 100%.
+                  </p>
+                  {form.milestones.length === 3 && (
+                    <p className="text-foreground/90 font-medium">
+                      💡 Tip: With 3 milestones, the maximum for any single milestone is{" "}
+                      <strong>98%</strong> (so the other 2 each have at least 1%). If you want to
+                      allocate <strong>99%</strong> to the first milestone, delete the 3rd milestone
+                      so only 2 milestones remain (e.g. 99% and 1%).
+                    </p>
+                  )}
+                  {form.milestones.length > 3 && (
+                    <p className="text-foreground/90 font-medium">
+                      💡 Tip: With {form.milestones.length} milestones, the maximum for any single
+                      milestone is <strong>{100 - (form.milestones.length - 1)}%</strong> so
+                      remaining milestones each have at least 1%. To assign a higher percentage
+                      (e.g. 99%), delete extra milestones.
+                    </p>
+                  )}
+                  {form.milestones.length === 2 && (
+                    <p className="text-foreground/90 font-medium">
+                      💡 Tip: With 2 milestones, you can assign up to <strong>99%</strong> to the
+                      first milestone, and the second milestone automatically becomes{" "}
+                      <strong>1%</strong>.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {form.milestones.length === 0 ? (
               <div className="rounded-2xl border-2 border-dashed border-muted-foreground/20 p-6 text-center sm:p-8 bg-muted/30">
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-3">
@@ -834,25 +997,29 @@ export default function PostJob() {
                               <Input
                                 type="number"
                                 min="1"
-                                max="100"
-                                value={milestone.percentage || ""}
+                                max={getMaxPercentageForMilestone(form.milestones, index)}
+                                value={milestone.percentage ?? ""}
                                 onChange={(e) => {
-                                  const val =
-                                    e.target.value === ""
-                                      ? 0
-                                      : Math.min(
-                                          100,
-                                          Math.max(0, parseInt(e.target.value, 10) || 0),
-                                        );
-                                  updateMilestone(index, "percentage", val);
+                                  const val = e.target.value;
+                                  updateMilestone(index, "percentage", val === "" ? "" : Number(val));
                                 }}
-                                placeholder="0"
+                                onBlur={() => {
+                                  if (!milestone.percentage || Number(milestone.percentage) < 1) {
+                                    updateMilestone(index, "percentage", 1);
+                                  }
+                                }}
+                                placeholder="1"
                                 className="pr-8"
                               />
                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium pointer-events-none">
                                 %
                               </span>
                             </div>
+                            {form.milestones.length > 1 && (
+                              <p className="mt-1 text-[11px] text-muted-foreground">
+                                Min 1% · Max {getMaxPercentageForMilestone(form.milestones, index)}%
+                              </p>
+                            )}
                           </Field>
                         </div>
                       </div>
@@ -1102,12 +1269,14 @@ export default function PostJob() {
                 form.milestones.length > 0
                   ? form.milestones
                       .map(
-                        (m, idx) =>
-                          `${idx + 1}. ${m.title} (${m.percentage}%${
+                        (m, idx) => {
+                          const milestonePercent = Number(m.percentage) || 0;
+                          return `${idx + 1}. ${m.title} (${m.percentage}%${
                             form.budgetMax
-                              ? ` • ₹${Math.round((Number(form.budgetMax) * m.percentage) / 100).toLocaleString("en-IN")}`
+                              ? ` • ₹${Math.round((Number(form.budgetMax) * milestonePercent) / 100).toLocaleString("en-IN")}`
                               : ""
-                          })${m.description ? `\n   ${m.description}` : ""}`,
+                          })${m.description ? `\n   ${m.description}` : ""}`;
+                        },
                       )
                       .join("\n")
                   : "Default: 100% on Project Completion"

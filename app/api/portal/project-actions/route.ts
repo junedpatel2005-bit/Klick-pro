@@ -419,9 +419,23 @@ export async function POST(request: NextRequest) {
       if (!milestone || milestone.trackingId !== project.id) {
         return NextResponse.json({ error: "Milestone not found." }, { status: 404 });
       }
-      if (milestone.status === "APPROVED") {
+      if (
+        milestone.status === "APPROVED" ||
+        milestone.status === "COMPLETED" ||
+        project.status === "COMPLETED"
+      ) {
         return NextResponse.json(
-          { error: "Approved milestones cannot be modified." },
+          { error: "Completed or approved milestones cannot be modified." },
+          { status: 400 },
+        );
+      }
+      const existingPayment = await db.payment.findFirst({
+        where: { milestoneId: milestone.id },
+        select: { status: true },
+      });
+      if (existingPayment?.status === "COMPLETED") {
+        return NextResponse.json(
+          { error: "Paid or completed milestones cannot be modified." },
           { status: 400 },
         );
       }
@@ -471,9 +485,24 @@ export async function POST(request: NextRequest) {
       if (!milestone || milestone.trackingId !== project.id) {
         return NextResponse.json({ error: "Milestone not found." }, { status: 404 });
       }
-      if (milestone.status === "APPROVED" || milestone.status === "AWAITING_CLIENT_REVIEW") {
+      if (
+        milestone.status === "APPROVED" ||
+        milestone.status === "COMPLETED" ||
+        milestone.status === "AWAITING_CLIENT_REVIEW" ||
+        project.status === "COMPLETED"
+      ) {
         return NextResponse.json(
-          { error: "This milestone is active or approved and cannot be deleted." },
+          { error: "This milestone is active, completed, or approved and cannot be deleted." },
+          { status: 400 },
+        );
+      }
+      const existingPayment = await db.payment.findFirst({
+        where: { milestoneId: milestone.id },
+        select: { status: true },
+      });
+      if (existingPayment?.status === "COMPLETED") {
+        return NextResponse.json(
+          { error: "Paid or completed milestones cannot be deleted." },
           { status: 400 },
         );
       }
