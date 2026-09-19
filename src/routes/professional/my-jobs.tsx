@@ -57,7 +57,10 @@ function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 }
 
 function normalizeCategoryKey(value: string | null | undefined) {
-  return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function categoryMatches(jobCategory: string | null | undefined, allowedNames: Set<string>) {
@@ -438,10 +441,12 @@ function ProfessionalJobsContent() {
           normalizeCategoryKey(c.name) === normalizeCategoryKey(category) ||
           normalizeCategoryKey(c.slug) === normalizeCategoryKey(category),
       ) ?? null;
-    const names = new Set<string>([
-      normalizeCategoryKey(match?.name ?? category),
-      normalizeCategoryKey(match?.slug ?? category),
-    ].filter(Boolean));
+    const names = new Set<string>(
+      [
+        normalizeCategoryKey(match?.name ?? category),
+        normalizeCategoryKey(match?.slug ?? category),
+      ].filter(Boolean),
+    );
     const addChildren = (catId: number) => {
       for (const c of categories) {
         if (c.parentId === catId) {
@@ -459,7 +464,10 @@ function ProfessionalJobsContent() {
     () =>
       new Set(
         categories
-          .filter((item) => !segment || normalizeCategoryKey(item.segment) === normalizeCategoryKey(segment))
+          .filter(
+            (item) =>
+              !segment || normalizeCategoryKey(item.segment) === normalizeCategoryKey(segment),
+          )
           .flatMap((item) => [normalizeCategoryKey(item.name), normalizeCategoryKey(item.slug)]),
       ),
     [categories, segment],
@@ -1283,7 +1291,9 @@ function ProfessionalJobsContent() {
           {negotiateTarget?.bidAmount != null && (
             <div className="rounded-xl border border-border bg-muted/40 p-3.5 space-y-1.5 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground font-medium">Current / Last Bid Amount:</span>
+                <span className="text-muted-foreground font-medium">
+                  Current / Last Bid Amount:
+                </span>
                 <span className="text-sm font-bold text-foreground">
                   ₹{negotiateTarget.bidAmount.toLocaleString("en-IN")}
                 </span>
@@ -1291,9 +1301,7 @@ function ProfessionalJobsContent() {
               {negotiateTarget.duration && (
                 <div className="flex items-center justify-between border-t border-border/60 pt-1.5">
                   <span className="text-muted-foreground font-medium">Current Timeline:</span>
-                  <span className="font-semibold text-foreground">
-                    {negotiateTarget.duration}
-                  </span>
+                  <span className="font-semibold text-foreground">{negotiateTarget.duration}</span>
                 </div>
               )}
             </div>
@@ -1320,8 +1328,8 @@ function ProfessionalJobsContent() {
                   <p className="mt-1.5 text-xs font-semibold text-destructive flex items-center gap-1.5">
                     <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                     Amount cannot be the same as the current bid (₹
-                    {negotiateTarget.bidAmount.toLocaleString("en-IN")}). Please propose a
-                    different amount.
+                    {negotiateTarget.bidAmount.toLocaleString("en-IN")}). Please propose a different
+                    amount.
                   </p>
                 )}
             </div>

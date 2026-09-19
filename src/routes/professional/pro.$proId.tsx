@@ -305,7 +305,8 @@ function ProProfileContent() {
                               <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300 space-y-2">
                                 <p className="font-semibold text-sm">No open jobs available</p>
                                 <p>
-                                  All your posted jobs are already in progress, completed, or closed. You can only hire professionals for active, open jobs.
+                                  All your posted jobs are already in progress, completed, or
+                                  closed. You can only hire professionals for active, open jobs.
                                 </p>
                                 <Button asChild size="sm" className="mt-2">
                                   <Link href="/post-job">Post a new job</Link>
@@ -460,7 +461,9 @@ function ProProfileContent() {
                         onClick={() => setHireStep((step) => (step + 1) as 2 | 3)}
                         disabled={
                           hireStep === 1
-                            ? !selectedJob || selectedJob.status !== "OPEN" || Boolean(selectedJob.projectId)
+                            ? !selectedJob ||
+                              selectedJob.status !== "OPEN" ||
+                              Boolean(selectedJob.projectId)
                             : !bidAmount.trim() ||
                               Number(bidAmount) < bidMin ||
                               Number(bidAmount) > bidMax
@@ -648,7 +651,8 @@ function ProProfileContent() {
             {!professional.reviewsList || professional.reviewsList.length === 0 ? (
               <div className="py-10 text-center">
                 <p className="text-sm text-muted-foreground">
-                  No written reviews yet. Client ratings will appear here once projects are completed.
+                  No written reviews yet. Client ratings will appear here once projects are
+                  completed.
                 </p>
               </div>
             ) : (
@@ -664,7 +668,9 @@ function ProProfileContent() {
                           {review.reviewerName[0]?.toUpperCase() ?? "C"}
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-foreground">{review.reviewerName}</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {review.reviewerName}
+                          </p>
                           {review.projectTitle && (
                             <p className="text-xs text-muted-foreground">{review.projectTitle}</p>
                           )}
@@ -676,7 +682,9 @@ function ProProfileContent() {
                             <Star
                               key={i}
                               className={`h-3.5 w-3.5 ${
-                                i < review.rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"
+                                i < review.rating
+                                  ? "fill-amber-400 text-amber-400"
+                                  : "text-muted-foreground/30"
                               }`}
                             />
                           ))}
@@ -696,7 +704,9 @@ function ProProfileContent() {
                         "{review.comment}"
                       </p>
                     ) : (
-                      <p className="mt-2 text-xs italic text-muted-foreground">Rating only, no written comment.</p>
+                      <p className="mt-2 text-xs italic text-muted-foreground">
+                        Rating only, no written comment.
+                      </p>
                     )}
 
                     {review.professionalResponse && (

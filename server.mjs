@@ -30,7 +30,7 @@ const dbPool = process.env.DATABASE_URL
   : null;
 
 const dev = process.env.NODE_ENV !== "production";
-const hostname = process.env.HOSTNAME ?? "0.0.0.0";
+const hostname = process.env.HOSTNAME ?? "localhost";
 const port = Number(process.env.PORT ?? 3000);
 const useWebpack = process.env.NEXT_WEBPACK === "1" || process.env.NEXT_WEBPACK === "true";
 const app = next({

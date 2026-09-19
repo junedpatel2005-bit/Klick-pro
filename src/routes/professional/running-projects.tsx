@@ -383,11 +383,13 @@ export default function RunningProjectsPage() {
                             <span>Milestones</span>
                             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
                               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                              {project.milestones.filter((m) => m.isCompleted).length} of {project.milestones.length} Done
+                              {project.milestones.filter((m) => m.isCompleted).length} of{" "}
+                              {project.milestones.length} Done
                             </span>
                           </span>
                           <span className="text-[11px] text-muted-foreground">
-                            {project.milestones.length} Milestone{project.milestones.length === 1 ? "" : "s"}
+                            {project.milestones.length} Milestone
+                            {project.milestones.length === 1 ? "" : "s"}
                           </span>
                         </div>
 
@@ -399,7 +401,8 @@ export default function RunningProjectsPage() {
                                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
                                   milestone.isCompleted
                                     ? "bg-emerald-500 text-white shadow-xs shadow-emerald-500/50 ring-2 ring-emerald-500/20"
-                                    : milestone.status === "AWAITING_CLIENT_REVIEW" || milestone.status === "IN_PROGRESS"
+                                    : milestone.status === "AWAITING_CLIENT_REVIEW" ||
+                                        milestone.status === "IN_PROGRESS"
                                       ? "bg-amber-500 text-white shadow-xs ring-2 ring-amber-500/20"
                                       : "bg-muted text-muted-foreground border border-border"
                                 }`}
@@ -421,13 +424,17 @@ export default function RunningProjectsPage() {
                         {/* Milestone rows with Green Dot */}
                         <div className="space-y-1.5 pt-1.5 border-t border-border/50">
                           {project.milestones.map((milestone, index) => (
-                            <div key={milestone.id} className="flex items-center justify-between gap-2 text-xs">
+                            <div
+                              key={milestone.id}
+                              className="flex items-center justify-between gap-2 text-xs"
+                            >
                               <div className="flex items-center gap-2 min-w-0">
                                 <span
                                   className={`h-2.5 w-2.5 shrink-0 rounded-full transition-all ${
                                     milestone.isCompleted
                                       ? "bg-emerald-500 ring-4 ring-emerald-500/25 shadow-xs"
-                                      : milestone.status === "AWAITING_CLIENT_REVIEW" || milestone.status === "IN_PROGRESS"
+                                      : milestone.status === "AWAITING_CLIENT_REVIEW" ||
+                                          milestone.status === "IN_PROGRESS"
                                         ? "bg-amber-400 ring-2 ring-amber-400/20"
                                         : "bg-muted-foreground/30"
                                   }`}

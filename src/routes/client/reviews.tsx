@@ -35,7 +35,9 @@ export default function ClientReviews() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Reviews & Ratings</h1>
-          <p className="mt-1 text-muted-foreground">Feedback from professionals who completed projects with you.</p>
+          <p className="mt-1 text-muted-foreground">
+            Feedback from professionals who completed projects with you.
+          </p>
         </div>
         <Button asChild>
           <a href="/reports">Completed projects</a>
@@ -86,7 +88,9 @@ export default function ClientReviews() {
               {review.comment ? (
                 <p className="mt-4 text-sm text-muted-foreground">{review.comment}</p>
               ) : (
-                <p className="mt-4 text-sm text-muted-foreground">Rating provided without written comment.</p>
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Rating provided without written comment.
+                </p>
               )}
             </li>
           ))}
@@ -95,4 +99,3 @@ export default function ClientReviews() {
     </div>
   );
 }
-
