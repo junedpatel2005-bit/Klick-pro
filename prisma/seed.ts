@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { faker } from "@faker-js/faker";
+import { faker, fakerEN_IN } from "@faker-js/faker";
 import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client";
@@ -805,6 +805,84 @@ async function ensureWallet(userId: number) {
   return db.wallet.upsert({ where: { userId }, update: {}, create: { userId } });
 }
 
+/**
+ * The wallet ledger demo needs real ProjectMilestone rows. Payment.milestone_id
+ * is a foreign key, so the synthetic 900_00x ids this seed used to write now
+ * fail to insert; they also left orphan rows on databases seeded earlier.
+ */
+async function ensureWalletDemoMilestones(
+  client: { id: number },
+  professional: { id: number },
+  milestones: { base: number; title: string }[],
+) {
+  const job = await db.clientJob.findFirst({
+    where: { userId: client.id },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  });
+  if (!job) throw new Error("seed wallet activity needs at least one client job");
+
+  const totalBase = milestones.reduce((sum, milestone) => sum + milestone.base, 0);
+  const existingRequest = await db.projectRequest.findFirst({
+    where: { jobId: job.id, professionalId: professional.id },
+    select: { id: true },
+  });
+  const request =
+    existingRequest ??
+    (await db.projectRequest.create({
+      data: {
+        jobId: job.id,
+        clientId: client.id,
+        professionalId: professional.id,
+        bidAmount: totalBase,
+        duration: "3 weeks",
+        coverLetter: "Seed engagement backing the wallet ledger demo.",
+        status: "ACCEPTED",
+      },
+      select: { id: true },
+    }));
+
+  const tracking = await db.projectTracking.upsert({
+    where: { requestId: request.id },
+    update: {},
+    create: {
+      requestId: request.id,
+      jobId: job.id,
+      clientId: client.id,
+      professionalId: professional.id,
+      status: "COMPLETED",
+      progress: 100,
+      currentStage: "Handover complete",
+      completedAt: new Date(),
+    },
+  });
+
+  const milestoneIds: number[] = [];
+  for (const milestone of milestones) {
+    const existing = await db.projectMilestone.findFirst({
+      where: { trackingId: tracking.id, title: milestone.title },
+      select: { id: true },
+    });
+    const row =
+      existing ??
+      (await db.projectMilestone.create({
+        data: {
+          trackingId: tracking.id,
+          clientId: client.id,
+          professionalId: professional.id,
+          title: milestone.title,
+          amount: milestone.base,
+          status: "APPROVED",
+          approvedAt: new Date(),
+        },
+        select: { id: true },
+      }));
+    milestoneIds.push(row.id);
+  }
+
+  return { trackingId: tracking.id, milestoneIds };
+}
+
 async function seedWalletActivity(client: { id: number }, professional: { id: number }) {
   const admin = await db.user.upsert({
     where: { email: SEED_ADMIN_EMAIL },
@@ -852,10 +930,15 @@ async function seedWalletActivity(client: { id: number }, professional: { id: nu
     { base: 12000, title: "API integration milestone" },
     { base: 8000, title: "QA & handoff milestone" },
   ];
+  const { trackingId, milestoneIds } = await ensureWalletDemoMilestones(
+    client,
+    professional,
+    milestones,
+  );
   for (const [index, milestone] of milestones.entries()) {
     const idempotencyKey = `seed-milestone-${client.id}-${professional.id}-${index}`;
     if (await db.payment.findUnique({ where: { idempotencyKey } })) continue;
-    const milestoneId = 900_001 + index;
+    const milestoneId = milestoneIds[index]!;
     const money = calculateMilestoneMoney(milestone.base);
 
     const payment = await db.payment.create({
@@ -890,7 +973,7 @@ async function seedWalletActivity(client: { id: number }, professional: { id: nu
     });
     await db.projectTransaction.create({
       data: {
-        trackingId: 900_000 + index,
+        trackingId,
         milestoneId,
         clientId: client.id,
         professionalId: professional.id,
@@ -974,10 +1057,728 @@ async function seedWalletActivity(client: { id: number }, professional: { id: nu
       },
     });
   }
+
+  return { adminWalletId: adminWallet.id };
+}
+
+/* --------------------------------------------------------------------------
+ * Indian demo dataset: 10 clients, 10 professionals and one full project
+ * journey per pair, so every client/professional screen has realistic rows.
+ * Names, phones and addresses come from Faker's en_IN locale.
+ * ------------------------------------------------------------------------ */
+
+const DEMO_COUNT = 10;
+const DEMO_DOMAIN = "demo.servio.example";
+
+/** City / state / district triples, because professional search filters on state + district. */
+const DEMO_INDIA_LOCATIONS = [
+  { city: "Surat", state: "Gujarat", district: "Surat", lat: 21.1702, lng: 72.8311 },
+  { city: "Ahmedabad", state: "Gujarat", district: "Ahmedabad", lat: 23.0225, lng: 72.5714 },
+  { city: "Mumbai", state: "Maharashtra", district: "Mumbai Suburban", lat: 19.076, lng: 72.8777 },
+  { city: "Pune", state: "Maharashtra", district: "Pune", lat: 18.5204, lng: 73.8567 },
+  {
+    city: "Bengaluru",
+    state: "Karnataka",
+    district: "Bengaluru Urban",
+    lat: 12.9716,
+    lng: 77.5946,
+  },
+  { city: "Hyderabad", state: "Telangana", district: "Hyderabad", lat: 17.385, lng: 78.4867 },
+  { city: "Chennai", state: "Tamil Nadu", district: "Chennai", lat: 13.0827, lng: 80.2707 },
+  { city: "Jaipur", state: "Rajasthan", district: "Jaipur", lat: 26.9124, lng: 75.7873 },
+  { city: "Kolkata", state: "West Bengal", district: "Kolkata", lat: 22.5726, lng: 88.3639 },
+  { city: "Kochi", state: "Kerala", district: "Ernakulam", lat: 9.9312, lng: 76.2673 },
+] as const;
+
+type DemoLocation = (typeof DEMO_INDIA_LOCATIONS)[number];
+
+const DEMO_HIRING_NEEDS = [
+  "Deep cleaning before Diwali",
+  "Society water-tank cleaning",
+  "Flat electrical rewiring",
+  "Bathroom plumbing overhaul",
+  "Split AC service contract",
+  "Modular kitchen carpentry",
+  "Interior painting (2 BHK)",
+  "CCTV installation for shop",
+  "Borewell pump replacement",
+  "Solar rooftop installation",
+];
+
+// Faker's lorem generator is Latin in every locale, so the free-text fields use
+// curated Indian-context copy instead.
+const DEMO_JOB_DETAILS = [
+  "3 BHK flat on the 7th floor, lift available. Society permits work between 9 AM and 7 PM.",
+  "Independent bungalow, roughly 2400 sq ft of built-up area. Water and power available on site.",
+  "Shop unit in a commercial complex; work must finish before the shop opens at 10 AM.",
+  "Newly handed-over flat, no furniture inside yet, so full access to all rooms.",
+  "Old construction, so expect some rework on existing fittings. Please quote for material separately.",
+  "Two-floor duplex; the upper floor is the priority for this round of work.",
+  "Rented flat, so the landlord must approve anything structural. Cosmetic work can start immediately.",
+  "Corner plot villa with a terrace and a small garden that also needs attention.",
+  "Office floor with 14 workstations; work has to happen over a weekend.",
+  "Row house in a gated society; society gate pass will be arranged for your team.",
+];
+
+const DEMO_PROPOSAL_NOTES = [
+  "I can do a site visit this week and share a firm quote the same day.",
+  "My team carries its own tools and material, so there is no extra trip charge.",
+  "I have finished similar work in the same locality and can share photos on request.",
+  "Rate quoted is inclusive of labour; material will be billed at actuals with GST.",
+  "I can start within two days of confirmation and work around your timings.",
+];
+
+const DEMO_REVIEW_NOTES = [
+  "Team arrived on time and cleaned up properly before leaving.",
+  "Quote stayed exactly as promised, no surprise charges at the end.",
+  "Work quality was neat and the finishing was better than expected.",
+  "Answered calls quickly and kept me updated through the job.",
+  "Handled a small rework without arguing about it. Would hire again.",
+];
+
+const DEMO_COMPANY_SUFFIXES = [
+  "Enterprises",
+  "Industries",
+  "Traders",
+  "Infratech",
+  "Services LLP",
+  "Solutions Pvt Ltd",
+];
+
+const DEMO_TEAM_SIZES = ["Just me", "2-5", "6-10", "11-50"];
+
+/**
+ * Deterministic +91 mobile numbers. User.phone is unique, so a re-run of the
+ * seed must reproduce the exact same number for the same demo account.
+ */
+function demoPhone(series: number, index: number) {
+  return `+9197${String(series * 1_000_000 + 100_000 + index).padStart(8, "0")}`;
+}
+
+function demoStreetAddress(location: DemoLocation) {
+  return `${fakerEN_IN.location.buildingNumber()}, ${fakerEN_IN.location.street()}, ${location.city}, ${location.state}`;
+}
+
+type DemoCategory = { id: number; name: string; parentName: string };
+
+/**
+ * Picks 10 leaf subcategories spread across different parents, so the demo
+ * professionals do not all end up selling the same trade.
+ */
+async function fetchDemoCategories(): Promise<DemoCategory[]> {
+  const leaves = await db.serviceCategory.findMany({
+    where: { parent: { parentId: { not: null } } },
+    orderBy: { id: "asc" },
+    select: { id: true, name: true, parent: { select: { name: true } } },
+  });
+  if (leaves.length < DEMO_COUNT) {
+    throw new Error(
+      `demo seed needs at least ${DEMO_COUNT} leaf service categories, found ${leaves.length}`,
+    );
+  }
+  const step = Math.max(1, Math.floor(leaves.length / DEMO_COUNT));
+  return Array.from({ length: DEMO_COUNT }, (_, index) => {
+    const leaf = leaves[(index * step) % leaves.length]!;
+    return { id: leaf.id, name: leaf.name, parentName: leaf.parent?.name ?? leaf.name };
+  });
+}
+
+type DemoClient = {
+  userId: number;
+  profileId: number;
+  name: string;
+  location: DemoLocation;
+};
+
+/** 10 CLIENT accounts with profile, primary saved location, hiring needs and a funded wallet. */
+async function createIndianDemoClients(passwordHash: string): Promise<DemoClient[]> {
+  const clients: DemoClient[] = [];
+
+  for (let index = 0; index < DEMO_COUNT; index += 1) {
+    const location = DEMO_INDIA_LOCATIONS[index]!;
+    const firstName = fakerEN_IN.person.firstName();
+    const lastName = fakerEN_IN.person.lastName();
+    const email = `demo.client.${index + 1}@${DEMO_DOMAIN}`;
+    const address = demoStreetAddress(location);
+    // Every third client is an individual homeowner rather than a business.
+    const hasCompany = index % 3 !== 0;
+    const companyName = hasCompany
+      ? `${lastName} ${location.city} ${DEMO_COMPANY_SUFFIXES[index % DEMO_COMPANY_SUFFIXES.length]!}`
+      : null;
+    const createdAt = fakerEN_IN.date.recent({ days: 75 });
+    const needs = fakerEN_IN.helpers.arrayElements(DEMO_HIRING_NEEDS, { min: 2, max: 3 });
+    const savedLocation = {
+      label: hasCompany ? "Office / Primary site" : "Home",
+      address,
+      city: location.city,
+      state: location.state,
+      district: location.district,
+      lat: location.lat,
+      lng: location.lng,
+    };
+
+    const shared = {
+      firstName,
+      lastName,
+      phone: demoPhone(4, index),
+      companyName,
+      companyWebsite: companyName
+        ? `https://www.${companyName.toLowerCase().replace(/[^a-z0-9]/g, "")}.in`
+        : null,
+      industry: hasCompany ? "Home & Facility Maintenance" : null,
+      teamSize: hasCompany ? DEMO_TEAM_SIZES[index % DEMO_TEAM_SIZES.length]! : "Just me",
+      companyDescription: hasCompany ? fakerEN_IN.company.catchPhrase() : null,
+      address,
+      hiringNeedsJson: JSON.stringify(needs),
+      savedLocationsJson: JSON.stringify([savedLocation]),
+    };
+
+    const user = await db.user.upsert({
+      where: { email },
+      update: shared,
+      create: {
+        ...shared,
+        email,
+        passwordHash,
+        role: "CLIENT",
+        authProvider: "LOCAL",
+        emailVerifiedAt: createdAt,
+        phoneVerifiedAt: createdAt,
+        createdAt,
+      },
+    });
+
+    const profileData = {
+      fullName: `${firstName} ${lastName}`,
+      email,
+      phone: shared.phone,
+      companyName: shared.companyName,
+      companyWebsite: shared.companyWebsite,
+      industry: shared.industry,
+      teamSize: shared.teamSize,
+      companyDescription: shared.companyDescription,
+      address,
+    };
+    const profile = await db.clientProfile.upsert({
+      where: { userId: user.id },
+      update: profileData,
+      create: { userId: user.id, ...profileData, createdAt },
+    });
+
+    // clientProfileId is only unique among primary rows, so match the row by hand.
+    const existingLocation = await db.clientSavedLocation.findFirst({
+      where: { clientProfileId: profile.id, isPrimary: true },
+      select: { id: true },
+    });
+    if (existingLocation) {
+      await db.clientSavedLocation.update({
+        where: { id: existingLocation.id },
+        data: { label: savedLocation.label, address },
+      });
+    } else {
+      await db.clientSavedLocation.create({
+        data: {
+          clientProfileId: profile.id,
+          label: savedLocation.label,
+          address,
+          isPrimary: true,
+          createdAt,
+        },
+      });
+    }
+
+    // Hiring needs carry no unique key; replace this demo client's own set.
+    await db.clientHiringNeed.deleteMany({ where: { clientProfileId: profile.id } });
+    await db.clientHiringNeed.createMany({
+      data: needs.map((value) => ({ clientProfileId: profile.id, value, createdAt })),
+    });
+
+    const wallet = await ensureWallet(user.id);
+    const openingKey = `demo-client-opening-${user.id}`;
+    if (!(await db.walletTransaction.findUnique({ where: { idempotencyKey: openingKey } }))) {
+      const opening = fakerEN_IN.helpers.arrayElement([25_000, 40_000, 60_000, 85_000]);
+      await db.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          amount: opening,
+          type: "WALLET_TOP_UP",
+          status: "COMPLETED",
+          description: `Opening wallet top-up: ${opening}`,
+          idempotencyKey: openingKey,
+        },
+      });
+      await db.wallet.update({
+        where: { id: wallet.id },
+        data: { balance: { increment: opening } },
+      });
+    }
+
+    clients.push({
+      userId: user.id,
+      profileId: profile.id,
+      name: `${firstName} ${lastName}`,
+      location,
+    });
+  }
+
+  return clients;
+}
+
+type DemoProfessional = {
+  userId: number;
+  name: string;
+  category: DemoCategory;
+  location: DemoLocation;
+};
+
+/** 10 PROFESSIONAL accounts, each with a listed Service, a verification record and a wallet. */
+async function createIndianDemoProfessionals(
+  passwordHash: string,
+  demoCategories: DemoCategory[],
+): Promise<DemoProfessional[]> {
+  const professionals: DemoProfessional[] = [];
+
+  for (let index = 0; index < DEMO_COUNT; index += 1) {
+    const location = DEMO_INDIA_LOCATIONS[index]!;
+    const category = demoCategories[index]!;
+    const coords = jitterNearCity(location);
+    const firstName = fakerEN_IN.person.firstName();
+    const lastName = fakerEN_IN.person.lastName();
+    const email = `demo.professional.${index + 1}@${DEMO_DOMAIN}`;
+    const createdAt = fakerEN_IN.date.recent({ days: 120 });
+    const skills = fakerEN_IN.helpers.arrayElements(
+      [
+        category.name,
+        category.parentName,
+        "On-site survey",
+        "Same-day service",
+        "Annual maintenance contract",
+        "GST invoicing",
+      ],
+      { min: 3, max: 4 },
+    );
+    const experienceYears = fakerEN_IN.number.int({ min: 2, max: 18 });
+
+    const shared = {
+      firstName,
+      lastName,
+      phone: demoPhone(5, index),
+      professionalCategory: category.name,
+      professionalCategoryId: category.id,
+      professionalCity: location.city,
+      professionalState: location.state,
+      professionalDistrict: location.district,
+      professionalLatitude: coords.lat,
+      professionalLongitude: coords.lng,
+      industry: category.parentName,
+      serviceArea: `${location.city} and nearby areas in ${location.district} district`,
+      serviceRadiusKm: fakerEN_IN.number.int({ min: 10, max: 45 }),
+      address: demoStreetAddress(location),
+      teamSize: DEMO_TEAM_SIZES[index % DEMO_TEAM_SIZES.length]!,
+      hourlyRate: fakerEN_IN.number.int({ min: 350, max: 1_400 }),
+      fixedRate: fakerEN_IN.number.int({ min: 4_000, max: 60_000 }),
+      experienceYears,
+      professionalSkillsJson: JSON.stringify(skills),
+      workMode: index % 4 === 0 ? "remote" : "on_site",
+    };
+
+    const user = await db.user.upsert({
+      where: { email },
+      update: shared,
+      create: {
+        ...shared,
+        email,
+        passwordHash,
+        role: "PROFESSIONAL",
+        authProvider: "LOCAL",
+        emailVerifiedAt: createdAt,
+        phoneVerifiedAt: createdAt,
+        companyDescription: `${category.name} specialist serving ${location.city} for ${experienceYears} years.`,
+        isVerified: index % 4 !== 0,
+        availabilityStatus: index % 2 === 0 ? "available" : "this_week",
+        averageRating: fakerEN_IN.number.float({ min: 4, max: 5, fractionDigits: 1 }),
+        reviewCount: fakerEN_IN.number.int({ min: 4, max: 90 }),
+        createdAt,
+      },
+    });
+
+    const serviceName = `${category.name} in ${location.city}`;
+    const serviceData = {
+      description: `${category.name} handled end to end in ${location.city}. Material, labour and a 30-day workmanship warranty included.`,
+      price: fakerEN_IN.number.int({ min: 1_200, max: 35_000 }),
+      isActive: true,
+    };
+    const existingService = await db.service.findFirst({
+      where: { professionalId: user.id, name: serviceName },
+      select: { id: true },
+    });
+    if (existingService) {
+      await db.service.update({ where: { id: existingService.id }, data: serviceData });
+    } else {
+      await db.service.create({
+        data: {
+          professionalId: user.id,
+          categoryId: category.id,
+          name: serviceName,
+          ...serviceData,
+          createdAt,
+        },
+      });
+    }
+
+    const verificationStatus = index % 4 === 0 ? "PENDING" : "APPROVED";
+    await db.professionalVerification.upsert({
+      where: { userId: user.id },
+      update: { status: verificationStatus },
+      create: {
+        userId: user.id,
+        status: verificationStatus,
+        governmentIdUrl: `https://files.servio.example/demo/${user.id}/aadhaar.pdf`,
+        licenseUrl: `https://files.servio.example/demo/${user.id}/trade-license.pdf`,
+        selfieUrl: `https://files.servio.example/demo/${user.id}/selfie.jpg`,
+        certificationsJson: JSON.stringify([`${category.parentName} safety certification`]),
+      },
+    });
+
+    await ensureWallet(user.id);
+
+    professionals.push({ userId: user.id, name: `${firstName} ${lastName}`, category, location });
+  }
+
+  return professionals;
+}
+
+/**
+ * Pairs client i with professional i and walks the whole flow once: job posted,
+ * proposal sent and accepted, project tracked, one milestone paid from the
+ * client wallet, and a two-sided review left at the end.
+ */
+async function createDemoProjectJourneys(
+  clients: DemoClient[],
+  professionals: DemoProfessional[],
+  adminWalletId: number,
+) {
+  for (let index = 0; index < DEMO_COUNT; index += 1) {
+    const client = clients[index]!;
+    const professional = professionals[index]!;
+    const { category, location } = professional;
+    const createdAt = fakerEN_IN.date.recent({ days: 45 });
+    // Every pair runs the journey to completion, so each downstream table
+    // (milestone, payment, invoice, two-sided review) lands exactly 10 rows.
+    // Open marketplace jobs come from createJobs() above, not from here.
+
+    // Deterministic title: this is the key the seed matches on when it re-runs,
+    // so it must not contain Faker output (that shifts whenever the calls above
+    // change and would insert a duplicate job instead of updating this one).
+    const title = `Demo project ${index + 1}: ${category.name} in ${location.city}`;
+    const budgetMin = fakerEN_IN.number.int({ min: 3_000, max: 12_000 });
+    const completedAt = fakerEN_IN.date.soon({ days: 20, refDate: createdAt });
+    const jobData = {
+      category: category.name,
+      description: `${DEMO_JOB_DETAILS[index]!} Site: ${client.location.city}, ${client.location.state}.`,
+      budgetMin,
+      budgetMax: budgetMin + fakerEN_IN.number.int({ min: 4_000, max: 40_000 }),
+      urgency: (index % 3 === 0 ? "HIGH" : index % 3 === 1 ? "MEDIUM" : "LOW") as
+        "HIGH" | "MEDIUM" | "LOW",
+      workMode: (index % 4 === 0 ? "REMOTE" : "ON_SITE") as "REMOTE" | "ON_SITE",
+      locationLabel: client.location.city,
+      locationAddress: demoStreetAddress(client.location),
+      locationState: client.location.state,
+      locationDistrict: client.location.district,
+      locationLat: client.location.lat,
+      locationLng: client.location.lng,
+      status: "CLOSED" as const,
+      paymentMethod: "WALLET",
+      deadline: fakerEN_IN.date.soon({ days: 40, refDate: createdAt }),
+    };
+
+    const existingJob = await db.clientJob.findFirst({ where: { title }, select: { id: true } });
+    const job = existingJob
+      ? await db.clientJob.update({ where: { id: existingJob.id }, data: jobData })
+      : await db.clientJob.create({
+          data: { userId: client.userId, title, ...jobData, createdAt },
+        });
+
+    const bidAmount = fakerEN_IN.number.int({ min: jobData.budgetMin, max: jobData.budgetMax });
+    const requestData = {
+      bidAmount,
+      duration: fakerEN_IN.helpers.arrayElement(["3 days", "1 week", "2 weeks", "1 month"]),
+      coverLetter: `Namaste ${client.name.split(" ")[0]}, I handle ${category.name.toLowerCase()} across ${location.city}. ${DEMO_PROPOSAL_NOTES[index % DEMO_PROPOSAL_NOTES.length]!}`,
+      status: "ACCEPTED",
+      origin: "PROFESSIONAL_PROPOSAL",
+    };
+    const existingRequest = await db.projectRequest.findFirst({
+      where: { jobId: job.id, professionalId: professional.userId },
+      select: { id: true },
+    });
+    const request = existingRequest
+      ? await db.projectRequest.update({ where: { id: existingRequest.id }, data: requestData })
+      : await db.projectRequest.create({
+          data: {
+            jobId: job.id,
+            clientId: client.userId,
+            professionalId: professional.userId,
+            ...requestData,
+            createdAt,
+          },
+        });
+
+    const trackingData = {
+      status: "COMPLETED",
+      progress: 100,
+      currentStage: "Handover complete",
+      startedAt: createdAt,
+      completedAt,
+    };
+    const tracking = await db.projectTracking.upsert({
+      where: { requestId: request.id },
+      update: trackingData,
+      create: {
+        requestId: request.id,
+        jobId: job.id,
+        clientId: client.userId,
+        professionalId: professional.userId,
+        ...trackingData,
+        acceptedAt: createdAt,
+        createdAt,
+      },
+    });
+
+    const milestoneTitle = `${category.name} full scope`;
+    const milestoneData = {
+      description: `Single-milestone engagement covering the agreed ${category.name.toLowerCase()} scope.`,
+      amount: bidAmount,
+      dueDate: jobData.deadline,
+      status: "APPROVED",
+      submittedAt: completedAt,
+      approvedAt: completedAt,
+    };
+    const existingMilestone = await db.projectMilestone.findFirst({
+      where: { trackingId: tracking.id, title: milestoneTitle },
+      select: { id: true },
+    });
+    const milestone = existingMilestone
+      ? await db.projectMilestone.update({
+          where: { id: existingMilestone.id },
+          data: milestoneData,
+        })
+      : await db.projectMilestone.create({
+          data: {
+            trackingId: tracking.id,
+            clientId: client.userId,
+            professionalId: professional.userId,
+            title: milestoneTitle,
+            ...milestoneData,
+            createdAt,
+          },
+        });
+
+    await db.projectTimelineEvent.deleteMany({
+      where: { trackingId: tracking.id, type: "DEMO_SEED" },
+    });
+    await db.projectTimelineEvent.create({
+      data: {
+        trackingId: tracking.id,
+        milestoneId: milestone.id,
+        actorId: professional.userId,
+        actorRole: "PROFESSIONAL",
+        type: "DEMO_SEED",
+        title: "Work handed over",
+        description: `${professional.name} updated progress for ${category.name} in ${location.city}.`,
+        progress: trackingData.progress,
+        stage: trackingData.currentStage,
+        createdAt,
+      },
+    });
+
+    // Money movement mirrors wallet-ledger.ts.
+    const money = calculateMilestoneMoney(milestone.amount);
+    const idempotencyKey = `demo-journey-${client.userId}-${professional.userId}-${index}`;
+    if (!(await db.payment.findUnique({ where: { idempotencyKey } }))) {
+      let clientWallet = await ensureWallet(client.userId);
+      const professionalWallet = await ensureWallet(professional.userId);
+
+      // A milestone can cost more than the opening top-up, and a demo wallet
+      // must never go negative, so the client tops up the shortfall first.
+      if (clientWallet.balance < money.clientChargeAmount) {
+        const shortfall = money.clientChargeAmount - clientWallet.balance;
+        await db.walletTransaction.create({
+          data: {
+            walletId: clientWallet.id,
+            amount: shortfall,
+            type: "WALLET_TOP_UP",
+            status: "COMPLETED",
+            description: `Wallet top-up before milestone payment: ${shortfall}`,
+            idempotencyKey: `${idempotencyKey}-client-topup`,
+          },
+        });
+        clientWallet = await db.wallet.update({
+          where: { id: clientWallet.id },
+          data: { balance: { increment: shortfall } },
+        });
+      }
+
+      const payment = await db.payment.create({
+        data: {
+          clientId: client.userId,
+          professionalId: professional.userId,
+          jobId: job.id,
+          projectTrackingId: tracking.id,
+          milestoneId: milestone.id,
+          amount: money.clientChargeAmount,
+          baseAmount: money.baseAmount,
+          clientFeeAmount: money.clientFeeAmount,
+          professionalPayoutAmount: money.professionalPayoutAmount,
+          adminNetAmount: money.adminNetAmount,
+          commissionAmount: money.adminNetAmount,
+          currency: "INR",
+          provider: "wallet",
+          status: "COMPLETED",
+          capturedAt: completedAt ?? createdAt,
+          idempotencyKey,
+        },
+      });
+      await db.invoice.create({
+        data: {
+          invoiceNumber: `INV-DEMO-${String(payment.id).padStart(6, "0")}`,
+          paymentId: payment.id,
+          clientId: client.userId,
+          professionalId: professional.userId,
+          amount: money.clientChargeAmount,
+          commissionAmount: money.adminNetAmount,
+          netAmount: money.professionalPayoutAmount,
+          currency: "INR",
+        },
+      });
+      await db.projectTransaction.create({
+        data: {
+          trackingId: tracking.id,
+          milestoneId: milestone.id,
+          clientId: client.userId,
+          professionalId: professional.userId,
+          amount: money.baseAmount,
+          currency: "INR",
+          type: "WALLET_MILESTONE_PAYMENT",
+          status: "COMPLETED",
+          description: `Wallet milestone payment: ${milestoneTitle}`,
+        },
+      });
+      await db.walletTransaction.createMany({
+        data: [
+          {
+            walletId: clientWallet.id,
+            amount: -money.clientChargeAmount,
+            type: "MILESTONE_PAYMENT",
+            status: "COMPLETED",
+            description: `Milestone payment debited: ${money.baseAmount}`,
+            idempotencyKey: `${idempotencyKey}-client-debit`,
+          },
+          {
+            walletId: adminWalletId,
+            amount: money.clientChargeAmount,
+            type: "ADMIN_MILESTONE_RECEIPT",
+            status: "COMPLETED",
+            description: `Client milestone receipt: ${money.clientChargeAmount}`,
+            idempotencyKey: `${idempotencyKey}-admin-credit`,
+          },
+          {
+            walletId: adminWalletId,
+            amount: -money.professionalPayoutAmount,
+            type: "PROFESSIONAL_PAYOUT",
+            status: "COMPLETED",
+            description: `Professional payout: ${money.professionalPayoutAmount}`,
+            idempotencyKey: `${idempotencyKey}-admin-debit`,
+          },
+          {
+            walletId: professionalWallet.id,
+            amount: money.professionalPayoutAmount,
+            type: "MILESTONE_EARNING",
+            status: "COMPLETED",
+            description: `Milestone earning: ${money.professionalPayoutAmount}`,
+            idempotencyKey: `${idempotencyKey}-professional-credit`,
+          },
+        ],
+      });
+      await Promise.all([
+        db.wallet.update({
+          where: { id: clientWallet.id },
+          data: { balance: { decrement: money.clientChargeAmount } },
+        }),
+        db.wallet.update({
+          where: { id: adminWalletId },
+          data: { balance: { increment: money.adminNetAmount } },
+        }),
+        db.wallet.update({
+          where: { id: professionalWallet.id },
+          data: { balance: { increment: money.professionalPayoutAmount } },
+        }),
+      ]);
+    }
+
+    // Two-sided review: exercises the client columns and the
+    // ProjectReview.professionalRating half in one row.
+    const reviewData = {
+      rating: fakerEN_IN.number.int({ min: 4, max: 5 }),
+      comment: `${category.name} completed neatly in ${location.city}. ${DEMO_REVIEW_NOTES[index % DEMO_REVIEW_NOTES.length]!}`,
+      clientReviewedAt: completedAt,
+      professionalRating: fakerEN_IN.number.int({ min: 4, max: 5 }),
+      professionalComment: `Clear scope and on-time wallet release from ${client.name}.`,
+      professionalReviewedAt: completedAt,
+      professionalResponse: "Thank you for the review, happy to help again.",
+      professionalResponseAt: completedAt,
+    };
+    await db.projectReview.upsert({
+      where: { trackingId: tracking.id },
+      update: reviewData,
+      create: {
+        trackingId: tracking.id,
+        clientId: client.userId,
+        professionalId: professional.userId,
+        ...reviewData,
+      },
+    });
+
+    const notificationHref = `/professional/job/${job.id}`;
+    await db.userNotification.deleteMany({
+      where: { userId: professional.userId, type: "DEMO_PROJECT_UPDATE", href: notificationHref },
+    });
+    await db.userNotification.create({
+      data: {
+        userId: professional.userId,
+        type: "DEMO_PROJECT_UPDATE",
+        title: "Milestone payment released",
+        description: `${client.name} released ${money.professionalPayoutAmount} for ${milestoneTitle}.`,
+        href: notificationHref,
+        createdAt,
+      },
+    });
+  }
+}
+
+/** Rolls the seeded reviews up onto each demo professional's rating summary. */
+async function refreshDemoProfessionalRatings(professionals: DemoProfessional[]) {
+  for (const professional of professionals) {
+    const stats = await db.projectReview.aggregate({
+      where: { professionalId: professional.userId, rating: { not: null } },
+      _avg: { rating: true },
+      _count: { rating: true },
+    });
+    if (!stats._count.rating) continue;
+    await db.user.update({
+      where: { id: professional.userId },
+      data: {
+        averageRating: Number((stats._avg.rating ?? 0).toFixed(1)),
+        reviewCount: stats._count.rating,
+      },
+    });
+  }
 }
 
 async function main() {
   faker.seed(20260810);
+  // Separate stream so the Indian demo block stays stable when the older
+  // English-locale blocks above change.
+  fakerEN_IN.seed(20260919);
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, 12);
   await upsertCategories();
   const client = await db.user.upsert({
@@ -999,8 +1800,23 @@ async function main() {
     where: { email: SEED_PROFESSIONAL_EMAIL },
     select: { id: true },
   });
-  await seedWalletActivity(client, professional);
-  console.info("seed.completed", { categories: categories.length, professionals: 12, jobs: 8 });
+  const { adminWalletId } = await seedWalletActivity(client, professional);
+
+  // Indian demo dataset: 10 clients, 10 professionals, 10 project journeys.
+  const demoCategories = await fetchDemoCategories();
+  const demoClients = await createIndianDemoClients(passwordHash);
+  const demoProfessionals = await createIndianDemoProfessionals(passwordHash, demoCategories);
+  await createDemoProjectJourneys(demoClients, demoProfessionals, adminWalletId);
+  await refreshDemoProfessionalRatings(demoProfessionals);
+
+  console.info("seed.completed", {
+    categories: categories.length,
+    professionals: 12,
+    jobs: 8,
+    demoClients: demoClients.length,
+    demoProfessionals: demoProfessionals.length,
+    demoJourneys: DEMO_COUNT,
+  });
 }
 
 main()
