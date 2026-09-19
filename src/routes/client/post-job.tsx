@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, Info, Plus, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, MapPin, Plus, Trash2 } from "lucide-react";
 import { AddressMapPicker } from "@/components/AddressMapPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { MarketplaceCategory } from "@/lib/types/marketplace";
-import { getAllStates } from "@/lib/india-locations";
+import { getAllStates, inferLocationFromAddress, matchIndiaLocation } from "@/lib/india-locations";
 
 export type JobFormMilestone = {
   id?: number;
@@ -83,6 +83,7 @@ export default function PostJob() {
     [categories, setCategories] = useState<MarketplaceCategory[]>([]),
     [primary, setPrimary] = useState<string>(""),
     [savedLocations, setSavedLocations] = useState<SavedLocation[]>([]),
+    [selectedSavedLocationKey, setSelectedSavedLocationKey] = useState<string>(""),
     [errors, setErrors] = useState<Record<string, string>>({}),
     [message, setMessage] = useState(""),
     [saving, setSaving] = useState(false),
@@ -130,11 +131,11 @@ export default function PostJob() {
           const address = data.profile?.address ?? "";
           setPrimary(address);
           if (address) {
-            setForm((current) =>
-              current.locationAddress
-                ? current
-                : { ...current, locationLabel: "Primary address", locationAddress: address },
-            );
+            setForm((current) => {
+              if (current.locationAddress) return current;
+              void chooseLocation("primary", address, "Primary address");
+              return { ...current, locationLabel: "Primary address", locationAddress: address };
+            });
           }
         },
       )
@@ -549,35 +550,86 @@ export default function PostJob() {
   useEffect(() => {
     if (!segment && activeTopCategory) setSegment(activeTopCategory.segment);
   }, [segment, activeTopCategory]);
-  const locationOptions = useMemo(
-    () => [
-      ...(primary ? [{ key: "primary", label: "Primary address", address: primary }] : []),
-      ...savedLocations
-        .filter((location) => !location.isPrimary && location.address !== primary)
-        .map((location) => ({
-          key: `saved-${location.id}`,
-          label: /^primary address$/i.test(location.label) ? "Saved address" : location.label,
-          address: location.address,
-        })),
-    ],
-    [primary, savedLocations],
-  );
-  async function chooseLocation(key: string) {
+  const locationOptions = useMemo(() => {
+    const list: Array<{ key: string; label: string; address: string }> = [];
+    const trimmedPrimary = primary?.trim() ?? "";
+    if (trimmedPrimary) {
+      list.push({ key: "primary", label: "Primary address", address: trimmedPrimary });
+    }
+    for (const location of savedLocations) {
+      const trimmedAddress = location.address?.trim() ?? "";
+      if (!trimmedAddress) continue;
+      if (trimmedPrimary && trimmedAddress.toLowerCase() === trimmedPrimary.toLowerCase()) continue;
+      list.push({
+        key: `saved-${location.id}`,
+        label: location.isPrimary
+          ? "Primary address"
+          : /^primary address$/i.test(location.label)
+            ? "Saved address"
+            : location.label || "Saved address",
+        address: trimmedAddress,
+      });
+    }
+    return list;
+  }, [primary, savedLocations]);
+
+  const activeSavedKey =
+    selectedSavedLocationKey ||
+    locationOptions.find(
+      (option) => option.address.toLowerCase() === form.locationAddress.trim().toLowerCase(),
+    )?.key ||
+    "";
+
+  async function chooseLocation(key: string, fallbackAddress?: string, fallbackLabel?: string) {
+    if (!key) {
+      setSelectedSavedLocationKey("");
+      return;
+    }
     const option = locationOptions.find((item) => item.key === key);
-    if (!option) return;
-    update("locationLabel", option.label);
-    update("locationAddress", option.address);
-    update("locationLat", null);
-    update("locationLng", null);
+    const label = option?.label ?? fallbackLabel ?? "Saved address";
+    const address = option?.address ?? fallbackAddress ?? "";
+    if (!address) return;
+
+    setSelectedSavedLocationKey(key);
+    const inferred = inferLocationFromAddress(address);
+
+    setForm((current) => ({
+      ...current,
+      locationLabel: label,
+      locationAddress: address,
+      ...(inferred.state ? { locationState: inferred.state } : {}),
+      ...(inferred.district ? { locationDistrict: inferred.district } : {}),
+    }));
+    setErrors((old) => {
+      const next = { ...old };
+      delete next.locationAddress;
+      delete next.locationState;
+      delete next.locationDistrict;
+      return next;
+    });
+
     try {
-      const response = await fetch(`/api/geocode?q=${encodeURIComponent(option.address)}`);
+      const response = await fetch(`/api/geocode?q=${encodeURIComponent(address)}`);
       const result = (await response.json()) as {
-        results?: Array<{ lat: number; lon: number }>;
+        results?: Array<{
+          lat: number;
+          lon: number;
+          state?: string | null;
+          district?: string | null;
+          city?: string | null;
+        }>;
       };
       const match = result.results?.[0];
       if (match && Number.isFinite(match.lat) && Number.isFinite(match.lon)) {
-        update("locationLat", match.lat);
-        update("locationLng", match.lon);
+        const matched = matchIndiaLocation(match.state, match.district);
+        setForm((current) => ({
+          ...current,
+          locationLat: match.lat,
+          locationLng: match.lon,
+          locationState: matched.state || current.locationState || (match.state ?? ""),
+          locationDistrict:
+            match.city || match.district || matched.district || current.locationDistrict,
+        }));
       }
     } catch {
       // The client can still place the map pin manually if lookup fails.
@@ -1124,35 +1176,15 @@ export default function PostJob() {
               <>
                 {locationOptions.length > 0 && (
                   <div className="space-y-2">
-                    <div className="hidden">
-                      {locationOptions.slice(1).map((option) => (
-                        <button
-                          key={option.key}
-                          type="button"
-                          className={`w-full rounded-xl border p-3 text-left ${
-                            form.locationAddress === option.address
-                              ? "border-primary bg-primary/5"
-                              : "border-input hover:border-primary"
-                          }`}
-                          onClick={() => void chooseLocation(option.key)}
-                        >
-                          <span className="block font-medium">Use {option.label}</span>
-                          <span className="text-sm text-muted-foreground">{option.address}</span>
-                        </button>
-                      ))}
-                    </div>
                     <div className="space-y-1.5">
                       <label htmlFor="saved-job-location" className="text-sm font-medium">
                         Choose a saved location
                       </label>
                       <select
                         id="saved-job-location"
-                        value={
-                          locationOptions.find((option) => option.address === form.locationAddress)
-                            ?.key ?? (primary ? "primary" : "")
-                        }
+                        value={activeSavedKey}
                         onChange={(event) => void chooseLocation(event.target.value)}
-                        className="h-11 w-full rounded-md border border-input bg-background px-3"
+                        className="h-11 w-full rounded-md border border-input bg-background px-3 font-medium"
                       >
                         <option value="">Select a saved address</option>
                         {locationOptions.map((option) => (
@@ -1161,6 +1193,32 @@ export default function PostJob() {
                           </option>
                         ))}
                       </select>
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {locationOptions.map((option) => {
+                        const isSelected =
+                          activeSavedKey === option.key ||
+                          form.locationAddress.trim().toLowerCase() ===
+                            option.address.toLowerCase();
+                        return (
+                          <button
+                            key={option.key}
+                            type="button"
+                            onClick={() => void chooseLocation(option.key)}
+                            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-left text-xs sm:text-sm font-medium transition-colors ${
+                              isSelected
+                                ? "border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary"
+                                : "border-input bg-background hover:border-primary/50 hover:bg-muted text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            <MapPin className="size-3.5 shrink-0 text-primary" />
+                            <span>{option.label}</span>
+                            <span className="max-w-[200px] truncate text-xs opacity-75 sm:max-w-xs">
+                              ({option.address})
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1177,8 +1235,12 @@ export default function PostJob() {
                         ? [form.locationLat, form.locationLng]
                         : null
                     }
-                    onChange={(value) => update("locationAddress", value)}
+                    onChange={(value) => {
+                      setSelectedSavedLocationKey("");
+                      update("locationAddress", value);
+                    }}
                     onCoordinatesChange={(lat, lng) => {
+                      setSelectedSavedLocationKey("");
                       update("locationLat", lat);
                       update("locationLng", lng);
                     }}
@@ -1220,7 +1282,10 @@ export default function PostJob() {
                 <Field label="Enter address manually">
                   <Input
                     value={form.locationAddress}
-                    onChange={(e) => update("locationAddress", e.target.value)}
+                    onChange={(e) => {
+                      setSelectedSavedLocationKey("");
+                      update("locationAddress", e.target.value);
+                    }}
                     placeholder="Enter the complete address manually"
                   />
                 </Field>

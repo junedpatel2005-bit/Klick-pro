@@ -1,8 +1,9 @@
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { BadgeCheck, MapPin, Star, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -32,7 +33,8 @@ import { MAX_HIRE_REQUEST_BUDGET } from "@/lib/constants/hiring";
 type ClientJob = {
   id: number;
   title: string | null;
-  status: "DRAFT" | "OPEN" | "CLOSED";
+  status: "DRAFT" | "OPEN" | "CLOSED" | "RUNNING";
+  projectId?: number | null;
   budgetMin: number | null;
   budgetMax: number | null;
   hourlyRate: number | null;
@@ -47,7 +49,7 @@ const formatCurrency = (value: number | null) =>
   value == null ? "Not set" : `₹${value.toLocaleString("en-US")}`;
 
 const jobLabel = (job: ClientJob) =>
-  `${job.title ?? `Job #${job.id}`} · ${job.timingType === "HOURLY" ? `${formatCurrency(job.hourlyRate)}/hr` : `${formatCurrency(job.budgetMin)} – ${formatCurrency(job.budgetMax)}`} ${job.status !== "OPEN" ? `(${job.status.toLowerCase()})` : ""}`;
+  `${job.title ?? `Job #${job.id}`} · ${job.timingType === "HOURLY" ? `${formatCurrency(job.hourlyRate)}/hr` : `${formatCurrency(job.budgetMin)} – ${formatCurrency(job.budgetMax)}`}`;
 
 function ProProfileContent() {
   const { proId } = useParams<{ proId: string }>();
@@ -99,7 +101,11 @@ function ProProfileContent() {
     void loadJobs();
   }, [requestedJobId]);
 
-  const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? null;
+  const openJobs = useMemo(
+    () => jobs.filter((job) => job.status === "OPEN" && !job.projectId),
+    [jobs],
+  );
+  const selectedJob = openJobs.find((job: ClientJob) => job.id === selectedJobId) ?? null;
   const isHourlyJob = selectedJob?.timingType === "HOURLY";
   const jobBudgetMin = selectedJob && !isHourlyJob ? selectedJob.budgetMin : null;
   const jobBudgetMax = selectedJob && !isHourlyJob ? selectedJob.budgetMax : null;
@@ -120,6 +126,7 @@ function ProProfileContent() {
   const canSubmitRequest =
     selectedJob !== null &&
     selectedJob.status === "OPEN" &&
+    !selectedJob.projectId &&
     Number.isFinite(Number(bidAmount)) &&
     Number(bidAmount) >= bidMin &&
     Number(bidAmount) <= bidMax &&
@@ -294,25 +301,33 @@ function ProProfileContent() {
                         {hireStep === 1 && (
                           <div>
                             <Label htmlFor="selectedJob">Select your job</Label>
-                            <Select
-                              value={selectedJobId?.toString() ?? ""}
-                              onValueChange={(value) => setSelectedJobId(Number(value))}
-                            >
-                              <SelectTrigger id="selectedJob" className="mt-2">
-                                <SelectValue placeholder="Choose a job" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {jobs.map((job) => (
-                                  <SelectItem
-                                    key={job.id}
-                                    value={job.id.toString()}
-                                    disabled={job.status !== "OPEN"}
-                                  >
-                                    {jobLabel(job)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            {openJobs.length === 0 ? (
+                              <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300 space-y-2">
+                                <p className="font-semibold text-sm">No open jobs available</p>
+                                <p>
+                                  All your posted jobs are already in progress, completed, or closed. You can only hire professionals for active, open jobs.
+                                </p>
+                                <Button asChild size="sm" className="mt-2">
+                                  <Link href="/post-job">Post a new job</Link>
+                                </Button>
+                              </div>
+                            ) : (
+                              <Select
+                                value={selectedJobId?.toString() ?? ""}
+                                onValueChange={(value) => setSelectedJobId(Number(value))}
+                              >
+                                <SelectTrigger id="selectedJob" className="mt-2">
+                                  <SelectValue placeholder="Choose a job" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {openJobs.map((job: ClientJob) => (
+                                    <SelectItem key={job.id} value={job.id.toString()}>
+                                      {jobLabel(job)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
                           </div>
                         )}
                         {hireStep === 1 && selectedJob && (
@@ -445,7 +460,7 @@ function ProProfileContent() {
                         onClick={() => setHireStep((step) => (step + 1) as 2 | 3)}
                         disabled={
                           hireStep === 1
-                            ? !selectedJob || selectedJob.status !== "OPEN"
+                            ? !selectedJob || selectedJob.status !== "OPEN" || Boolean(selectedJob.projectId)
                             : !bidAmount.trim() ||
                               Number(bidAmount) < bidMin ||
                               Number(bidAmount) > bidMax
@@ -605,6 +620,95 @@ function ProProfileContent() {
                 {professional.fixedRate === null ? "Not set" : `₹${professional.fixedRate}`}
               </p>
             </div>
+          </section>
+
+          {/* Client Reviews Section */}
+          <section className="mt-10 rounded-2xl border border-border bg-card p-6 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  Client Reviews
+                  <span className="text-sm font-normal text-muted-foreground">
+                    ({professional.reviewsList?.length ?? professional.reviews})
+                  </span>
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Verified feedback from clients who hired this professional
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 rounded-xl bg-amber-500/10 px-3 py-1.5 text-base font-bold text-amber-600 dark:text-amber-400">
+                  <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+                  <span>{professional.rating.toFixed(1)}</span>
+                  <span className="text-xs font-normal text-muted-foreground">/ 5.0</span>
+                </div>
+              </div>
+            </div>
+
+            {!professional.reviewsList || professional.reviewsList.length === 0 ? (
+              <div className="py-10 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No written reviews yet. Client ratings will appear here once projects are completed.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-6 space-y-4">
+                {professional.reviewsList.map((review) => (
+                  <div
+                    key={review.id}
+                    className="rounded-xl border border-border/80 bg-muted/20 p-4 transition-colors hover:border-border"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                          {review.reviewerName[0]?.toUpperCase() ?? "C"}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{review.reviewerName}</p>
+                          {review.projectTitle && (
+                            <p className="text-xs text-muted-foreground">{review.projectTitle}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1 text-amber-500">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Star
+                              key={i}
+                              className={`h-3.5 w-3.5 ${
+                                i < review.rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(review.createdAt).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {review.comment ? (
+                      <p className="mt-3 text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                        "{review.comment}"
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-xs italic text-muted-foreground">Rating only, no written comment.</p>
+                    )}
+
+                    {review.professionalResponse && (
+                      <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/5 p-3 text-xs">
+                        <p className="font-semibold text-primary">Professional response:</p>
+                        <p className="mt-1 text-muted-foreground">{review.professionalResponse}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       </article>

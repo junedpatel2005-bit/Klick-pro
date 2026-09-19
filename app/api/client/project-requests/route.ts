@@ -53,6 +53,16 @@ export async function POST(request: NextRequest) {
       { status: 409 },
     );
   }
+  const existingProject = await db.projectTracking.findFirst({
+    where: { jobId },
+    select: { id: true },
+  });
+  if (existingProject) {
+    return NextResponse.json(
+      { error: "A project has already been started for this job." },
+      { status: 409 },
+    );
+  }
 
   if (job.timingType !== "HOURLY" && job.budgetMin !== null && job.budgetMax !== null) {
     if (bidAmount < job.budgetMin || bidAmount > job.budgetMax) {

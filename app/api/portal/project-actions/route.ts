@@ -419,13 +419,19 @@ export async function POST(request: NextRequest) {
       if (!milestone || milestone.trackingId !== project.id) {
         return NextResponse.json({ error: "Milestone not found." }, { status: 404 });
       }
+      const milestoneWorkCount = await db.projectWorkUpload.count({
+        where: { milestoneId: milestone.id },
+      });
       if (
         milestone.status === "APPROVED" ||
         milestone.status === "COMPLETED" ||
+        milestone.status === "AWAITING_CLIENT_REVIEW" ||
+        milestone.submittedAt !== null ||
+        milestoneWorkCount > 0 ||
         project.status === "COMPLETED"
       ) {
         return NextResponse.json(
-          { error: "Completed or approved milestones cannot be modified." },
+          { error: "Milestones that are awaiting review, have submitted work, or are completed cannot be modified." },
           { status: 400 },
         );
       }
@@ -485,14 +491,19 @@ export async function POST(request: NextRequest) {
       if (!milestone || milestone.trackingId !== project.id) {
         return NextResponse.json({ error: "Milestone not found." }, { status: 404 });
       }
+      const milestoneWorkCount = await db.projectWorkUpload.count({
+        where: { milestoneId: milestone.id },
+      });
       if (
         milestone.status === "APPROVED" ||
         milestone.status === "COMPLETED" ||
         milestone.status === "AWAITING_CLIENT_REVIEW" ||
+        milestone.submittedAt !== null ||
+        milestoneWorkCount > 0 ||
         project.status === "COMPLETED"
       ) {
         return NextResponse.json(
-          { error: "This milestone is active, completed, or approved and cannot be deleted." },
+          { error: "This milestone has submitted work, is active, completed, or approved and cannot be deleted." },
           { status: 400 },
         );
       }
@@ -523,6 +534,13 @@ export async function POST(request: NextRequest) {
           { error: "One or more uploaded files are unavailable." },
           { status: 400 },
         );
+      const previousUploadsCount = await db.projectWorkUpload.count({
+        where: {
+          trackingId: project.id,
+          ...(input.milestoneId ? { milestoneId: input.milestoneId } : {}),
+        },
+      });
+      const roundNumber = previousUploadsCount + 1;
       const upload = await db.projectWorkUpload.create({
         data: {
           trackingId: project.id,
@@ -532,13 +550,13 @@ export async function POST(request: NextRequest) {
           fileName: attachments[0]?.name ?? null,
           fileUrl: attachments[0]?.url ?? null,
           filesJson: JSON.stringify(attachments),
-          roundNumber: project.status === "REVISION_REQUESTED" ? 2 : 1,
+          roundNumber,
           status: "UPLOADED",
         },
       });
       await event(
         upload.roundNumber > 1 ? "REVISED_WORK_UPLOADED" : "WORK_UPLOADED",
-        upload.roundNumber > 1 ? "Revised work uploaded" : "Work uploaded",
+        upload.roundNumber > 1 ? `Revised work uploaded (Round ${upload.roundNumber})` : "Work uploaded",
         input.note ?? input.title,
         {
           milestoneId: input.milestoneId ?? undefined,
@@ -563,6 +581,10 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       const isResubmission = milestone.status === "REVISION_REQUESTED";
+      const previousSubmissionsCount = await db.projectWorkUpload.count({
+        where: { trackingId: project.id, milestoneId: milestone.id },
+      });
+      const roundNumber = previousSubmissionsCount + 1;
       await db.projectWorkUpload.create({
         data: {
           trackingId: project.id,
@@ -572,7 +594,7 @@ export async function POST(request: NextRequest) {
           fileName: attachments[0]?.name ?? null,
           fileUrl: attachments[0]?.url ?? null,
           filesJson: JSON.stringify(attachments),
-          roundNumber: isResubmission ? 2 : 1,
+          roundNumber,
           status: "SUBMITTED",
         },
       });
@@ -586,7 +608,7 @@ export async function POST(request: NextRequest) {
       });
       await event(
         isResubmission ? "REVISED_WORK_SUBMITTED" : "MILESTONE_SUBMITTED",
-        isResubmission ? "Revised work submitted" : "Milestone submitted",
+        isResubmission ? `Revised work submitted (Round ${roundNumber})` : "Milestone submitted",
         input.note,
         {
           milestoneId: milestone.id,
@@ -792,33 +814,50 @@ export async function POST(request: NextRequest) {
       });
     }
     if (input.action === "complete-project") {
-      if (project.status === "COMPLETED" || project.status === "AWAITING_PROFESSIONAL_CONFIRMATION")
+      if (project.status === "COMPLETED")
         return NextResponse.json(
-          { error: "This project is already closed or awaiting confirmation." },
+          { error: "This project is already completed." },
           { status: 409 },
         );
+      const pendingMilestonesCount = await db.projectMilestone.count({
+        where: {
+          trackingId: project.id,
+          status: { not: "APPROVED" },
+        },
+      });
+      if (pendingMilestonesCount > 0) {
+        return NextResponse.json(
+          {
+            error: `Cannot close project yet: there are still ${pendingMilestonesCount} unapproved milestone(s). Please approve all deliverables first.`,
+          },
+          { status: 409 },
+        );
+      }
       const completed = await db.projectTracking.updateMany({
         where: {
           id: project.id,
           clientId: session.userId,
-          status: project.status,
         },
-        data: { status: "AWAITING_PROFESSIONAL_CONFIRMATION" },
+        data: { status: "COMPLETED", progress: 100, completedAt: new Date() },
       });
       if (completed.count !== 1)
         return NextResponse.json(
-          { error: "This project changed before completion could be requested." },
+          { error: "This project could not be closed. Please verify and try again." },
           { status: 409 },
         );
+      await db.clientJob.updateMany({
+        where: { id: project.jobId, userId: project.clientId },
+        data: { status: "CLOSED" },
+      });
       await event(
-        "PROJECT_COMPLETION_REQUESTED",
-        "Completion confirmation requested",
-        "The client reviewed the final work and asked the professional to confirm project completion.",
+        "PROJECT_COMPLETED",
+        "Project completed and closed",
+        "All milestones were approved and the client successfully closed the project.",
       );
       await notifyUsers([project.professionalId], {
-        type: "PROJECT_COMPLETION_REQUESTED",
-        title: "Completion request received",
-        description: "The client reviewed the final work and is asking you to confirm completion.",
+        type: "PROJECT_COMPLETED",
+        title: "Project closed and completed",
+        description: "The client approved all deliverables and closed the project.",
         href: `/project/${project.id}/tracking`,
       });
     }

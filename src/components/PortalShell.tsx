@@ -48,8 +48,12 @@ export function PortalShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { title } = usePortalTitle();
+  const { title, setTitle } = usePortalTitle();
   const [user, setUser] = useState<PortalUser | null>(initialUser ?? null);
+
+  useEffect(() => {
+    setTitle(undefined);
+  }, [pathname, setTitle]);
 
   useEffect(() => {
     if (!initialUser) {

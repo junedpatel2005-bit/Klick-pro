@@ -50,6 +50,19 @@ export type DetailedProfessional = MarketplaceProfessional & {
   selfieUrl: string | null;
   // Services
   services: ProfessionalService[];
+  reviewsList?: PublicReviewItem[];
+};
+
+export type PublicReviewItem = {
+  id: number;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  professionalResponse?: string | null;
+  reviewerName: string;
+  reviewerAvatar?: string | null;
+  projectTitle?: string | null;
+  reviewerCategory?: string | null;
 };
 
 /** Fields that are safe to expose on the public professional marketplace profile. */
@@ -116,7 +129,14 @@ export type MarketplaceJob = {
   createdAt: string;
   status: "OPEN" | "CLOSED" | "DRAFT";
   proposalCount: number;
-  client: { name: string; avatar: string | null; rating: number };
+  client: {
+    id?: number;
+    name: string;
+    avatar: string | null;
+    rating: number;
+    reviewCount?: number;
+    reviewsList?: PublicReviewItem[];
+  };
   attachments: {
     id: number;
     fileName: string;

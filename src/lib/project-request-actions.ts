@@ -57,6 +57,12 @@ export async function respondToProjectRequest(
   if (action === "counter") {
     if (!counterInput)
       return { error: "Counter offer details are required.", status: 400 as const };
+    if (counterInput.bidAmount === hireRequest.bidAmount) {
+      return {
+        error: `Counter-offer amount cannot be the same as the current bid amount (₹${hireRequest.bidAmount.toLocaleString()}). Please propose a different amount.`,
+        status: 400 as const,
+      };
+    }
     await db.projectNegotiation.create({
       data: {
         requestId,

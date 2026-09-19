@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertCircle,
   Home,
   LocateFixed,
   Search,
@@ -207,7 +208,7 @@ function ProfessionalJobsContent() {
 
   function openNegotiate(item: RequestItem) {
     setNegotiateTarget(item);
-    setNegotiatePrice(String(item.bidAmount));
+    setNegotiatePrice("");
     setNegotiateDuration(item.duration);
     setNegotiateMessage("");
     setNegotiateError(null);
@@ -223,6 +224,12 @@ function ProfessionalJobsContent() {
       !negotiateMessage.trim()
     ) {
       setNegotiateError("Enter a valid price, timeline, and message.");
+      return;
+    }
+    if (negotiateTarget.bidAmount != null && bidAmount === negotiateTarget.bidAmount) {
+      setNegotiateError(
+        `Counter-offer amount cannot be the same as the current bid amount (₹${negotiateTarget.bidAmount.toLocaleString("en-IN")}). Please propose a different amount.`,
+      );
       return;
     }
     setNegotiateBusy(true);
@@ -1272,34 +1279,89 @@ function ProfessionalJobsContent() {
               client can accept, decline, or counter back.
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-2 grid gap-3 [&_input]:rounded-md [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
-            <input
-              type="number"
-              min="1"
-              value={negotiatePrice}
-              onChange={(event) => setNegotiatePrice(event.target.value)}
-              placeholder="Your counter price"
-            />
-            <input
-              value={negotiateDuration}
-              onChange={(event) => setNegotiateDuration(event.target.value)}
-              placeholder="Timeline (for example, 10 days)"
-            />
-            <textarea
-              value={negotiateMessage}
-              onChange={(event) => setNegotiateMessage(event.target.value)}
-              placeholder="Explain your counter-offer"
-              rows={4}
-            />
+
+          {negotiateTarget?.bidAmount != null && (
+            <div className="rounded-xl border border-border bg-muted/40 p-3.5 space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-medium">Current / Last Bid Amount:</span>
+                <span className="text-sm font-bold text-foreground">
+                  ₹{negotiateTarget.bidAmount.toLocaleString("en-IN")}
+                </span>
+              </div>
+              {negotiateTarget.duration && (
+                <div className="flex items-center justify-between border-t border-border/60 pt-1.5">
+                  <span className="text-muted-foreground font-medium">Current Timeline:</span>
+                  <span className="font-semibold text-foreground">
+                    {negotiateTarget.duration}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-1 grid gap-3 [&_input]:rounded-md [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
+            <div>
+              <label className="text-xs font-semibold text-foreground block mb-1">
+                Your Counter-Offer Price (₹) <span className="text-destructive">*</span>
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={negotiatePrice}
+                onChange={(event) => {
+                  setNegotiatePrice(event.target.value);
+                  setNegotiateError(null);
+                }}
+                placeholder="Enter counter price (must differ from current bid)"
+              />
+              {negotiateTarget?.bidAmount != null &&
+                negotiatePrice.trim() !== "" &&
+                Number(negotiatePrice) === negotiateTarget.bidAmount && (
+                  <p className="mt-1.5 text-xs font-semibold text-destructive flex items-center gap-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    Amount cannot be the same as the current bid (₹
+                    {negotiateTarget.bidAmount.toLocaleString("en-IN")}). Please propose a
+                    different amount.
+                  </p>
+                )}
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground block mb-1">
+                Proposed Timeline <span className="text-destructive">*</span>
+              </label>
+              <input
+                value={negotiateDuration}
+                onChange={(event) => setNegotiateDuration(event.target.value)}
+                placeholder="Timeline (for example, 10 days)"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground block mb-1">
+                Message / Notes <span className="text-destructive">*</span>
+              </label>
+              <textarea
+                value={negotiateMessage}
+                onChange={(event) => setNegotiateMessage(event.target.value)}
+                placeholder="Explain why you are proposing these new terms..."
+                rows={3}
+              />
+            </div>
           </div>
-          {negotiateError && <p className="mt-3 text-sm text-destructive">{negotiateError}</p>}
+          {negotiateError && <p className="mt-2 text-sm text-destructive">{negotiateError}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="outline" onClick={() => setNegotiateTarget(null)}>
               Cancel
             </Button>
             <Button
               className="bg-cta text-cta-foreground hover:bg-cta/90"
-              disabled={negotiateBusy}
+              disabled={
+                negotiateBusy ||
+                (negotiateTarget?.bidAmount != null &&
+                  Number(negotiatePrice) === negotiateTarget.bidAmount) ||
+                !negotiatePrice.trim() ||
+                !negotiateDuration.trim() ||
+                !negotiateMessage.trim()
+              }
               onClick={() => void submitNegotiation()}
             >
               {negotiateBusy ? "Sending…" : "Send Counter-Offer"}

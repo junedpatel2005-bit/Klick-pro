@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Star, Loader2 } from "lucide-react";
+import { Star } from "lucide-react";
 
 type Review = {
   id: number;
@@ -16,7 +16,7 @@ type Review = {
   createdAt: string;
 };
 
-export default function ProfessionalReviews() {
+export default function ClientReviews() {
   const [reviews, setReviews] = useState<Review[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,11 +34,11 @@ export default function ProfessionalReviews() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Reviews</h1>
-          <p className="mt-1 text-muted-foreground">See what clients are saying about your work.</p>
+          <h1 className="text-3xl font-bold">Reviews & Ratings</h1>
+          <p className="mt-1 text-muted-foreground">Feedback from professionals who completed projects with you.</p>
         </div>
         <Button asChild>
-          <a href="/professional/reports">Completed projects</a>
+          <a href="/reports">Completed projects</a>
         </Button>
       </div>
 
@@ -53,7 +53,7 @@ export default function ProfessionalReviews() {
         </div>
       ) : reviews.length === 0 ? (
         <div className="rounded-3xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-          No reviews yet. Your clients will see them here once work is complete.
+          No reviews yet. Professionals will leave feedback here once projects are completed.
         </div>
       ) : (
         <ul className="grid gap-4">
@@ -61,7 +61,7 @@ export default function ProfessionalReviews() {
             <li key={review.id} className="rounded-3xl border border-border bg-card p-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm font-semibold">{review.clientName ?? "Client"}</p>
+                  <p className="text-sm font-semibold">{review.clientName ?? "Professional"}</p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {new Date(review.createdAt).toLocaleDateString()}
                   </p>
@@ -86,15 +86,7 @@ export default function ProfessionalReviews() {
               {review.comment ? (
                 <p className="mt-4 text-sm text-muted-foreground">{review.comment}</p>
               ) : (
-                <p className="mt-4 text-sm text-muted-foreground">No comment provided.</p>
-              )}
-              {review.professionalResponse && (
-                <div className="mt-4 border-l-2 border-primary/30 pl-4">
-                  <p className="text-xs font-semibold text-muted-foreground">Your response</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {review.professionalResponse}
-                  </p>
-                </div>
+                <p className="mt-4 text-sm text-muted-foreground">Rating provided without written comment.</p>
               )}
             </li>
           ))}
@@ -103,3 +95,4 @@ export default function ProfessionalReviews() {
     </div>
   );
 }
+

@@ -29,6 +29,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { CelebrationConfetti } from "@/components/CelebrationConfetti";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -61,6 +62,7 @@ type Milestone = {
 };
 type Event = {
   id: number;
+  type?: string;
   title: string;
   description: string | null;
   actorRole: string;
@@ -108,7 +110,7 @@ type Data = {
   } | null;
   professional: Person;
   client: Person;
-  viewerRole: "CLIENT" | "PROFESSIONAL";
+  viewerRole: "CLIENT" | "PROFESSIONAL" | "ADMIN";
   milestones: Milestone[];
   uploads: Upload[];
   revisions: { note: string | null; createdAt: string }[];
@@ -220,6 +222,12 @@ export default function SharedProjectTrackingPage() {
     platformEarnings: number;
     remainingBalance: number;
   } | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [revisionMilestone, setRevisionMilestone] = useState<Milestone | null>(null);
+  const [revisionFeedback, setRevisionFeedback] = useState("");
+  const [submittingRevision, setSubmittingRevision] = useState(false);
+  const [revisionError, setRevisionError] = useState("");
+  const [finalWorkNote, setFinalWorkNote] = useState("");
   const [draftMilestones, setDraftMilestones] = useState<DraftMilestone[]>([]);
   const [milestoneModalError, setMilestoneModalError] = useState<string | null>(null);
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
@@ -423,15 +431,12 @@ export default function SharedProjectTrackingPage() {
         );
         return false;
       }
-      await refresh().catch(() => undefined);
+      // Close the approval popup immediately upon successful payment
+      setApprovalMilestone(null);
+      setApprovalSuccess(null);
+      setShowCelebration(true);
       setApprovalWalletBalance(result?.remainingBalance ?? null);
-      setApprovalSuccess({
-        charged: result?.charged ?? 0,
-        professionalReceives: result?.professionalReceives ?? 0,
-        adminReceives: result?.adminReceives ?? 0,
-        platformEarnings: result?.platformEarnings ?? 0,
-        remainingBalance: result?.remainingBalance ?? 0,
-      });
+      await refresh().catch(() => undefined);
       return true;
     } finally {
       actionInFlight.current = false;
@@ -458,6 +463,8 @@ export default function SharedProjectTrackingPage() {
   const client = name(data.client, "Client"),
     professional = name(data.professional, "Professional");
   const isClient = data.viewerRole === "CLIENT";
+  const isAdmin = data.viewerRole === "ADMIN";
+  const isProfessional = data.viewerRole === "PROFESSIONAL";
   const reviewRecipient = isClient ? professional : client;
   const ownRating = isClient ? data.review?.rating : data.review?.professionalRating;
   const ownComment = isClient ? data.review?.comment : data.review?.professionalComment;
@@ -468,12 +475,17 @@ export default function SharedProjectTrackingPage() {
   const current = data.milestones.find((m) =>
     ["IN_PROGRESS", "REVISION_REQUESTED", "AWAITING_CLIENT_REVIEW"].includes(m.status),
   );
-  const completed = data.milestones.filter((m) => m.status === "APPROVED").length;
+  const completed = data.milestones.filter(
+    (m) => m.status === "APPROVED" || m.status === "COMPLETED" || m.payment?.status === "COMPLETED",
+  ).length;
   const remaining = data.job?.deadline
     ? Math.ceil((new Date(data.job.deadline).getTime() - Date.now()) / 86400000)
     : null;
   const canFinal =
-    data.milestones.length > 0 && data.milestones.every((m) => m.status === "APPROVED");
+    data.milestones.length > 0 &&
+    data.milestones.every(
+      (m) => m.status === "APPROVED" || m.status === "COMPLETED" || m.payment?.status === "COMPLETED",
+    );
   const totalMilestoneValue = data.milestones.reduce(
     (total, milestone) => total + milestone.amount,
     0,
@@ -699,6 +711,14 @@ export default function SharedProjectTrackingPage() {
       setEditMilestoneError("Completed or approved milestones cannot be modified.");
       return;
     }
+    const hasWork =
+      data.uploads.some((u) => u.milestoneId === milestone.id) ||
+      milestone.status === "AWAITING_CLIENT_REVIEW" ||
+      Boolean(milestone.submittedAt);
+    if (hasWork) {
+      setEditMilestoneError("Work has already been submitted for this milestone, so it can no longer be edited.");
+      return;
+    }
     if (data?.project.status === "COMPLETED") {
       setEditMilestoneError("This project is completed, so milestones can no longer be edited.");
       return;
@@ -754,6 +774,14 @@ export default function SharedProjectTrackingPage() {
       setEditMilestoneError("Completed or approved milestones cannot be modified.");
       return;
     }
+    const hasWork =
+      data.uploads.some((u) => u.milestoneId === editingMilestone.id) ||
+      editingMilestone.status === "AWAITING_CLIENT_REVIEW" ||
+      Boolean(editingMilestone.submittedAt);
+    if (hasWork) {
+      setEditMilestoneError("Work has already been submitted for this milestone, so it can no longer be edited.");
+      return;
+    }
     if (data?.project.status === "COMPLETED") {
       setEditMilestoneError("This project is completed, so milestones can no longer be edited.");
       return;
@@ -795,13 +823,19 @@ export default function SharedProjectTrackingPage() {
 
   const deleteCurrentMilestone = async () => {
     if (!editingMilestone) return;
+    const hasWork =
+      data.uploads.some((u) => u.milestoneId === editingMilestone.id) ||
+      editingMilestone.status === "AWAITING_CLIENT_REVIEW" ||
+      Boolean(editingMilestone.submittedAt);
     if (
       editingMilestone.status === "APPROVED" ||
       editingMilestone.status === "COMPLETED" ||
-      editingMilestone.status === "AWAITING_CLIENT_REVIEW" ||
+      hasWork ||
       data?.project.status === "COMPLETED"
     ) {
-      setEditMilestoneError("This milestone is active, completed, or approved and cannot be deleted.");
+      setEditMilestoneError(
+        "This milestone has submitted work, is active, completed, or approved and cannot be deleted.",
+      );
       return;
     }
     if (
@@ -832,23 +866,33 @@ export default function SharedProjectTrackingPage() {
   const paidToProfessional = data.milestones.reduce(
     (total, milestone) =>
       total +
-      (milestone.payment?.status === "COMPLETED"
-        ? (milestone.payment.professionalPayoutAmount ?? 0)
+      (milestone.status === "APPROVED" ||
+      milestone.status === "COMPLETED" ||
+      milestone.payment?.status === "COMPLETED" ||
+      milestone.payment?.status === "FUNDED"
+        ? milestone.amount
         : 0),
     0,
   );
-  const clientPaidMilestoneTotal = data.milestones.reduce(
-    (total, milestone) =>
-      total + (milestone.payment && milestone.payment.status !== "FAILED" ? milestone.amount : 0),
-    0,
-  );
+  const clientPaidMilestoneTotal = paidToProfessional;
   const completedMilestones = data.milestones.filter(
-    (m) => m.status === "APPROVED" || m.payment?.status === "COMPLETED",
+    (m) =>
+      m.status === "APPROVED" ||
+      m.status === "COMPLETED" ||
+      m.payment?.status === "COMPLETED" ||
+      m.payment?.status === "FUNDED",
   );
-  const remainingProjectBalance = Math.max(0, totalAgreed - clientPaidMilestoneTotal);
+  const remainingProjectBalance = Math.max(
+    0,
+    (totalMilestoneValue > 0 ? totalMilestoneValue : totalAgreed) - paidToProfessional,
+  );
   const remainingClientPayment = remainingProjectBalance;
   const unpaidMilestones = data.milestones.filter(
-    (milestone) => !milestone.payment || milestone.payment.status === "FAILED",
+    (milestone) =>
+      milestone.status !== "APPROVED" &&
+      milestone.status !== "COMPLETED" &&
+      milestone.payment?.status !== "COMPLETED" &&
+      milestone.payment?.status !== "FUNDED",
   );
   const attachments = (event: Event): Attachment[] => {
     try {
@@ -892,6 +936,10 @@ export default function SharedProjectTrackingPage() {
 
   return (
     <AppShell>
+      <CelebrationConfetti
+        active={showCelebration}
+        onComplete={() => setShowCelebration(false)}
+      />
       <main className="mx-auto max-w-6xl space-y-6">
         {message && (
           <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
@@ -912,7 +960,11 @@ export default function SharedProjectTrackingPage() {
                 {data.job?.title ?? `Project #${data.project.id}`}
               </h1>
               <p className="mt-2 text-sm text-white/75">
-                {isClient ? `Professional: ${professional}` : `Client: ${client}`}
+                {isAdmin
+                  ? `Admin Audit Oversight · Client: ${client} · Professional: ${professional}`
+                  : isClient
+                    ? `Professional: ${professional}`
+                    : `Client: ${client}`}
               </p>
             </div>
             <div className="flex items-center">
@@ -933,6 +985,20 @@ export default function SharedProjectTrackingPage() {
             </div>
           </div>
         </section>
+
+        {isAdmin && (
+          <div className="flex items-center gap-3 rounded-2xl border border-purple-500/30 bg-purple-500/10 p-4 text-purple-950 dark:text-purple-200 shadow-xs">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-500/20 font-bold text-xs uppercase text-purple-700 dark:text-purple-300">
+              Admin
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold">Admin Project Oversight Mode</p>
+              <p className="text-xs text-purple-800/85 dark:text-purple-300/85">
+                Viewing workspace in read-only audit mode. Full access to inspect deliverables, revisions, financial breakdown, and project timeline events.
+              </p>
+            </div>
+          </div>
+        )}
 
         <Tabs
           defaultValue={searchParams.get("tab") === "timeline" ? "timeline" : "overview"}
@@ -1013,7 +1079,7 @@ export default function SharedProjectTrackingPage() {
                   </Button>
                 )}
 
-                {!isClient && data.project.status !== "COMPLETED" && (
+                {isProfessional && data.project.status !== "COMPLETED" && (
                   <Button variant="outline" onClick={() => setShowRequestModal(true)}>
                     Request client
                   </Button>
@@ -1022,25 +1088,45 @@ export default function SharedProjectTrackingPage() {
             </section>
 
             <section className="rounded-2xl border bg-card p-5 shadow-soft">
-              {isClient &&
-              data.project.status !== "COMPLETED" &&
-              data.project.status !== "AWAITING_PROFESSIONAL_CONFIRMATION" ? (
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-muted p-4">
-                  <div>
-                    <p className="font-semibold">Ready to request project completion?</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Review the current project work and ask the professional to confirm
-                      completion.
-                    </p>
+              {isClient && data.project.status !== "COMPLETED" ? (
+                canFinal ? (
+                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-4">
+                    <div>
+                      <p className="font-bold text-emerald-950 dark:text-emerald-300 flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                        All Milestones Approved! Ready to close project?
+                      </p>
+                      <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-400/90">
+                        All milestone deliverables have been verified and approved. You can now close and complete this project.
+                      </p>
+                    </div>
+                    <Button
+                      disabled={busy === "complete-project"}
+                      onClick={() => setShowCompleteModal(true)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-semibold shadow-xs"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Close & Complete Project
+                    </Button>
                   </div>
-                  <Button
-                    disabled={busy === "complete-project"}
-                    onClick={() => setShowCompleteModal(true)}
-                  >
-                    Request completion confirmation
-                  </Button>
-                </div>
-              ) : !isClient && data.project.status === "AWAITING_PROFESSIONAL_CONFIRMATION" ? (
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-muted/60 border border-border p-4">
+                    <div>
+                      <p className="font-semibold text-foreground">Project in Progress</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {completed} of {data.milestones.length} milestone deliverables approved. Once all milestones are completed, you can close and complete this project.
+                      </p>
+                    </div>
+                    <Button
+                      disabled
+                      variant="outline"
+                      className="opacity-70 text-xs font-semibold cursor-not-allowed"
+                    >
+                      {data.milestones.length - completed} milestone(s) pending approval
+                    </Button>
+                  </div>
+                )
+              ) : isProfessional && data.project.status === "AWAITING_PROFESSIONAL_CONFIRMATION" ? (
                 <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-amber-50 p-4">
                   <div>
                     <p className="font-semibold text-amber-950">Client requested completion</p>
@@ -1081,23 +1167,8 @@ export default function SharedProjectTrackingPage() {
                 />
                 <Info
                   icon={Wallet}
-                  label="Project amount"
-                  value={
-                    data.agreedAmount == null
-                      ? "Amount pending"
-                      : `₹${data.agreedAmount.toLocaleString("en-IN")}`
-                  }
-                />
-                <Info
-                  icon={Wallet}
-                  label="Total milestone value"
-                  value={`₹${totalMilestoneValue.toLocaleString("en-IN")}`}
-                />
-                <Info
-                  icon={AlertCircle}
-                  label="Unassigned milestone budget"
-                  value={`₹${unassignedMilestoneAmount.toLocaleString("en-IN")}`}
-                  tone={unassignedMilestoneAmount > 0 ? "text-indigo-700 font-semibold" : undefined}
+                  label="Milestone amount"
+                  value={`₹${(totalMilestoneValue > 0 ? totalMilestoneValue : (data.agreedAmount ?? 0)).toLocaleString("en-IN")}`}
                 />
                 <Info
                   icon={CheckCircle2}
@@ -1106,7 +1177,7 @@ export default function SharedProjectTrackingPage() {
                 />
                 <Info
                   icon={AlertCircle}
-                  label="Remaining project balance"
+                  label="Remaining balance"
                   value={`₹${remainingProjectBalance.toLocaleString("en-IN")}`}
                   tone={remainingProjectBalance > 0 ? "text-amber-700" : "text-emerald-700"}
                 />
@@ -1175,26 +1246,38 @@ export default function SharedProjectTrackingPage() {
               </section>
             )}
 
-            {!isClient && canFinal && data.project.status === "IN_PROGRESS" && (
-              <section className="rounded-2xl border bg-card p-5 shadow-soft">
-                <h2 className="text-lg font-semibold">Final work</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  All milestones are approved. Submit final work for client approval.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <FilePicker inputId="final-work-files" files={files} setFiles={setFiles} />
-                  <Button
-                    onClick={() => {
-                      const finalNote = prompt("Final work note")?.trim();
-                      if (!finalNote || !files.length)
-                        return setMessage("Enter a final note and choose files.");
-                      void actionWithFiles("submit-final-work", {
-                        note: finalNote,
-                      });
-                    }}
-                  >
-                    Submit Final Work
-                  </Button>
+            {isProfessional && canFinal && data.project.status === "IN_PROGRESS" && (
+              <section className="rounded-2xl border bg-card p-5 shadow-soft space-y-3">
+                <div>
+                  <h2 className="text-lg font-semibold">Final work</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    All milestones are approved. Submit final work for client approval.
+                  </p>
+                </div>
+                <div className="space-y-2.5">
+                  <input
+                    type="text"
+                    value={finalWorkNote}
+                    onChange={(e) => setFinalWorkNote(e.target.value)}
+                    placeholder="Enter a note about the final deliverables..."
+                    className="w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <FilePicker inputId="final-work-files" files={files} setFiles={setFiles} />
+                    <Button
+                      disabled={busy === "submit-final-work"}
+                      onClick={() => {
+                        const note = finalWorkNote.trim();
+                        if (!note || !files.length)
+                          return setMessage("Enter a final note and choose files.");
+                        void actionWithFiles("submit-final-work", {
+                          note,
+                        });
+                      }}
+                    >
+                      {busy === "submit-final-work" ? "Submitting…" : "Submit Final Work"}
+                    </Button>
+                  </div>
                 </div>
               </section>
             )}
@@ -1274,7 +1357,7 @@ export default function SharedProjectTrackingPage() {
                         {reviewRecipient} has not left a review yet.
                       </p>
                     )}
-                    {!isClient && hasReceivedReview && !data.review?.professionalResponse && (
+                    {isProfessional && hasReceivedReview && !data.review?.professionalResponse && (
                       <Button
                         className="mt-4"
                         variant="outline"
@@ -1284,7 +1367,7 @@ export default function SharedProjectTrackingPage() {
                         Respond to review
                       </Button>
                     )}
-                    {!isClient && data.review?.professionalResponse && (
+                    {isProfessional && data.review?.professionalResponse && (
                       <p className="mt-3 border-l-2 border-primary/30 pl-3 text-sm text-muted-foreground">
                         Your response: {data.review.professionalResponse}
                       </p>
@@ -1347,7 +1430,7 @@ export default function SharedProjectTrackingPage() {
                 )}
 
                 {showReviewResponseForm &&
-                  !isClient &&
+                  isProfessional &&
                   data.review &&
                   hasReceivedReview &&
                   !data.review.professionalResponse && (
@@ -1553,13 +1636,21 @@ export default function SharedProjectTrackingPage() {
                 <div className="mt-5 space-y-2">
                   <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
                     <span>Milestone Progress</span>
-                    <span className="font-bold text-foreground">
-                      {Math.round((completed / (data.milestones.length || 1)) * 100)}% Completed
+                    <span className="font-bold text-foreground flex items-center gap-1.5">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">
+                        {completed} of {data.milestones.length} Done
+                      </span>
+                      <span className="text-muted-foreground font-normal">
+                        ({Math.round((completed / (data.milestones.length || 1)) * 100)}%)
+                      </span>
                     </span>
                   </div>
                   <div className="flex h-2.5 w-full items-center gap-1.5 rounded-full bg-muted/40 p-0.5">
                     {data.milestones.map((milestone, index) => {
-                      const filled = milestone?.status === "APPROVED";
+                      const filled =
+                        milestone?.status === "APPROVED" ||
+                        milestone?.status === "COMPLETED" ||
+                        milestone?.payment?.status === "COMPLETED";
                       const active =
                         milestone &&
                         ["IN_PROGRESS", "REVISION_REQUESTED", "AWAITING_CLIENT_REVIEW"].includes(
@@ -1591,8 +1682,15 @@ export default function SharedProjectTrackingPage() {
                   const milestoneUploads = data.uploads.filter(
                     (upload) => upload.milestoneId === m.id,
                   );
+                  const hasSubmittedWork =
+                    milestoneUploads.length > 0 ||
+                    m.status === "AWAITING_CLIENT_REVIEW" ||
+                    Boolean(m.submittedAt);
                   const pct = totalAgreed > 0 ? Math.round((m.amount / totalAgreed) * 100) : 0;
-                  const isApproved = m.status === "APPROVED";
+                  const isApproved =
+                    m.status === "APPROVED" ||
+                    m.status === "COMPLETED" ||
+                    m.payment?.status === "COMPLETED";
                   const isAwaitingReview = m.status === "AWAITING_CLIENT_REVIEW";
                   const isRevision = m.status === "REVISION_REQUESTED";
                   const isInProgress = m.status === "IN_PROGRESS";
@@ -1663,7 +1761,8 @@ export default function SharedProjectTrackingPage() {
                           {isClient &&
                             data.project.status !== "COMPLETED" &&
                             m.status !== "APPROVED" &&
-                            m.status !== "COMPLETED" && (
+                            m.status !== "COMPLETED" &&
+                            !hasSubmittedWork && (
                               <Button
                                 type="button"
                                 variant="outline"
@@ -1695,7 +1794,7 @@ export default function SharedProjectTrackingPage() {
                             {!isApproved && !isAwaitingReview && !isRevision && !isInProgress && (
                               <Layers className="h-3.5 w-3.5" />
                             )}
-                            {label(m.status)}
+                            {isApproved ? (m.payment?.status === "COMPLETED" ? "Done · Paid Out" : "Done · Approved") : label(m.status)}
                           </span>
                           {overdueDays !== null && (
                             <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">
@@ -1715,75 +1814,161 @@ export default function SharedProjectTrackingPage() {
                         </div>
                       )}
 
-                      {/* Uploads history */}
-                      {milestoneUploads.length > 0 && (
-                        <div className="space-y-2 pt-1">
-                          {milestoneUploads.map((upload) => {
-                            const uploadFiles = uploadAttachments(upload);
-                            return (
-                              <div
-                                key={upload.id}
-                                className="rounded-xl border border-border/80 bg-muted/20 p-3.5"
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <p className="text-xs font-bold uppercase tracking-wide text-foreground/80 flex items-center gap-1.5">
-                                    <Upload className="h-3.5 w-3.5 text-primary" />
-                                    {upload.roundNumber > 1
-                                      ? `Revised Deliverable (Round ${upload.roundNumber})`
-                                      : "Milestone Deliverable Submitted"}
-                                  </p>
-                                  <span className="text-xs text-muted-foreground">
-                                    {date(upload.createdAt)}
-                                  </span>
-                                </div>
-                                {upload.note && (
-                                  <p className="mt-1.5 text-sm text-foreground">{upload.note}</p>
-                                )}
-                                {uploadFiles.length > 0 && (
-                                  <div className="mt-2.5 flex flex-wrap gap-2">
-                                    {uploadFiles.map((file) => (
-                                      <Button
-                                        key={file.id}
-                                        size="sm"
-                                        variant="outline"
-                                        asChild
-                                        className="h-8 gap-1.5 text-xs"
-                                      >
-                                        <a href={file.url} target="_blank" rel="noreferrer">
-                                          <FileText className="h-3.5 w-3.5" />
-                                          {file.name}
-                                        </a>
-                                      </Button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                      {/* Milestone Deliverables & Proof History (Requirement 8) */}
+                      {milestoneUploads.length > 0 && (() => {
+                        const sortedUploads = [...milestoneUploads].sort(
+                          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+                        );
+                        const latestUpload = sortedUploads[sortedUploads.length - 1];
+                        const earlierUploads = sortedUploads.slice(0, -1);
+                        const milestoneRevisions = data.timeline.filter(
+                          (e) =>
+                            e.milestoneId === m.id &&
+                            (e.type === "REVISION_REQUESTED" ||
+                              e.title.toLowerCase().includes("revision requested")),
+                        );
 
-                      {/* Revision Feedback */}
-                      {m.status === "REVISION_REQUESTED" && data.revisions[0] && (
+                        return (
+                          <div className="space-y-3 pt-2">
+                            {/* Comparison header if multiple rounds exist */}
+                            {earlierUploads.length > 0 && (
+                              <div className="flex items-center gap-2 rounded-xl bg-primary/5 border border-primary/20 px-3.5 py-2.5 text-xs font-semibold text-primary">
+                                <Split className="h-4 w-4 shrink-0" />
+                                <span>
+                                  Deliverable History: {sortedUploads.length} rounds submitted. You can compare earlier submissions with the latest proof below.
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Earlier Submissions (Archived Proofs) */}
+                            {earlierUploads.map((upload, uIdx) => {
+                              const uploadFiles = uploadAttachments(upload);
+                              const relatedRevision = milestoneRevisions[uIdx] || data.revisions[0];
+                              return (
+                                <div key={upload.id} className="space-y-2">
+                                  <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 opacity-90">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                                        <History className="h-3.5 w-3.5 text-muted-foreground" />
+                                        Earlier Proof (Round {upload.roundNumber || uIdx + 1})
+                                      </p>
+                                      <span className="text-xs text-muted-foreground">{date(upload.createdAt)}</span>
+                                    </div>
+                                    {upload.note && (
+                                      <p className="mt-1.5 text-sm text-foreground/80 italic">&ldquo;{upload.note}&rdquo;</p>
+                                    )}
+                                    {uploadFiles.length > 0 && (
+                                      <div className="mt-2.5 flex flex-wrap gap-2">
+                                        {uploadFiles.map((file) => (
+                                          <Button
+                                            key={file.id}
+                                            size="sm"
+                                            variant="outline"
+                                            asChild
+                                            className="h-7 gap-1.5 text-xs bg-background"
+                                          >
+                                            <a href={file.url} target="_blank" rel="noreferrer">
+                                              <FileText className="h-3 w-3 text-muted-foreground" />
+                                              {file.name}
+                                            </a>
+                                          </Button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Client revision request feedback following this submission */}
+                                  {relatedRevision && (
+                                    <div className="rounded-xl border border-rose-200/80 bg-rose-50/60 dark:bg-rose-950/20 p-3 text-rose-900 dark:text-rose-200 text-xs">
+                                      <p className="font-bold uppercase tracking-wider flex items-center gap-1.5 text-[11px] text-rose-700 dark:text-rose-400">
+                                        <AlertCircle className="h-3.5 w-3.5" />
+                                        Client Requested Changes (Round {upload.roundNumber || uIdx + 1})
+                                      </p>
+                                      <p className="mt-1 text-xs leading-relaxed">
+                                        {"description" in relatedRevision
+                                          ? relatedRevision.description
+                                          : relatedRevision.note}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {/* Latest Submission (Current Deliverable) */}
+                            {latestUpload && (() => {
+                              const latestFiles = uploadAttachments(latestUpload);
+                              const isResubmission = latestUpload.roundNumber > 1;
+                              return (
+                                <div
+                                  className={`rounded-xl border p-4 shadow-xs ${
+                                    isApproved
+                                      ? "border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-950/10"
+                                      : isAwaitingReview
+                                        ? "border-purple-500/40 bg-purple-50/30 dark:bg-purple-950/20 ring-1 ring-purple-500/20"
+                                        : isRevision
+                                          ? "border-amber-500/30 bg-amber-50/20 dark:bg-amber-950/10"
+                                          : "border-border/90 bg-muted/20"
+                                  }`}
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 text-foreground">
+                                      <Upload className="h-3.5 w-3.5 text-primary" />
+                                      {isResubmission
+                                        ? `Latest Resubmitted Proof (Round ${latestUpload.roundNumber})`
+                                        : "Milestone Deliverable Submitted"}
+                                    </p>
+                                    <span className="text-xs text-muted-foreground">{date(latestUpload.createdAt)}</span>
+                                  </div>
+                                  {latestUpload.note && (
+                                    <p className="mt-2 text-sm text-foreground font-medium">{latestUpload.note}</p>
+                                  )}
+                                  {latestFiles.length > 0 && (
+                                    <div className="mt-2.5 flex flex-wrap gap-2">
+                                      {latestFiles.map((file) => (
+                                        <Button
+                                          key={file.id}
+                                          size="sm"
+                                          variant="outline"
+                                          asChild
+                                          className="h-8 gap-1.5 text-xs font-medium"
+                                        >
+                                          <a href={file.url} target="_blank" rel="noreferrer">
+                                            <FileText className="h-3.5 w-3.5 text-primary" />
+                                            {file.name}
+                                          </a>
+                                        </Button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Active Revision Request feedback if milestone is awaiting resubmission */}
+                      {m.status === "REVISION_REQUESTED" && (
                         <div className="rounded-xl border border-rose-300/60 bg-rose-50/70 dark:bg-rose-950/30 p-4 text-rose-900 dark:text-rose-200">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-xs font-bold uppercase tracking-wide flex items-center gap-1.5">
                               <AlertCircle className="h-4 w-4 text-rose-600" />
-                              Revision Requested by Client
+                              Revision Requested by Client (Pending Resubmission)
                             </p>
                             <span className="text-xs text-rose-700/75 dark:text-rose-300/75">
-                              {date(data.revisions[0].createdAt)}
+                              {date(data.revisions[0]?.createdAt)}
                             </span>
                           </div>
                           <p className="mt-2 text-sm leading-relaxed">
-                            {data.revisions[0].note ||
+                            {data.revisions[0]?.note ||
                               "Please review the requested changes and submit your revised deliverables."}
                           </p>
                         </div>
                       )}
 
                       {/* Actions: Professional Submit */}
-                      {!isClient && ["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status) && (
+                      {isProfessional && ["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status) && (
                         <div className="pt-2 border-t flex flex-col sm:flex-row sm:items-center gap-2">
                           <FilePicker
                             inputId={`milestone-${m.id}-files`}
@@ -1793,7 +1978,11 @@ export default function SharedProjectTrackingPage() {
                           <Input
                             value={note}
                             onChange={(e) => setNote(e.target.value)}
-                            placeholder="Deliverable note or comment for client"
+                            placeholder={
+                              m.status === "REVISION_REQUESTED"
+                                ? "Describe changes/fixes made in this revised deliverable..."
+                                : "Deliverable note or comment for client"
+                            }
                             className="flex-1"
                           />
                           <Button
@@ -1802,7 +1991,11 @@ export default function SharedProjectTrackingPage() {
                             className="gap-1.5 shrink-0"
                           >
                             <Upload className="h-4 w-4" />
-                            {busy === "submit-milestone" ? "Submitting…" : "Request Payment"}
+                            {busy === "submit-milestone"
+                              ? "Submitting…"
+                              : m.status === "REVISION_REQUESTED"
+                                ? "Submit Revised Proof"
+                                : "Request Payment"}
                           </Button>
                         </div>
                       )}
@@ -1820,15 +2013,11 @@ export default function SharedProjectTrackingPage() {
                           </Button>
                           <Button
                             variant="outline"
+                            disabled={busy === "request-revision" || busy === "approve-milestone"}
                             onClick={() => {
-                              const feedback = prompt(
-                                "Enter revision feedback for professional:",
-                              )?.trim();
-                              if (feedback)
-                                void action("request-revision", {
-                                  milestoneId: m.id,
-                                  note: feedback,
-                                });
+                              setRevisionMilestone(m);
+                              setRevisionFeedback("");
+                              setRevisionError("");
                             }}
                             className="gap-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 border-rose-200"
                           >
@@ -1865,7 +2054,7 @@ export default function SharedProjectTrackingPage() {
 
           {/* Work Upload Tab */}
           <TabsContent value="uploads" className="space-y-6">
-            {!isClient && ["IN_PROGRESS", "REVISION_REQUESTED"].includes(data.project.status) && (
+            {isProfessional && ["IN_PROGRESS", "REVISION_REQUESTED"].includes(data.project.status) && (
               <section className="rounded-2xl border bg-card p-5 shadow-soft">
                 <div>
                   <h2 className="text-lg font-semibold">Upload Work</h2>
@@ -2022,7 +2211,11 @@ export default function SharedProjectTrackingPage() {
                   <li key={event.id} className="relative">
                     <span
                       className={`absolute -left-[1.95rem] top-1 size-3 rounded-full ring-4 ring-card ${
-                        event.actorRole === "CLIENT" ? "bg-cta" : "bg-primary"
+                        event.actorRole === "CLIENT"
+                          ? "bg-cta"
+                          : event.actorRole === "ADMIN"
+                            ? "bg-purple-600"
+                            : "bg-primary"
                       }`}
                     />
                     <p className="font-semibold">
@@ -2049,9 +2242,18 @@ export default function SharedProjectTrackingPage() {
                       </ul>
                     )}
                     <p className="mt-2 text-xs text-muted-foreground">
-                      {event.actorRole === "CLIENT" ? client : professional} ·{" "}
-                      {event.actorRole === "CLIENT" ? "Client" : "Professional"} ·{" "}
-                      {date(event.createdAt)}
+                      {event.actorRole === "CLIENT"
+                        ? client
+                        : event.actorRole === "ADMIN"
+                          ? "System / Admin"
+                          : professional}{" "}
+                      ·{" "}
+                      {event.actorRole === "CLIENT"
+                        ? "Client"
+                        : event.actorRole === "ADMIN"
+                          ? "Admin Audit"
+                          : "Professional"}{" "}
+                      · {date(event.createdAt)}
                     </p>
                   </li>
                 ))}
@@ -2114,33 +2316,32 @@ export default function SharedProjectTrackingPage() {
       <Dialog open={showCompleteModal} onOpenChange={setShowCompleteModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Request completion confirmation?</DialogTitle>
+            <DialogTitle>Close & Complete Project</DialogTitle>
             <DialogDescription>
-              This will notify the professional to review the final work and confirm completion. The
-              project will not be completed until they confirm it.
+              All milestones have been reviewed and approved. Confirming will close this project, finalize records, and invite both parties to exchange ratings and reviews.
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-950 dark:text-emerald-200">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <p className="text-xs text-amber-800/70">Milestone total</p>
-                <p className="font-semibold">INR {totalMilestoneValue.toLocaleString("en-IN")}</p>
+                <p className="text-xs opacity-80">Milestone total</p>
+                <p className="font-semibold">₹{totalMilestoneValue.toLocaleString("en-IN")}</p>
               </div>
               <div>
-                <p className="text-xs text-amber-800/70">Paid by client</p>
+                <p className="text-xs opacity-80">Paid by client</p>
                 <p className="font-semibold">₹{clientPaidMilestoneTotal.toLocaleString("en-IN")}</p>
               </div>
               <div>
-                <p className="text-xs text-amber-800/70">Paid to professional</p>
+                <p className="text-xs opacity-80">Paid to professional</p>
                 <p className="font-semibold">₹{paidToProfessional.toLocaleString("en-IN")}</p>
               </div>
               <div>
-                <p className="text-xs text-amber-800/70">Unpaid milestones</p>
+                <p className="text-xs opacity-80">Remaining pending</p>
                 <p className="font-semibold">₹{remainingClientPayment.toLocaleString("en-IN")}</p>
               </div>
             </div>
             {unpaidMilestones.length > 0 ? (
-              <div className="mt-3 border-t border-amber-200 pt-3">
+              <div className="mt-3 border-t border-emerald-500/20 pt-3">
                 Unpaid milestones:
                 <ul className="mt-1 list-disc pl-5">
                   {unpaidMilestones.map((milestone) => (
@@ -2151,8 +2352,9 @@ export default function SharedProjectTrackingPage() {
                 </ul>
               </div>
             ) : (
-              <p className="mt-3 border-t border-amber-200 pt-3 text-emerald-700">
-                All milestones are funded by the client.
+              <p className="mt-3 border-t border-emerald-500/20 pt-3 font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4" />
+                All milestones are fully funded and approved.
               </p>
             )}
           </div>
@@ -2166,12 +2368,9 @@ export default function SharedProjectTrackingPage() {
                 setShowCompleteModal(false);
                 void action("complete-project");
               }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
             >
-              {busy === "complete-project"
-                ? "Sending request…"
-                : remainingClientPayment > 0
-                  ? "Send request with remaining amount"
-                  : "Send completion request"}
+              {busy === "complete-project" ? "Closing project…" : "Close & Complete Project"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2199,61 +2398,68 @@ export default function SharedProjectTrackingPage() {
             <div className="mt-4 space-y-3">
               {(() => {
                 const offlinePayment = data.job?.paymentMethod === "OFFLINE";
-                const clientFee = offlinePayment ? 0 : Math.ceil(approvalMilestone.amount * 0.1);
-                const clientCharge = offlinePayment
-                  ? approvalMilestone.amount
-                  : approvalMilestone.amount + clientFee;
+                const clientCharge = approvalMilestone.amount;
                 return (
                   <>
                     {approvalSuccess ? (
-                      <div className="space-y-3">
-                        <div className="rounded-2xl bg-success/10 p-4">
-                          <p className="text-sm font-semibold text-success">Payment completed</p>
-                          <p className="mt-1 text-2xl font-bold">
-                            ₹{approvalSuccess.charged.toLocaleString("en-IN")} charged
-                          </p>
+                      <div className="space-y-4 py-2 text-center">
+                        <div className="relative mx-auto flex h-20 w-20 items-center justify-center">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/30 opacity-75" />
+                          <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/30">
+                            <CheckCircle2 className="h-9 w-9" />
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                            <Sparkles className="h-3.5 w-3.5" />
+                            Milestone Approved & Paid! 🎉
+                          </span>
+                          <h3 className="mt-2 font-display text-3xl font-bold tracking-tight text-foreground">
+                            ₹{approvalSuccess.charged.toLocaleString("en-IN")}
+                          </h3>
                           <p className="mt-1 text-sm text-muted-foreground">
                             {offlinePayment
-                              ? "Offline payment recorded. The professional was marked as paid."
-                              : "Client payment received. Professional payout is waiting for admin approval."}
+                              ? `Marked as paid directly to ${professional}.`
+                              : `Directly transferred to ${professional}'s account.`}
                           </p>
                         </div>
-                        <div className="space-y-3 rounded-2xl border border-border p-4 text-sm">
-                          <div className="flex justify-between gap-4">
-                            <span className="text-muted-foreground">
-                              Professional payout pending
-                            </span>
-                            <span className="font-semibold text-success">
-                              ₹{approvalSuccess.professionalReceives.toLocaleString("en-IN")}
+
+                        <div className="space-y-2 rounded-2xl border border-border bg-muted/40 p-4 text-left text-sm">
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Milestone</span>
+                            <span className="font-semibold text-foreground">{approvalMilestone.title}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Paid to professional</span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                              ₹{approvalSuccess.professionalReceives.toLocaleString("en-IN")} (100% full payout)
                             </span>
                           </div>
-                          <div className="flex justify-between gap-4">
-                            <span className="text-muted-foreground">
-                              {offlinePayment ? "Platform earnings" : "Admin wallet receives"}
-                            </span>
-                            <span className="font-semibold">
-                              ₹{approvalSuccess.adminReceives.toLocaleString("en-IN")}
-                            </span>
-                          </div>
-                          <div className="flex justify-between gap-4">
-                            <span className="text-muted-foreground">
-                              Platform earnings after payout
-                            </span>
-                            <span className="font-semibold">
-                              ₹{approvalSuccess.platformEarnings.toLocaleString("en-IN")}
-                            </span>
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Platform fee deduction</span>
+                            <span className="font-medium text-emerald-600 dark:text-emerald-400">₹0 (0% cut)</span>
                           </div>
                           {!offlinePayment && (
-                            <div className="flex justify-between gap-4 border-t border-border pt-3">
-                              <span className="font-semibold">Wallet balance after payment</span>
-                              <span className="font-bold text-primary">
+                            <div className="flex items-center justify-between border-t border-border pt-2 text-xs">
+                              <span className="text-muted-foreground">Remaining wallet balance</span>
+                              <span className="font-bold text-foreground">
                                 ₹{approvalSuccess.remainingBalance.toLocaleString("en-IN")}
                               </span>
                             </div>
                           )}
                         </div>
-                        <DialogFooter className="pt-2">
-                          <Button onClick={() => setApprovalMilestone(null)}>Done</Button>
+
+                        <DialogFooter className="pt-2 sm:justify-center">
+                          <Button
+                            onClick={() => {
+                              setApprovalMilestone(null);
+                              setApprovalSuccess(null);
+                            }}
+                            className="w-full sm:w-auto px-8 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+                          >
+                            Done
+                          </Button>
                         </DialogFooter>
                       </div>
                     ) : null}
@@ -2264,7 +2470,7 @@ export default function SharedProjectTrackingPage() {
                           <p className="mt-1 text-2xl font-bold">
                             ₹{approvalMilestone.amount.toLocaleString("en-IN")}
                           </p>
-                          <p className="mt-1 text-xs text-muted-foreground">Milestone value</p>
+                          <p className="mt-1 text-xs text-muted-foreground">Full Milestone Value</p>
                         </div>
                         <div className="space-y-3 rounded-2xl border border-border p-4 text-sm">
                           <div className="flex justify-between gap-4">
@@ -2274,16 +2480,14 @@ export default function SharedProjectTrackingPage() {
                             </span>
                           </div>
                           <div className="flex justify-between gap-4">
-                            <span className="text-muted-foreground">
-                              {offlinePayment ? "Payment method" : "Client wallet fee (10%)"}
-                            </span>
-                            <span className="font-semibold">
-                              +₹{clientFee.toLocaleString("en-IN")}
+                            <span className="text-muted-foreground">Platform deduction</span>
+                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                              ₹0 (0% cut)
                             </span>
                           </div>
                           <div className="flex justify-between gap-4 border-t border-border pt-3">
                             <span className="font-semibold">
-                              {offlinePayment ? "Amount paid offline" : "Client wallet debit"}
+                              {offlinePayment ? "Amount paid offline" : "Total to pay to professional"}
                             </span>
                             <span className="font-bold text-primary">
                               ₹{clientCharge.toLocaleString("en-IN")}
@@ -2292,8 +2496,8 @@ export default function SharedProjectTrackingPage() {
                         </div>
                         {offlinePayment ? null : (
                           <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
-                            Approval will debit ₹{clientCharge.toLocaleString("en-IN")} from your
-                            wallet. Make sure your wallet has enough balance.
+                            Approval will transfer ₹{clientCharge.toLocaleString("en-IN")} directly from your
+                            wallet to {professional}'s account immediately.
                           </p>
                         )}
                         {!offlinePayment && (
@@ -2327,8 +2531,9 @@ export default function SharedProjectTrackingPage() {
                             onClick={async () => {
                               await approveMilestoneWithPayment(approvalMilestone.id);
                             }}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
                           >
-                            {busy === "approve-milestone" ? "Processing…" : "Approve & pay"}
+                            {busy === "approve-milestone" ? "Processing…" : "Approve & Pay"}
                           </Button>
                         </DialogFooter>
                       </div>
@@ -2336,6 +2541,138 @@ export default function SharedProjectTrackingPage() {
                   </>
                 );
               })()}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Client Revision Request Dialog */}
+      <Dialog
+        open={Boolean(revisionMilestone)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRevisionMilestone(null);
+            setRevisionFeedback("");
+            setRevisionError("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg p-0 overflow-hidden sm:rounded-2xl">
+          {revisionMilestone ? (
+            <div>
+              <DialogHeader className="p-6 pb-4 border-b bg-amber-50/60 dark:bg-amber-950/20">
+                <div className="flex items-center gap-3">
+                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+                    <AlertCircle className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <DialogTitle className="text-lg font-bold text-slate-900 dark:text-white">
+                      Request Milestone Revision
+                    </DialogTitle>
+                    <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                      Send detailed change requests back to the professional
+                    </DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <div className="p-6 space-y-4">
+                {/* Milestone Summary Card */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 dark:border-slate-800 dark:bg-slate-900/50">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Milestone
+                      </p>
+                      <h4 className="mt-0.5 text-sm font-bold text-slate-900 dark:text-white">
+                        {revisionMilestone.title}
+                      </h4>
+                    </div>
+                    <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                      ₹{revisionMilestone.amount.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Feedback Input */}
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="revision-feedback"
+                    className="text-xs font-semibold text-slate-700 dark:text-slate-300"
+                  >
+                    Feedback & required changes <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    id="revision-feedback"
+                    value={revisionFeedback}
+                    onChange={(e) => {
+                      setRevisionFeedback(e.target.value);
+                      if (revisionError) setRevisionError("");
+                    }}
+                    placeholder="Describe specifically what needs to be changed, corrected, or updated before you can approve this milestone..."
+                    rows={4}
+                    maxLength={2000}
+                    className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm placeholder:text-muted-foreground focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-200 dark:border-slate-800 dark:bg-slate-950 dark:focus:ring-amber-900/40"
+                    autoFocus
+                  />
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>Be specific to help the professional revise quickly.</span>
+                    <span>{revisionFeedback.length} / 2000</span>
+                  </div>
+                </div>
+
+                {revisionError && (
+                  <div className="rounded-lg bg-rose-50 p-3 text-xs font-medium text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-900">
+                    {revisionError}
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="p-4 border-t bg-muted/20 flex flex-wrap items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={submittingRevision}
+                  onClick={() => {
+                    setRevisionMilestone(null);
+                    setRevisionFeedback("");
+                    setRevisionError("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={submittingRevision || !revisionFeedback.trim()}
+                  onClick={async () => {
+                    const trimmed = revisionFeedback.trim();
+                    if (!trimmed) {
+                      setRevisionError("Please enter feedback explaining the requested changes.");
+                      return;
+                    }
+                    setSubmittingRevision(true);
+                    setRevisionError("");
+                    try {
+                      await action("request-revision", {
+                        milestoneId: revisionMilestone.id,
+                        note: trimmed,
+                      });
+                      setRevisionMilestone(null);
+                      setRevisionFeedback("");
+                    } catch (err) {
+                      setRevisionError(err instanceof Error ? err.message : "Unable to request revision.");
+                    } finally {
+                      setSubmittingRevision(false);
+                    }
+                  }}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-semibold gap-1.5 shadow-sm"
+                >
+                  <AlertCircle className="h-4 w-4" />
+                  {submittingRevision ? "Sending Request…" : "Send Revision Request"}
+                </Button>
+              </DialogFooter>
             </div>
           ) : null}
         </DialogContent>
@@ -2847,7 +3184,11 @@ export default function SharedProjectTrackingPage() {
           <DialogFooter className="p-4 border-t bg-muted/20 flex flex-wrap items-center justify-between gap-2">
             <div>
               {editingMilestone &&
-                !["APPROVED", "AWAITING_CLIENT_REVIEW"].includes(editingMilestone.status) && (
+                !["APPROVED", "COMPLETED", "AWAITING_CLIENT_REVIEW"].includes(
+                  editingMilestone.status,
+                ) &&
+                !data.uploads.some((u) => u.milestoneId === editingMilestone.id) &&
+                !editingMilestone.submittedAt && (
                   <Button
                     type="button"
                     variant="ghost"

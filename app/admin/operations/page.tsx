@@ -9,15 +9,49 @@ import {
   ChevronRight,
   CircleAlert,
   Clock3,
+  ExternalLink,
+  FileCheck,
+  Layers,
   MapPin,
+  PlayCircle,
   Power,
   Search,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
+  Upload,
+  UserCheck,
   UserRound,
+  Wallet,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+export type AdminTimelineItem = {
+  id: string;
+  type:
+    | "PAYMENT"
+    | "MILESTONE_COMPLETED"
+    | "PROOF_SUBMITTED"
+    | "PROJECT_COMPLETED"
+    | "WORK_STARTED"
+    | "MILESTONE_CREATED"
+    | "REVISION_REQUESTED"
+    | "PROGRESS_UPDATE"
+    | "JOB_POSTED"
+    | "PROFESSIONAL_HIRED"
+    | "OTHER";
+  title: string;
+  description?: string | null;
+  amount?: number | null;
+  actorRole?: "CLIENT" | "PROFESSIONAL" | "ADMIN" | "SYSTEM";
+  actorName?: string | null;
+  createdAt: string;
+  status?: string | null;
+  stage?: string | null;
+  progress?: number | null;
+  files?: Array<{ name: string; url?: string | null }>;
+};
 type Job = {
   id: number;
   title: string | null;
@@ -139,12 +173,110 @@ type JobDetails = Job & {
     }[];
     financial: { milestoneTotal: number; paidAmount: number; remainingAmount: number };
   } | null;
+  timeline?: AdminTimelineItem[];
 };
 
 const date = (value: string) =>
   new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(
     new Date(value),
   );
+const formatDateTime = (value: string) => {
+  try {
+    return new Intl.DateTimeFormat("en", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+};
+function getTimelineNodeConfig(type: AdminTimelineItem["type"]) {
+  switch (type) {
+    case "PAYMENT":
+      return {
+        label: "Payment",
+        icon: Wallet,
+        iconBg: "bg-emerald-500",
+        iconColor: "text-white",
+        badgeStyle: "bg-emerald-100 text-emerald-800",
+      };
+    case "MILESTONE_COMPLETED":
+      return {
+        label: "Milestone Completed",
+        icon: CheckCircle2,
+        iconBg: "bg-indigo-600",
+        iconColor: "text-white",
+        badgeStyle: "bg-indigo-100 text-indigo-800",
+      };
+    case "PROOF_SUBMITTED":
+      return {
+        label: "Proof Submitted",
+        icon: Upload,
+        iconBg: "bg-sky-500",
+        iconColor: "text-white",
+        badgeStyle: "bg-sky-100 text-sky-800",
+      };
+    case "PROJECT_COMPLETED":
+      return {
+        label: "Project Completed",
+        icon: Sparkles,
+        iconBg: "bg-purple-600",
+        iconColor: "text-white",
+        badgeStyle: "bg-purple-100 text-purple-800",
+      };
+    case "WORK_STARTED":
+      return {
+        label: "Work Started",
+        icon: PlayCircle,
+        iconBg: "bg-amber-500",
+        iconColor: "text-white",
+        badgeStyle: "bg-amber-100 text-amber-800",
+      };
+    case "JOB_POSTED":
+      return {
+        label: "Job Posted",
+        icon: BriefcaseBusiness,
+        iconBg: "bg-slate-700",
+        iconColor: "text-white",
+        badgeStyle: "bg-slate-100 text-slate-700",
+      };
+    case "PROFESSIONAL_HIRED":
+      return {
+        label: "Professional Hired",
+        icon: UserCheck,
+        iconBg: "bg-teal-600",
+        iconColor: "text-white",
+        badgeStyle: "bg-teal-100 text-teal-800",
+      };
+    case "REVISION_REQUESTED":
+      return {
+        label: "Revision Requested",
+        icon: AlertTriangle,
+        iconBg: "bg-rose-500",
+        iconColor: "text-white",
+        badgeStyle: "bg-rose-100 text-rose-800",
+      };
+    case "PROGRESS_UPDATE":
+      return {
+        label: "Progress Update",
+        icon: Clock3,
+        iconBg: "bg-blue-500",
+        iconColor: "text-white",
+        badgeStyle: "bg-blue-100 text-blue-800",
+      };
+    default:
+      return {
+        label: "Activity",
+        icon: Layers,
+        iconBg: "bg-slate-400",
+        iconColor: "text-white",
+        badgeStyle: "bg-slate-100 text-slate-600",
+      };
+  }
+}
 const tone = (value: string) =>
   ({
     OPEN: "bg-emerald-50 text-emerald-700 ring-emerald-200 border border-emerald-200",
@@ -835,6 +967,229 @@ function Empty({ view }: { view: "jobs" | "disputes" }) {
   );
 }
 
+function JobTimelineSection({ timeline }: { timeline: AdminTimelineItem[] }) {
+  const [filter, setFilter] = useState<"ALL" | "PAYMENT" | "MILESTONE" | "PROOF" | "COMPLETION">("ALL");
+
+  const filteredTimeline = useMemo(() => {
+    if (filter === "ALL") return timeline;
+    if (filter === "PAYMENT") return timeline.filter((item) => item.type === "PAYMENT");
+    if (filter === "MILESTONE")
+      return timeline.filter((item) => item.type === "MILESTONE_COMPLETED" || item.type === "MILESTONE_CREATED");
+    if (filter === "PROOF") return timeline.filter((item) => item.type === "PROOF_SUBMITTED");
+    if (filter === "COMPLETION")
+      return timeline.filter((item) => item.type === "PROJECT_COMPLETED");
+    return timeline;
+  }, [timeline, filter]);
+
+  const counts = useMemo(
+    () => ({
+      all: timeline.length,
+      payments: timeline.filter((item) => item.type === "PAYMENT").length,
+      milestones: timeline.filter(
+        (item) => item.type === "MILESTONE_COMPLETED" || item.type === "MILESTONE_CREATED",
+      ).length,
+      proofs: timeline.filter((item) => item.type === "PROOF_SUBMITTED").length,
+      completion: timeline.filter((item) => item.type === "PROJECT_COMPLETED").length,
+    }),
+    [timeline],
+  );
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-indigo-50 text-indigo-700">
+              <Clock3 className="h-4 w-4" />
+            </span>
+            <h3 className="text-base font-bold text-slate-900">Activity Timeline</h3>
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+              {timeline.length}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Chronological log of payments, completed milestones, submitted proofs, and project completion.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5 text-xs">
+          <button
+            type="button"
+            onClick={() => setFilter("ALL")}
+            className={`rounded-lg px-2.5 py-1 font-medium transition ${
+              filter === "ALL"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            All ({counts.all})
+          </button>
+          {counts.payments > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilter("PAYMENT")}
+              className={`rounded-lg px-2.5 py-1 font-medium transition ${
+                filter === "PAYMENT"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+              }`}
+            >
+              Payments ({counts.payments})
+            </button>
+          )}
+          {counts.milestones > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilter("MILESTONE")}
+              className={`rounded-lg px-2.5 py-1 font-medium transition ${
+                filter === "MILESTONE"
+                  ? "bg-indigo-600 text-white shadow-xs"
+                  : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+              }`}
+            >
+              Milestones ({counts.milestones})
+            </button>
+          )}
+          {counts.proofs > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilter("PROOF")}
+              className={`rounded-lg px-2.5 py-1 font-medium transition ${
+                filter === "PROOF"
+                  ? "bg-sky-600 text-white shadow-xs"
+                  : "bg-sky-50 text-sky-700 hover:bg-sky-100"
+              }`}
+            >
+              Proofs ({counts.proofs})
+            </button>
+          )}
+          {counts.completion > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilter("COMPLETION")}
+              className={`rounded-lg px-2.5 py-1 font-medium transition ${
+                filter === "COMPLETION"
+                  ? "bg-purple-600 text-white shadow-xs"
+                  : "bg-purple-50 text-purple-700 hover:bg-purple-100"
+              }`}
+            >
+              Completed ({counts.completion})
+            </button>
+          )}
+        </div>
+      </div>
+
+      {filteredTimeline.length === 0 ? (
+        <div className="py-10 text-center">
+          <p className="text-sm font-medium text-slate-500">
+            {filter === "ALL"
+              ? "No timeline activity recorded yet."
+              : `No ${filter.toLowerCase()} events recorded yet.`}
+          </p>
+        </div>
+      ) : (
+        <div className="relative mt-6 space-y-6 pl-6 before:absolute before:bottom-3 before:left-3 before:top-3 before:w-0.5 before:bg-slate-200">
+          {filteredTimeline.map((item) => {
+            const config = getTimelineNodeConfig(item.type);
+            const Icon = config.icon;
+            return (
+              <div key={item.id} className="relative group">
+                <div
+                  className={`absolute -left-6 top-0 grid h-6 w-6 -translate-x-1/2 place-items-center rounded-full border-2 border-white shadow-xs ${config.iconBg} ${config.iconColor}`}
+                >
+                  <Icon className="h-3 w-3" />
+                </div>
+
+                <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 transition hover:bg-slate-50 hover:border-slate-300">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${config.badgeStyle}`}
+                      >
+                        {config.label}
+                      </span>
+                      <h4 className="text-sm font-semibold text-slate-900">{item.title}</h4>
+                      {item.amount != null && item.amount > 0 && (
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
+                          ₹{item.amount.toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    <time className="text-xs text-slate-400 font-medium">
+                      {formatDateTime(item.createdAt)}
+                    </time>
+                  </div>
+
+                  {item.description && (
+                    <p className="mt-2 text-xs leading-relaxed text-slate-600 whitespace-pre-wrap">
+                      {item.description}
+                    </p>
+                  )}
+
+                  {item.files && item.files.length > 0 && (
+                    <div className="mt-3 space-y-1.5 border-t border-slate-200/70 pt-2.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                        Submitted proof deliverables ({item.files.length}):
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {item.files.map((file, idx) => (
+                          <div
+                            key={idx}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50/80 px-2.5 py-1 text-xs font-medium text-sky-800"
+                          >
+                            <FileCheck className="h-3.5 w-3.5 text-sky-600" />
+                            <span className="max-w-44 truncate">{file.name}</span>
+                            {file.url && (
+                              <a
+                                href={file.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="ml-1 text-sky-600 hover:text-sky-900"
+                                title="Open / Download proof"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-2 text-[11px] text-slate-400 font-medium">
+                    {item.actorName && (
+                      <span>
+                        By: <span className="font-semibold text-slate-600">{item.actorName}</span> (
+                        {label(item.actorRole ?? "SYSTEM")})
+                      </span>
+                    )}
+                    {item.stage && (
+                      <span>
+                        Stage: <span className="font-semibold text-slate-600">{item.stage}</span>
+                      </span>
+                    )}
+                    {item.progress != null && (
+                      <span>
+                        Progress:{" "}
+                        <span className="font-semibold text-slate-600">{item.progress}%</span>
+                      </span>
+                    )}
+                    {item.status && (
+                      <span className="ml-auto font-semibold uppercase text-slate-500">
+                        {label(item.status)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function JobDetailsPanel({
   job,
   status,
@@ -946,6 +1301,7 @@ function JobDetailsPanel({
                   {job.description ?? "No description was provided."}
                 </p>
               </div>
+              <JobTimelineSection timeline={job.timeline ?? []} />
               <div>
                 <h3 className="text-sm font-semibold text-slate-900">
                   Proposals ({job.proposals.length})

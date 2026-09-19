@@ -2,20 +2,20 @@ import "server-only";
 import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 
-export const CLIENT_FEE_RATE = 0.1;
-export const PROFESSIONAL_FEE_RATE = 0.1;
+export const CLIENT_FEE_RATE = 0;
+export const PROFESSIONAL_FEE_RATE = 0;
 
 export function calculateMilestoneMoney(baseAmount: number) {
-  const clientFeeAmount = Math.ceil(baseAmount * CLIENT_FEE_RATE);
-  const professionalFeeAmount = Math.ceil(baseAmount * PROFESSIONAL_FEE_RATE);
-  const clientChargeAmount = baseAmount + clientFeeAmount;
-  const professionalPayoutAmount = Math.max(0, baseAmount - professionalFeeAmount);
+  const clientFeeAmount = 0;
+  const professionalFeeAmount = 0;
+  const clientChargeAmount = baseAmount;
+  const professionalPayoutAmount = baseAmount;
   return {
     baseAmount,
     clientFeeAmount,
     clientChargeAmount,
     professionalPayoutAmount,
-    adminNetAmount: clientChargeAmount - professionalPayoutAmount,
+    adminNetAmount: 0,
   };
 }
 

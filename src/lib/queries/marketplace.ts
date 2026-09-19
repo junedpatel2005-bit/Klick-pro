@@ -8,6 +8,7 @@ import type {
   DetailedProfessional,
   PublicProfessionalProfile,
   ProfessionalService,
+  PublicReviewItem,
 } from "@/lib/types/marketplace";
 
 function parseSkills(value: string | null): string[] {
@@ -65,60 +66,63 @@ function toProfessional(professional: {
   };
 }
 
-function toDetailedProfessional(professional: {
-  id: number;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string | null;
-  avatarUrl: string | null;
-  companyName: string | null;
-  companyWebsite: string | null;
-  industry: string | null;
-  teamSize: string | null;
-  companyDescription: string | null;
-  address: string | null;
-  professionalCategory: string | null;
-  professionalCity: string | null;
-  professionalState: string | null;
-  professionalDistrict: string | null;
-  professionalSkillsJson: string | null;
-  experienceYears: number | null;
-  hourlyRate: number | null;
-  fixedRate: number | null;
-  portfolioUrl: string | null;
-  workPhotosJson: string | null;
-  certificationsJson: string | null;
-  tradeLicenseUrl: string | null;
-  serviceArea: string | null;
-  workMode: string;
-  serviceRadiusKm: number | null;
-  averageRating: number;
-  reviewCount: number;
-  isVerified: boolean;
-  availabilityStatus: string;
-  professionalLatitude: number | null;
-  professionalLongitude: number | null;
-  isActive: boolean;
-  lastLoginAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-  verification: {
-    status: string | null;
-    governmentIdUrl: string | null;
-    licenseUrl: string | null;
-    insuranceUrl: string | null;
-    selfieUrl: string | null;
-  } | null;
-  services: {
+function toDetailedProfessional(
+  professional: {
     id: number;
-    name: string;
-    description: string;
-    price: number | null;
-    imageUrl: string | null;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string | null;
+    avatarUrl: string | null;
+    companyName: string | null;
+    companyWebsite: string | null;
+    industry: string | null;
+    teamSize: string | null;
+    companyDescription: string | null;
+    address: string | null;
+    professionalCategory: string | null;
+    professionalCity: string | null;
+    professionalState: string | null;
+    professionalDistrict: string | null;
+    professionalSkillsJson: string | null;
+    experienceYears: number | null;
+    hourlyRate: number | null;
+    fixedRate: number | null;
+    portfolioUrl: string | null;
+    workPhotosJson: string | null;
+    certificationsJson: string | null;
+    tradeLicenseUrl: string | null;
+    serviceArea: string | null;
+    workMode: string;
+    serviceRadiusKm: number | null;
+    averageRating: number;
+    reviewCount: number;
+    isVerified: boolean;
+    availabilityStatus: string;
+    professionalLatitude: number | null;
+    professionalLongitude: number | null;
     isActive: boolean;
-  }[];
-}): DetailedProfessional {
+    lastLoginAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    verification: {
+      status: string | null;
+      governmentIdUrl: string | null;
+      licenseUrl: string | null;
+      insuranceUrl: string | null;
+      selfieUrl: string | null;
+    } | null;
+    services: {
+      id: number;
+      name: string;
+      description: string;
+      price: number | null;
+      imageUrl: string | null;
+      isActive: boolean;
+    }[];
+  },
+  reviewsList: PublicReviewItem[] = [],
+): DetailedProfessional {
   const base = toProfessional({
     id: professional.id,
     firstName: professional.firstName,
@@ -138,6 +142,7 @@ function toDetailedProfessional(professional: {
 
   return {
     ...base,
+    reviewsList,
     firstName: professional.firstName,
     lastName: professional.lastName,
     email: professional.email,
@@ -288,7 +293,6 @@ export async function listProfessionals(): Promise<MarketplaceProfessional[]> {
 export async function listOpenJobs(): Promise<MarketplaceJob[]> {
   const [runningJobs, acceptedRequests] = await Promise.all([
     db.projectTracking.findMany({
-      where: { status: { notIn: ["COMPLETED", "CANCELLED"] } },
       select: { jobId: true },
     }),
     db.projectRequest.findMany({
@@ -462,7 +466,68 @@ export async function getDetailedProfessional(id: number): Promise<DetailedProfe
       },
     },
   });
-  return professional ? toDetailedProfessional(professional) : null;
+  if (!professional) return null;
+
+  const reviews = await db.projectReview.findMany({
+    where: { professionalId: id, rating: { not: null } },
+    select: {
+      id: true,
+      trackingId: true,
+      clientId: true,
+      rating: true,
+      comment: true,
+      clientReviewedAt: true,
+      createdAt: true,
+      professionalResponse: true,
+    },
+    orderBy: [{ clientReviewedAt: "desc" }, { createdAt: "desc" }],
+    take: 50,
+  });
+
+  const trackingIds = [...new Set(reviews.map((r) => r.trackingId))];
+  const clientIds = [...new Set(reviews.map((r) => r.clientId))];
+
+  const [trackings, clients] = await Promise.all([
+    db.projectTracking.findMany({
+      where: { id: { in: trackingIds } },
+      select: {
+        id: true,
+        job: { select: { title: true, category: true } },
+      },
+    }),
+    db.user.findMany({
+      where: { id: { in: clientIds } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        avatarUrl: true,
+      },
+    }),
+  ]);
+
+  const trackingMap = new Map(trackings.map((t) => [t.id, t]));
+  const clientMap = new Map(clients.map((c) => [c.id, c]));
+
+  const reviewsList: PublicReviewItem[] = reviews.map((r) => {
+    const t = trackingMap.get(r.trackingId);
+    const c = clientMap.get(r.clientId);
+    return {
+      id: r.id,
+      rating: r.rating ?? 0,
+      comment: r.comment,
+      createdAt: (r.clientReviewedAt ?? r.createdAt).toISOString(),
+      professionalResponse: r.professionalResponse,
+      projectTitle: t?.job?.title ?? null,
+      reviewerName: c
+        ? `${c.firstName} ${c.lastName?.[0] ?? ""}.`.trim()
+        : "Verified Client",
+      reviewerAvatar: c?.avatarUrl ?? null,
+      reviewerCategory: t?.job?.category ?? null,
+    };
+  });
+
+  return toDetailedProfessional(professional, reviewsList);
 }
 
 /**
@@ -524,7 +589,16 @@ export async function getOpenJob(id: number): Promise<MarketplaceJob | null> {
       timingType: true,
       hourlyRate: true,
       createdAt: true,
-      user: { select: { firstName: true, lastName: true, avatarUrl: true, averageRating: true } },
+      user: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          avatarUrl: true,
+          averageRating: true,
+          reviewCount: true,
+        },
+      },
       _count: { select: { favoriteJobs: true } },
       attachments: {
         select: { id: true, fileName: true, fileType: true, fileSize: true, previewUrl: true },
@@ -543,6 +617,63 @@ export async function getOpenJob(id: number): Promise<MarketplaceJob | null> {
     },
   });
   if (!job || !job.title || !job.description || !job.category) return null;
+
+  const clientReviews = await db.projectReview.findMany({
+    where: { clientId: job.user.id, professionalRating: { not: null } },
+    select: {
+      id: true,
+      trackingId: true,
+      professionalId: true,
+      professionalRating: true,
+      professionalComment: true,
+      professionalReviewedAt: true,
+      createdAt: true,
+    },
+    orderBy: [{ professionalReviewedAt: "desc" }, { createdAt: "desc" }],
+    take: 20,
+  });
+
+  const clientTrackingIds = [...new Set(clientReviews.map((r) => r.trackingId))];
+  const proIds = [...new Set(clientReviews.map((r) => r.professionalId))];
+
+  const [clientTrackings, pros] = await Promise.all([
+    db.projectTracking.findMany({
+      where: { id: { in: clientTrackingIds } },
+      select: {
+        id: true,
+        job: { select: { title: true, category: true } },
+      },
+    }),
+    db.user.findMany({
+      where: { id: { in: proIds } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        avatarUrl: true,
+        professionalCategory: true,
+      },
+    }),
+  ]);
+
+  const clientTrackingMap = new Map(clientTrackings.map((t) => [t.id, t]));
+  const proMap = new Map(pros.map((p) => [p.id, p]));
+
+  const clientReviewsList: PublicReviewItem[] = clientReviews.map((r) => {
+    const t = clientTrackingMap.get(r.trackingId);
+    const p = proMap.get(r.professionalId);
+    return {
+      id: r.id,
+      rating: r.professionalRating ?? 0,
+      comment: r.professionalComment,
+      createdAt: (r.professionalReviewedAt ?? r.createdAt).toISOString(),
+      reviewerName: p ? `${p.firstName} ${p.lastName}`.trim() : "Professional",
+      reviewerAvatar: p?.avatarUrl ?? null,
+      projectTitle: t?.job?.title ?? null,
+      reviewerCategory: p?.professionalCategory ?? null,
+    };
+  });
+
   const displayPoint =
     job.locationLat !== null && job.locationLng !== null
       ? createDisplayPoint(job.id, job.locationLat, job.locationLng)
@@ -568,9 +699,12 @@ export async function getOpenJob(id: number): Promise<MarketplaceJob | null> {
     status: "OPEN",
     proposalCount: job._count.favoriteJobs,
     client: {
+      id: job.user.id,
       name: `${job.user.firstName} ${job.user.lastName}`.trim(),
       avatar: job.user.avatarUrl,
       rating: job.user.averageRating,
+      reviewCount: job.user.reviewCount,
+      reviewsList: clientReviewsList,
     },
     attachments: job.attachments,
     milestones: job.milestones,

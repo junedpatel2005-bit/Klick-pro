@@ -340,15 +340,19 @@ export async function GET(
         }),
       );
     if (resource === "reviews") {
-      if (session.role !== "PROFESSIONAL")
-        return NextResponse.json({ error: "Professional access required." }, { status: 403 });
+      const isClient = session.role === "CLIENT";
       const reviews = await db.projectReview.findMany({
-        where: { professionalId: session.userId, rating: { not: null } },
-        orderBy: { clientReviewedAt: "desc" },
+        where: isClient
+          ? { clientId: session.userId, professionalRating: { not: null } }
+          : { professionalId: session.userId, rating: { not: null } },
+        orderBy: isClient ? { professionalReviewedAt: "desc" } : { clientReviewedAt: "desc" },
       });
-      const [clients, projects] = await Promise.all([
+      const otherUserIds = [
+        ...new Set(reviews.map((review) => (isClient ? review.professionalId : review.clientId))),
+      ];
+      const [otherUsers, projects] = await Promise.all([
         db.user.findMany({
-          where: { id: { in: [...new Set(reviews.map((review) => review.clientId))] } },
+          where: { id: { in: otherUserIds } },
           select: { id: true, firstName: true, lastName: true },
         }),
         db.projectTracking.findMany({
@@ -356,21 +360,23 @@ export async function GET(
           select: { id: true, job: { select: { id: true, title: true } } },
         }),
       ]);
-      const clientMap = new Map(
-        clients.map((client) => [client.id, `${client.firstName} ${client.lastName}`.trim()]),
+      const userMap = new Map(
+        otherUsers.map((user) => [user.id, `${user.firstName} ${user.lastName}`.trim()]),
       );
       const projectMap = new Map(projects.map((project) => [project.id, project]));
       return NextResponse.json(
         reviews.map((review) => ({
           id: review.id,
           trackingId: review.trackingId,
-          rating: review.rating!,
-          comment: review.comment,
+          rating: isClient ? review.professionalRating! : review.rating!,
+          comment: isClient ? review.professionalComment : review.comment,
           professionalResponse: review.professionalResponse,
-          clientName: clientMap.get(review.clientId) ?? null,
+          clientName: isClient ? userMap.get(review.professionalId) ?? "Professional" : userMap.get(review.clientId) ?? "Client",
           projectId: projectMap.get(review.trackingId)?.job.id ?? null,
           projectTitle: projectMap.get(review.trackingId)?.job.title ?? null,
-          createdAt: (review.clientReviewedAt ?? review.createdAt).toISOString(),
+          createdAt: (
+            (isClient ? review.professionalReviewedAt : review.clientReviewedAt) ?? review.createdAt
+          ).toISOString(),
         })),
       );
     }
@@ -408,19 +414,23 @@ export async function GET(
         : null;
 
       const blockedJobs = await db.$transaction(async (tx) => {
-        const [trackingJobs, acceptedRequests] = await Promise.all([
+        const [trackingJobs, acceptedRequests, myAppliedRequests] = await Promise.all([
           tx.projectTracking.findMany({
-            where: { status: { notIn: ["COMPLETED", "CANCELLED"] } },
             select: { jobId: true },
           }),
           tx.projectRequest.findMany({
             where: { status: "ACCEPTED" },
             select: { jobId: true },
           }),
+          tx.projectRequest.findMany({
+            where: { professionalId: session.userId },
+            select: { jobId: true },
+          }),
         ]);
         return new Set([
           ...trackingJobs.map((job) => job.jobId),
           ...acceptedRequests.map((request) => request.jobId),
+          ...myAppliedRequests.map((request) => request.jobId),
         ]);
       });
       const availabilityFilter: Prisma.ClientJobWhereInput = bbox
@@ -768,7 +778,9 @@ export async function GET(
             title: milestone.title,
             status: milestone.status,
             isCompleted:
-              milestone.status === "APPROVED" || milestone.payment?.status === "COMPLETED",
+              milestone.status === "APPROVED" ||
+              milestone.status === "COMPLETED" ||
+              milestone.payment?.status === "COMPLETED",
           })),
           currentStage: project.currentStage,
         })),
@@ -833,7 +845,12 @@ export async function GET(
         });
       }
       if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
-      const viewerRole = session.userId === project.clientId ? "CLIENT" : "PROFESSIONAL";
+      const viewerRole =
+        session.role === "ADMIN"
+          ? "ADMIN"
+          : session.userId === project.clientId
+            ? "CLIENT"
+            : "PROFESSIONAL";
       const milestones = await db.projectMilestone.findMany({
         where: { trackingId: project.id },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],

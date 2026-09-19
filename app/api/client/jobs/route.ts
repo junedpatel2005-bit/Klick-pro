@@ -143,7 +143,6 @@ export async function GET(request: NextRequest) {
       where: {
         clientId: user.id,
         jobId: { in: jobs.map((job) => job.id) },
-        status: { not: "COMPLETED" },
       },
       select: { id: true, jobId: true, status: true },
     });

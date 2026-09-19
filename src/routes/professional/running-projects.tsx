@@ -8,6 +8,7 @@ import {
   ArrowRight,
   BriefcaseBusiness,
   CalendarDays,
+  CheckCircle2,
   CircleDollarSign,
   Clock3,
   Heart,
@@ -376,24 +377,80 @@ export default function RunningProjectsPage() {
                       />
                     </div>
                     {project.milestones.length > 0 && (
-                      <div className="mt-3 space-y-1.5">
-                        {project.milestones.map((milestone, index) => (
-                          <div key={milestone.id} className="flex items-center gap-2 text-xs">
-                            <span
-                              className={`h-2 w-2 shrink-0 rounded-full ${
-                                milestone.isCompleted ? "bg-emerald-500" : "bg-muted-foreground/30"
-                              }`}
-                            />
-                            <span className="min-w-0 flex-1 truncate">
-                              {index + 1}. {milestone.title}
+                      <div className="mt-4 rounded-xl border border-border/70 bg-muted/25 p-3 sm:p-3.5 space-y-2.5">
+                        <div className="flex items-center justify-between text-xs font-semibold">
+                          <span className="text-muted-foreground flex items-center gap-2">
+                            <span>Milestones</span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              {project.milestones.filter((m) => m.isCompleted).length} of {project.milestones.length} Done
                             </span>
-                            <span className="text-muted-foreground">
-                              {milestone.isCompleted
-                                ? "Completed"
-                                : displayStatus(milestone.status)}
-                            </span>
-                          </div>
-                        ))}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {project.milestones.length} Milestone{project.milestones.length === 1 ? "" : "s"}
+                          </span>
+                        </div>
+
+                        {/* Milestone Stepper Dots */}
+                        <div className="flex items-center gap-2 py-1">
+                          {project.milestones.map((milestone, idx) => (
+                            <div key={milestone.id} className="flex flex-1 items-center gap-1.5">
+                              <div
+                                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
+                                  milestone.isCompleted
+                                    ? "bg-emerald-500 text-white shadow-xs shadow-emerald-500/50 ring-2 ring-emerald-500/20"
+                                    : milestone.status === "AWAITING_CLIENT_REVIEW" || milestone.status === "IN_PROGRESS"
+                                      ? "bg-amber-500 text-white shadow-xs ring-2 ring-amber-500/20"
+                                      : "bg-muted text-muted-foreground border border-border"
+                                }`}
+                                title={`${milestone.title} - ${milestone.isCompleted ? "Done" : milestone.status}`}
+                              >
+                                {milestone.isCompleted ? "✓" : idx + 1}
+                              </div>
+                              {idx < project.milestones.length - 1 && (
+                                <div
+                                  className={`h-1 flex-1 rounded-full ${
+                                    milestone.isCompleted ? "bg-emerald-500" : "bg-muted"
+                                  }`}
+                                />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Milestone rows with Green Dot */}
+                        <div className="space-y-1.5 pt-1.5 border-t border-border/50">
+                          {project.milestones.map((milestone, index) => (
+                            <div key={milestone.id} className="flex items-center justify-between gap-2 text-xs">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                  className={`h-2.5 w-2.5 shrink-0 rounded-full transition-all ${
+                                    milestone.isCompleted
+                                      ? "bg-emerald-500 ring-4 ring-emerald-500/25 shadow-xs"
+                                      : milestone.status === "AWAITING_CLIENT_REVIEW" || milestone.status === "IN_PROGRESS"
+                                        ? "bg-amber-400 ring-2 ring-amber-400/20"
+                                        : "bg-muted-foreground/30"
+                                  }`}
+                                />
+                                <span className="truncate font-medium text-foreground">
+                                  {index + 1}. {milestone.title}
+                                </span>
+                              </div>
+                              <div className="shrink-0">
+                                {milestone.isCompleted ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Done
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-muted-foreground">
+                                    {displayStatus(milestone.status)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>

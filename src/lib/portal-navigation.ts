@@ -22,6 +22,7 @@ export const clientItems: NavigationItem[] = [
   { to: "/post-job", icon: PlusCircle, label: "Post a job" },
   { to: "/my-jobs", icon: FolderKanban, label: "Projects" },
   { to: "/reports", icon: FileBarChart, label: "Reports" },
+  { to: "/reviews", icon: Star, label: "Reviews" },
   { to: "/messages", icon: MessageSquare, label: "Messages" },
   { to: "/earnings", icon: Wallet, label: "Earnings" },
   { to: "/verification", icon: BadgeCheck, label: "Verification" },

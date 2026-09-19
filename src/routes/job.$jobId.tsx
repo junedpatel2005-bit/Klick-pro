@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
+  AlertCircle,
   Briefcase,
   Clock,
   MapPin,
@@ -96,7 +97,23 @@ type ViewJob = {
   createdAt: string;
   status?: "DRAFT" | "OPEN" | "CLOSED";
   proposalCount?: number;
-  client?: { name: string; avatar: string | null; rating: number };
+  client?: {
+    id?: number;
+    name: string;
+    avatar: string | null;
+    rating: number;
+    reviewCount?: number;
+    reviewsList?: Array<{
+      id: number;
+      rating: number;
+      comment: string | null;
+      createdAt: string;
+      reviewerName: string;
+      reviewerAvatar?: string | null;
+      projectTitle?: string | null;
+      reviewerCategory?: string | null;
+    }>;
+  };
   attachments: {
     id: number;
     fileName: string;
@@ -276,6 +293,8 @@ export default function JobDetails({
   const [negotiateTarget, setNegotiateTarget] = useState<{
     kind: NegotiationKind;
     id: number;
+    lastBidAmount?: number;
+    lastDuration?: string;
   } | null>(null);
   const [negotiatePrice, setNegotiatePrice] = useState("");
   const [negotiateDuration, setNegotiateDuration] = useState("");
@@ -570,8 +589,13 @@ export default function JobDetails({
     kind: NegotiationKind,
     item: { id: number; bidAmount: number; duration: string },
   ) {
-    setNegotiateTarget({ kind, id: item.id });
-    setNegotiatePrice(String(item.bidAmount));
+    setNegotiateTarget({
+      kind,
+      id: item.id,
+      lastBidAmount: item.bidAmount,
+      lastDuration: item.duration,
+    });
+    setNegotiatePrice("");
     setNegotiateDuration(item.duration);
     setNegotiateMessage("");
     setNegotiateError(null);
@@ -586,6 +610,12 @@ export default function JobDetails({
       !negotiateMessage.trim()
     ) {
       setNegotiateError("Enter a valid price, timeline, and message.");
+      return;
+    }
+    if (negotiateTarget.lastBidAmount != null && bidAmount === negotiateTarget.lastBidAmount) {
+      setNegotiateError(
+        `Counter-offer amount cannot be the same as the current bid amount (₹${negotiateTarget.lastBidAmount.toLocaleString("en-IN")}). Please propose a different amount.`,
+      );
       return;
     }
     setNegotiateBusy(true);
@@ -884,6 +914,90 @@ export default function JobDetails({
             </div>
           </section>
         )}
+
+        {/* Client History & Reviews from Professionals */}
+        {job.client && (
+          <section className="mt-8 rounded-2xl border border-border bg-card p-6 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  About the Client
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Feedback from professionals who previously worked with this client
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 rounded-xl bg-amber-500/10 px-3 py-1.5 text-base font-bold text-amber-600 dark:text-amber-400">
+                  <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+                  <span>{job.client.rating.toFixed(1)}</span>
+                  <span className="text-xs font-normal text-muted-foreground">/ 5.0</span>
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  ({job.client.reviewsList?.length ?? job.client.reviewCount ?? 0} reviews)
+                </span>
+              </div>
+            </div>
+
+            {!job.client.reviewsList || job.client.reviewsList.length === 0 ? (
+              <div className="py-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  This client has no previous professional reviews yet.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-6 space-y-4">
+                {job.client.reviewsList.map((review) => (
+                  <div
+                    key={review.id}
+                    className="rounded-xl border border-border/80 bg-muted/20 p-4 transition-colors hover:border-border"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                          {review.reviewerName[0]?.toUpperCase() ?? "P"}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{review.reviewerName}</p>
+                          {review.reviewerCategory && (
+                            <p className="text-xs text-muted-foreground">{review.reviewerCategory}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center text-amber-500">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Star
+                              key={i}
+                              className={`h-3 w-3 ${
+                                i < review.rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(review.createdAt).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                    {review.comment ? (
+                      <p className="mt-2.5 text-sm text-foreground/90 whitespace-pre-wrap">
+                        "{review.comment}"
+                      </p>
+                    ) : (
+                      <p className="mt-1.5 text-xs italic text-muted-foreground">Rating only</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {isOwner && (
           <section className="mt-8 border-t border-border pt-6">
             <div className="flex items-center gap-2 mb-4">
@@ -1587,34 +1701,89 @@ export default function JobDetails({
               counter back.
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-2 grid gap-3 [&_input]:rounded-md [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
-            <input
-              type="number"
-              min="1"
-              value={negotiatePrice}
-              onChange={(event) => setNegotiatePrice(event.target.value)}
-              placeholder="Your counter price"
-            />
-            <input
-              value={negotiateDuration}
-              onChange={(event) => setNegotiateDuration(event.target.value)}
-              placeholder="Timeline (for example, 10 days)"
-            />
-            <textarea
-              value={negotiateMessage}
-              onChange={(event) => setNegotiateMessage(event.target.value)}
-              placeholder="Explain your counter-offer"
-              rows={4}
-            />
+
+          {negotiateTarget?.lastBidAmount != null && (
+            <div className="rounded-xl border border-border bg-muted/40 p-3.5 space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-medium">Current / Last Bid Amount:</span>
+                <span className="text-sm font-bold text-foreground">
+                  ₹{negotiateTarget.lastBidAmount.toLocaleString("en-IN")}
+                </span>
+              </div>
+              {negotiateTarget.lastDuration && (
+                <div className="flex items-center justify-between border-t border-border/60 pt-1.5">
+                  <span className="text-muted-foreground font-medium">Current Timeline:</span>
+                  <span className="font-semibold text-foreground">
+                    {negotiateTarget.lastDuration}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-1 grid gap-3 [&_input]:rounded-md [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
+            <div>
+              <label className="text-xs font-semibold text-foreground block mb-1">
+                Your Counter-Offer Price (₹) <span className="text-destructive">*</span>
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={negotiatePrice}
+                onChange={(event) => {
+                  setNegotiatePrice(event.target.value);
+                  setNegotiateError(null);
+                }}
+                placeholder="Enter counter price (must differ from current bid)"
+              />
+              {negotiateTarget?.lastBidAmount != null &&
+                negotiatePrice.trim() !== "" &&
+                Number(negotiatePrice) === negotiateTarget.lastBidAmount && (
+                  <p className="mt-1.5 text-xs font-semibold text-destructive flex items-center gap-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    Amount cannot be the same as the current bid (₹
+                    {negotiateTarget.lastBidAmount.toLocaleString("en-IN")}). Please propose a
+                    different amount.
+                  </p>
+                )}
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground block mb-1">
+                Proposed Timeline <span className="text-destructive">*</span>
+              </label>
+              <input
+                value={negotiateDuration}
+                onChange={(event) => setNegotiateDuration(event.target.value)}
+                placeholder="Timeline (for example, 10 days)"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground block mb-1">
+                Message / Notes <span className="text-destructive">*</span>
+              </label>
+              <textarea
+                value={negotiateMessage}
+                onChange={(event) => setNegotiateMessage(event.target.value)}
+                placeholder="Explain why you are proposing these new terms..."
+                rows={3}
+              />
+            </div>
           </div>
-          {negotiateError && <p className="mt-3 text-sm text-destructive">{negotiateError}</p>}
+          {negotiateError && <p className="mt-2 text-sm text-destructive">{negotiateError}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="outline" onClick={() => setNegotiateTarget(null)}>
               Cancel
             </Button>
             <Button
               className="bg-cta text-cta-foreground hover:bg-cta/90"
-              disabled={negotiateBusy}
+              disabled={
+                negotiateBusy ||
+                (negotiateTarget?.lastBidAmount != null &&
+                  Number(negotiatePrice) === negotiateTarget.lastBidAmount) ||
+                !negotiatePrice.trim() ||
+                !negotiateDuration.trim() ||
+                !negotiateMessage.trim()
+              }
               onClick={() => void submitNegotiation()}
             >
               {negotiateBusy ? "Sending…" : "Send Counter-Offer"}
