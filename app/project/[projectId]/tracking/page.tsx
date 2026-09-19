@@ -482,6 +482,24 @@ export default function SharedProjectTrackingPage() {
   const unassignedMilestoneAmount = Math.max(0, totalAgreed - totalMilestoneValue);
   const remainingMilestoneAmount = unassignedMilestoneAmount;
 
+  const recommendedMilestonePercentages = (count: number) => {
+    if (count <= 0) return [];
+    if (count === 1) return [100];
+    if (count === 2) return [50, 50];
+
+    const distribution = [50];
+    const remainingForOthers = 50;
+    const remainingSlots = count - 1;
+    const base = Math.floor(remainingForOthers / remainingSlots);
+    const remainder = remainingForOthers % remainingSlots;
+
+    for (let index = 1; index < count; index += 1) {
+      distribution.push(base + (index - 1 < remainder ? 1 : 0));
+    }
+
+    return distribution;
+  };
+
   const resetDraftMilestones = (customUnallocated?: number) => {
     const unallocated =
       customUnallocated !== undefined ? customUnallocated : unassignedMilestoneAmount;
@@ -556,14 +574,18 @@ export default function SharedProjectTrackingPage() {
   const addDraftMilestone = () => {
     const currentSum = draftMilestones.reduce((acc, m) => acc + (Number(m.amount) || 0), 0);
     const left = Math.max(0, remainingMilestoneAmount - currentSum);
-    const leftPct = totalAgreed > 0 && left > 0 ? Math.round((left / totalAgreed) * 100) : "";
     const nextIndex = (data?.milestones?.length ?? 0) + draftMilestones.length + 1;
+    const distribution = recommendedMilestonePercentages(draftMilestones.length + 1);
+    const suggestedPct = distribution[distribution.length - 1] ?? 100;
+    const suggestedAmount =
+      left > 0 && totalAgreed > 0 ? Math.round((left * suggestedPct) / 100) : left;
+
     setDraftMilestones((prev) => [
       ...prev,
       {
         title: `Milestone ${nextIndex}`,
-        amount: left > 0 ? left : "",
-        percentage: leftPct || "",
+        amount: left > 0 ? suggestedAmount : "",
+        percentage: left > 0 ? suggestedPct : "",
         description: "",
       },
     ]);
@@ -605,16 +627,18 @@ export default function SharedProjectTrackingPage() {
   const splitDraftEvenly = () => {
     if (draftMilestones.length === 0) return;
     const count = draftMilestones.length;
-    const base = Math.floor(remainingMilestoneAmount / count);
-    const rem = remainingMilestoneAmount % count;
+    const distribution = recommendedMilestonePercentages(count);
+    let allocated = 0;
+
     setDraftMilestones((prev) =>
-      prev.map((m, i) => {
-        const amt = i === 0 ? base + rem : base;
-        const pct =
-          totalAgreed > 0 ? Math.round((amt / totalAgreed) * 100) : Math.floor(100 / count);
+      prev.map((m, index) => {
+        const pct = distribution[index] ?? 1;
+        const rawAmount = totalAgreed > 0 ? Math.round((remainingMilestoneAmount * pct) / 100) : 0;
+        const amount = index === prev.length - 1 ? Math.max(0, remainingMilestoneAmount - allocated) : rawAmount;
+        allocated += amount;
         return {
           ...m,
-          amount: amt,
+          amount,
           percentage: pct,
         };
       }),
@@ -671,6 +695,15 @@ export default function SharedProjectTrackingPage() {
   const remainingInModal = Math.max(0, remainingMilestoneAmount - totalDraftAmount);
 
   const openEditMilestoneModal = (milestone: Milestone) => {
+    if (milestone.status === "APPROVED" || milestone.status === "COMPLETED") {
+      setEditMilestoneError("Completed or approved milestones cannot be modified.");
+      return;
+    }
+    if (data?.project.status === "COMPLETED") {
+      setEditMilestoneError("This project is completed, so milestones can no longer be edited.");
+      return;
+    }
+
     setEditingMilestone(milestone);
     setEditMilestoneTitle(milestone.title);
     setEditMilestoneAmount(milestone.amount);
@@ -717,6 +750,15 @@ export default function SharedProjectTrackingPage() {
 
   const saveEditMilestone = async () => {
     if (!editingMilestone) return;
+    if (editingMilestone.status === "APPROVED" || editingMilestone.status === "COMPLETED") {
+      setEditMilestoneError("Completed or approved milestones cannot be modified.");
+      return;
+    }
+    if (data?.project.status === "COMPLETED") {
+      setEditMilestoneError("This project is completed, so milestones can no longer be edited.");
+      return;
+    }
+
     const title = editMilestoneTitle.trim();
     const amount = Number(editMilestoneAmount);
     if (!title) {
@@ -753,6 +795,15 @@ export default function SharedProjectTrackingPage() {
 
   const deleteCurrentMilestone = async () => {
     if (!editingMilestone) return;
+    if (
+      editingMilestone.status === "APPROVED" ||
+      editingMilestone.status === "COMPLETED" ||
+      editingMilestone.status === "AWAITING_CLIENT_REVIEW" ||
+      data?.project.status === "COMPLETED"
+    ) {
+      setEditMilestoneError("This milestone is active, completed, or approved and cannot be deleted.");
+      return;
+    }
     if (
       !confirm(
         `Are you sure you want to delete "${editingMilestone.title}"? This cannot be undone.`,
@@ -1611,7 +1662,8 @@ export default function SharedProjectTrackingPage() {
                         <div className="flex h-fit flex-wrap items-center gap-2">
                           {isClient &&
                             data.project.status !== "COMPLETED" &&
-                            m.status !== "APPROVED" && (
+                            m.status !== "APPROVED" &&
+                            m.status !== "COMPLETED" && (
                               <Button
                                 type="button"
                                 variant="outline"
