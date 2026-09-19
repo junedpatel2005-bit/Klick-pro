@@ -1,2 +1,0 @@
-ALTER TABLE "ClientJob"
-ADD COLUMN "paymentMethod" TEXT NOT NULL DEFAULT 'WALLET';
