@@ -54,6 +54,18 @@ function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return earthRadiusKm * c;
 }
+
+function normalizeCategoryKey(value: string | null | undefined) {
+  return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function categoryMatches(jobCategory: string | null | undefined, allowedNames: Set<string>) {
+  const normalizedJobCategory = normalizeCategoryKey(jobCategory);
+  if (!normalizedJobCategory) return true;
+  if (allowedNames.has(normalizedJobCategory)) return true;
+  return Array.from(allowedNames).some((name) => name === normalizedJobCategory);
+}
+
 const segmentOptions: [string, string][] = [
   ["RESIDENTIAL", "Residential"],
   ["COMMERCIAL", "Commercial"],
@@ -386,7 +398,12 @@ function ProfessionalJobsContent() {
   }, [categories, segment, segmentCategory]);
 
   const selectedCategory = useMemo(
-    () => categories.find((c) => c.name === category) ?? null,
+    () =>
+      categories.find(
+        (c) =>
+          normalizeCategoryKey(c.name) === normalizeCategoryKey(category) ||
+          normalizeCategoryKey(c.slug) === normalizeCategoryKey(category),
+      ) ?? null,
     [categories, category],
   );
 
@@ -408,25 +425,35 @@ function ProfessionalJobsContent() {
 
   const matchingCategoryNames = useMemo(() => {
     if (!category) return null;
-    const match = categories.find((c) => c.name === category);
-    if (!match) return new Set([category]);
-    const names = new Set<string>([match.name]);
+    const match =
+      categories.find(
+        (c) =>
+          normalizeCategoryKey(c.name) === normalizeCategoryKey(category) ||
+          normalizeCategoryKey(c.slug) === normalizeCategoryKey(category),
+      ) ?? null;
+    const names = new Set<string>([
+      normalizeCategoryKey(match?.name ?? category),
+      normalizeCategoryKey(match?.slug ?? category),
+    ].filter(Boolean));
     const addChildren = (catId: number) => {
       for (const c of categories) {
         if (c.parentId === catId) {
-          names.add(c.name);
+          names.add(normalizeCategoryKey(c.name));
+          names.add(normalizeCategoryKey(c.slug));
           addChildren(c.id);
         }
       }
     };
-    addChildren(match.id);
+    if (match) addChildren(match.id);
     return names;
   }, [categories, category]);
 
   const segmentCategoryNames = useMemo(
     () =>
       new Set(
-        categories.filter((item) => !segment || item.segment === segment).map((item) => item.name),
+        categories
+          .filter((item) => !segment || normalizeCategoryKey(item.segment) === normalizeCategoryKey(segment))
+          .flatMap((item) => [normalizeCategoryKey(item.name), normalizeCategoryKey(item.slug)]),
       ),
     [categories, segment],
   );
@@ -444,15 +471,15 @@ function ProfessionalJobsContent() {
     const getSubtreeNames = (catId: number): string[] => {
       const cat = categories.find((c) => c.id === catId);
       if (!cat) return [];
-      const names = [cat.name];
+      const names = [normalizeCategoryKey(cat.name), normalizeCategoryKey(cat.slug)];
       for (const childId of childrenMap.get(catId) ?? []) {
         names.push(...getSubtreeNames(childId));
       }
       return names;
     };
     for (const cat of categories) {
-      const allNames = new Set(getSubtreeNames(cat.id));
-      counts[cat.name] = jobs.filter((j) => j.category && allNames.has(j.category)).length;
+      const allNames = new Set(getSubtreeNames(cat.id).filter(Boolean));
+      counts[cat.name] = jobs.filter((j) => categoryMatches(j.category, allNames)).length;
     }
     return counts;
   }, [categories, jobs]);
@@ -471,9 +498,9 @@ function ProfessionalJobsContent() {
         [job.title, job.category, job.locationAddress, job.clientName]
           .filter(Boolean)
           .some((field) => String(field).toLowerCase().includes(value));
-      const matchesSegment = !segment || segmentCategoryNames.has(job.category ?? "");
+      const matchesSegment = !segment || categoryMatches(job.category, segmentCategoryNames);
       const matchesCategory =
-        !matchingCategoryNames || matchingCategoryNames.has(job.category ?? "");
+        !matchingCategoryNames || categoryMatches(job.category, matchingCategoryNames);
       const matchesCity =
         !city || (job.locationAddress ?? "").toLowerCase().includes(city.toLowerCase());
       const matchesState = !state || job.locationState === state;
