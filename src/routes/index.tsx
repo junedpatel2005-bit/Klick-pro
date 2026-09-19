@@ -5,12 +5,24 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Briefcase, MapPin, Search, ShieldCheck, Users } from "lucide-react";
 import { ProCard } from "@/components/ProCard";
 import { Button } from "@/components/ui/button";
-import { closestCenter, DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import type { DragEndEvent } from "@dnd-kit/core";
-import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import dynamic from "next/dynamic";
+import { moveItem } from "@/lib/move-item";
+import type { DragHandle } from "@/components/cms/CmsSortable";
 import type { HomeContent } from "@/lib/home-cms-file";
 import type { MarketplaceProfessional } from "@/lib/types/marketplace";
+
+// Drag-and-drop is CMS-only, so the libraries load lazily and never ship to
+// public visitors on the marketing pages.
+const SortableBoard = dynamic(
+  () => import("@/components/cms/CmsSortable").then((m) => m.SortableBoard),
+  { ssr: false },
+);
+const SortableItem = dynamic(
+  () => import("@/components/cms/CmsSortable").then((m) => m.SortableItem),
+  {
+    ssr: false,
+  },
+);
 
 export default function Landing({
   isAuthenticated = false,
@@ -88,7 +100,6 @@ export default function Landing({
   const content = homeContent ?? fallback;
   const edit = (hero: Partial<HomeContent["hero"]>) =>
     onHomeChange?.({ ...content, hero: { ...content.hero, ...hero } });
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const [professionals, setProfessionals] = useState<MarketplaceProfessional[]>([]);
   const [failed, setFailed] = useState(false);
 
@@ -105,6 +116,29 @@ export default function Landing({
     }
     void loadHome();
   }, [cmsMode]);
+
+  // Shared by the sortable (CMS) and plain (public) grids so both render
+  // identical markup.
+  const renderFeature = (feature: HomeContent["features"][number], drag?: DragHandle) => (
+    <HomeFeature
+      key={feature.id}
+      feature={feature}
+      cmsMode={cmsMode}
+      drag={drag}
+      selected={selectedFeatureId === feature.id}
+      onSelect={() => onFeatureSelect?.(feature.id)}
+      onDelete={() => onFeatureDelete?.(feature.id)}
+      onDuplicate={() => onFeatureDuplicate?.(feature.id)}
+      onChange={(changes) =>
+        onHomeChange?.({
+          ...content,
+          features: content.features.map((item) =>
+            item.id === feature.id ? { ...item, ...changes } : item,
+          ),
+        })
+      }
+    />
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -204,45 +238,26 @@ export default function Landing({
               A complete platform built for seamless collaboration between professionals and clients
             </p>
           </div>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={(event: DragEndEvent) => {
-              if (!cmsMode || !onHomeChange || !event.over || event.active.id === event.over.id)
-                return;
-              const from = content.features.findIndex((item) => item.id === event.active.id);
-              const to = content.features.findIndex((item) => item.id === event.over?.id);
-              if (from >= 0 && to >= 0)
-                onHomeChange({ ...content, features: arrayMove(content.features, from, to) });
-            }}
-          >
-            <SortableContext
-              items={content.features.map((feature) => feature.id)}
-              strategy={rectSortingStrategy}
+          {cmsMode ? (
+            <SortableBoard
+              ids={content.features.map((feature) => feature.id)}
+              onReorder={(from, to) =>
+                onHomeChange?.({ ...content, features: moveItem(content.features, from, to) })
+              }
             >
               <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
                 {content.features.map((feature) => (
-                  <HomeFeature
-                    key={feature.id}
-                    feature={feature}
-                    cmsMode={cmsMode}
-                    selected={selectedFeatureId === feature.id}
-                    onSelect={() => onFeatureSelect?.(feature.id)}
-                    onDelete={() => onFeatureDelete?.(feature.id)}
-                    onDuplicate={() => onFeatureDuplicate?.(feature.id)}
-                    onChange={(changes) =>
-                      onHomeChange?.({
-                        ...content,
-                        features: content.features.map((item) =>
-                          item.id === feature.id ? { ...item, ...changes } : item,
-                        ),
-                      })
-                    }
-                  />
+                  <SortableItem key={feature.id} id={feature.id}>
+                    {(drag) => renderFeature(feature, drag)}
+                  </SortableItem>
                 ))}
               </div>
-            </SortableContext>
-          </DndContext>
+            </SortableBoard>
+          ) : (
+            <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+              {content.features.map((feature) => renderFeature(feature))}
+            </div>
+          )}
         </section>
         <section className="bg-surface">
           <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
@@ -324,6 +339,7 @@ export default function Landing({
 function HomeFeature({
   feature,
   cmsMode,
+  drag,
   selected,
   onSelect,
   onDelete,
@@ -332,15 +348,13 @@ function HomeFeature({
 }: {
   feature: HomeContent["features"][number];
   cmsMode: boolean;
+  drag?: DragHandle;
   selected: boolean;
   onSelect: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
   onChange: (changes: Partial<HomeContent["features"][number]>) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: feature.id,
-  });
   const icons = {
     shield: ShieldCheck,
     briefcase: Briefcase,
@@ -362,12 +376,11 @@ function HomeFeature({
       : {};
   return (
     <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      {...(cmsMode ? attributes : {})}
-      {...(cmsMode ? listeners : {})}
+      ref={drag?.ref}
+      style={drag?.style}
+      {...(drag?.handleProps ?? {})}
       onClick={cmsMode ? onSelect : undefined}
-      className={`relative rounded-2xl border border-border bg-card p-8 shadow-soft ${cmsMode ? "cursor-grab active:cursor-grabbing" : ""} ${selected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""} ${isDragging ? "z-10 scale-[1.02] opacity-70 shadow-2xl" : ""}`}
+      className={`relative rounded-2xl border border-border bg-card p-8 shadow-soft ${cmsMode ? "cursor-grab active:cursor-grabbing" : ""} ${selected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""} ${drag?.isDragging ? "z-10 scale-[1.02] opacity-70 shadow-2xl" : ""}`}
     >
       <div className="inline-flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
         <Icon className="h-6 w-6" />

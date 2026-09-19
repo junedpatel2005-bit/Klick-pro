@@ -5,10 +5,28 @@ import { jwtVerify } from "jose";
 import next from "next";
 import pg from "pg";
 import { Server } from "socket.io";
+import { SOCKET_SESSION_QUERY } from "./src/lib/socket-session-sql.mjs";
 
 const { Pool } = pg;
+
+// Without a database the socket handshake cannot check whether a session has
+// been revoked or the account deactivated, and it would accept both. Degrading
+// that way is acceptable while developing, never in production.
+if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
+  throw new Error(
+    "DATABASE_URL is required in production: without it the realtime handshake cannot verify session revocation.",
+  );
+}
+if (!process.env.DATABASE_URL) {
+  console.warn(
+    "[servio] DATABASE_URL is not set - realtime connections will skip the session revocation check.",
+  );
+}
+
+// One small lookup per socket handshake. Kept at max 1 so this pool does not
+// consume connections the request path needs (see the pool in src/lib/db.ts).
 const dbPool = process.env.DATABASE_URL
-  ? new Pool({ connectionString: process.env.DATABASE_URL, max: 2, idleTimeoutMillis: 30000 })
+  ? new Pool({ connectionString: process.env.DATABASE_URL, max: 1, idleTimeoutMillis: 30000 })
   : null;
 
 const dev = process.env.NODE_ENV !== "production";
@@ -51,10 +69,7 @@ io.use(async (socket, nextSocket) => {
     if (!Number.isSafeInteger(userId) || userId < 1) throw new Error("Invalid session");
 
     if (dbPool && typeof payload.sessionId === "string") {
-      const { rows } = await dbPool.query(
-        'SELECT s.revoked_at, s.expires_at, u."isActive" FROM sessions s JOIN "User" u ON s.user_id = u.id WHERE s.id = $1',
-        [payload.sessionId],
-      );
+      const { rows } = await dbPool.query(SOCKET_SESSION_QUERY, [payload.sessionId]);
       const sessionRow = rows[0];
       if (
         !sessionRow ||
@@ -83,6 +98,9 @@ io.on("connection", (socket) => {
 });
 globalThis.__servioIo = io;
 
+const LOOPBACK_ALIASES = new Set(["0.0.0.0", "::", "127.0.0.1", "::1"]);
+const browseHost = LOOPBACK_ALIASES.has(hostname) ? "localhost" : hostname;
+
 httpServer.listen(port, hostname, () => {
-  console.log(`> Servio ready on http://${hostname}:${port}`);
+  console.log(`> Servio ready on http://${browseHost}:${port} (bound to ${hostname})`);
 });

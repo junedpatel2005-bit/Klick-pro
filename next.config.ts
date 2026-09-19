@@ -7,7 +7,10 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://i.pravatar.cc https://*.googleapis.com https://*.gstatic.com https://maps.gstatic.com",
   "font-src 'self' data:",
-  "connect-src 'self' https://api.razorpay.com https://maps.googleapis.com https://places.googleapis.com https://*.googleapis.com https://*.gstatic.com",
+  // Sentry ingest is required for browser error reporting: without it the CSP
+  // silently drops every client-side event. Narrow these wildcards to the exact
+  // host from NEXT_PUBLIC_SENTRY_DSN once it is known.
+  "connect-src 'self' https://api.razorpay.com https://maps.googleapis.com https://places.googleapis.com https://*.googleapis.com https://*.gstatic.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io",
   "frame-src 'self' https://checkout.razorpay.com https://api.razorpay.com https://www.google.com https://maps.google.com",
   "object-src 'none'",
   "base-uri 'self'",
@@ -28,7 +31,9 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/:path*",
+        // Documents and API responses only. Immutable build assets under
+        // _next/static gain nothing from a CSP or Permissions-Policy.
+        source: "/((?!_next/static|_next/image).*)",
         headers: [
           { key: "Content-Security-Policy", value: contentSecurityPolicy },
           {

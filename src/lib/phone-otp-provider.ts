@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, randomInt } from "crypto";
 import twilio from "twilio";
 import { db } from "@/lib/db";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@generated/prisma/client";
 
 export type PhoneOtpResult = { ok: true } | { ok: false; error: string; status: number };
 export type AccountRole = "CLIENT" | "PROFESSIONAL";

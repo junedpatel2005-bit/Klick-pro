@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { faker } from "@faker-js/faker";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../src/generated/prisma/client";
+import { PrismaClient } from "../generated/prisma/client";
 
 const email = "junedpatel2005@gmail.com";
 const marker = "[Demo Faker Job]";

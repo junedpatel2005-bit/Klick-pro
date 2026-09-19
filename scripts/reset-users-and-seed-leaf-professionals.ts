@@ -2,7 +2,7 @@ import "dotenv/config";
 import { faker } from "@faker-js/faker";
 import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../src/generated/prisma/client";
+import { PrismaClient } from "../generated/prisma/client";
 import { getIndiaDemoLocation } from "./india-demo-locations";
 
 const db = new PrismaClient({

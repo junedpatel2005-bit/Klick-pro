@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@generated/prisma/client";
 
 export const CLIENT_FEE_RATE = 0;
 export const PROFESSIONAL_FEE_RATE = 0;

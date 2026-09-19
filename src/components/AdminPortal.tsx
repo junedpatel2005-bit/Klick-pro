@@ -1,10 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { AdminHeader } from "@/components/AdminHeader";
 import { AdminSidebar } from "@/components/AdminSidebar";
 import { AdminRealtime } from "@/components/AdminRealtime";
+
+// Lazy: keeps socket.io-client out of the shared client entry.
+const RealtimeNotifications = dynamic(
+  () => import("@/components/RealtimeNotifications").then((m) => m.RealtimeNotifications),
+  { ssr: false },
+);
 
 export function AdminPortal({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -16,6 +23,7 @@ export function AdminPortal({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-slate-50/70 text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
       <AdminRealtime />
+      <RealtimeNotifications />
       <AdminSidebar />
       <main className="lg:pl-64 flex flex-col min-h-screen">
         <AdminHeader />

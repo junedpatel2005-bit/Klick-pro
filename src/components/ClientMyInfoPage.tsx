@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { invalidateCurrentUser } from "@/lib/current-user";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
@@ -97,6 +98,7 @@ export function ClientMyInfoPage({ data }: { data: ClientAccountSummaryResponse 
   async function handleLogout() {
     setLoggingOut(true);
     await fetch("/api/v1/auth/logout", { method: "POST" });
+    invalidateCurrentUser();
     router.replace("/login");
   }
 

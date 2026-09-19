@@ -1,13 +1,16 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { cache } from "react";
 import { SignJWT, jwtVerify } from "jose";
-import type { UserRole } from "@/generated/prisma/client";
+import type { UserRole } from "@generated/prisma/client";
 import { db } from "./db";
 
 const authSecret = process.env.AUTH_SECRET;
 if (!authSecret) throw new Error("AUTH_SECRET is required.");
 const secret = new TextEncoder().encode(authSecret);
-export const sessionCookie = "servio_session";
+// Re-exported so existing importers keep working; the constant lives in the
+// db-free module that the proxy uses.
+export { sessionCookie } from "./session-token";
 export type Session = { userId: number; role: UserRole; emailVerifiedAt?: Date | null };
 export async function createSession(session: Session) {
   const sessionId = randomUUID();
@@ -20,7 +23,9 @@ export async function createSession(session: Session) {
   await db.session.create({ data: { id: sessionId, userId: session.userId, expiresAt } });
   return token;
 }
-export async function verifySession(token: string) {
+// Memoized per render pass so a navigation that passes through several layouts
+// issues one session query instead of one per layer.
+export const verifySession = cache(async (token: string) => {
   const { payload } = await jwtVerify(token, secret);
   if (typeof payload.sessionId !== "string") throw new Error("Invalid session.");
   const userId = Number(payload.userId);
@@ -30,7 +35,18 @@ export async function verifySession(token: string) {
     select: {
       expiresAt: true,
       revokedAt: true,
-      user: { select: { id: true, role: true, isActive: true, emailVerifiedAt: true } },
+      user: {
+        select: {
+          id: true,
+          role: true,
+          isActive: true,
+          emailVerifiedAt: true,
+          firstName: true,
+          lastName: true,
+          avatarUrl: true,
+          email: true,
+        },
+      },
     },
   });
   if (!session || session.revokedAt || session.expiresAt <= new Date())
@@ -41,8 +57,12 @@ export async function verifySession(token: string) {
     userId: user.id,
     role: user.role,
     emailVerifiedAt: user.emailVerifiedAt,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    avatarUrl: user.avatarUrl,
+    email: user.email,
   };
-}
+});
 
 export async function revokeSession(token: string) {
   const { payload } = await jwtVerify(token, secret);

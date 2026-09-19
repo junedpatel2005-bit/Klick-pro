@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { getDistanceBoundingBox, getDistanceKm, createDisplayPoint } from "@/lib/geo";
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma } from "@generated/prisma/client";
 import type { ProfessionalDiscoveryResult } from "@/lib/types/professional-discovery";
 
 export type ProfessionalDiscoveryFilter = {

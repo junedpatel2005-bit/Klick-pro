@@ -1,6 +1,8 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
+import { fetchCurrentUser } from "@/lib/current-user";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -17,6 +19,13 @@ import {
   professionalItems,
   professionalMobileItems,
 } from "@/lib/portal-navigation";
+
+// Socket + notification listener for signed-in surfaces only, loaded lazily so
+// socket.io-client stays out of the shared client entry.
+const RealtimeNotifications = dynamic(
+  () => import("@/components/RealtimeNotifications").then((m) => m.RealtimeNotifications),
+  { ssr: false },
+);
 
 type PortalUser = NavigationUser;
 
@@ -57,10 +66,9 @@ export function PortalShell({
 
   useEffect(() => {
     if (!initialUser) {
-      fetch("/api/v1/auth/me")
-        .then((response) => (response.ok ? response.json() : null))
-        .then((data: { user?: PortalUser } | null) => {
-          if (data?.user) setUser(data.user);
+      void fetchCurrentUser()
+        .then((data) => {
+          if (data.user) setUser(data.user as PortalUser);
         })
         .catch(() => {});
     }
@@ -85,6 +93,7 @@ export function PortalShell({
 
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
+      <RealtimeNotifications />
       <AppSidebar items={items} pathname={pathname} user={navigationUser} />
       <div className="lg:pl-64">
         <AppHeader role={activeUser?.role ?? (isProfessional ? "PROFESSIONAL" : "CLIENT")} />

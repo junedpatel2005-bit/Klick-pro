@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { fetchCurrentUser } from "@/lib/current-user";
 import { useEffect, useState } from "react";
 import { Briefcase } from "lucide-react";
 
@@ -13,9 +14,8 @@ export function Logo({
 }) {
   const [role, setRole] = useState<string | null>(null);
   useEffect(() => {
-    fetch("/api/v1/auth/me")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { user?: { role: string } } | null) => setRole(data?.user?.role ?? null))
+    void fetchCurrentUser()
+      .then((data) => setRole(data.user?.role ?? null))
       .catch(() => setRole(null));
   }, []);
   const href = role === "PROFESSIONAL" ? "/professional-home" : "/";

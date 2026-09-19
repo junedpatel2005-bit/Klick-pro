@@ -8,6 +8,10 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    # The Postgres credentials below are intentionally public: this is an
+    # ephemeral service container, reachable only on 127.0.0.1 inside the
+    # runner, torn down with the job. Moving them to secrets would also break
+    # the pg_isready health-check literal.
     services:
       postgres:
         image: postgres:16-alpine

@@ -1,0 +1,1815 @@
+# API Specification
+
+Last verified against code: 2026-09-16 (commit cd8f4fb); runtime-validated 2026-09-17
+
+> **Source of truth:** the route handlers under `app/api/**/route.ts`. This document was reverse-engineered from code; nothing here is aspirational.
+> **Machine-readable companion:** [`openapi.yaml`](./openapi.yaml) (OpenAPI 3.1 — 97 paths, 127 operations, 77 schemas; each operation has `x-source: file:line`).
+> **Diagrams:** [`../03-architecture/diagrams/api-flow.md`](../03-architecture/diagrams/api-flow.md). **Auth deep-dive:** [`../03-architecture/authentication-and-authorization.md`](../03-architecture/authentication-and-authorization.md). **Data model:** [`../04-database/schema.md`](../04-database/schema.md).
+> **Known issues** raised in this document are consolidated and severity-ranked in [`../07-development/known-issues-and-tech-debt.md`](../07-development/known-issues-and-tech-debt.md).
+
+---
+
+## 1. API at a glance
+
+| Item | Value | Evidence |
+|---|---|---|
+| API style | REST-ish JSON over Next.js 16 App Router route handlers. No GraphQL, tRPC, Pages Router API or server actions (`"use server"`) | `find app/api -name 'route.*'` (66 files); grep |
+| Route handler files | 66 (30 in Part A + 36 in Part B; one is `route.tsx`) | Part A §A.0.1, Part B §B.0 |
+| Logical endpoints | **149** (69 Part A + 80 Part B), counting each dispatch value of `[action]` / `[resource]` / `project-actions` as its own endpoint | §A.1, §B.2 |
+| OpenAPI operations | 127 (dispatch routes such as `project-actions` are modelled as one operation with a discriminated body) | `openapi.yaml` |
+| Realtime | Socket.IO at `/api/realtime` on the custom server; 10 server→client events, 0 client→server events | §B.10 |
+| Base path | `/api/*`; every path is also reachable as `/api/v1/*` via rewrite, except the physical `/api/v1/messages` and `/api/v1/professionals` which exist only under `/api/v1` | `next.config.ts:20-27`; §B.9 |
+| Authentication | `servio_session` cookie (HS256 JWT `{userId, role, sessionId}`, 7 days) validated against the `sessions` table on every call. Same cookie for CLIENT, PROFESSIONAL and ADMIN. Bearer accepted only by `GET /api/auth/me` and `GET/POST /api/client/jobs` | `src/lib/auth.ts:10-72` |
+| Authorization | Per-handler, via ~17 duplicated local helpers (no shared guard); role + ownership checks inline | §A.0.2, §B.1.2 |
+| CSRF-style guard | `proxy.ts` rejects POST/PUT/PATCH/DELETE on `/api/*` whose `Origin` is missing or not the app origin / `APP_URL` → `403 {"error":"Request origin is not allowed."}`. **No exemption for webhooks or non-browser clients** | `proxy.ts:4-14,44-46` |
+| Response format | Raw `NextResponse.json`. Errors are `{ "error": "<sentence>" }` (exception: `GET /api/v1/professionals` uses `{error:{code,message,details}}`). The `apiSuccess`/`apiError` helpers in `src/lib/api-response.ts` have **zero** call sites | grep |
+| Validation | zod `safeParse` in most handlers; manual parsing in a few (`v1/messages`, `project-files`, `payment-details`) | per endpoint |
+| Rate limiting | In-memory fixed window (`src/lib/rate-limit.ts`, default 5/60 s), per process, keyed on first `X-Forwarded-For`. Used only by auth actions, admin login and geocode | §A.0.2, §B.1.4 |
+| Email verification | Not enforced by any API handler (proxy redirect to `/verify` skips `/api/*`) | `proxy.ts:87`; §B.1.5 |
+| Side effects | Notifications (`UserNotification` row + `notification:new` socket event + SMTP email), wallet ledger entries, realtime admin updates. In-process fire-and-forget background jobs (not durable) | `src/lib/marketplace-notifications.ts`, `src/lib/background-jobs.ts`, `src/lib/realtime.ts` |
+
+### 1.1 Endpoint count by domain
+
+| Part | Domain | Endpoints | Section |
+|---|---|---|---|
+| A | Auth (`app/api/auth`) | 18 | §A.2 |
+| A | Admin (`app/api/admin`) | 35 | §A.3 |
+| A | Profile (`app/api/profile`) | 8 | §A.4 |
+| A | Verification (Persona) | 2 | §A.5 |
+| A | Webhooks (Razorpay, Persona) | 2 | §A.6 |
+| A | Contact, geocode, search, dashboard | 4 | §A.7 |
+| B | Client (`app/api/client`) | 13 | §B.3 |
+| B | Professional (`app/api/professional`) | 17 | §B.4 |
+| B | Portal incl. project-actions state machine and invoices | 30 | §B.5 |
+| B | Marketplace (public) | 7 | §B.6 |
+| B | Payments (Razorpay config; order/verify retired → 410) | 3 | §B.7 |
+| B | Wallet | 6 | §B.8 |
+| B | v1 physical routes (messages, professionals) | 4 | §B.9 |
+| | **Total** | **149** | |
+
+### 1.2 How to read this document
+
+- **Part A** covers auth, admin, profile, verification, webhooks and public utilities. **Part B** covers client, professional, portal, marketplace, payments, wallet, the `/api/v1` namespace and realtime. Each part keeps its own numbering (`§A.n`, `§B.n`); cross-references inside a part use that part's numbers.
+- Each endpoint block lists: Method, Path, Purpose, Authentication, Authorization, Request, Response, Validation, Errors, Database operations, External integrations, Side effects, with `path:line` evidence.
+- `[NEEDS VALIDATION]` = could not be proven by static reading (runtime/environment dependent). Status is **Implemented** unless stated otherwise.
+- Legend used in Part A: **Auth** `None` / `Session` / `Session+Role` / `Signature`; Part B: `public` / `cookie` / `cookie|bearer`.
+
+### 1.3 Relationship to existing API documentation
+
+| Document | Status | Notes |
+|---|---|---|
+| `openapi.yaml` (repo root, 69 lines) | **Superseded** by `docs/05-api/openapi.yaml` | Documents non-existent `/client/proposals/{id}`; wrong error schema; no security schemes |
+| `project-docs/docs/openapi.yaml` | **Outdated** | Missing params/sort options; `AuthUser` fields missing; uses 3.0 `nullable` in a 3.1 file |
+| `project-docs/docs/API_CONTRACT.md` | **Describes an unimplemented target** | `{data}` envelope and `/api/v1/website/*` do not exist; required tests do not exist |
+| `docs/_archive/2026-09-14-flat-docs/api-reference.md` (earlier AI-written flat doc) | **Replaced by this document** | Wrong counts (project-actions 964 lines / 18 actions), non-existent test file, sliding vs fixed window, 5-milestone cap not in code |
+
+Detailed comparisons: §A.9 and §B.12.
+
+---
+
+# Part A — Auth, Admin, Profile, Verification, Webhooks, Public utilities
+
+## A.0 Scope, discovery method and conventions
+
+### A.0.1 Discovery
+
+| Check | Result | Evidence |
+|---|---|---|
+| Route handler files in scope | 30 files (`app/api/{auth,admin,profile,verification,webhooks,contact,geocode,search,dashboard}/**/route.ts`) | Glob over `app/api/**` |
+| Total route handler files in repo | 65 (35 are in Part B) | Glob `app/api/**/route.ts` |
+| Pages Router API (`pages/api`, `src/pages`) | None — directories do not exist | `ls pages src/pages` |
+| Server actions (`"use server"`) | None in `app/` or `src/` | grep |
+| GraphQL / tRPC | None found | — |
+| Endpoints documented in Part A | **69** (each dispatch action/resource counted separately) | §A.1 |
+
+### A.0.2 Cross-cutting behaviour that applies to every endpoint here
+
+| Concern | Implementation | Evidence |
+|---|---|---|
+| URL aliases | Every `/api/<path>` is also reachable as `/api/v1/<path>` through a rewrite. The web UI calls the `/api/v1/...` form for most endpoints and the unversioned form for a few (`/api/profile/avatar`, `/api/admin/finance/*`, `/api/admin/reports/*`). The canonical path in this document is the physical `/api/...` path. | `next.config.ts:21-27`; e.g. `src/components/ClientProfilePage.tsx:112,133`, `app/admin/finance/page.tsx:211,468` |
+| CSRF / origin guard | `proxy.ts` returns `403 {"error":"Request origin is not allowed."}` for any POST/PUT/PATCH/DELETE under `/api/` whose `Origin` header is missing or differs from both the request origin and `APP_URL`. There is **no exemption for webhooks** (see §A.8 finding F1-01). Under the custom server (`server.mjs`) the request-origin branch did not match: a genuine same-origin POST to `http://127.0.0.1:3100` with `Origin: http://127.0.0.1:3100` got 403 while `APP_URL` was `http://localhost:3100` — in practice **only the exact `APP_URL` origin passes**, so browser mutations work only when users browse at exactly `APP_URL` `[FOUND IN VALIDATION 2026-09-17 · [V-20](../validation/LOCAL_VALIDATION_LOG.md)]`. | `proxy.ts:4-14,44-46` |
+| Request ID | `x-request-id` is propagated or generated and echoed on the response. No handler in Part A reads it. | `proxy.ts:93-98` |
+| Session | Cookie `servio_session` holding an HS256 JWT `{userId, role, sessionId}` (7 days). `verifySession()` also loads the `Session` row and rejects revoked or expired sessions and inactive users. | `src/lib/auth.ts:10-45,66-72` |
+| Authentication helpers | There is no shared guard. Each file defines its own wrapper around `verifySession` (`requireAdmin`, `isAdmin`, `admin`, `getSession`, `getClient`, `session`, `getClientSession`, or inline code). The helper named in each endpoint below is the local one. | per-file |
+| Bearer tokens | Only `GET /api/auth/me` in Part A accepts `Authorization: Bearer <jwt>`. All others read the cookie only. | `app/api/auth/me/route.ts:6-10` |
+| Response style | **All 69 endpoints use raw `NextResponse.json(...)`** (or `NextResponse` binary / redirect). `apiSuccess`/`apiError` from `src/lib/api-response.ts` have **zero call sites** in the repository. The error shape is `{ "error": "<sentence>" }`, sometimes with `fields`, `message` or `redirect`. | `src/lib/api-response.ts:15-29`; grep |
+| Rate limiting | `rateLimit(key, limit=5, windowMs=60000)` is an in-memory, per-process **fixed-window** counter (`Map`). Keys use the first `X-Forwarded-For` value, which the client can spoof unless a trusted proxy overwrites it: 7 failed logins with the same XFF → 401×5 then 429; rotating XFF → never limited `[VALIDATED 2026-09-17 · [V-26](../validation/LOCAL_VALIDATION_LOG.md)]`. | `src/lib/rate-limit.ts:36-48`; `app/api/auth/[action]/route.ts:42-43` |
+| Audit logging | `recordAudit` is **not called** by any endpoint in Part A (including all admin mutations). | grep `recordAudit` |
+| Background jobs | `enqueueBackgroundJob` is an in-process fire-and-forget promise. It is not durable. | `src/lib/background-jobs.ts:11-20` |
+| Realtime | `emit*` helpers post to `globalThis.__servioIo` and do nothing if Socket.IO is not attached (for example on serverless). | `src/lib/realtime.ts:20-102` |
+| Notifications | `notifyRole`/`notifyUsers` create `UserNotification` rows, emit `notification:new`, and send email. Failures are logged, not thrown. | `src/lib/marketplace-notifications.ts:275-304` |
+
+### A.0.3 Legend
+
+- **Auth**: `None` (public), `Session` (any valid session), `Session+Role` (role enforced in the handler), `Signature` (provider HMAC).
+- **Role**: `CLIENT`, `PROFESSIONAL`, `ADMIN`, `ANY`, `—`.
+- **Module**: MOD codes from the shared brief (AUTH, ACC, CAT, JOB, PAY, DSP, NOT, VER, SRCH, CMS, RPT, ADM, SYS).
+- Status labels: **Implemented** unless stated. `[NEEDS VALIDATION]` means runtime behaviour could not be proven from static reading.
+
+---
+
+## A.1 Endpoint inventory (summary)
+
+### A.1.1 Authentication (18)
+
+| # | Method | Path | Auth | Role | Module | Purpose | Source |
+|---|---|---|---|---|---|---|---|
+| 1 | GET | `/api/auth/google` | None | — | AUTH | Google OAuth 2.0 start and callback (one handler) | `app/api/auth/[action]/route.ts:101-222` |
+| 2 | GET | `/api/auth/me` | Session or Bearer (optional) | ANY | AUTH | Return the current user or `null` | `app/api/auth/me/route.ts:5-47` |
+| 3 | POST | `/api/auth/send-phone-otp` | None (session optional) | — | AUTH | Send a signup/phone-change OTP | `app/api/auth/[action]/route.ts:244-283` |
+| 4 | POST | `/api/auth/verify-phone` | None (session optional) | — | AUTH | Verify an OTP; set the phone-proof cookie or update the phone | `…/[action]/route.ts:284-339` |
+| 5 | POST | `/api/auth/check-availability` | None | — | AUTH | Check whether an email or phone is already registered | `…/[action]/route.ts:340-364` |
+| 6 | POST | `/api/auth/register` | None | — | AUTH | Create a CLIENT or PROFESSIONAL account | `…/[action]/route.ts:366-445` |
+| 7 | POST | `/api/auth/login` | None | — | AUTH | Email + password login (any role, including ADMIN) | `…/[action]/route.ts:446-533` |
+| 8 | POST | `/api/auth/send-phone-login-otp` | None | — | AUTH | Send a login OTP to a registered phone | `…/[action]/route.ts:534-552` |
+| 9 | POST | `/api/auth/login-phone` | None | — | AUTH | Phone + OTP login | `…/[action]/route.ts:553-601` |
+| 10 | POST | `/api/auth/login-phone-password` | None | — | AUTH | Phone + password login (no UI caller found) | `…/[action]/route.ts:602-653` |
+| 11 | POST | `/api/auth/logout` | Session (optional) | ANY | AUTH | Revoke the session and clear the cookie | `…/[action]/route.ts:654-666` |
+| 12 | POST | `/api/auth/update-email` | Session | ANY | AUTH | Change the email address and resend verification | `…/[action]/route.ts:667-717` |
+| 13 | POST | `/api/auth/resend-verification` | Session | ANY | AUTH | Resend the email verification link | `…/[action]/route.ts:719-736` |
+| 14 | POST | `/api/auth/forgot-password` | None | — | AUTH | Email a password reset link | `…/[action]/route.ts:737-765` |
+| 15 | POST | `/api/auth/forgot-password-phone` | None | — | AUTH | Send a password reset OTP to a phone | `…/[action]/route.ts:766-778` |
+| 16 | POST | `/api/auth/verify-forgot-password-phone` | None | — | AUTH | Verify the reset OTP and return a reset token | `…/[action]/route.ts:779-802` |
+| 17 | POST | `/api/auth/verify-email` | None (token) | — | AUTH | Consume an email verification token and sign in | `…/[action]/route.ts:803-844` |
+| 18 | POST | `/api/auth/reset-password` | None (token) | — | AUTH | Set a new password with a reset token; revoke all sessions | `…/[action]/route.ts:845-878` |
+
+Unmatched actions: `GET /api/auth/<other>` and `POST /api/auth/<other>` return `404 {"error":"Not found"}` (`…/[action]/route.ts:226,879`). `GET /api/auth/me` is served by the static sibling route, which takes precedence over `[action]` (`…/[action]/route.ts:223-225`).
+
+### A.1.2 Administration (35)
+
+| # | Method | Path | Auth | Role | Module | Purpose | Source |
+|---|---|---|---|---|---|---|---|
+| 19 | POST | `/api/admin/login` | None | — | AUTH/ADM | Admin username + password login; first-run bootstrap admin | `app/api/admin/login/route.ts:44-83` |
+| 20 | GET | `/api/admin/data/overview` | Session+Role | ADMIN | ADM | Dashboard counters and recent items | `app/api/admin/data/[resource]/route.ts:21-81` |
+| 21 | GET | `/api/admin/data/users` | Session+Role | ADMIN | ADM | List all users (unpaginated) | `…/data/[resource]/route.ts:82-98` |
+| 22 | GET | `/api/admin/data/jobs` | Session+Role | ADMIN | JOB/ADM | All jobs, 50 disputes, job stats | `…/data/[resource]/route.ts:99-129` |
+| 23 | GET | `/api/admin/data/finance` | Session+Role | ADMIN | PAY | Finance console data (payments, withdrawals, platform wallet) | `…/data/[resource]/route.ts:130-389` |
+| 24 | GET | `/api/admin/data/support` | Session+Role | ADMIN | ADM | FAQs and contact requests | `…/data/[resource]/route.ts:390-396` |
+| 25 | GET | `/api/admin/users/{id}` | Session+Role | ADMIN | ADM | User detail and stats | `app/api/admin/users/[id]/route.ts:59-155` |
+| 26 | PATCH | `/api/admin/users/{id}` | Session+Role | ADMIN | ADM | Activate or deactivate a user (revokes sessions) | `…/users/[id]/route.ts:6-34` |
+| 27 | DELETE | `/api/admin/users/{id}` | Session+Role | ADMIN | ADM | Hard-delete a user | `…/users/[id]/route.ts:36-57` |
+| 28 | GET | `/api/admin/jobs/{id}` | Session+Role | ADMIN | JOB | Job detail with proposals, project and financials | `app/api/admin/jobs/[id]/route.ts:60-180` |
+| 29 | PATCH | `/api/admin/jobs/{id}` | Session+Role | ADMIN | JOB | Set job status OPEN/CLOSED | `…/jobs/[id]/route.ts:16-37` |
+| 30 | DELETE | `/api/admin/jobs/{id}` | Session+Role | ADMIN | JOB | Hard-delete a job | `…/jobs/[id]/route.ts:39-58` |
+| 31 | GET | `/api/admin/verifications` | Session+Role | ADMIN | VER | Pending/rejected verification queue and Persona queue | `app/api/admin/verifications/route.ts:17-70` |
+| 32 | PATCH | `/api/admin/verifications` | Session+Role | ADMIN | VER | Decide a verification, a document, or a Persona inquiry | `…/verifications/route.ts:71-135` |
+| 33 | GET | `/api/admin/disputes/{id}` | Session+Role | ADMIN | DSP | Dispute detail, messages, project financials | `app/api/admin/disputes/[id]/route.ts:55-138` |
+| 34 | PATCH | `/api/admin/disputes/{id}` | Session+Role | ADMIN | DSP | Set dispute OPEN/RESOLVED and notify both parties | `…/disputes/[id]/route.ts:17-53` |
+| 35 | POST | `/api/admin/disputes/{id}/messages` | Session+Role | ADMIN | DSP | Send an admin message to the client or professional | `app/api/admin/disputes/[id]/messages/route.ts:18-55` |
+| 36 | POST | `/api/admin/finance/milestone-payout` | Session+Role | ADMIN | PAY | Approve a funded milestone payout (wallet ledger) | `app/api/admin/finance/milestone-payout/route.ts:20-150` |
+| 37 | POST | `/api/admin/finance/payouts` | Session+Role | ADMIN | PAY | Settle a withdrawal via a Razorpay Route transfer (no UI caller found) | `app/api/admin/finance/payouts/route.ts:22-106` |
+| 38 | PATCH | `/api/admin/finance/withdrawals/{id}` | Session+Role | ADMIN | PAY | Manually mark a withdrawal COMPLETED/FAILED | `app/api/admin/finance/withdrawals/[id]/route.ts:21-81` |
+| 39 | GET | `/api/admin/services` | Session+Role | ADMIN | CAT | List categories with job counts, or one category with its children and jobs | `app/api/admin/services/route.ts:29-72` |
+| 40 | POST | `/api/admin/services` | Session+Role | ADMIN | CAT | Create a category | `…/services/route.ts:74-102` |
+| 41 | PATCH | `/api/admin/services?id=` | Session+Role | ADMIN | CAT | Rename or describe a category | `…/services/route.ts:104-120` |
+| 42 | DELETE | `/api/admin/services?id=` | Session+Role | ADMIN | CAT | Delete a category | `…/services/route.ts:122-130` |
+| 43 | POST | `/api/admin/support` | Session+Role | ADMIN | ADM | Create an FAQ entry | `app/api/admin/support/route.ts:23-31` |
+| 44 | PUT | `/api/admin/support?id=` | Session+Role | ADMIN | ADM | Update an FAQ entry | `…/support/route.ts:33-47` |
+| 45 | DELETE | `/api/admin/support?id=` | Session+Role | ADMIN | ADM | Delete an FAQ entry | `…/support/route.ts:49-57` |
+| 46 | GET | `/api/admin/cms` | Session+Role | ADMIN | CMS | Read CMS JSON (about, home, or a marketing page) | `app/api/admin/cms/route.ts:28-40` |
+| 47 | PUT | `/api/admin/cms` | Session+Role | ADMIN | CMS | Write CMS JSON (three body variants) | `…/cms/route.ts:42-147` |
+| 48 | POST | `/api/admin/reports/users` | Session+Role | ADMIN | RPT | PDF export of users | `app/api/admin/reports/[resource]/route.ts:100-138` |
+| 49 | POST | `/api/admin/reports/jobs` | Session+Role | ADMIN | RPT | PDF export of jobs | `…/reports/[resource]/route.ts:139-155` |
+| 50 | POST | `/api/admin/reports/finance` | Session+Role | ADMIN | RPT | PDF export of transactions and withdrawals | `…/reports/[resource]/route.ts:156-204` |
+| 51 | GET | `/api/admin/sidebar-counts` | Session+Role | ADMIN | NOT/ADM | Badge counts for the admin sidebar | `app/api/admin/sidebar-counts/route.ts:5-41` |
+| 52 | PATCH | `/api/admin/sidebar-counts` | Session+Role | ADMIN | NOT/ADM | Mark a sidebar section as seen | `…/sidebar-counts/route.ts:43-102` |
+| 53 | GET | `/api/admin/database-status` | Session+Role in production only; **None otherwise** | ADMIN (prod) | SYS | Database connectivity probe (`SELECT 1`) | `app/api/admin/database-status/route.ts:9-40` |
+
+Unmatched resources: `GET /api/admin/data/<other>` returns `404 {"error":"Not found"}` (`…/data/[resource]/route.ts:397`); `POST /api/admin/reports/<other>` returns `404 {"error":"Unknown report."}` (`…/reports/[resource]/route.ts:205-207`) — note the auth and body checks run first.
+
+### A.1.3 Profile (8)
+
+| # | Method | Path | Auth | Role | Module | Purpose | Source |
+|---|---|---|---|---|---|---|---|
+| 54 | GET | `/api/profile` | Session+Role | CLIENT | ACC | Client account and client profile with saved locations | `app/api/profile/route.ts:47-67` |
+| 55 | POST | `/api/profile` | Session+Role | CLIENT (email verified) | ACC | Create/update the client profile and primary location | `…/profile/route.ts:69-158` |
+| 56 | POST | `/api/profile/avatar` | Session+Role | CLIENT, PROFESSIONAL | ACC | Upload an avatar image | `app/api/profile/avatar/route.ts:28-58` |
+| 57 | GET | `/api/profile/avatar?key=` | Session | ANY (owner of key only) | ACC | Stream an avatar image | `…/avatar/route.ts:60-82` |
+| 58 | GET | `/api/profile/locations` | Session+Role | CLIENT | ACC | List saved locations | `app/api/profile/locations/route.ts:18-31` |
+| 59 | POST | `/api/profile/locations` | Session+Role | CLIENT | ACC | Add a saved location (max 3) | `…/locations/route.ts:33-53` |
+| 60 | PATCH | `/api/profile/locations/{id}` | Session+Role+Ownership | CLIENT | ACC | Update a saved location / make primary | `app/api/profile/locations/[id]/route.ts:21-44` |
+| 61 | DELETE | `/api/profile/locations/{id}` | Session+Role+Ownership | CLIENT | ACC | Delete a saved location (promote replacement) | `…/locations/[id]/route.ts:46-68` |
+
+### A.1.4 Verification (2)
+
+| # | Method | Path | Auth | Role | Module | Purpose | Source |
+|---|---|---|---|---|---|---|---|
+| 62 | POST | `/api/verification/persona/start` | Session+Role | PROFESSIONAL | VER | Create a Persona KYC inquiry | `app/api/verification/persona/start/route.ts:16-54` |
+| 63 | GET | `/api/verification/persona/status` | Session+Role | PROFESSIONAL | VER | Latest Persona inquiry status | `app/api/verification/persona/status/route.ts:6-26` |
+
+### A.1.5 Webhooks (2)
+
+| # | Method | Path | Auth | Role | Module | Purpose | Source |
+|---|---|---|---|---|---|---|---|
+| 64 | POST | `/api/webhooks/razorpay` | Signature (`X-Razorpay-Signature`) | — | PAY | Idempotent Razorpay payment/wallet top-up events | `app/api/webhooks/razorpay/route.ts:29-185` |
+| 65 | POST | `/api/webhooks/persona` | Signature (`Persona-Signature`) | — | VER | Persona inquiry status events | `app/api/webhooks/persona/route.ts:6-17`; `src/lib/persona.ts:89-145` |
+
+### A.1.6 Public utilities and dashboard (4)
+
+| # | Method | Path | Auth | Role | Module | Purpose | Source |
+|---|---|---|---|---|---|---|---|
+| 66 | POST | `/api/contact` | None | — | ADM | Submit a contact request | `app/api/contact/route.ts:11-17` |
+| 67 | GET | `/api/geocode` | None | — | SRCH | Server-side Google geocoding proxy (forward and reverse) | `app/api/geocode/route.ts:48-101` |
+| 68 | GET | `/api/search` | None | — | SRCH | Header quick search over open jobs (max 8) | `app/api/search/route.ts:4-27` |
+| 69 | GET | `/api/dashboard` | Session+Role | CLIENT | JOB/PROP | Client dashboard aggregate | `app/api/dashboard/route.ts:5-103` |
+
+---
+
+## A.2 Authentication endpoints — details
+
+Common to `app/api/auth/[action]/route.ts` POST actions:
+
+- Body is read with `request.json().catch(() => null)`. Malformed JSON becomes `null` and fails zod validation (`:234`).
+- **Global rate limit per action**: `rateLimit("<action>:<ip>")` or, for `login`, `rateLimit("login:<ip>:<email>")`. Limit 5 per 60 s. Exceeding it returns `429 {"error":"Too many attempts. Please try again shortly."}`. This applies to **every** POST action, including `logout` and `verify-email` (`:238-243`).
+- Password policy `passwordSchema`: min 8 characters, at least one uppercase letter, one lowercase letter, and one digit (`:30`).
+- Phone validity: `isValidInternationalPhoneNumber` (`src/lib/phone-validation.ts`) plus length 7–25.
+- Tokens stored in `ApiToken` as a SHA-256 hash (`tokenHash`, `:41`). Kinds: `EMAIL_VERIFICATION` (24 h), `PASSWORD_RESET` (1 h by email, 30 min by phone).
+- OTP provider (`src/lib/phone-otp-provider.ts`): if `PHONE_OTP_PROVIDER` is not `twilio`, a hashed 4-digit code is stored in `OtpCode` (10 min expiry, max 5 attempts). The code is `DEV_PHONE_OTP`, or the fixed code a fixed development code outside production, or a random code. With `twilio`, Twilio Verify sends and checks the code; if Twilio is not configured the response is 503.
+- Session issue: `createSession()` inserts a `Session` row and signs the JWT; the cookie uses `sessionOptions` (httpOnly, `sameSite=lax`, `secure` in production, 7 days) (`src/lib/auth.ts:12-22,66-72`).
+
+### GET /api/auth/google
+
+| Field | Detail |
+|---|---|
+| Purpose | Google sign-in/sign-up. Without `code` it redirects to Google. With `code` it acts as the OAuth callback. |
+| Authentication | None. Uses the `servio_google_oauth` state cookie (httpOnly, 10 min). |
+| Authorization | None. The role for **new** accounts comes from the `role` query parameter (`PROFESSIONAL`, otherwise `CLIENT`). |
+| Request | Start: query `role?` (`PROFESSIONAL`\|other), `next?` (post-login path). Callback: query `code`, `state`. |
+| Callback URL | `${publicAppOrigin}/api/v1/auth/google` (resolved via the v1 rewrite) (`:104`). |
+| Response | `302` to Google (start). Callback success: `302` to `next` if it starts with `/` and not `//`, else `/client-profile` (CLIENT), `/professional-home` (PROFESSIONAL), `/admin` (ADMIN); sets `servio_session`; clears the state cookie. |
+| Validation | State cookie must equal `state`; Google profile must include `sub`, `email`, and `email_verified === true` (`:140-168`). |
+| Errors | Env not configured → `302 /login?oauthError=google-not-configured`. Any callback failure → `302 /login?oauthError=google-failed`. |
+| Database | `User.findFirst` by `googleId` OR `email`; `User.create` (authProvider `GOOGLE`, `emailVerifiedAt=now`) or `User.update` to link `googleId` on an existing email account; `Session.create`. |
+| External | `https://oauth2.googleapis.com/token`, `https://openidconnect.googleapis.com/v1/userinfo`. Env: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APP_URL` fallback. |
+| Rate limiting | None. |
+| Side effects | On account creation (non-admin): `notifyAdminsOfNewAccount`, and for professionals `notifyClientsOfNewProfessional` (notifications, realtime, email) — awaited inline (`:193-198`). |
+| Notes | Does not check `user.isActive` before creating a session (the session will then fail `verifySession`). Links Google to **any** existing account with the same email, including ADMIN accounts. The `next` check does not reject backslash forms such as `/\host`: `next=/\evil.example` is stored unmodified in the `servio_google_oauth` state cookie, passes the guard, and `new URL(next, request.url)` resolves to `http://evil.example/` — open redirect likely; callback not executed end-to-end (needs real Google) `[PARTIALLY VALIDATED 2026-09-17 · [V-24](../validation/LOCAL_VALIDATION_LOG.md)]`. The callback `redirect_uri` is also derived from `Host`/`X-Forwarded-Host` `[VALIDATED 2026-09-17 · [V-25](../validation/LOCAL_VALIDATION_LOG.md)]`. |
+
+### GET /api/auth/me
+
+| Field | Detail |
+|---|---|
+| Purpose | Return the current user for UI bootstrap. |
+| Authentication | Optional. `Authorization: Bearer <jwt>` takes precedence over the `servio_session` cookie, which is parsed from the raw `Cookie` header by regex (`me/route.ts:6-10`). |
+| Authorization | None. |
+| Request | None. |
+| Response | `200 {"user": null}` when there is no token, the token is invalid, or the user is inactive. `200 {"user": {id: string, role, firstName, lastName, email, emailVerifiedAt, avatarUrl}}` otherwise (`:33-43`). Note `id` is serialised as a string. |
+| Errors | None (all failures become `user: null`). |
+| Database | `Session` (via `verifySession`), `User.findUnique`. |
+| Rate limiting / side effects | None. |
+
+### POST /api/auth/send-phone-otp
+
+| Field | Detail |
+|---|---|
+| Purpose | Send an OTP to verify a phone number during signup or phone change. |
+| Authentication | Optional session; if present, the caller's own user is excluded from the duplicate check (`:256-267`). |
+| Request body | `{ phone: string(7..25, valid international), role: "CLIENT"\|"PROFESSIONAL" }` |
+| Response | `200 {"success": true}` |
+| Errors | 400 `Enter a valid phone number and account type.`; 409 `This phone number is already registered. Please log in or use a different number.`; 429 (global, or `send-phone-otp:<ip>:<phone>` 3 per 10 min) `Too many code requests. Please try again later.`; provider errors (400/503) with the provider message. |
+| Database | `User.findFirst` (phone); `OtpCode.updateMany` + `OtpCode.create` (development provider). |
+| External | Twilio Verify when `PHONE_OTP_PROVIDER=twilio`. |
+| Side effects | In non-production, the development code is logged to the server console (`phone-otp-provider.ts:84-86`). |
+
+### POST /api/auth/verify-phone
+
+| Field | Detail |
+|---|---|
+| Purpose | Verify a phone OTP. Signed-in users get their phone updated; anonymous users get a signed proof cookie used by `register`. |
+| Authentication | Optional session. When present, its role overrides `role` and must match it if supplied. |
+| Request body | `{ phone: string(7..25), code: string(1..20), role?: "CLIENT"\|"PROFESSIONAL" }` |
+| Response | `200 {"success": true}`. Anonymous: also sets cookie `servio_phone_verification` (HS256 JWT `{phone, role, purpose:"signup-phone"}`, 10 min, httpOnly) (`src/lib/dev-phone-otp.ts:14-25,48-54`). |
+| Errors | 400 `Enter a valid phone number, account type, and code.`; 400 `Your account type is invalid.`; 409 `This phone number is already registered.` (session only); 429 (`verify-phone:<ip>:<phone>` 5 per 10 min); provider errors 400/503. |
+| Database | `OtpCode` read/attempt update; with session: `User.findFirst` duplicate check, `User.update {phone, phoneVerifiedAt}`. |
+
+### POST /api/auth/check-availability
+
+| Field | Detail |
+|---|---|
+| Purpose | Signup form duplicate check. |
+| Request body | `{ email?: email, phone?: string(7..25, valid) }` — at least one is required. |
+| Response | `200 {"fields": {"email"?: "Email is already registered.", "phone"?: "Phone number is already registered."}}` (empty object if both are free). |
+| Errors | 400 `Enter a valid email or phone number.`; 429 global. |
+| Database | `User.findUnique` (email), `User.findFirst` (phone). |
+| Notes | Allows account enumeration (5 checks per minute per IP). |
+
+### POST /api/auth/register
+
+| Field | Detail |
+|---|---|
+| Purpose | Create a local account. |
+| Request body | `{ firstName: string(1..80), lastName: string(1..80), email: email, phone?: string(7..25), password: passwordSchema, role: "CLIENT"\|"PROFESSIONAL", terms: true }` (`:31-39`). |
+| Precondition | If `phone` is given, a valid `servio_phone_verification` cookie for the same phone and role is required (`:378-390`). |
+| Response | `201 {"success": true, "redirect": "/verify"}`; clears the phone-proof cookie. **No session is issued.** |
+| Errors | 400 `{error:"Please correct the highlighted fields.", fields:{<field>: <zod message>}}`; 403 `{error:"Phone verification is required before completing registration.", fields:{phone:…}}`; 409 `{error:"An account already exists with that email or phone.", fields}`; 429 global. |
+| Database | `User.findUnique` (email), `User.findFirst` (phone), `User.create` (bcrypt cost 12, `phoneVerifiedAt` set if phone), `ApiToken.create` (EMAIL_VERIFICATION, 24 h). |
+| External | SMTP via `sendAuthEmail` (`src/lib/email.ts:76`). |
+| Side effects | Background jobs: `notifications.new_account` (admins; clients for new professionals) and `email.verification` (link `${origin}/verify-email?token=…`). |
+| Notes | The email is stored as submitted (no lowercasing), while `login` lowercases the input before an exact lookup (`:449-450`). A mixed-case registration can **never** log in by email/password: 401 with the email as typed and lowercased, even after verification `[VALIDATED 2026-09-17 · [V-21](../validation/LOCAL_VALIDATION_LOG.md)]`. |
+
+### POST /api/auth/login
+
+| Field | Detail |
+|---|---|
+| Purpose | Email + password login for all roles (ADMIN included). |
+| Request body | `{ email: email, password: string(min 1) }` |
+| Response | `200 {"success": true, "redirect": string, "token": "<session JWT>", "user": {id: number, email, firstName, lastName, role}}` and sets `servio_session`. Redirect: `/admin` (ADMIN); `/professional-home` or `/professional/setup?profileSetup=1` (PROFESSIONAL, depending on category + coordinates); `/dashboard` or `/client-profile?profileSetup=1` (CLIENT, depending on a `ClientProfile`). |
+| Errors | 401 `Invalid email or password.` (bad input, unknown user, no password hash, inactive, wrong password); 403 `{error:"EMAIL_NOT_VERIFIED", message:"Please verify your email before signing in.", redirect:"/verify"}`; 429 (`login:<ip>:<email>` 5/min; cleared on success). |
+| Database | `User.findUnique`, `ClientProfile.findFirst`, transaction: `User.update {lastLoginAt}` + on first login `UserNotification.create` (WELCOME_CLIENT / WELCOME_PROFESSIONAL); `Session.create`. |
+| Notes | The session JWT is returned in the JSON body as well as in the httpOnly cookie, which exposes it to page JavaScript. ADMIN users can log in here without the `/api/admin/login` username flow. |
+
+### POST /api/auth/send-phone-login-otp
+
+| Field | Detail |
+|---|---|
+| Request body | `{ phone: string(7..25, valid) }` |
+| Response | `200 {"success": true}` |
+| Errors | 400 `Enter a valid phone number.`; 404 `No active account was found with this phone number.` (also for ADMIN phones); 429 global; provider 400/503. |
+| Database | `User.findFirst {phone, isActive:true}`; `OtpCode` writes (development provider). |
+| Notes | The 404 reveals whether a phone is registered. |
+
+### POST /api/auth/login-phone
+
+| Field | Detail |
+|---|---|
+| Request body | `{ phone: string(7..25, valid), code: string(1..20) }` |
+| Response | `200 {"success": true, "redirect": string}` and sets `servio_session` (same CLIENT/PROFESSIONAL redirect rules as `login`). |
+| Errors | 401 `Enter a valid phone number and code.`; 401 `Invalid phone number or verification code.`; provider errors (400 `The verification code is invalid or has expired.` etc.); 403 `EMAIL_NOT_VERIFIED` body (no session set); 429 global. |
+| Database | `User.findFirst`, `OtpCode` read/update, `ClientProfile.findFirst`, `Session.create`. |
+| Notes | Does not update `lastLoginAt` or create the welcome notification (unlike `login`). |
+
+### POST /api/auth/login-phone-password
+
+| Field | Detail |
+|---|---|
+| Request body | `{ phone: string(7..25, valid), password: string(min 1) }` |
+| Response | `200 {"success": true, "redirect": string}` + session cookie. |
+| Errors | 401 `Enter a valid phone number and password.` / `Invalid phone number or password.`; **403 `{error:"You are registered, but your email is not confirmed…", redirect}` while still setting `servio_session`** (`:637-651`); 429 global. |
+| Database | `User.findFirst`, `ClientProfile.findFirst`, `Session.create`. |
+| Notes | No UI caller was found in `src/` or `app/` (grep). The 403 path still issues a **valid** session, which is inconsistent with `login` and `login-phone`: with it `GET /api/auth/me` → 200 and `POST /api/client/jobs` → 201, while pages redirect to `/verify` `[VALIDATED 2026-09-17 · [V-23](../validation/LOCAL_VALIDATION_LOG.md)]`. |
+
+### POST /api/auth/logout
+
+| Field | Detail |
+|---|---|
+| Request | No body required. |
+| Response | `200 {"success": true}`; clears `servio_session` (maxAge 0). |
+| Errors | 500 `Unable to sign out right now.` if `revokeSession` throws (for example, an invalid JWT signature); 429 global (5 logouts per minute per IP). |
+| Database | `Session.updateMany {revokedAt}`. |
+
+### POST /api/auth/update-email
+
+| Field | Detail |
+|---|---|
+| Authentication | `servio_session` cookie + `verifySession` (inline). Any role. |
+| Request body | `{ email: email }` |
+| Response | `200 {"success": true, "message": "Email updated. A new confirmation link has been sent.", "email": string}` |
+| Errors | 400 `Enter a valid email address.`; 401 `Please sign in again.`; 409 `{error:"This email address is already registered.", fields:{email}}`; 500 `Unable to update your email.` (any exception, including an invalid session or an SMTP failure); 429 global. |
+| Database | Transaction: `ApiToken.updateMany` (invalidate unused EMAIL_VERIFICATION), `User.update {email, emailVerifiedAt:null}`, `ApiToken.create`. |
+| External | SMTP (awaited). |
+| Notes | The email is sent **after** the transaction commits. If SMTP fails, the client receives 500 although the email has already changed and been marked unverified. |
+
+### POST /api/auth/resend-verification
+
+| Field | Detail |
+|---|---|
+| Authentication | Cookie + `verifySession`. |
+| Response | `200 {"success": true}` (also when already verified). |
+| Errors | 401 `Please sign in again.`; 500 `Unable to send a new verification code.`; 429 global. |
+| Database | `User.findUniqueOrThrow`, `ApiToken.create`. |
+| Side effects | Background job `email.verification.resend`. |
+
+### POST /api/auth/forgot-password
+
+| Field | Detail |
+|---|---|
+| Request body | `{ email: email }` |
+| Response | Always `200 {"success": true}` (including invalid input and unknown email). |
+| Errors | 429 global only. |
+| Database | `User.findUnique`, `ApiToken.create` (PASSWORD_RESET, 1 h). |
+| Side effects | Background job `email.password-reset` with link `${origin}/reset-password?token=…`. `origin` comes from the request `Host` / `X-Forwarded-Host` / `X-Forwarded-Proto`, **not** `APP_URL`: sending `X-Forwarded-Host: evil.example` makes the emailed reset link point to `https://evil.example/reset-password?token=…` (host-header poisoning; verification links use the same origin logic) `[VALIDATED 2026-09-17 · [V-25](../validation/LOCAL_VALIDATION_LOG.md)]`. |
+| Notes | Inactive users also receive reset emails (no `isActive` filter). |
+
+### POST /api/auth/forgot-password-phone
+
+| Field | Detail |
+|---|---|
+| Request body | `{ phone: string(7..25) }` (no international-format refinement) |
+| Response | `200 {"success": true}` for invalid input, unknown phones, and success. |
+| Errors | 429 (`forgot-password-phone:<ip>:<phone>` 3 per 10 min, or global); provider errors 400/503 **only for existing CLIENT/PROFESSIONAL users**. |
+| Database | `User.findFirst {phone, isActive}`; `OtpCode` writes. |
+
+### POST /api/auth/verify-forgot-password-phone
+
+| Field | Detail |
+|---|---|
+| Request body | `{ phone: string(7..25), code: string(1..20) }` |
+| Response | `200 {"success": true, "token": "<raw reset token>"}` — used with `reset-password`. |
+| Errors | 400 `Enter a valid phone number and code.`; 400 `That verification code is invalid or has expired.`; provider errors; 429 (`verify-forgot-password-phone:<ip>:<phone>` 5 per 10 min, or global). |
+| Database | `User.findFirst`, `OtpCode`, `ApiToken.create` (PASSWORD_RESET, 30 min). |
+
+### POST /api/auth/verify-email
+
+| Field | Detail |
+|---|---|
+| Request body | `{ token: string(min 32) }` |
+| Response | `200 {"success": true, "redirect": "/client-profile?profileSetup=1" \| "/professional-home" \| "/professional/setup?profileSetup=1"}` and sets `servio_session` (auto sign-in). |
+| Errors | 400 `This verification link is invalid or has expired.`; 500 `Unable to verify your email right now. Please request a new link.` (logged `auth.email_verification.failed`); 429 global. |
+| Database | `ApiToken.findFirst` (unused, unexpired), transaction `ApiToken.update {usedAt}` + `User.update {emailVerifiedAt}`; `Session.create`. |
+| Notes | For ADMIN users (not normally applicable) the redirect falls into the professional branch. Does not check `isActive`. |
+
+### POST /api/auth/reset-password
+
+| Field | Detail |
+|---|---|
+| Request body | `{ token: string(min 32), password: passwordSchema }` |
+| Response | `200 {"success": true}` |
+| Errors | 400 `Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.` (valid token shape, weak password); 400 `Invalid or expired link.`; 429 global. |
+| Database | `ApiToken.findFirst`; transaction `ApiToken.update {usedAt}`, `User.update {passwordHash}` (bcrypt 12), `Session.updateMany {revokedAt}` (all sessions). |
+
+---
+
+## A.3 Administration endpoints — details
+
+Authorization pattern for all admin handlers: read `servio_session`, call `verifySession`, require `role === "ADMIN"`. There is **no ownership, super-admin, or permission granularity**: any ADMIN can perform every action, including deleting or deactivating other admins or themselves. `proxy.ts` protects `/admin/*` pages only; API protection relies on each handler (`proxy.ts:63-68`).
+
+Status codes differ by helper:
+
+| Helper style | No/invalid session | Wrong role | Files |
+|---|---|---|---|
+| Inline, distinguishes 401/403 | 401 | 403 | `data/[resource]`, `jobs/[id]` GET, `users/[id]`, `sidebar-counts`, `database-status` |
+| Boolean/nullable helper | 403 | 403 | `disputes/*`, `finance/*`, `jobs/[id]` PATCH/DELETE, `reports`, `services`, `support`, `verifications` |
+| `requireAdmin` via `cookies()` | 401 | 401 | `cms` |
+
+### POST /api/admin/login
+
+| Field | Detail |
+|---|---|
+| Purpose | Admin console login by **username**. |
+| Authentication | None. |
+| Request body | `{ username: string(trim, 1..64), password: string(1..256) }` |
+| Response | `200 {"ok": true}` + `servio_session` (role ADMIN). |
+| Errors | 400 `Enter a valid admin username and password.`; 401 `Invalid administrator credentials.`; 429 `Too many sign-in attempts. Please try again later.` (`admin-login:<ip>:<username>`, 5 per 15 min, cleared on success). |
+| Bootstrap | If `User.count({role:"ADMIN"}) === 0`, `createBootstrapAdmin()` creates an admin from `ADMIN_BOOTSTRAP_USERNAME`, `ADMIN_BOOTSTRAP_PASSWORD` (min 12 characters) and `ADMIN_EMAIL` (falls back to `<username>@admin.local` if the email is taken). The password is then compared against the submitted password; **the submitted username is not compared** in this branch (`login/route.ts:61-66`). |
+| Database | `User.count`, `User.findUnique` (username/email), `User.create` (bootstrap), `User.findFirst {username, role:ADMIN}`, `Session.create`. |
+| Notes | Does not check `emailVerifiedAt`. Uses the same cookie and session model as normal users. |
+
+### GET /api/admin/data/overview
+
+| Field | Detail |
+|---|---|
+| Response | `200 { clients: int, professionals: int, pendingVerifications: int, jobs: int, disputes: int (OPEN), payments: int (sum of COMPLETED ProjectTransaction.amount), newUsers: User[5], newJobs: ClientJob[5] (+user name), newDisputes: ProjectDispute[5] }` |
+| Errors | 401 `Admin sign-in required.`; 403 `Admin access required.` |
+| Database | `User.count` ×2, `ProfessionalVerification.count`, `ClientJob.count`, `ProjectDispute.count`, `ProjectTransaction.aggregate`, `User.findMany`, `ClientJob.findMany`, `ProjectDispute.findMany`. |
+
+### GET /api/admin/data/users
+
+| Field | Detail |
+|---|---|
+| Response | `200 { users: [{id, firstName, lastName, email, role, isActive, isVerified, emailVerifiedAt, createdAt}] }` — every user, no pagination. |
+| Database | `User.findMany`. |
+
+### GET /api/admin/data/jobs
+
+| Field | Detail |
+|---|---|
+| Response | `200 { jobs: [ClientJob + user{firstName,lastName,email} with status overridden to "COMPLETED" or "RUNNING" when a ProjectTracking exists], disputes: ProjectDispute[≤50], stats: {totalJobs, openJobs, scheduledJobs} }` |
+| Database | `ClientJob.findMany` (unbounded), `ProjectDispute.findMany`, `ClientJob.count` ×3, `ProjectTracking.findMany`. |
+
+### GET /api/admin/data/finance
+
+| Field | Detail |
+|---|---|
+| Response | `200 { transactions: ProjectTransaction[≤100], withdrawals: ProjectWithdrawal[≤100], payments: [Payment(≤200) + client/professional/job/milestone/projectTracking + jobTitle, jobCategory, milestoneTitle, milestoneStatus, milestoneNumber, totalMilestonesCount, projectTotalBudget, projectPaidAmount, projectRemainingAmount, remainingMilestonesCount, milestonesList, financials{grossClientAmount, baseAmount, clientFeeAmount, commissionAmount, professionalPayoutAmount, adminNetAmount}], walletTransactions: WalletTransaction[WALLET_TOP_UP ≤100], platformWallet: null \| {balance, currency, ownerName, totalReceived, totalPaidToProfessionals, retainedEarnings}, platformWalletTransactions: [{id,type,amount,status,description,createdAt}], names: {[userId]: string}, usersById: {[userId]: {id,name,email,phone,avatarUrl,role,companyName}} }` |
+| Business logic | Fee fallbacks when stored values are 0: 10% client fee, 10% commission (`:341-344`). Platform wallet aggregates **all** ADMIN wallets because settlement credits whichever admin `findFirst` returns (`:226-244`). |
+| Database | `ProjectTransaction`, `ProjectWithdrawal`, `Payment` (deep include), `WalletTransaction`, `User`, `LegacyUserProfile` reads; **`Wallet.create` via `ensureWallet` for every admin without a wallet — a write inside a GET** (`src/lib/wallet-ledger.ts:24-33`). |
+
+### GET /api/admin/data/support
+
+| Field | Detail |
+|---|---|
+| Response | `200 { faqs: Faq[≤200] (displayOrder asc), contactRequests: ContactRequest[≤200] (newest first) }` |
+| Database | `Faq.findMany`, `ContactRequest.findMany`. |
+
+### GET /api/admin/users/{id}
+
+| Field | Detail |
+|---|---|
+| Request | Path `id` (integer). |
+| Response | `200 { user: {id, firstName, lastName, email, phone, phoneVerifiedAt, emailVerifiedAt, role, isActive, isVerified, createdAt, professional* fields, company fields, address, serviceArea, workMode, serviceRadiusKm, availabilityStatus, experienceYears, professionalSkillsJson, professionalLatitude, professionalLongitude, updatedAt, clientProfiles[{…, savedLocations[{label,address,isPrimary}]}], services[{id}]}, stats: {jobsPosted, proposals, projects, completedPayments, money, services} }` |
+| Errors | 401/403; 400 `Invalid user.`; 404 `User not found.`; 500 `Unable to load user details.` |
+| Database | `User.findUnique`, `ClientJob.count`, `ProjectRequest.count`, `ProjectTracking.count`, `ProjectTransaction.aggregate`. |
+
+### PATCH /api/admin/users/{id}
+
+| Field | Detail |
+|---|---|
+| Request body | `{ isActive: boolean }` |
+| Response | `200 { user: {id, isActive} }` |
+| Errors | 401 `Admin access required.`; 403; 400 `Invalid account update.`; 500 `Unable to update account.` (includes non-existent id and malformed JSON). |
+| Database | Transaction: `User.update`; when deactivating, `Session.updateMany {revokedAt}`. |
+| Side effects | None (no audit log, no realtime `admin:users-update`, no user notification). |
+
+### DELETE /api/admin/users/{id}
+
+| Field | Detail |
+|---|---|
+| Response | `200 {"ok": true}` |
+| Errors | 401/403; 400 `Invalid user.`; 500 `Unable to delete account. It may have related records.` |
+| Database | `User.delete` (hard delete). A user with activity (jobs, projects, payments…) → **500 "Unable to delete account. It may have related records."**, nothing deleted (RESTRICT FKs). A fresh user → 200 `{ok:true}`, but rows without a DB FK (e.g. `ApiToken`) are left orphaned `[CORRECTED 2026-09-17 · [V-07](../validation/LOCAL_VALIDATION_LOG.md)]`. See [database-design §7.1](../04-database/database-design.md). |
+| Notes | No guard against deleting the caller or the last admin. |
+
+### GET /api/admin/jobs/{id}
+
+| Field | Detail |
+|---|---|
+| Response | `200 { job: ClientJob + attachments[] + user{id,firstName,lastName,email,phone,companyName,address,isVerified,createdAt} + _count.favoriteJobs + proposals[{id, professionalId, bidAmount, duration, status, origin, createdAt, professional{id,firstName,lastName,email}\|null}] + project: null \| {id,status,progress,currentStage,startedAt,completedAt, milestones[], financial{milestoneTotal, paidAmount, remainingAmount}} }` |
+| Errors | 401 `Admin sign-in required.`; 403; 400 `Invalid job ID.`; 404 `Job not found.` |
+| Database | `ClientJob.findUnique`, `ProjectRequest.findMany`, `ProjectTracking.findFirst`, `User.findMany`, `ProjectMilestone.findMany`, `ProjectTransaction.aggregate`. |
+
+### PATCH /api/admin/jobs/{id}
+
+| Field | Detail |
+|---|---|
+| Request body | `{ status: "OPEN" \| "CLOSED" }` |
+| Response | `200 { job: {id, status} }` |
+| Errors | 403 `Admin access required.`; 400 `Invalid job ID.` / `Invalid job update.`; 500 `Unable to update job.` (also for unknown id). |
+| Database | `ClientJob.update`. |
+| Side effects | None (the client and professionals are not notified). |
+
+### DELETE /api/admin/jobs/{id}
+
+| Field | Detail |
+|---|---|
+| Response | `200 {"ok": true}` |
+| Errors | 403; 400; 500 `Unable to delete job. It may have related records.` |
+| Database | `ClientJob.delete` (hard delete). |
+
+### GET /api/admin/verifications
+
+| Field | Detail |
+|---|---|
+| Response | `200 { verifications: [ProfessionalVerification (status PENDING\|REJECTED) + user{id,firstName,lastName,email,professionalCategory} + reviews: VerificationDocumentReview[]], personaVerifications: [PersonaVerification (adminStatus PENDING) + user{…}] }` |
+| Errors | 403; 500 `{error:"Unable to load verification records.", verifications: []}` |
+| Database | `ProfessionalVerification.findMany`, `PersonaVerification.findMany`, `VerificationDocumentReview.findMany`. |
+
+### PATCH /api/admin/verifications
+
+| Field | Detail |
+|---|---|
+| Request body | `{ userId: int>0, status: "APPROVED"\|"REJECTED", providerInquiryId?: string, documentKey?: "governmentIdUrl"\|"licenseUrl"\|"certificationsJson"\|"insuranceUrl"\|"selfieUrl" }` |
+| Modes (evaluated in order) | (1) `providerInquiryId` → `PersonaVerification.update {adminStatus, reviewedBy, reviewedAt}` → `200 {personaVerification}`. (2) `documentKey` → `VerificationDocumentReview.upsert` → `200 {review}`. (3) Otherwise → transaction `ProfessionalVerification.update {status}` + `User.update {isVerified: status==="APPROVED"}` → `200 {"ok": true}`. |
+| Errors | 403; 400 `Invalid verification decision.`; an unknown `providerInquiryId` or `userId` throws inside Prisma and is **not caught** (framework 500). |
+| Side effects | Mode 3 only: realtime `notification:new` to `user:<userId>` (type `VERIFICATION_UPDATE`, **not persisted** as a `UserNotification`, no email) and `admin:verifications-update` + `admin:overview-update`. Modes 1–2 have no side effects. The session is verified twice (`:72,86`). |
+
+### GET /api/admin/disputes/{id}
+
+| Field | Detail |
+|---|---|
+| Response | `200 { dispute: ProjectDispute, messages: ProjectDisputeMessage[] (asc), client{id,firstName,lastName,email}, professional{…}, job{id,title}\|null, project{id,status,progress,currentStage,startedAt,completedAt}\|null, milestones[{id,title,amount,status,dueDate}], milestoneSummary{completed,total}, financial{milestoneTotal, paidAmount, remainingAmount, approvedTotal, unpaidApproved} }` |
+| Errors | 403; 400 `Invalid dispute ID.`; 404 `Dispute not found.` |
+| Database | `ProjectDispute`, `ProjectDisputeMessage`, `ProjectTracking`, `User` ×2, `ClientJob`, `ProjectMilestone`, `ProjectTransaction.aggregate`. |
+
+### PATCH /api/admin/disputes/{id}
+
+| Field | Detail |
+|---|---|
+| Request body | `{ status: "OPEN" \| "RESOLVED" }` |
+| Response | `200 { dispute: {id, status, trackingId, clientId, professionalId} }` |
+| Errors | 403; 400 `Invalid dispute ID.` / `Invalid dispute update.`; 500 `Unable to update dispute.` (also for an unknown id). |
+| Database | `ProjectDispute.update`, `ProjectTracking.findUnique`, `ClientJob.findUnique`. |
+| Side effects | `notifyDisputeResolved` → notifications/realtime/email to the client and professional (`src/lib/marketplace-notifications.ts:337`). |
+
+### POST /api/admin/disputes/{id}/messages
+
+| Field | Detail |
+|---|---|
+| Request body | `{ recipient: "CLIENT" \| "PROFESSIONAL", message: string(trim, 2..4000) }` |
+| Response | `201 { message: ProjectDisputeMessage }` |
+| Errors | 403 `Admin access required.`; 400 `Invalid dispute message.`; 404 `Dispute not found.` |
+| Database | `ProjectDispute.findUnique`, `User.findUnique` (sender name), `ProjectDisputeMessage.create {senderRole:"ADMIN", recipientId}`. |
+| Side effects | `notifyDisputeMessage` to the recipient (`marketplace-notifications.ts:356`). |
+
+### POST /api/admin/finance/milestone-payout
+
+| Field | Detail |
+|---|---|
+| Purpose | Release a client-funded milestone from the admin (platform) wallet to the professional. |
+| Request body | `{ paymentId: int>0 }` |
+| Preconditions | `Payment.status === "FUNDED"`, `projectTrackingId` set, linked milestone `status === "AWAITING_ADMIN_APPROVAL"` (`:41-51`). |
+| Response | `200 { ok: true, paidToProfessional: number, platformEarnings: number, status: "COMPLETED" }` — amounts are computed from the milestone's **current** `amount`, not the funded `Payment` split `[VALIDATED 2026-09-17 · [V-42](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| Errors | 403; 400 `A valid payment is required.`; 409 `This payment is not waiting for admin payout approval.`; 409 `This payout is already being processed.` (optimistic claim); 402 `The admin wallet does not have enough balance for this payout.`; 500 `Payout could not be completed.` (the raw error message in development). |
+| Database | Interactive transaction (maxWait 10 s, timeout 30 s): `Payment.updateMany` FUNDED→PAYOUT_PROCESSING (claim); `releaseMilestoneToProfessional` (WalletTransaction debit from the first ADMIN wallet `PROFESSIONAL_PAYOUT`, credit professional `MILESTONE_EARNING`, idempotency keys `payment-<id>-admin-debit` / `-professional-credit`) (`src/lib/wallet-ledger.ts:140-172`); `Payment.update COMPLETED`; `ProjectMilestone.update APPROVED`; `ProjectTransaction.updateMany COMPLETED`; next UPCOMING milestone → IN_PROGRESS; `ProjectTracking.update`. |
+| Side effects | `notifyMilestonePayoutApproved` (client + professional); realtime `project:updated` to both users. |
+
+### POST /api/admin/finance/payouts
+
+| Field | Detail |
+|---|---|
+| Purpose | Pay a pending professional withdrawal by transferring from a captured Razorpay payment to the professional's Route linked account. |
+| Request body | `{ withdrawalId: int>0, paymentId: int>0 }` |
+| Preconditions | Razorpay Route enabled; withdrawal PENDING; payment COMPLETED, same professional, has `razorpayPaymentId`; professional has `razorpayAccountId`. |
+| Response | `200 { withdrawal: ProjectWithdrawal }` (status COMPLETED, `providerTransferId`). |
+| Errors | 403; 503 `Razorpay Route payouts are not enabled.`; 400 `Withdrawal and captured payment are required.`; 409 `Withdrawal is no longer pending.`; 400 `Select a captured Razorpay payment for this professional.`; 400 `Professional has not saved a Razorpay Route linked account.`; 502 `<Razorpay or wallet error message>`. |
+| External | `POST https://api.razorpay.com/v1/payments/{id}/transfers` (`src/lib/razorpay.ts:32-64`). |
+| Database | `ProjectWithdrawal.findUnique`, `Payment.findUnique`, `User.findUnique`; transaction `Wallet.update` (decrement balance and pendingBalance) + `ProjectWithdrawal.update COMPLETED`; on any error, transaction `ProjectWithdrawal.update FAILED` + `Wallet.updateMany` (release pendingBalance). |
+| Notes | No UI caller found (grep). The Razorpay transfer happens **before and outside** the DB transaction; if the DB step fails after a successful transfer, the withdrawal is recorded FAILED and the reservation is released although money moved. No idempotency key is sent to Razorpay. No notifications. |
+
+### PATCH /api/admin/finance/withdrawals/{id}
+
+| Field | Detail |
+|---|---|
+| Request body | `{ status: "COMPLETED" \| "FAILED", failureReason?: string(trim, ≤300) }` |
+| Response | `200 { withdrawal: ProjectWithdrawal }` |
+| Errors | 403; 400 `Invalid withdrawal id.` / `A valid status is required.`; 409 `Only pending withdrawal requests can be updated.`; 409 `Professional wallet reservation is no longer available.`; other errors are re-thrown (framework 500), for example `Professional wallet not found.` |
+| Database | Transaction: `Wallet.findUnique`; COMPLETED → `Wallet.updateMany` guarded decrement of balance + pendingBalance; FAILED → release pendingBalance; `ProjectWithdrawal.update {status, processedAt, failureReason}` (default `Rejected by admin.`). |
+| Notes | Manual settlement: no money movement is performed or recorded externally, no `WalletTransaction` ledger row is written, and the professional is not notified. |
+
+### GET /api/admin/services
+
+| Field | Detail |
+|---|---|
+| Request | Query `categoryId?` (positive integer). |
+| Response | With `categoryId`: `200 { category: ServiceCategory, descendants: ServiceCategory[] (itself + direct children), jobs: [{id,title,description,category,status,budgetMin,budgetMax,locationLabel,createdAt}] }` (jobs matched by category **name**). Without it: `200 { services: [ServiceCategory + jobCount] }`. |
+| Errors | 403; 404 `Category not found.` |
+| Database | `ServiceCategory.findUnique/findMany`, `ClientJob.findMany`, `ClientJob.groupBy(category)`. |
+
+### POST /api/admin/services
+
+| Field | Detail |
+|---|---|
+| Request body | `{ name: string(trim, 2..80), description?: string(≤300, default ""), iconName?: string(≤80, default "FolderTree"), segment?: "RESIDENTIAL"\|"COMMERCIAL"\|"INDUSTRIAL" (default RESIDENTIAL), parentId?: int>0 \| null (coerced, default null) }` |
+| Response | `201 { service: ServiceCategory }` — `slug` = slugified name; `sortOrder` = current count; `segment` is inherited from the parent when `parentId` is set. |
+| Errors | 403; 400 `Enter a valid service name.`; 409 `A service with this name already exists.` (slug collision); 400 `Choose a valid category as the parent.`; malformed JSON is not caught (`request.json()` without catch, `:77`) → framework 500; a duplicate `name` with a different slug → Prisma P2002 → 500. |
+| Database | `ServiceCategory.findUnique` (slug, parent), `ServiceCategory.count`, `ServiceCategory.create`. |
+
+### PATCH /api/admin/services?id={id}
+
+| Field | Detail |
+|---|---|
+| Request | Query `id` (integer). Body `{ name: string(trim, 2..80), description: string(trim, ≤300) }` (both required). |
+| Response | `200 { service: ServiceCategory }` |
+| Errors | 403; 400 `Enter a valid category.`; 404 `Category not found.`; duplicate name → uncaught 500. |
+| Database | `ServiceCategory.findUnique`, `ServiceCategory.update`. |
+| Notes | `slug` is not regenerated. Jobs reference categories by **name string** (`ClientJob.category`), so renaming disconnects existing jobs from the category's job counts. |
+
+### DELETE /api/admin/services?id={id}
+
+| Field | Detail |
+|---|---|
+| Response | Always `200 {"ok": true}` when the id is an integer — delete errors are swallowed (`:128`). |
+| Errors | 403; 400 `Invalid service.` |
+| Database | `ServiceCategory.delete`; child categories cascade (`onDelete: Cascade` on `parent`, `prisma/schema.prisma` model `ServiceCategory`). |
+
+### POST /api/admin/support
+
+| Field | Detail |
+|---|---|
+| Request body | `{ question: string(trim, 2..300), answer: string(trim, 2..4000), displayOrder?: int≥0 (coerced, default 0), category?: string(≤80) \| null }` |
+| Response | `201 { faq: Faq }` |
+| Errors | 403; 400 `Add both a question and an answer.` |
+| Database | `Faq.create`. |
+
+### PUT /api/admin/support?id={id}
+
+| Field | Detail |
+|---|---|
+| Request | Query `id`; body = any subset of the POST fields (`input.partial()`). |
+| Response | `200 { faq: Faq }` |
+| Errors | 403; 400 `Invalid FAQ item.` / `Invalid FAQ update.`; 500 `Unable to update FAQ item.` |
+| Database | `Faq.update`. |
+
+### DELETE /api/admin/support?id={id}
+
+| Field | Detail |
+|---|---|
+| Response | Always `200 {"ok": true}` for an integer id (errors swallowed). |
+| Errors | 403; 400 `Invalid FAQ item.` |
+| Database | `Faq.delete`. |
+| Notes | There is no admin endpoint to update `ContactRequest.status`. |
+
+### GET /api/admin/cms
+
+| Field | Detail |
+|---|---|
+| Authentication | `requireAdmin()` using `cookies()` from `next/headers`. `runtime = "nodejs"`, `dynamic = "force-dynamic"`. |
+| Request | Query `page?`: `home`, one of `marketingPageIds` (`src/lib/marketing-cms.ts`), or absent (about/default CMS). |
+| Response | `200` the JSON document from `readHomeContent()`, `readMarketingContent(page)`, or `readCmsContent()`. Shapes match the PUT schemas below. |
+| Errors | 401 `Administrator access required.` (both unauthenticated and non-admin); 500 `Unable to read CMS content.` |
+| Storage | File-based JSON in `data/cms-*.json` (`src/lib/cms-file.ts`, `home-cms-file.ts`, `marketing-cms.ts`). No database. |
+
+### PUT /api/admin/cms
+
+| Variant (selected by body) | Body schema | Response |
+|---|---|---|
+| Marketing page (`body.page` ∈ `marketingPageIds`) | `{ page, content: { hero: {label ≤120, title ≤240, description ≤5000}, items: [{id 1..120, title ≤240, description ≤5000, icon ≤40}] (1..50) } }` | `200` result of `writeMarketingContent` |
+| Home (`body.page === "home"`) | `{ page: "home", content: { hero: {eyebrow ≤160, title ≤240, description ≤5000, primaryCta ≤120, secondaryCta ≤120}, features: [{id, title, description, icon ≤40}] (1..50) } }` | `200` result of `writeHomeContent` |
+| Default (about) | `{ hero: {label ≤120, title ≤240, description ≤500000}, cards: [{id 1..120, title ≤240, description ≤5000, icon: "shield"\|"handshake"\|"award"\|"briefcase"\|"users"}] (1..50, unique ids), sectionOrder: ["hero"\|"features"] (length 2) }` | `200` result of `writeCmsContent` |
+
+Errors: 401 `Administrator access required.`; 400 `Invalid marketing page content.` / `Invalid Home content.` / `Content must be valid text.`; 500 `Unable to save CMS content.` HTML sanitisation happens in the writers/renderers `[NEEDS VALIDATION]` (`src/lib/sanitizeCmsHtml.ts` exists). Writing to the filesystem will not persist on read-only or ephemeral serverless filesystems `[NEEDS VALIDATION — not testable locally]`. Saves to statically prerendered marketing pages (e.g. `pricing`, `how-it-works`) return 200 and show in `GET /api/admin/cms`, but the public page does not change until the next build/deploy `[FOUND IN VALIDATION 2026-09-17 · [V-03b](../validation/LOCAL_VALIDATION_LOG.md)]`.
+
+### POST /api/admin/reports/{resource} (users | jobs | finance)
+
+| Field | Detail |
+|---|---|
+| Request body (all three) | `{ scope: "all" \| "selected", ids?: int>0[], pageSize?: "A4" \| "LETTER", orientation?: "portrait" \| "landscape" }` (`src/lib/reports/pdf/request.ts:4-9`). |
+| Response | `200` `application/pdf` with `Content-Disposition: attachment; filename="<resource>-report-<scope>.pdf"` (`src/lib/reports/pdf/render.ts:8-16`). |
+| users | `User.findMany` role CLIENT/PROFESSIONAL (filtered by `ids` when `selected`, else newest 500). Columns: Name, Email, Role, Active, Verified, Joined. |
+| jobs | `ClientJob.findMany` + user names (500 cap). Columns: Title, Client, Category, Status, Created. |
+| finance | `ProjectTransaction.findMany` + `ProjectWithdrawal.findMany` (each 500 cap; `ids` are applied to **both** tables, so ids from one table may match rows in the other) + `User.findMany`. Columns: Kind, Type, Amount, Status, Parties, Date. |
+| Errors | 403 `Admin access required.`; 400 `Invalid export request.`; 404 `Unknown report.` |
+| External | `@react-pdf/renderer` `renderToBuffer` (in process). |
+
+### GET /api/admin/sidebar-counts
+
+| Field | Detail |
+|---|---|
+| Request | Reads cookies `servio_admin_seen_verifications`, `servio_admin_seen_operations` (ISO dates). |
+| Response | `200 { newUsers: int (unread NEW_ACCOUNT notifications), verification: int (PENDING verifications updated after the seen date), jobs: int (OPEN disputes updated after the seen date), notifications: int (unread), messages: int (unread SocketMessage) }` |
+| Errors | 401 `Admin sign-in required.`; 403; 500 `Unable to load sidebar counts.` |
+| Database | `UserNotification.count` ×2, `ProfessionalVerification.count`, `ProjectDispute.count`, `SocketMessage.count`. |
+
+### PATCH /api/admin/sidebar-counts
+
+| Field | Detail |
+|---|---|
+| Request body | `{ section?: "users" \| "verifications" \| "verification" \| "operations" \| "jobs" \| "messages" }` (not validated by zod; unknown values are no-ops). |
+| Response | `200 {"success": true}`; for verifications/operations it sets the corresponding `servio_admin_seen_*` cookie (httpOnly, lax, 30 days). |
+| Database | `UserNotification.updateMany {readAt}` (types NEW_ACCOUNT; VERIFICATION_SUBMITTED/NEW_VERIFICATION; NEW_JOB/DISPUTE_RAISED/DISPUTE_UPDATED) or `SocketMessage.updateMany {readAt}` — scoped to the calling admin. |
+| Errors | 401; 403; 500 `Unable to update sidebar counts.` |
+
+### GET /api/admin/database-status
+
+| Field | Detail |
+|---|---|
+| Authentication | **Only when `NODE_ENV === "production"`**: cookie + ADMIN (no cookie → 401). Otherwise public: development server without cookie → 200 `{connected:true,…}` (`:9-24`) `[VALIDATED 2026-09-17 · [V-30](../validation/LOCAL_VALIDATION_LOG.md)]`. |
+| Response | `200 { connected: true, checkedAt: ISO, latencyMs: int }` or `503 { connected: false, checkedAt }`. |
+| Errors | Production: 401 `Unauthorized`; 403 `Admin access required`. |
+| Database | `$queryRaw SELECT 1`. |
+
+---
+
+## A.4 Profile endpoints — details
+
+### GET /api/profile
+
+| Field | Detail |
+|---|---|
+| Authentication | Local `getClient()` → `verifySession` + `role === "CLIENT"` + `User.isActive` re-check (`profile/route.ts:20-45`). |
+| Response | `200 { account: {firstName, lastName, email, phone, phoneVerifiedAt, avatarUrl, address}, profile: ClientProfile + savedLocations[] \| null }` |
+| Errors | 401 `Please sign in again.`; 403 `This profile is only available to clients.`; 401 `Account is unavailable.` |
+| Database | `User.findUnique`, `ClientProfile.findFirst`. |
+
+### POST /api/profile
+
+| Field | Detail |
+|---|---|
+| Authorization | CLIENT with `emailVerifiedAt` set. |
+| Request body | `{ firstName: string(trim, 1..80), lastName: string(trim, 1..80), companyName?: string(≤160) \| "", address: string(trim, 1..300), profilePhotoUrl?: absolute URL(≤2048) \| "", phone?: string(trim, 7..25) \| "" }` |
+| Response | `200 { success: true, primaryLocation: ClientSavedLocation }` |
+| Errors | 401/403 as GET; 403 `Please verify your email before completing your profile.`; 400 `<first zod message>` (for example `Enter a valid photo URL.`); 409 `This phone number is already registered.` |
+| Database | Transaction: `ClientProfile.create/update`, `User.update {firstName, lastName, companyName, address, avatarUrl, phone}`, `ClientSavedLocation.findFirst/updateMany/update/create` (maintain one primary location labelled `Primary Address` or matching the address). |
+| Notes | (1) The phone can be changed here **without OTP verification**, and `phoneVerifiedAt` is not reset. (2) `POST /api/profile/avatar` returns a **relative** URL (`/api/profile/avatar?key=…`), which `ClientProfilePage` puts into `profilePhotoUrl` and then posts here. `z.string().url()` rejects relative URLs, so saving the profile after an avatar upload fails with 400 `Enter a valid photo URL.` (`src/components/ClientProfilePage.tsx:112-137`); the same body with `profilePhotoUrl: ""` → 200 `[VALIDATED 2026-09-17 · [V-40](../validation/LOCAL_VALIDATION_LOG.md)]`. (3) Setting `profilePhotoUrl` to `""` clears `User.avatarUrl`. |
+
+### POST /api/profile/avatar
+
+| Field | Detail |
+|---|---|
+| Authorization | CLIENT or PROFESSIONAL (ADMIN rejected with 401). |
+| Request | `multipart/form-data` with `file`: `image/jpeg` \| `image/png` \| `image/webp`, 1 byte – 5 MB. |
+| Response | `200 { avatarUrl: "/api/profile/avatar?key=avatars/<userId>/<uuid>.<ext>" }` |
+| Errors | 401 `Please sign in again.`; 400 `Choose an image to upload.` / `Use a JPG, PNG, or WebP image.` / `Profile images must be smaller than 5 MB.` |
+| Storage | `storeProjectFile` (local filesystem or S3-compatible per `FILE_STORAGE_*`, `src/lib/project-file-storage.ts`). With `NODE_ENV=production` and `FILE_STORAGE_PROVIDER≠s3` every upload (avatars, project files, verification documents) → 500, logged "Local file storage is disabled in production. Configure S3-compatible storage." `[FOUND IN VALIDATION 2026-09-17 · [PROD-STORAGE](../validation/LOCAL_VALIDATION_LOG.md)]`. The MIME type is taken from the client-declared `file.type`; content is not sniffed. |
+| Database | `User.update {avatarUrl}`; for CLIENT, `ClientProfile.updateMany {profilePhotoUrl}`. |
+| Notes | Old avatar objects are not deleted. |
+
+### GET /api/profile/avatar?key=
+
+| Field | Detail |
+|---|---|
+| Authorization | Any session; `key` must start with `avatars/<session.userId>/` — **only the owner can read their avatar**. |
+| Response | `200` image bytes, `content-type` from the extension, `cache-control: private, max-age=3600`. |
+| Errors | 401 plain text `Unauthorized`; 404 (empty) for a foreign key or missing file; 500 (empty). |
+| Notes | Because `avatarUrl` is stored as this URL, other users (admins, clients viewing a professional, anonymous marketplace visitors) receive 401/404 when rendering someone else's avatar: owner 200; another signed-in user 404; admin 404; anonymous 401 `[VALIDATED 2026-09-17 · [V-40](../validation/LOCAL_VALIDATION_LOG.md)]`. An unused `User.findUnique` query runs first (`:63-66`). |
+
+### GET /api/profile/locations
+
+| Field | Detail |
+|---|---|
+| Authentication | `getClientSession()` (`src/lib/client-profile-auth.ts`) — session with role CLIENT, otherwise null. |
+| Response | `200 { locations: ClientSavedLocation[] }` (primary first, newest first). |
+| Errors | 401 `Client sign-in is required.`; 409 `Complete your client profile before adding locations.` |
+
+### POST /api/profile/locations
+
+| Field | Detail |
+|---|---|
+| Request body | `{ label: string(trim, 1..80), address: string(trim, 1..300) }` |
+| Response | `201 { location: ClientSavedLocation }` (`isPrimary` true when it is the first location). |
+| Errors | 401; 409 profile missing; 400 `Enter a label and address.`; 409 `You can save up to 3 locations.` |
+| Database | `ClientProfile.findFirst`, `ClientSavedLocation.count`, `ClientSavedLocation.create`. The count check and the create are not atomic. |
+
+### PATCH /api/profile/locations/{id}
+
+| Field | Detail |
+|---|---|
+| Authorization | CLIENT **and ownership**: location must belong to a `ClientProfile` whose `userId` is the caller (`[id]/route.ts:12-19`). |
+| Request body | `{ label: string(trim, 1..80), address: string(trim, 1..300), isPrimary?: boolean }` |
+| Response | `200 { location: ClientSavedLocation }` |
+| Errors | 404 `Saved location not found.` (also returned for no session, wrong role, invalid id, or not owned); 400 `Enter a label and address.` |
+| Database | Transaction: if `isPrimary`, `ClientSavedLocation.updateMany {isPrimary:false}` + `ClientProfile.update {address}`; `ClientSavedLocation.update`. Uniqueness of the primary row is enforced by a partial unique index (`prisma/schema.prisma` `ClientSavedLocation_one_primary_idx`). |
+| Notes | `isPrimary: false` on the current primary leaves the profile without a primary location. `User.address` is not synchronised. |
+
+### DELETE /api/profile/locations/{id}
+
+| Field | Detail |
+|---|---|
+| Response | `200 { success: true }` |
+| Errors | 404 `Saved location not found.` |
+| Database | Transaction: `ClientSavedLocation.delete`; if it was primary, promote the oldest remaining location. |
+
+---
+
+## A.5 Verification endpoints — details
+
+### POST /api/verification/persona/start
+
+| Field | Detail |
+|---|---|
+| Authorization | PROFESSIONAL (any other state → 401). |
+| Request | No body. |
+| Response | Persona disabled: `200 { enabled: false, message: "Document verification is not currently configured." }`. Enabled: `200 { enabled: true, inquiryId: string, status: string, hostedUrl: string \| null }`. |
+| Errors | 401 `Professional sign-in is required.`; 404 `User account not found.`; 502 `Unable to start document verification.` |
+| External | `POST https://api.withpersona.com/api/v1/inquiries` with `inquiry-template-id`, `reference-id=<userId>`, first/last name, and an `Idempotency-Key` (`src/lib/persona.ts:27-57`). Env: `PERSONA_ENABLED`, `PERSONA_API_KEY`, `PERSONA_TEMPLATE_ID`. |
+| Database | `User.findUnique`, `PersonaVerification.create`. |
+| Notes | Every call creates a new inquiry and row (no reuse of an open inquiry); there is no rate limit. |
+
+### GET /api/verification/persona/status
+
+| Field | Detail |
+|---|---|
+| Authorization | PROFESSIONAL. |
+| Response | `200 { enabled: boolean, providerStatus?: string, inquiryId?: string }` (latest row; fields omitted when there is none). |
+| Errors | 401 `Sign-in is required.` (no token or invalid session); 403 `Professional sign-in is required.` |
+| Database | `PersonaVerification.findFirst`. |
+| Notes | Does not call Persona (`getPersonaInquiry` is unused here); the status is only as fresh as the webhooks. |
+
+---
+
+## A.6 Webhook endpoints — details
+
+> **Blocking issue:** both webhook routes live under `/api/` and accept POST, so `proxy.ts` rejects them with 403 unless the provider sends an `Origin` header equal to the app origin or `APP_URL` (`proxy.ts:4-14,44-46`). Server-to-server webhooks normally send no `Origin`. Locally, POSTs to both webhooks without `Origin` → 403 "Request origin is not allowed."; with the `APP_URL` Origin they reach the handler (401 invalid signature) `[VALIDATED 2026-09-17 · [V-20](../validation/LOCAL_VALIDATION_LOG.md)]`. As written, provider deliveries are therefore very likely rejected before reaching these handlers `[NEEDS VALIDATION — not testable locally]` against a live delivery.
+
+### POST /api/webhooks/razorpay
+
+| Field | Detail |
+|---|---|
+| Authentication | HMAC-SHA256 of the raw body with `RAZORPAY_WEBHOOK_SECRET`, compared with `X-Razorpay-Signature` in constant time (`src/lib/razorpay.ts:120-126`). Webhooks must be enabled (`isRazorpayWebhookConfigured`). `runtime = "nodejs"`. |
+| Request body | `{ id: string, event: string, payload?: { payment?: { entity: { id?, order_id?, status?, error_description? (≤500), amount?: int≥0 (paise), currency?: 3 chars } } } }` (`:8-21`). |
+| Response | `200 {"received": true}`; `200 {"received": true, "processing": true}` when another worker claimed the event less than 5 minutes ago. |
+| Errors | 401 `Invalid Razorpay webhook.`; 400 `Invalid webhook payload.`; 500 `Unable to process Razorpay webhook.` (event marked FAILED with `lastError`; Razorpay retries). |
+| Idempotency | `RazorpayWebhookEvent.createMany(skipDuplicates)` stores the raw payload as RECEIVED; PROCESSED events short-circuit; stale PROCESSING claims (≥5 min) are reset; the transaction claims RECEIVED/FAILED → PROCESSING with `processingAttempts++`. |
+| Business logic | Matches `order_id` to `Payment.razorpayOrderId`, else `WalletTransaction.providerReference`. It throws if neither exists or if the payment id/amount/currency mismatch. `payment.captured`: Payment PENDING/FAILED → COMPLETED (`capturedAt`, `razorpayPaymentId`); wallet top-up PENDING → `Wallet.balance += amount` and COMPLETED. `payment.failed`: Payment PENDING → FAILED (`failureReason`); WalletTransaction PENDING → FAILED (`metadataJson.reason`). Other events are marked PROCESSED with no changes. |
+| Database | `RazorpayWebhookEvent` (createMany, findUnique, updateMany, update), `Payment` (findUnique, updateMany), `WalletTransaction` (findUnique, update, updateMany), `Wallet.update`. |
+| Notes | No timestamp/replay window. An event whose order is unknown is marked FAILED and retried by Razorpay. No notifications or realtime emits. The wallet top-up path increments the balance without a ledger idempotency key (it relies on the PENDING status check inside the transaction). |
+
+### POST /api/webhooks/persona
+
+| Field | Detail |
+|---|---|
+| Authentication | `Persona-Signature` header: `t=<unix>` within ±300 s and one or more `v1=<hex>` HMAC-SHA256 of `"<t>.<rawBody>"` with `PERSONA_WEBHOOK_SECRET`, compared in constant time; requires `PERSONA_ENABLED=true` (`src/lib/persona.ts:72-97`). |
+| Request body | Persona event: `{ data: { id: string, attributes: { name: string, "created-at"?: ISO, payload: { data: { id: string (inquiry id), attributes: { status: string } } } } } }` |
+| Response | `200 {"received": true}` (including duplicates, unknown inquiries, and stale events). |
+| Errors | 401 `Invalid Persona webhook.`; 400 `Invalid Persona webhook.` (missing ids/status); 500 `Unable to process Persona webhook.` (for example, malformed JSON, because `JSON.parse` runs after the signature check and throws). |
+| Database | `PersonaWebhookEvent.create` (unique `providerEventId`; P2002 = duplicate); `PersonaVerification.findUnique {providerInquiryId}`; `PersonaVerification.update {providerStatus, lastProviderEventAt, submittedAt (on "pending")}`. Events older than `lastProviderEventAt` are ignored. |
+| Notes | The event row is inserted **before** the verification update. If the update fails, the retry is treated as a duplicate and the status change is lost. There is no admin notification or realtime `admin:verifications-update`. |
+
+---
+
+## A.7 Public utilities and dashboard — details
+
+### POST /api/contact
+
+| Field | Detail |
+|---|---|
+| Authentication | None (still subject to the proxy Origin check). |
+| Request body | `{ name: string(trim, 2..120), email: email(≤250), subject: string(trim, 2..180), message: string(trim, 10..4000) }` |
+| Response | `200 {"ok": true}` |
+| Errors | 400 `Please complete all fields.`; malformed JSON → uncaught exception from `request.json()` → framework 500. |
+| Database | `ContactRequest.create` (status defaults to `OPEN`). |
+| Rate limiting / abuse | None — no rate limit, CAPTCHA, or honeypot. |
+| Side effects | None (admins are not notified; requests are visible only via `GET /api/admin/data/support`). |
+
+### GET /api/geocode
+
+| Field | Detail |
+|---|---|
+| Authentication | None. |
+| Request | Query `q?` (forward geocoding) or `lat` + `lon` (reverse). |
+| Response | `200 { results: [{ address, lat, lon, state \| null, city \| null, district \| null }] }`; `200 { results: [] }` when no query is given. |
+| Errors | 429 `Please wait before searching again.` (`geocode:<ip>`, 20 per minute); 503 `Address search is not configured on the server.`; 503 `Address search timed out. Please try again or enter the address manually.` (8 s abort); 503 `Address search is unavailable. You can still enter an address manually.` |
+| External | `https://maps.googleapis.com/maps/api/geocode/json` with `GOOGLE_MAPS_SERVER_KEY`, falling back to `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (`:56-57`). |
+| Database | None. |
+| Notes | `lat`/`lon` are not numerically validated. The endpoint is an open, unauthenticated proxy that consumes the server's Google quota (limited only by the spoofable XFF key). |
+
+### GET /api/search
+
+| Field | Detail |
+|---|---|
+| Authentication | None. |
+| Request | Query `q` (trimmed; empty → `{ jobs: [] }`). |
+| Response | `200 { jobs: [{ id, title, category, locationLabel }] }` (≤8, newest first). |
+| Filter | `status = OPEN`, (`jobDate` null or ≤ now), (`deadline` null or ≥ now), and case-insensitive `contains` on title, description, or category. |
+| Errors | None handled (DB failures → framework 500). |
+| Database | `ClientJob.findMany`. |
+| Notes | Jobs with a future `jobDate` are excluded from search. No rate limit. Used by `src/components/AppHeader.tsx`. |
+
+### GET /api/dashboard
+
+| Field | Detail |
+|---|---|
+| Authorization | CLIENT. |
+| Response | `200 { user: {firstName, averageRating, phoneVerifiedAt}, jobs: ClientJob[≤4] (+_count.favoriteJobs, status "RUNNING" if a non-completed ProjectTracking exists), projectSummary: {total, open, running, drafts}, proposals: [ProjectRequest (origin PROFESSIONAL_PROPOSAL, ≤4) + professionalName], hireRequests: [ProjectRequest (origin CLIENT_HIRE, ≤4) + professionalName], notifications: UserNotification[] (not cleared, excluding PROPOSAL_SENT/PROPOSAL_UPDATE_SENT/HIRE_REQUEST_SENT, unbounded), spent: number (COMPLETED ProjectTransaction.amount this calendar month) }` |
+| Errors | 401 `Unauthorized`; 403 `Client access required`; 500 `Unable to load dashboard.` |
+| Database | `User.findUniqueOrThrow`, `ClientJob.findMany` (all of the client's jobs), `ProjectRequest.findMany` ×2, `UserNotification.findMany`, `ProjectTransaction.aggregate`, `ProjectTracking.findMany`, `User.findMany`. |
+| Notes | "This month" uses the server's local time zone. |
+
+---
+
+## A.8 Findings (for known-issues register)
+
+| ID | Severity | Title | Evidence | Impact |
+|---|---|---|---|---|
+| F1-01 | Critical | Proxy Origin check blocks provider webhooks | `proxy.ts:4-14,44-46`; `app/api/webhooks/razorpay/route.ts`, `app/api/webhooks/persona/route.ts` | Razorpay/Persona POSTs without `Origin` get 403, so captured payments, wallet top-ups, and KYC statuses are never recorded by webhook (403 without Origin confirmed locally `[VALIDATED 2026-09-17 · [V-20](../validation/LOCAL_VALIDATION_LOG.md)]`; live delivery `[NEEDS VALIDATION — not testable locally]`) |
+| F1-02 | High | Google OAuth links to any existing account by email, including ADMIN, and skips `isActive` | `app/api/auth/[action]/route.ts:169-192,207-212` | A Google account with an admin's email obtains an ADMIN session, bypassing the admin username/password flow; inactive users still get a Session row |
+| F1-03 | High | Session JWT returned in the login JSON body | `app/api/auth/[action]/route.ts:519-530` | Defeats httpOnly protection; any XSS can exfiltrate a 7-day session `[VALIDATED 2026-09-17 · [V-29](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| F1-04 | High | Razorpay Route transfer performed outside the DB transaction; failures after transfer recorded as FAILED | `app/api/admin/finance/payouts/route.ts:58-104` | Money can leave the platform while the ledger shows a failed withdrawal and releases the reservation (double payout risk) |
+| F1-05 | Medium | `login-phone-password` issues a session on the 403 unverified-email response | `app/api/auth/[action]/route.ts:637-651` | Unverified users get a valid session, unlike `login`/`login-phone` `[VALIDATED 2026-09-17 · [V-23](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| F1-06 | Medium | Open-redirect candidate in Google OAuth `next` | `app/api/auth/[action]/route.ts:199-207` | `next=/\evil.example` passes the `/` + not `//` check and resolves to `http://evil.example/`; callback not run end-to-end `[PARTIALLY VALIDATED 2026-09-17 · [V-24](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| F1-07 | Medium | `/api/admin/database-status` is unauthenticated outside production | `app/api/admin/database-status/route.ts:9-24` | Preview/staging deployments with `NODE_ENV≠production` expose DB health publicly (dev 200 / prod 401 unauthenticated) `[VALIDATED 2026-09-17 · [V-30](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| F1-08 | Medium | Rate limiting is in-memory, per-process, keyed on spoofable `X-Forwarded-For` | `src/lib/rate-limit.ts:14-48`; `app/api/auth/[action]/route.ts:42-43`; `app/api/admin/login/route.ts:13-15` | Brute-force limits are bypassable by rotating the header or scaling instances (rotation bypass `[VALIDATED 2026-09-17 · [V-26](../validation/LOCAL_VALIDATION_LOG.md)]`) |
+| F1-09 | Medium | No audit logging for any admin mutation | grep `recordAudit` (only 2 professional routes) | User deactivation/deletion, payouts, verification decisions, and CMS edits are untraceable |
+| F1-10 | Medium | Admin can delete/deactivate any admin, including themselves; hard deletes | `app/api/admin/users/[id]/route.ts:6-57` | Lock-out risk; loss of history |
+| F1-11 | Medium | Account enumeration | `check-availability` `:340-364`; `send-phone-login-otp` 404 `:547-548` | Attackers can confirm registered emails and phones (`send-phone-login-otp` unknown phone 404; `send-phone-otp` registered phone 409) `[VALIDATED 2026-09-17 · [V-22](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| F1-12 | Medium | Phone can be changed via `POST /api/profile` without OTP | `app/api/profile/route.ts:85-121` | Bypasses the verified-phone flow; `phoneVerifiedAt` stays set for an unverified number |
+| F1-13 | Medium | Avatar URL is owner-only but stored as the public `avatarUrl` | `app/api/profile/avatar/route.ts:49,68-69` | Other viewers cannot load avatars (other user/admin 404, anonymous 401) `[VALIDATED 2026-09-17 · [V-40](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| F1-14 | Medium | Profile save fails after avatar upload (relative URL vs `z.string().url()`) | `app/api/profile/route.ts:11-16`; `src/components/ClientProfilePage.tsx:112-137` | Clients cannot save their profile after uploading a photo (400 `Enter a valid photo URL.`) `[VALIDATED 2026-09-17 · [V-40](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| F1-15 | Medium | `update-email` commits before sending mail; SMTP failure returns 500 after the change | `app/api/auth/[action]/route.ts:686-715` | Misleading error; the email is changed and unverified |
+| F1-16 | Low | `/api/contact` has no rate limit/CAPTCHA and throws 500 on malformed JSON | `app/api/contact/route.ts:11-17` | Spam; noisy errors |
+| F1-17 | Low | Unhandled Prisma errors → framework 500 (verifications PATCH, services POST/PATCH, withdrawals PATCH, search) | `app/api/admin/verifications/route.ts:88-122`; `app/api/admin/services/route.ts:77,98,110` | Inconsistent error bodies |
+| F1-18 | Low | DELETE services/support always return `{ok:true}` | `app/api/admin/services/route.ts:128`; `app/api/admin/support/route.ts:55` | Silent failures; category delete cascades to children |
+| F1-19 | Low | Inconsistent 401/403 semantics across admin helpers (cms returns 401 for non-admin; others 403 for no session) | §A.3 table | Clients cannot rely on status codes |
+| F1-20 | Low | `apiSuccess`/`apiError` envelope unused; all endpoints return ad-hoc shapes | `src/lib/api-response.ts`; grep | Documented contract (`project-docs/docs/API_CONTRACT.md`) not implemented |
+| F1-21 | Low | GET `/api/admin/data/finance` writes (creates admin wallets) | `app/api/admin/data/[resource]/route.ts:230`; `src/lib/wallet-ledger.ts:24-33` | Side effects on a safe method |
+| F1-22 | Low | Unbounded admin lists (`data/users`, `data/jobs`, dashboard notifications) | `…/data/[resource]/route.ts:82-105`; `app/api/dashboard/route.ts:39-48` | Performance degradation with growth |
+| F1-23 | Low | Global auth limiter also throttles `logout`, `verify-email`, and `reset-password` at 5/min per IP | `app/api/auth/[action]/route.ts:238-243` | Shared NAT users can be blocked from signing out |
+| F1-24 | Low | Dead or uncalled endpoints: `login-phone-password`, `POST /api/admin/finance/payouts` | grep over `src/`, `app/` | Untested attack surface |
+| F1-25 | Low | Email case handling differs between register and login | `app/api/auth/[action]/route.ts:391-411,449-450` | Mixed-case registrations can never log in by email/password `[VALIDATED 2026-09-17 · [V-21](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| F1-26 | Low | Admin verification decision notification is realtime-only (not persisted, no email) | `app/api/admin/verifications/route.ts:123-133` | Offline professionals miss the decision |
+| F1-27 | Low | Persona webhook records the event before applying it | `src/lib/persona.ts:113-143` | A failed update is never retried |
+| F1-28 | Info | Development OTP a fixed development code fixed outside production; `DEV_PHONE_OTP` usable in production when the provider is not `twilio` | `src/lib/phone-otp-provider.ts:25-32,78-88` | Misconfiguration allows a known OTP in production |
+
+---
+
+## A.9 Comparison with existing API documentation
+
+### A.9.1 Root `openapi.yaml` (69 lines)
+
+| # | Discrepancy | Code evidence |
+|---|---|---|
+| 1 | Covers only `/auth/me` in Part A's scope; the other 68 endpoints here are absent. | §A.1 |
+| 2 | `components.schemas.Error` = `{error:{code,message,details}}`; every endpoint here returns `{error: "<string>"}`. | e.g. `app/api/auth/[action]/route.ts:44` |
+| 3 | `/auth/me` does not document `Authorization: Bearer` support or the response fields. | `app/api/auth/me/route.ts:6-43` |
+| 4 | Title `Servio API` (old name; brand is Klick-Pro). No security schemes defined. | — |
+| 5 | Lists `/client/proposals/{id}`, which has no route file (confirmed in Part B). | Glob `app/api/**` |
+
+### A.9.2 `project-docs/docs/openapi.yaml` (209 lines)
+
+| # | Discrepancy | Code evidence |
+|---|---|---|
+| 1 | Only `/api/auth/me` from Part A. | — |
+| 2 | `AuthUser` lacks `email` and `emailVerifiedAt`, which the handler returns. | `app/api/auth/me/route.ts:33-43` |
+| 3 | `ErrorResponse` envelope is not used by any endpoint here. | §A.0.2 |
+| 4 | Uses `nullable: true` (OpenAPI 3.0 keyword) inside a document declaring `openapi: 3.1.0`. | file lines 118, 127, 130, 133, 142, 146, 209 |
+
+### A.9.3 `project-docs/docs/API_CONTRACT.md`
+
+| # | Claim | Reality |
+|---|---|---|
+| 1 | "New and migrated endpoints use `{ "data": {} }`" and a coded error envelope | No endpoint in Part A uses it; `apiSuccess`/`apiError` have zero call sites. |
+| 2 | "The browser must call versioned URLs under `/api/v1`" | Several UI callers use unversioned paths (`/api/profile/avatar`, `/api/admin/finance/*`, `/api/admin/reports/*`). |
+| 3 | Access group `/api/v1/website/*` for the public website | No `app/api/website` route exists. |
+| 4 | Administration = "Administrator only" | `/api/admin/database-status` is public outside production; `/api/admin/login` is public by necessity. |
+| 5 | "add an automated test for its permission boundary" | No tests exist in the repository (brief Phase-1 inventory). |
+
+### A.9.4 `docs/_archive/2026-09-14-flat-docs/api-reference.md` (earlier AI session)
+
+| # | Claim | Reality |
+|---|---|---|
+| 1 | `api-response.ts` "has unit tests in `src/lib/api-response.test.ts`" | File does not exist. |
+| 2 | Rate limiter is a "sliding window", "used in 3 places, all on authentication paths" | Fixed window (`src/lib/rate-limit.ts:36-48`); 7 `rateLimit(` call sites, including `/api/geocode` (non-auth), plus the global limiter on every `/api/auth/*` POST action. |
+| 3 | `enqueueBackgroundJob` has 3 call sites | 7 repo-wide; 4 in `app/api/auth/[action]/route.ts` alone. |
+| 4 | "Registration and email login deliberately do not issue a normal session until `emailVerifiedAt` is set" | True for `register`, `login`, `login-phone`; false for `login-phone-password` (sets the cookie on 403), and `verify-email`/Google OAuth sign the user in. |
+| 5 | Line counts: `/api/auth/[action]` 882, `/api/admin/data/[resource]` 267 | 880 and 398. |
+| 6 | `{ ok: true }` shape attributed to `/api/contact` only | Also `admin/login`, `admin/jobs/{id}` DELETE, `admin/users/{id}` DELETE, `admin/services` DELETE, `admin/support` DELETE, `admin/finance/milestone-payout`. |
+| 7 | CSRF section says "Native mobile clients must send one [Origin]" | Omits that the same rule blocks third-party webhooks (F1-01). |
+| 8 | Webhook section implies working idempotent processing | Processing logic is correct in isolation but is likely unreachable (F1-01). |
+| 9 | Accurate and reusable: 17 auth actions list, admin route/method table, webhook raw-body note, Persona `lastProviderEventAt`, `/api/auth/me` precedence. | Confirmed. |
+
+### A.9.5 Relationship to existing docs
+
+- `openapi.yaml` (root) and `project-docs/docs/openapi.yaml`: **Obsolete / partial** — superseded by `docs/05-api/openapi.yaml` once merged.
+- `project-docs/docs/API_CONTRACT.md`: **Intended (Planned/inferred) contract**, not implemented; keep only as a target standard.
+- `docs/_archive/2026-09-14-flat-docs/api-reference.md`: **Partially accurate** — superseded by `docs/05-api/api-specification.md`; corrections in §A.9.4.
+
+---
+
+# Part B — Client, Professional, Portal, Marketplace, Payments, Wallet, v1, Realtime
+
+## B.0 Scope and coverage
+
+| Domain | Route files | Method handlers | Logical endpoints (dispatch expanded) |
+|---|---|---|---|
+| Client (`app/api/client/**`) | 8 | 11 | 13 (`PATCH /api/client/project-requests/{id}` has 3 actions) |
+| Professional (`app/api/professional/**`) | 10 | 15 | 17 (`PATCH /api/professional/project-requests/{id}` has 3 actions) |
+| Portal (`app/api/portal/**`) | 6 | 8 | 30 (6 GET resources, 18 project actions, invoices PDF) |
+| Marketplace (`app/api/marketplace/**`) | 2 | 2 | 7 (6 `[resource]` values + static `jobs`) |
+| Payments (`app/api/payments/**`) | 3 | 3 | 3 |
+| Wallet (`app/api/wallet/**`) | 5 | 6 | 6 |
+| v1 physical routes (`app/api/v1/**`) | 2 | 4 | 4 |
+| **Total** | **36** | **49** | **80** |
+
+Coverage check: `find app/api -name 'route.*'` returns 66 files (65 `route.ts` + 1 `route.tsx`). Part A covers 30 of them (auth, admin, profile, verification, webhooks, contact, geocode, search, dashboard). Part B covers the other 36. No route file is left uncovered. No `"use server"` server actions exist.
+
+Realtime: 1 Socket.IO server (`server.mjs`), 10 custom server-to-client events, 0 custom client-to-server events, 3 rooms.
+
+## B.1 Cross-cutting behaviour for every endpoint in Part B
+
+### B.1.1 Request pipeline
+
+| Step | Implementation | Evidence |
+|---|---|---|
+| 1. Custom HTTP server | `server.mjs` passes every request to the Next.js handler. Socket.IO takes the `/api/realtime` path. | `server.mjs:28-35` |
+| 2. Proxy (Next 16 `proxy.ts`) | For `POST`/`PUT`/`PATCH`/`DELETE` under `/api/`, the `Origin` header must equal the request origin or `APP_URL`. Otherwise the proxy returns `403 {"error":"Request origin is not allowed."}`. A missing `Origin` header also gets a 403 (also for `Authorization: Bearer` POSTs); a same-origin request that is not exactly `APP_URL` also gets 403 `[VALIDATED 2026-09-17 · [V-20](../validation/LOCAL_VALIDATION_LOG.md)]`. The proxy sets `x-request-id` (Socket.IO `/api/realtime` bypasses the proxy: no `x-request-id`, and a POST without Origin gets engine.io's 400, not 403 `[VALIDATED 2026-09-17 · [V-12](../validation/LOCAL_VALIDATION_LOG.md)]`). It does **not** enforce authentication, roles or email verification for `/api/*`. | `proxy.ts:3-14`, `proxy.ts:43-46`, `proxy.ts:86-99` |
+| 3. Rewrite | `/api/v1/:path*` is rewritten to `/api/:path*` (afterFiles). See §B.9. | `next.config.ts:20-26` |
+| 4. Route handler auth | Each handler reads the `servio_session` cookie and calls `verifySession()`. That function verifies the HS256 JWT, loads the `Session` row (checking revoked and expired) and checks that the user `isActive`. It returns `{userId, role, emailVerifiedAt}` with the **role taken from the DB**. | `src/lib/auth.ts:23-45` |
+| 5. Validation | Mostly zod `safeParse`. Some handlers parse manually (`v1/messages`, `project-files`, `payment-details`). | per endpoint |
+| 6. Data | Prisma through `db` (`@/lib/db`). Transactions are used only where noted. | per endpoint |
+| 7. Side effects | `notifyUsers` / `notifyRole` (`src/lib/marketplace-notifications.ts`) write `UserNotification` rows, emit `notification:new` over Socket.IO and send SMTP email (`sendNotificationEmail`) to users with `emailNotificationsEnabled`. Failures are logged and swallowed. | `marketplace-notifications.ts:94-141`, `:275-304` |
+| 8. Response | Every handler here uses raw `NextResponse.json`. **`apiSuccess`/`apiError` (`src/lib/api-response.ts`) are used by no route.** | `grep apiSuccess` finds only the definition |
+
+### B.1.2 Authentication helper variants used in Part B
+
+All variants wrap `verifySession`. They differ in failure status and in whether they re-check `isActive`. That re-check is redundant because `verifySession` already does it.
+
+| Local helper | Returns | Role enforced | Files |
+|---|---|---|---|
+| `getSession(request)` | session or null | none | `client/account/route.ts:5`, `v1/messages/route.ts:8` |
+| `getClient(request)` | `{id,isActive}` user or null (**also accepts `Authorization: Bearer`**) | CLIENT | `client/jobs/route.ts:49-65` |
+| `getClient(request)` (cookie only) | user or null | CLIENT | `client/jobs/export/route.ts:9`, `client/payments/export/route.ts:10` |
+| `client(request)` | userId or null | CLIENT | `client/jobs/[id]/route.ts:49-59` |
+| `getClientId` | userId or null | CLIENT | `client/project-requests/route.ts:17` |
+| `getProfessional` | user or null | PROFESSIONAL | `professional/earnings/export:10`, `professional/jobs/export:9` |
+| `professionalIdFrom` / `professionalId` / `professional` | userId / session | PROFESSIONAL | `favorite-jobs/[jobId]:5`, `profile:23`, `verification:15`, `razorpay-account:14` |
+| `sessionFromRequest` | session or null | none (checked per resource) | `portal/[resource]/route.ts:15-23` |
+| `sessionFrom` | session or null | none | `wallet/route.ts:8` |
+| inline `verifySession(token)` | session | inline | `project-actions`, `project-files`, `payment-details`, `proposals`, `project-requests/[id]`, `verification/upload`, `verification/documents`, `wallet/deposit/*`, `wallet/milestone`, `client/verification` |
+
+**Bearer tokens:** only `GET/POST /api/client/jobs` accept `Authorization: Bearer <same JWT>`. Mutating Bearer calls still need an acceptable `Origin` header because of the proxy.
+
+### B.1.3 Common error conventions (implemented)
+
+- Error body is `{ "error": "<sentence>" }`. **Exception:** `GET /api/v1/professionals` uses `{ "error": { "code", "message", "details" } }`.
+- `404` is often used to hide records the caller may not access (for example `client/jobs/[id]`, `project-files/[fileId]`).
+- Some 500 handlers echo `error.message` to the caller: `client/jobs/route.ts:177,245`, `client/jobs/[id]/route.ts:242,336,358`, `professional/profile/route.ts:64,122`.
+- Unparseable JSON returns 400 through `.catch(() => null)` in most handlers. It gives an **unhandled 500** in `portal/project-actions` (`:136`) and `v1/messages` PATCH/POST (`:212`, `:278`).
+
+### B.1.4 Rate limiting
+
+**None.** No endpoint in Part B calls `rateLimit()` (`src/lib/rate-limit.ts` is used only in auth, admin login and geocode). This includes message sending, proposal sending, file uploads and Razorpay order creation.
+
+### B.1.5 Email verification
+
+API handlers here do not require `emailVerifiedAt`. `requireVerifiedUser` is never called, and the proxy's `/verify` redirect skips `/api/*` (`proxy.ts:87`). An authenticated but unverified user can call every endpoint in Part B. Unverified users **can** obtain a session via `login-phone-password` (403 + cookie) and `POST /api/client/jobs` then returns 201; `register`, `login` and `login-phone` issue no session to them `[VALIDATED 2026-09-17 · [V-22](../validation/LOCAL_VALIDATION_LOG.md), [V-23](../validation/LOCAL_VALIDATION_LOG.md)]`.
+
+---
+
+## B.2 Summary inventory
+
+Auth column: `cookie` = `servio_session` via `verifySession`; `cookie|bearer` = cookie or Bearer JWT; `public` = none.
+
+| # | Method | Path | Auth | Role | Purpose | Source |
+|---|---|---|---|---|---|---|
+| C1 | GET | /api/client/account | cookie | CLIENT | Client account, profile, 3 saved locations, job counts | `app/api/client/account/route.ts:15` |
+| C2 | GET | /api/client/jobs | cookie\|bearer | CLIENT | List own jobs with derived RUNNING/CLOSED status and proposal counts | `app/api/client/jobs/route.ts:129` |
+| C3 | POST | /api/client/jobs | cookie\|bearer | CLIENT | Create a draft or published job with milestones | `app/api/client/jobs/route.ts:183` |
+| C4 | GET | /api/client/jobs/{id} | cookie | CLIENT (owner) | Job detail with proposals, hire requests and negotiation history | `app/api/client/jobs/[id]/route.ts:127` |
+| C5 | PATCH | /api/client/jobs/{id} | cookie | CLIENT (owner) | Edit or publish a job, or change status only (close/reopen) | `app/api/client/jobs/[id]/route.ts:247` |
+| C6 | DELETE | /api/client/jobs/{id} | cookie | CLIENT (owner) | Delete a DRAFT job | `app/api/client/jobs/[id]/route.ts:341` |
+| C7 | POST | /api/client/jobs/export | cookie | CLIENT | PDF export of own jobs | `app/api/client/jobs/export/route.ts:67` |
+| C8 | POST | /api/client/payments/export | cookie | CLIENT | PDF export of own project transactions | `app/api/client/payments/export/route.ts:54` |
+| C9 | POST | /api/client/project-requests | cookie | CLIENT (job owner) | Send a hire request (CLIENT_HIRE) to a professional | `app/api/client/project-requests/route.ts:28` |
+| C10a | PATCH | /api/client/project-requests/{id} `action=accept` | cookie | CLIENT (request client) | Accept a pending request, which closes the job and creates the project | `app/api/client/project-requests/[id]/route.ts:14`, `src/lib/project-request-actions.ts:96` |
+| C10b | PATCH | /api/client/project-requests/{id} `action=reject` | cookie | CLIENT | Reject a pending request | `project-request-actions.ts:43` |
+| C10c | PATCH | /api/client/project-requests/{id} `action=counter` | cookie | CLIENT | Counter-offer (new price, timeline, message) | `project-request-actions.ts:57` |
+| C11 | GET | /api/client/verification | cookie | CLIENT | Email/phone verification state | `app/api/client/verification/route.ts:4` |
+| P1 | POST | /api/professional/earnings/export | cookie | PROFESSIONAL | PDF of earnings and payouts | `app/api/professional/earnings/export/route.ts:54` |
+| P2 | POST | /api/professional/favorite-jobs/{jobId} | cookie | PROFESSIONAL | Save an open job | `app/api/professional/favorite-jobs/[jobId]/route.ts:21` |
+| P3 | DELETE | /api/professional/favorite-jobs/{jobId} | cookie | PROFESSIONAL | Unsave a job | `app/api/professional/favorite-jobs/[jobId]/route.ts:50` |
+| P4 | POST | /api/professional/jobs/export | cookie | PROFESSIONAL | PDF of running projects | `app/api/professional/jobs/export/route.ts:78` |
+| P5 | GET | /api/professional/profile | cookie | PROFESSIONAL | Professional profile fields | `app/api/professional/profile/route.ts:34` |
+| P6 | POST | /api/professional/profile | cookie | PROFESSIONAL | Save profile (category, geo, rate, skills) | `app/api/professional/profile/route.ts:70` |
+| P7a-c | PATCH | /api/professional/project-requests/{id} `action=accept\|reject\|counter` | cookie | PROFESSIONAL (request professional) | Same shared logic as C10, acting as professional | `app/api/professional/project-requests/[id]/route.ts:14` |
+| P8 | GET | /api/professional/proposals?jobId= | cookie | PROFESSIONAL | Own latest proposal for a job plus latest negotiation | `app/api/professional/proposals/route.ts:17` |
+| P9 | POST | /api/professional/proposals | cookie | PROFESSIONAL | Create a proposal, or update the pending one | `app/api/professional/proposals/route.ts:55` |
+| P10 | GET | /api/professional/razorpay-account | cookie | PROFESSIONAL | Read the linked Razorpay account id | `app/api/professional/razorpay-account/route.ts:25` |
+| P11 | PUT | /api/professional/razorpay-account | cookie | PROFESSIONAL | Set or clear the Razorpay linked account id | `app/api/professional/razorpay-account/route.ts:36` |
+| P12 | GET | /api/professional/verification | cookie | PROFESSIONAL | Verification record plus document reviews | `app/api/professional/verification/route.ts:26` |
+| P13 | PUT | /api/professional/verification | cookie | PROFESSIONAL | Submit or update verification document URLs | `app/api/professional/verification/route.ts:37` |
+| P14 | POST | /api/professional/verification/upload | cookie | PROFESSIONAL | Upload one verification document (multipart) | `app/api/professional/verification/upload/route.ts:16` |
+| P15 | GET | /api/professional/verification/documents/{storageKey...} | cookie | ADMIN, or PROFESSIONAL for own prefix | Stream a verification document | `app/api/professional/verification/documents/[...storageKey]/route.ts:18` |
+| R1 | GET | /api/portal/notifications | cookie | any | Notifications enriched with project/job titles and names | `app/api/portal/[resource]/route.ts:40` |
+| R2 | PATCH | /api/portal/notifications | cookie | any (own rows) | Mark read or unread (single, many, all) | `app/api/portal/[resource]/route.ts:938` |
+| R3 | DELETE | /api/portal/notifications | cookie | any (own rows) | Soft-clear notifications | `app/api/portal/[resource]/route.ts:981` |
+| R4 | GET | /api/portal/earnings | cookie | CLIENT or PROFESSIONAL | Last 50 project transactions plus invoice payment id | `app/api/portal/[resource]/route.ts:299` |
+| R5 | GET | /api/portal/messages | cookie | any | Last 50 legacy `MessageConversation` rows | `app/api/portal/[resource]/route.ts:333` |
+| R6 | GET | /api/portal/reviews | cookie | PROFESSIONAL | Reviews received | `app/api/portal/[resource]/route.ts:342` |
+| R7 | GET | /api/portal/professional-jobs | cookie | PROFESSIONAL | Professional dashboard (open/saved jobs, proposals, offers, projects) | `app/api/portal/[resource]/route.ts:377` |
+| R8 | GET | /api/portal/project?id=\|jobId= | cookie | party or ADMIN | Full project workspace data | `app/api/portal/[resource]/route.ts:798` |
+| R9 | GET | /api/portal/{other} | cookie | - | Unknown resource returns 404 | `app/api/portal/[resource]/route.ts:921` |
+| R10 | GET | /api/portal/payment-details/{paymentId} | cookie | payment party or ADMIN | Payment breakdown | `app/api/portal/payment-details/[paymentId]/route.ts:5` |
+| R11 | POST | /api/portal/project-files | cookie | PROFESSIONAL (project professional) | Upload 1-10 work files (multipart) | `app/api/portal/project-files/route.ts:15` |
+| R12 | GET | /api/portal/project-files/{fileId} | cookie | project party | Stream a work file | `app/api/portal/project-files/[fileId]/route.ts:9` |
+| R13 | GET | /api/portal/invoices/{paymentId} | cookie | payment client/professional or ADMIN | Invoice PDF for a COMPLETED payment (creates `Invoice` row on first request) | `app/api/portal/invoices/[paymentId]/route.tsx:7` |
+| A1 | POST | /api/portal/project-actions `create-milestone` | cookie | CLIENT (party) | Add one milestone within budget | `app/api/portal/project-actions/route.ts:293` |
+| A2 | POST | … `create-milestones` | cookie | CLIENT | Add 1-50 milestones | `:352` |
+| A3 | POST | … `update-milestone` | cookie | CLIENT | Edit a non-approved milestone | `:415` |
+| A4 | POST | … `delete-milestone` | cookie | CLIENT | Delete a milestone that is not APPROVED or AWAITING_CLIENT_REVIEW | `:467` |
+| A5 | POST | … `start-work` | cookie | CLIENT | READY_TO_START to IN_PROGRESS | `:247` |
+| A6 | POST | … `update-progress` | cookie | PROFESSIONAL | Set progress and stage (forces IN_PROGRESS) | `:281` |
+| A7 | POST | … `upload-work` | cookie | PROFESSIONAL | Record a work upload from stored files | `:485` |
+| A8 | POST | … `submit-milestone` | cookie | PROFESSIONAL | Milestone to AWAITING_CLIENT_REVIEW | `:520` |
+| A9 | POST | … `request-revision` | cookie | CLIENT | Milestone to REVISION_REQUESTED | `:568` |
+| A10 | POST | … `approve-milestone` | cookie | CLIENT | OFFLINE jobs: record payment and approve. WALLET jobs: 402 | `:597` |
+| A11 | POST | … `submit-final-work` | cookie | PROFESSIONAL | All milestones approved, then FINAL_WORK_SUBMITTED | `:724` |
+| A12 | POST | … `request-client` | cookie | PROFESSIONAL | Send a request/note to the client | `:756` |
+| A13 | POST | … `complete-project` | cookie | CLIENT | Move to AWAITING_PROFESSIONAL_CONFIRMATION | `:765` |
+| A14 | POST | … `confirm-project-completion` | cookie | PROFESSIONAL | COMPLETED, and the job is CLOSED | `:796` |
+| A15 | POST | … `submit-review` | cookie | CLIENT (listed as shared) | Upsert review and recompute rating | `:832` |
+| A16 | POST | … `respond-to-review` | cookie | PROFESSIONAL | Respond to the client review | `:874` |
+| A17 | POST | … `submit-dispute` | cookie | CLIENT or PROFESSIONAL | Open a dispute | `:889` |
+| A18 | POST | … (valid action with no matching branch) | cookie | - | Unreachable fallback `{ok:true}` | `:959` |
+| M1 | GET | /api/marketplace/jobs | public | - | 100 open jobs (static route; shadows `[resource]=jobs`) | `app/api/marketplace/jobs/route.ts:6` |
+| M2 | GET | /api/marketplace/categories | public | - | Category tree with professional counts | `app/api/marketplace/[resource]/route.ts:17` |
+| M3 | GET | /api/marketplace/professionals | public | - | 50 active professionals | `app/api/marketplace/[resource]/route.ts:18` |
+| M4 | GET | /api/marketplace/jobs (via `[resource]`) | public | - | **Unreachable**: shadowed by M1 | `app/api/marketplace/[resource]/route.ts:19` |
+| M5 | GET | /api/marketplace/professional?id= | public | - | Public professional card | `app/api/marketplace/[resource]/route.ts:20` |
+| M6 | GET | /api/marketplace/professional-detail?id= | public | - | Public detailed profile (PII stripped) | `app/api/marketplace/[resource]/route.ts:32` |
+| M7 | GET | /api/marketplace/job?id= | public | - | Open job detail | `app/api/marketplace/[resource]/route.ts:44` |
+| Y1 | GET | /api/payments/razorpay/config | public | - | Razorpay public key id and enabled flag | `app/api/payments/razorpay/config/route.ts:4` |
+| Y2 | POST | /api/payments/razorpay/order | public | - | Retired: always 410 | `app/api/payments/razorpay/order/route.ts:4` |
+| Y3 | POST | /api/payments/razorpay/verify | public | - | Retired: always 410 | `app/api/payments/razorpay/verify/route.ts:4` |
+| W1 | GET | /api/wallet | cookie | any | Wallet, last 50 ledger rows, earnings and withdrawal summary | `app/api/wallet/route.ts:17` |
+| W2 | POST | /api/wallet | cookie | CLIENT or PROFESSIONAL | Request a withdrawal (reserves pendingBalance) | `app/api/wallet/route.ts:55` |
+| W3 | POST | /api/wallet/deposit/order | cookie | CLIENT | Create a Razorpay order and a PENDING top-up | `app/api/wallet/deposit/order/route.ts:10` |
+| W4 | POST | /api/wallet/deposit/verify | cookie | CLIENT (order owner) | Verify the checkout signature and credit the wallet | `app/api/wallet/deposit/verify/route.ts:14` |
+| W5 | POST | /api/wallet/deposit/fail | cookie | any (order owner) | Mark a pending top-up FAILED | `app/api/wallet/deposit/fail/route.ts:11` |
+| W6 | POST | /api/wallet/milestone | cookie | CLIENT (project client) | Fund a milestone from the wallet (escrow to admin) | `app/api/wallet/milestone/route.ts:14` |
+| V1 | GET | /api/v1/messages | cookie | any | Contacts and conversation list, or one conversation (`?conversationId`) | `app/api/v1/messages/route.ts:27` |
+| V2 | PATCH | /api/v1/messages | cookie | party or ADMIN | Mark a conversation or all messages read | `app/api/v1/messages/route.ts:209` |
+| V3 | POST | /api/v1/messages | cookie | any (gated) | Send a direct message | `app/api/v1/messages/route.ts:275` |
+| V4 | GET | /api/v1/professionals | public | - | Professional discovery search | `app/api/v1/professionals/route.ts:26` |
+
+Every non-v1 path above is also reachable as `/api/v1/<same path>` through the rewrite (§B.9). The front end mostly calls the `/api/v1/...` form.
+
+---
+
+## B.3 Client domain (`app/api/client/**`)
+
+### C1 GET /api/client/account
+- **Purpose:** Aggregated client account view. Implemented. **No in-repo caller found** (`grep client/account` outside `app/api`) `[NEEDS VALIDATION]`: possibly unused.
+- **Authentication:** `getSession` (cookie) at `route.ts:5-13`. A missing or invalid session returns 401 `{"error":"Client sign-in is required."}`.
+- **Authorization:** `session.role !== "CLIENT"` returns 403 (`:18-19`). Scoped to `session.userId`.
+- **Request:** none.
+- **Response 200:** `{ account:{firstName,lastName,email,avatarUrl,phone,phoneVerifiedAt(ISO|null),emailVerifiedAt(ISO|null),isActive}, profile:{id,fullName,companyName,address,profilePhotoUrl}|null, savedLocations:[{id,label,address}] (max 3), jobCounts:{open,draft,closed}, role:"CLIENT" }` (`:67-82`).
+- **Errors:** 401, 403, 404 `Client account not found.` (`:36`). Unhandled exceptions give the framework 500.
+- **DB:** `User.findUnique`, `ClientProfile.findFirst`, `ClientSavedLocation.findMany(take 3)`, `ClientJob.aggregate` (result unused), then 3 separate `ClientJob.count` calls. That is 6+ sequential queries.
+- **Side effects / integrations / rate limit:** none.
+
+### C2 GET /api/client/jobs
+- **Auth:** `getClient` accepts Bearer or cookie. It requires role CLIENT and `isActive` (`:49-65`). Failure returns 401.
+- **Authorization:** `where userId = user.id`.
+- **Response 200:** `{ jobs: ClientJob[] }`. Each job has all ClientJob columns plus `milestones[]` (sorted by `sortOrder`), with **derived** `status` (`RUNNING` if a non-completed ProjectTracking exists, `CLOSED` if it is completed, else the stored status), `projectId|null`, and `proposalCount` (count of `PROFESSIONAL_PROPOSAL` requests, forced to 0 when RUNNING) (`:158-173`).
+- **Errors:** 401; 500 with `error.message` leaked (`:174-180`).
+- **DB:** `ClientJob.findMany` (include milestones), `ProjectTracking.findMany`, `ProjectRequest.groupBy(jobId)`. Unpaginated.
+- **Note:** The `ProjectTracking` filter is `status != COMPLETED` (`:146`), so the `COMPLETED → CLOSED` branch at `:162` is unreachable. Completed jobs keep their stored status (normally CLOSED, set at A14).
+
+### C3 POST /api/client/jobs
+- **Auth/Authz:** as C2.
+- **Request body (zod `jobInput`, `:26-47`):**
+
+| Field | Type / constraint |
+|---|---|
+| `mode` | **required** `"draft" \| "publish"` |
+| `title` | string ≤160 or `""` |
+| `category` | string ≤100 or `""` (must equal an existing `ServiceCategory.name` when publishing) |
+| `description` | string ≤5000 or `""` |
+| `budgetMin`, `budgetMax` | coerced int 0..10,000,000, nullable |
+| `hourlyRate` | coerced int 0..1,000,000, nullable |
+| `timingType` | `FIXED \| HOURLY` (default FIXED) |
+| `paymentMethod` | `WALLET \| OFFLINE` (default WALLET) |
+| `urgency` | `LOW \| MEDIUM \| HIGH` (default MEDIUM) |
+| `jobDate`, `deadline` | `YYYY-MM-DD` date string, nullable |
+| `workMode` | `ON_SITE \| REMOTE \| BOTH` (default BOTH) |
+| `locationLabel` ≤100, `locationAddress` ≤300, `locationState` ≤100, `locationDistrict` ≤100 | nullable strings |
+| `locationLat` −90..90, `locationLng` −180..180 | coerced numbers, nullable |
+| `milestones` | array of `{title 1..160, description ≤1000?, percentage int 1..100}`, sum ≤100, default `[]` |
+
+- **Publish validation (`publishErrors`, `:90-127`):** title, category, description and deadline are required. Non-REMOTE jobs need an address plus lat/lng. HOURLY needs hourlyRate, otherwise budgetMin and budgetMax are needed, with budgetMin ≤ budgetMax. The deadline must be ≥ jobDate. The category must exist, and milestone percentages must be ≤100 with titles.
+- **Behaviour:** Empty milestones default to one "Project Completion" milestone at 100% (`:200-209`). The milestone `amount = round(budgetRef*pct/100)` where `budgetRef = budgetMax ?? budgetMin` (`:210-217`). Status becomes OPEN when publishing, else DRAFT.
+- **Response:** `201 { job }` (job includes milestones).
+- **Errors:** 400 `{error:"Please review the job details.", fields: zodFieldErrors}`; 400 `{error:"Please correct the highlighted fields.", fields:{field:message}}`; 401; 500 with the message leaked.
+- **DB:** `ServiceCategory.findFirst` when publishing; `ClientJob.create` with nested `milestones.create` (atomic single statement).
+- **Side effects:** if `status==OPEN` and (`jobDate` null or ≤ now), it calls `notifyProfessionalsOfNewJob` (a `UserNotification` for **every active PROFESSIONAL**, `notification:new` to each, email to each opted-in) and `notifyAdminsOfNewJob` (admins plus `admin:notification`, `notification:new`, `admin:overview-update`, `admin:operations-update`). Both are awaited inside the request (`:234-240`, `marketplace-notifications.ts:213-260`). Jobs with a future `jobDate` are never announced later by any scheduler found `[NEEDS VALIDATION]`.
+- **Rate limit:** none.
+
+### C4 GET /api/client/jobs/{id}
+- **Auth:** `client()` (cookie, CLIENT) `:49-59`. Invalid auth **or** a bad id returns 404 `Not found.` (not 401).
+- **Authz:** `ClientJob.findFirst({id,userId})`.
+- **Path:** `id` positive safe integer.
+- **Response 200:** `{ job:{...ClientJob, attachments:[{id,fileName,fileType,fileSize,previewUrl}], milestones[], projectId, mainCategory, categorySegment}, proposals:[{id,professionalId,bidAmount,duration,coverLetter,status,origin,createdAt,lastActorRole, previous:{bidAmount,duration,message}|null, professional:{id,firstName,lastName,professionalCategory,professionalCity,averageRating,reviewCount,isVerified}|null}], hireRequests:[same without previous] }` (`:216-238`).
+- **DB:** ClientJob, ServiceCategory, ProjectTracking, 2× ProjectRequest, User, ProjectNegotiation (×3 via `attachLastActorRole` and history).
+- **Errors:** 404; 500 with the message leaked.
+
+### C5 PATCH /api/client/jobs/{id}
+- **Auth/Authz:** as C4. The job is loaded by `{id,userId}` (`:252`).
+- **Body (`bodySchema`, `:26-48`):** the same fields as C3, but `mode` is optional, plus `status: OPEN|CLOSED` optional and `milestones` optional (no default).
+- **Branches:**
+  1. A CLOSED job with `status !== "OPEN"` returns 409 `Closed jobs cannot be changed.` (`:257`).
+  2. **Status-only** (body keys are only `status`, no `mode`): updates just `status` (close/reopen) and returns `200 {job}` without milestones (`:263-273`).
+  3. Otherwise the job must not be CLOSED. `publish` runs the same validation as C3. **All scalar fields are rebuilt by `dataOf()`**, so omitted fields become null or defaults (`:64-87`). Publish without status sets OPEN.
+  4. If `milestones` is given or `mode=publish`: `ClientJobMilestone.deleteMany` then `createMany`, then `ClientJob.update`. These are **three separate non-transactional writes** (`:317-331`).
+- **Response:** `200 {job}` (with milestones in branch 3).
+- **Errors:** 400 `Please review the job details.` (no `fields` here, unlike C3); 400 with `fields`; 404; 409; 500 with the message leaked.
+- **Side effects:** none. **Publishing a draft via PATCH sends no new-job notifications**, unlike C3 (direct publish +15 `UserNotification` rows; PATCH draft→publish +0) `[VALIDATED 2026-09-17 · [V-46](../validation/LOCAL_VALIDATION_LOG.md)]`; whether intended `[NEEDS VALIDATION — not testable locally]`.
+
+### C6 DELETE /api/client/jobs/{id}
+- Owner only (404 otherwise). Only `status === "DRAFT"` can be deleted, else 409 `Only drafts can be deleted.` `ClientJob.delete` (cascade behaviour per schema, see database docs). Response `200 {ok:true}`.
+
+### C7 POST /api/client/jobs/export
+- **Auth:** cookie `getClient` (CLIENT, active), else 401.
+- **Body (`parseReportRequest`, `src/lib/reports/pdf/request.ts:4-9`):** `{scope:"all"|"selected", ids?:int[], pageSize?:"A4"|"LETTER", orientation?:"portrait"|"landscape"}`. Invalid input returns 400 `Invalid export request.`
+- **DB:** `ClientJob.findMany({userId, id in ids?})`, unbounded.
+- **Response:** `200 application/pdf`, `Content-Disposition: attachment; filename="my-jobs-<scope>.pdf"` (`render.ts:8-16`). Rendered with `@react-pdf/renderer`.
+- **Errors:** render failures are not caught, so the framework returns 500.
+
+### C8 POST /api/client/payments/export
+- Same auth and body as C7. `ProjectTransaction.findMany({clientId})`, `take 500` unless scope=selected. PDF `my-payments-<scope>.pdf`. Errors are caught and logged with `logServerError("report.export.failed")`, returning 500 `The report could not be generated.`
+
+### C9 POST /api/client/project-requests
+- **Auth:** `getClientId` (CLIENT), else 401.
+- **Body:** `{jobId:int>0 (coerced), professionalId:int>0, bidAmount:int>0, duration:string ≤100 (may be empty), coverLetter?:string ≤5000|""}` (`:9-15`).
+- **Validation and authorization:**
+  - The job must exist and be owned by the caller (404) and be `OPEN` (409).
+  - Bid rules: for a fixed job with a budget range the bid must be within budgetMin..budgetMax (400); otherwise it must be ≤ `MAX_HIRE_REQUEST_BUDGET` = 10,000,000 (`src/lib/constants/hiring.ts:6`).
+  - The professional must have role PROFESSIONAL (404). **`isActive` is not checked.**
+  - No PENDING request may already exist for the same job, client and professional (409).
+- **DB:** `ProjectRequest.create {status:PENDING, origin:CLIENT_HIRE}`. The duplicate check is not atomic with the insert, so a race is possible.
+- **Side effects:** `notifyUsers([professionalId], type NEW_HIRE_REQUEST, href /job/{jobId}?requestId=…)` (DB row, `notification:new`, email with Job/Offered amount/Timeline); `emitRealtimeProposalNew([professionalId], {jobId})`.
+- **Response:** `201 {request: ProjectRequest}`.
+
+### C10 PATCH /api/client/project-requests/{id} (and P7 professional twin)
+- **Auth:** inline `verifySession`. No cookie returns 401. The wrong role returns 403 (`Client access required.` / `Professional access required.`). An invalid JWT **throws inside try, so the caller gets a 500** `Unable to update this request.` rather than 401 (`:18`, `:53-58`).
+- **Body:** `{action:"accept"|"reject"|"counter", bidAmount?:int>0, duration?:string 1..100, message?:string ≤5000}`. `counter` requires all three, else 400. Invalid id or body returns 400.
+- **Service:** `respondToProjectRequest(requestId, {userId, role}, action, counter?)` in `src/lib/project-request-actions.ts:15-169`.
+- **Authorization:** the request must be `PENDING` and belong to the actor (`clientId` or `professionalId` = actor) (`:21-26`), else **409** `This request is no longer available.` Either party may act on either origin (a CLIENT_HIRE or a PROFESSIONAL_PROPOSAL). No "whose turn" check is enforced server-side; `lastActorRole` is informational only — a client can `counter` its own hire request and then `accept` it, creating a project without the professional responding `[VALIDATED 2026-09-17 · [V-44](../validation/LOCAL_VALIDATION_LOG.md)]`.
+
+| Action | DB operations | Side effects | Response |
+|---|---|---|---|
+| `reject` (`:43-55`) | `ProjectRequest.update status=REJECTED` | `notifyUsers([other], REQUEST_DECLINED)`; `proposal:new {jobId}` to both parties | `200 {ok:true, status:"REJECTED"}` |
+| `counter` (`:57-94`) | `ProjectNegotiation.create` (with previous values); `ProjectRequest.update bidAmount,duration,coverLetter` | `notifyUsers([other], REQUEST_COUNTERED)`; `proposal:new` to both | `200 {ok:true, request}` |
+| `accept` (`:96-168`) | Job must be OPEN and owned by the request client (409). `ClientJob.updateMany status OPEN→CLOSED` (optimistic claim, 409 if count≠1); `ProjectRequest.update ACCEPTED`; `updateMany` other PENDING for the job becomes REJECTED; `ProjectTracking.create READY_TO_START`; `ProjectMilestone.createMany` from job milestones (amount = job milestone amount ?? round(bid*pct/100)), all `UPCOMING` — since job milestones already carry an amount computed from `budgetMax`, the project milestone uses the **job budget, not the agreed bid** (budgetMax 2000 vs agreed 1400 → milestone 2000) `[FOUND IN VALIDATION 2026-09-17 · [V-44](../validation/LOCAL_VALIDATION_LOG.md)]`; `ProjectTimelineEvent.create OFFER_ACCEPTED`. **Not wrapped in a transaction.** | `notifyUsers([other], REQUEST_ACCEPTED, href /project/{id}/tracking)` with project email details; `proposal:new` and `project:updated` to both. Other rejected bidders are **not notified**. | `200 {ok:true, project: ProjectTracking}` |
+
+- **Errors:** 400, 401, 403, 409, 500.
+
+### C11 GET /api/client/verification
+- Cookie, CLIENT (403 otherwise). An invalid token returns 401. Response `200 {user:{email,phone,emailVerifiedAt,phoneVerifiedAt}}`. DB: `User.findUnique`.
+
+---
+
+## B.4 Professional domain (`app/api/professional/**`)
+
+### P1 POST /api/professional/earnings/export
+- `getProfessional` (PROFESSIONAL, active), else 401. Body is the same report schema as C7.
+- DB: `ProjectTransaction.findMany({professionalId})` and `ProjectWithdrawal.findMany({professionalId})`, each `take 500` unless selected. Rows are merged as `Earning`/`Payout` and sorted by date.
+- **Defect:** `scope:"selected"` applies the same `ids` array to **both** tables (`:65-83`), so an id can match unrelated rows in the other table.
+- Response PDF `my-earnings-<scope>.pdf`; 500 `The report could not be generated.` (logged).
+
+### P2 POST /api/professional/favorite-jobs/{jobId}
+- `professionalIdFrom` (PROFESSIONAL). Invalid auth or id returns **404** `Job not found.`
+- The job must be OPEN with `jobDate` null or ≤ now and `deadline` null or ≥ now, else 404 `This job is no longer open.`
+- DB: `FavoriteJob.upsert` on unique `(userId, jobId)`. Response `200 {saved:true}`.
+
+### P3 DELETE /api/professional/favorite-jobs/{jobId}
+- Same auth. `FavoriteJob.deleteMany({userId, jobId})` (idempotent). Response `200 {saved:false}`.
+
+### P4 POST /api/professional/jobs/export
+- `getProfessional`. Report body. DB: `ProjectTracking.findMany({professionalId, status≠COMPLETED})`, then `ClientJob.findMany`, then `User.findMany`. PDF `running-projects-<scope>.pdf`. Render errors are uncaught (framework 500).
+
+### P5 GET /api/professional/profile
+- `professionalIdFrom`, else 401. Response `200 {profile:{professionalCategory, professionalCategoryId, experienceYears, hourlyRate, serviceRadiusKm, professionalState, professionalDistrict, professionalCity, address, professionalLatitude, professionalLongitude, workMode, companyDescription, professionalSkillsJson (JSON string), phone, phoneVerifiedAt}}`. 500 leaks the message.
+
+### P6 POST /api/professional/profile
+- **Body (`:6-21`):**
+
+| Field | Constraint |
+|---|---|
+| `categoryId` | int>0 optional |
+| `category` | string 2..100 optional (used when there is no categoryId) |
+| `experienceYears` | int 0..80 **nullable, required key** |
+| `hourlyRate` | int 0..1,000,000 **nullable, required key** |
+| `serviceRadiusKm` | int 1..500 nullable optional |
+| `state` | string 2..100 **required** |
+| `district`, `city` | string ≤100 nullable optional |
+| `address` | string ≤500 nullable optional |
+| `latitude` | finite −90..90 **required** |
+| `longitude` | finite −180..180 **required** |
+| `workMode` | `on_site \| remote \| both` (**lower-case**, unlike jobs' upper-case enum) |
+| `bio` | string ≤2000 or `""` |
+| `skills` | string[1..60] max 20 items **required** |
+
+- Validation: the category must resolve by id or by name, else 400 `Choose a valid service category.`
+- DB: `User.update` sets the professional fields, `serviceArea: null`, `professionalSkillsJson = JSON.stringify(skills)`, and `companyDescription = bio`.
+- **Response:** `200 {profile: User}`. This returns the **full User row, including `passwordHash` (`prisma/schema.prisma:117`) and every other scalar column, because no `select` is used** (`:98-118`). Runtime response contains `passwordHash` with a bcrypt value `[VALIDATED 2026-09-17 · [KI-030](../validation/LOCAL_VALIDATION_LOG.md)]`.
+- Errors: 400, 401, 500 (message leaked).
+
+### P7 PATCH /api/professional/project-requests/{id}
+See C10. Role is PROFESSIONAL, and the log key is `professional.project-request.action.failed`.
+
+### P8 GET /api/professional/proposals?jobId=
+- Inline auth: 401 without a cookie, 403 for a non-professional. An invalid JWT gives **500** `Unable to load your proposal.` because the catch-all swallows it.
+- Query: `jobId` coerced int>0, else 400.
+- Response `200 {proposal: ProjectRequest & {lastActorRole} | null, negotiation: {senderRole, previousBidAmount, previousDuration, previousMessage} | null}`.
+- DB: `ProjectRequest.findFirst`, `ProjectNegotiation.findMany` via `attachLastActorRole`, `ProjectNegotiation.findFirst`.
+
+### P9 POST /api/professional/proposals
+- **Body (strict numbers, no coercion):** `{jobId:int>0, bidAmount:int 1..10,000,000, duration:string 2..100, coverLetter:string 10..5000}`. Otherwise 400.
+- **Validation:** the job must exist, be OPEN, have `jobDate` ≤ now (or null) and `deadline` ≥ now (or null), else 409. It must not be the caller's own job (403). **The bid is not checked against the job budget** (unlike C9).
+- **Branch "update":** if a PENDING `PROFESSIONAL_PROPOSAL` exists for (job, professional), update bidAmount, duration and coverLetter. **No `ProjectNegotiation` row is written.** Side effects: `notifyUsers([client], PROPOSAL_UPDATED)` and `proposal:new {jobId}` to the client. Response `200 {proposal}`.
+- **Branch "create":** `ProjectRequest.create {status PENDING, origin PROFESSIONAL_PROPOSAL}`. Side effects: `notifyUsers([client], NEW_PROPOSAL)` with email details; `proposal:new` to the client; `enqueueBackgroundJob("proposal.created.notifications", notifyAdminsOfNewProposal)` runs in-process fire-and-forget and is not durable (`src/lib/background-jobs.ts:11-19`). Response `201 {proposal}`.
+- **Status reuse:** a proposal previously REJECTED or ACCEPTED does not block a new create. The check matches only PENDING.
+- Errors: 400, 401, 403, 409, 500 `Unable to send your proposal.`
+
+### P10 GET /api/professional/razorpay-account
+- `professional()`, else 401. Response `200 {razorpayAccountId: string|null}`.
+
+### P11 PUT /api/professional/razorpay-account
+- Body `{razorpayAccountId: string matching ^acc_[A-Za-z0-9]+$ | null}` (key required). 400 carries the first zod message.
+- DB: `User.update`. **Not verified against Razorpay.** The account is used by admin payouts (F1: `admin/finance/*`) `[NEEDS VALIDATION]`. Response `200 {razorpayAccountId}`.
+
+### P12 GET /api/professional/verification
+- `professionalId()`, else 401. Response `200 {verification: ProfessionalVerification|null, reviews: VerificationDocumentReview[]}`.
+
+### P13 PUT /api/professional/verification
+- **Body:** `{governmentIdUrl?, licenseUrl?, insuranceUrl?, selfieUrl?: string ≤500 | null, certificationsJson?: string ≤10000 | null}`. **The URLs are free text and are not checked to be storage keys the caller uploaded** (`:7-13`).
+- DB: `ProfessionalVerification.upsert` with `status: "PENDING"` always. This resets a previously approved or rejected status on every PUT. The expression `hasDocument ? "PENDING" : "PENDING"` at `:53` is a no-op ternary.
+- Side effects if any document is present: `emitAdminNotification({type:"VERIFICATION_SUBMITTED", ...})`, which sends `admin:notification` and `notification:new` to room `admins`, then `emitAdminVerificationsUpdate({userId})`, which sends `admin:verifications-update` and `admin:overview-update`. **No DB notification row and no email are created** (realtime only).
+- Response `200 {verification}`.
+
+### P14 POST /api/professional/verification/upload
+- `runtime = "nodejs"`. Inline auth: 401 or 403. An invalid JWT gives 500.
+- **Request:** `multipart/form-data` with field `file` (File). The size must be 1 byte to 10 MB (400). The extension must be `.jpg .jpeg .png .webp .pdf` (400). `validateProjectFile` checks the MIME type against the extension and the magic bytes (`src/lib/project-file-storage.ts:146-156`).
+- Storage: key `verification/{userId}/{uuid}{ext}` (`project-file-storage.ts:162`). Stored in S3 when `FILE_STORAGE_PROVIDER=s3`, else in local `.project-work-files/`; local storage throws in production (`:44-50`).
+- Side effects: `recordAudit({action:"verification.document.uploaded", entityType:"VerificationDocument", metadata:{sizeBytes}})` (non-blocking).
+- Response `200 {url:"/api/v1/professional/verification/documents/<storageKey>", name}`. The URL relies on the v1 rewrite.
+- **No DB row is created for the upload** (no `StoredFile`), so the file is orphaned unless P13 references it.
+
+### P15 GET /api/professional/verification/documents/{storageKey...}
+- Catch-all path segments are joined with `/`. The key must start with `verification/`, else 404.
+- **Authorization:** ADMIN may read any key. A PROFESSIONAL may read only keys under `verification/{ownUserId}/`. Anyone else gets 403 (`:29-38`).
+- Response: raw bytes, `Content-Type` by extension, `Content-Disposition: inline`, `Cache-Control: private, no-store`.
+- Side effects: `recordAudit("verification.document.viewed")`.
+- Errors: every exception (including an invalid session) returns **404** `Document not found.`
+- **Cross-user read (local storage only):** the prefix check runs on the raw key, but the local provider applies `path.resolve`. Literal `../` and a `%2e%2e` segment are normalised by the router (403), but an **encoded separator** — `verification/<B>/..%2F<A>%2F<file>` or `%2e%2e%2f` — passes the prefix check and returns 200 with user A's document to professional B. S3 keys are literal, and production refuses local storage `[VALIDATED 2026-09-17 · [V-35](../validation/LOCAL_VALIDATION_LOG.md)]`.
+
+---
+
+## B.5 Portal domain (`app/api/portal/**`)
+
+### B.5.1 `app/api/portal/[resource]/route.ts` dispatch
+
+`GET` dispatches on `resource` ∈ {`notifications`, `earnings`, `messages`, `reviews`, `professional-jobs`, `project`}. `PATCH` and `DELETE` accept only `notifications`. Anything else returns 404 `Not found.`. Auth for all of them is `sessionFromRequest`, and no session returns 401 `Authentication required.` GET errors are caught and return 500 `Unable to load portal data.` (`:922-925`).
+
+#### R1 GET /api/portal/notifications
+- **Authz:** any role; rows are filtered `userId = session.userId`, `clearedAt = null`, and exclude types `PROPOSAL_SENT`, `PROPOSAL_UPDATE_SENT`, `HIRE_REQUEST_SENT`.
+- **Response 200:** a **bare array**. Each item is a `UserNotification` plus `{projectId|null, jobId|null, isProject:boolean, projectTitle|null, clientName|null, professionalName|null}`. The fields are derived by parsing `href` (`/project/N`, `?project=N`, `?tab=projects&id=N`, `/job/N`, `?job=N`, `?dispute=N`) and by regex over the title and description (`:51-297`). No pagination.
+- **DB:** `UserNotification.findMany` (unbounded); `ProjectDispute.findMany`; **`ProjectMilestone.findMany()` with no filter (all milestones in the system)**; **`ClientJob.findMany(take 100)` across all clients**; `ProjectTracking.findMany`; `ClientJob.findMany`.
+- **Concerns:** a full-table read on every notification poll (the front end polls every 15 s, `RealtimeNotifications.tsx:~96`). Title resolution can match another tenant's job or milestone title into `projectTitle`/`projectId` (information leak limited to titles and ids) `[NEEDS VALIDATION — not testable locally]`.
+
+#### R2 PATCH /api/portal/notifications
+- **Body (zod union, `:928-936`):** `{id:int>0, unread?:bool}` | `{ids:int>0[1..100], unread?:bool}` | `{all:true, unread?:bool}`. Otherwise 400 `A notification id is required.`
+- DB: `UserNotification.updateMany` scoped by `userId`, setting `readAt = now` (or `null` when `unread:true`).
+- Response `200 {success:true, unread:boolean}`. Non-`notifications` resource returns 404.
+
+#### R3 DELETE /api/portal/notifications
+- **Body:** `{id}` | `{ids[1..100]}` | `{all:true}`, else 400. Soft delete: `updateMany clearedAt = now` scoped to the user. Response `200 {success:true}`.
+
+#### R4 GET /api/portal/earnings
+- Authz: CLIENT or PROFESSIONAL (else 403). Scoped by `clientId` or `professionalId`.
+- Response: **bare array** of the last 50 `ProjectTransaction` rows, each plus `invoicePaymentId` (the id of the COMPLETED `Payment` for the same milestone, or null).
+- **Note:** wallet-funded payments sit in status `FUNDED` until admin payout. Only `COMPLETED` payments are linked, so `invoicePaymentId` stays null before payout. Admin payout sets Payment `COMPLETED`, after which `GET /api/v1/portal/invoices/{id}` → 200 PDF `[VALIDATED 2026-09-17 · [V-45](../validation/LOCAL_VALIDATION_LOG.md)]`.
+
+#### R5 GET /api/portal/messages
+- Any role. Response: bare array (≤50) of `MessageConversation` including the latest message. This is the **legacy conversation model**; the active chat uses `SocketConversation` via V1-V3. Caller: `src/routes/messages.tsx:13` `[NEEDS VALIDATION: whether legacy]`.
+
+#### R6 GET /api/portal/reviews
+- PROFESSIONAL only (403). Response: bare array `[{id, trackingId, rating, comment, professionalResponse, clientName, projectId (jobId), projectTitle, createdAt}]`. Here `projectId` actually holds the **job id** (`:371`).
+
+#### R7 GET /api/portal/professional-jobs
+- PROFESSIONAL only.
+- **Logic (`:377-797`):**
+  - Loads the professional's geo and service radius and builds a bounding box.
+  - "Blocked" jobs are **all** job ids with an active (non-COMPLETED, non-CANCELLED) project or an ACCEPTED request, read inside a `$transaction` (read-only, full scans, `:410-425`).
+  - Open jobs: status OPEN, not blocked, in the date window, and REMOTE/BOTH or inside the bbox, then exact-distance filtered (unbounded query).
+  - Also loads: saved jobs (20), own proposals (20), CLIENT_HIRE offers (20), active projects (20, REVISION_REQUESTED sorted first), completed projects (20, each with a per-project `ProjectTransaction.aggregate`, an N+1 pattern).
+- **Response 200:** `{professional:{firstName,lastName,avatarUrl,professionalCategory,professionalCity,averageRating,reviewCount,isVerified,availabilityStatus,experienceYears,professionalLatitude,professionalLongitude,serviceRadiusKm}, openJobs:JobCard[], savedJobs:JobCard[], proposals:RequestCard[], offers:RequestCard[], activeProjects:[{id,jobId,jobTitle,clientName,status,acceptedAt,deadline,budget,timingType,progress,milestones:[{id,title,status,isCompleted}],currentStage}], completedProjects:[{id,jobId,jobTitle,clientName,completedAt,amount,currency:"INR"}]}`.
+- `JobCard = {id,title,category,status,budgetMin,budgetMax,hourlyRate,timingType,locationAddress (approximated),locationState,locationDistrict,locationLat/lng (fuzzed display point),distanceKm,description,clientName,clientRating,clientVerified,createdAt,proposalCount}`.
+- **Defect:** `proposalCount` is the **favorite (saved) count**, not the proposal count (`:623-639`, `:671`, `:706`).
+- Privacy (implemented): addresses are approximated with `approximateAddress` and coordinates are fuzzed with `createDisplayPoint` (`src/lib/geo`).
+
+#### R8 GET /api/portal/project?id=|jobId=
+- Query: `id` or `jobId` (coerced int>0). Neither valid returns 400.
+- **Authz:** ADMIN sees any project; otherwise the caller must be `clientId` or `professionalId`. Non-parties get 404.
+- **Response 200:** `{project: ProjectTracking, milestones: ProjectMilestone[] (+payment{status,professionalPayoutAmount}), job:{title,category,urgency,workMode,jobDate,deadline,locationAddress,locationLat,locationLng,description,budgetMin,budgetMax,hourlyRate,timingType,paymentMethod}, professional:{firstName,lastName}, client:{firstName,lastName}, viewerRole:"CLIENT"|"PROFESSIONAL", uploads: ProjectWorkUpload[], revisions: ProjectRevisionRequest[], timeline: ProjectTimelineEvent[], agreedAmount:int|null, review: ProjectReview|null, dispute: ProjectDispute|null}`.
+- The exact job coordinates and address are returned to both parties (not fuzzed).
+- **Minor defect:** an ADMIN viewer gets `viewerRole:"PROFESSIONAL"` (`:836`).
+
+### R10 GET /api/portal/payment-details/{paymentId}
+- Cookie; an invalid session returns 401. An invalid id returns 400. A missing payment returns 404.
+- Authz: ADMIN or payment `clientId`/`professionalId`, else 403.
+- Response `200 {id, amount, baseAmount, clientFeeAmount, professionalPayoutAmount, adminNetAmount, commissionAmount, currency, provider, status, razorpayOrderId, razorpayPaymentId, failureReason, createdAt, capturedAt, milestone:{id,title,amount}|null}`.
+- Both parties see the full fee split, including `adminNetAmount` and `commissionAmount`.
+
+### R11 POST /api/portal/project-files
+- `runtime=nodejs`. Auth: 401, or 403 when not PROFESSIONAL. An invalid JWT gives 500.
+- **Request multipart:** `projectId` (int), `files` (1..`maxProjectFiles`=10). Each file is validated with `validateProjectFile`: extension in `.pdf .png .jpg .jpeg .webp .doc .docx .txt`, ≤15 MB, MIME type matching the extension, and magic bytes (`project-file-storage.ts:14-35`, `:121-156`).
+- Validation order note: the file bytes are read and validated **before** the project ownership check (`:33-44`).
+- Authz: `ProjectTracking` with `professionalId = caller` (404), status in READY_TO_START, IN_PROGRESS or REVISION_REQUESTED (409).
+- **DB and storage:** for each file, `storeProjectFile(projects/{projectId}/{uuid}{ext})` then `StoredFile.create {ownerId, purpose:"project-work:{projectId}", isPublic:false}`. On failure it compensates by removing stored objects and `StoredFile` rows, then rethrows (`:83-89`), which gives 500 — e.g. on a production server without S3 (`Local file storage is disabled in production…`) `[FOUND IN VALIDATION 2026-09-17 · [PROD-STORAGE](../validation/LOCAL_VALIDATION_LOG.md)]`.
+- Response `201 {attachments:[{id,name,mimeType,sizeBytes,url:"/api/v1/portal/project-files/{id}"}]}`.
+- **Note:** files are not linked to a work upload until A7, A8 or A11 reference their ids. Unreferenced files stay orphaned (no cleanup found).
+
+### R12 GET /api/portal/project-files/{fileId}
+- Cookie auth. The `StoredFile.purpose` must start with `project-work:`. The caller must be client or professional of that project, **else 404** (enumeration-safe).
+- Response: raw bytes with the stored `Content-Type`, `Content-Length`, `Content-Disposition: inline` (sanitized name), `Cache-Control: private, no-store` and `nosniff`.
+- Errors: 404 (including ENOENT/NoSuchKey); 500 otherwise (logged). **ADMIN is not granted access** here, unlike R8 and R10 `[NEEDS VALIDATION: admin dispute review needs files? — not testable locally]`.
+
+### R13 GET /api/portal/invoices/{paymentId}
+- **Source:** `app/api/portal/invoices/[paymentId]/route.tsx:7-85` (note the `.tsx` extension — it renders a React PDF component; a `route.ts` glob misses it). Added by orchestrator after agent D detected the 66th route file.
+- **Purpose:** Download a PDF invoice for a completed payment. Implemented. Called from `src/routes/client/earnings.tsx:728` and `src/routes/professional/earnings.tsx:517` via `/api/v1/portal/invoices/{id}` (rewritten to this route).
+- **Authentication:** `servio_session` cookie → inline `verifySession` (`:11-18`); missing/invalid → 401 `{"error":"Sign-in required."}`.
+- **Authorization:** `ADMIN`, or `session.userId` equals `payment.clientId` or `payment.professionalId` (`:28-33`); else 403 `{"error":"Access denied."}`.
+- **Request:** path `paymentId` — positive integer (`:19-21`), else 400 `{"error":"Invalid payment ID."}`. No body.
+- **Response:** `application/pdf` via `pdfResponse(buffer, "<invoiceNumber>.pdf")` (`src/lib/reports/pdf/render`). PDF content: invoice number, issued date, status `Paid`, milestone title (fallback "Marketplace milestone payment"), billed-to (client name, email, phone, address), paid-to (professional name, email, phone, address), gross, commission, net, currency, payment reference (`razorpayPaymentId ?? providerReference`).
+- **Errors:** 401, 400, 404 `{"error":"Completed payment not found."}` when payment missing or `status !== "COMPLETED"` (`:26-27`), 403. Rendering errors are unhandled → 500.
+- **Database operations:** `payment.findUnique` (+ milestone title); `invoice.upsert` by `paymentId` — **creates** the invoice on first download with `invoiceNumber = INV-<current year>-<paymentId padded 6>`, `commissionAmount = payment.adminNetAmount`, `netAmount = payment.professionalPayoutAmount` (`:34-47`); two `user.findUnique` for contact details.
+- **Side effects / notes:** A GET that writes (invoice creation). Invoice year reflects first download date, not payment date. The PDF discloses each party's email, phone and address to the other party `[NEEDS VALIDATION: intended by privacy rules? — not testable locally]`. No rate limiting.
+
+### B.5.2 POST /api/portal/project-actions (`app/api/portal/project-actions/route.ts`)
+
+**Common handling for all 18 actions:**
+- Auth: cookie. No cookie returns 401 `Sign in required.` An invalid JWT throws, giving 500 `Unable to update the project.`
+- Body: zod `discriminatedUnion("action", …)` (`:11-117`). Unparsable JSON is **not** caught, giving 500. A schema failure gives 400 `Please provide valid project information.`
+- Role gate (`:119-153`):
+  - `clientActions` = create-milestone, create-milestones, update-milestone, delete-milestone, start-work, request-revision, approve-milestone, complete-project. These require CLIENT.
+  - `sharedActions` = submit-review, submit-dispute. No role gate at this step.
+  - Every other action requires PROFESSIONAL.
+  - A failure returns 403 `Client access required.` or `Professional access required.`
+- Ownership: `ProjectTracking.findFirst({id: projectId, OR:[{clientId: me},{professionalId: me}]})`, else 404 `Project not found.` (`:154-160`).
+- **Timeline helper `event()` (`:161-226`):**
+  - Creates a `ProjectTimelineEvent {trackingId, actorId, actorRole, type, title, description, milestoneId?, progress?, stage?, attachmentJson?}`.
+  - Unless the type is `PROJECT_COMPLETION_REQUESTED`, `PROJECT_COMPLETED` or `PROFESSIONAL_REQUEST`, it calls `notifyUsers(otherParty, type "PROJECT_ACTIVITY_<TYPE>", href /project/{id}/tracking)`. That writes a DB row, emits `notification:new` and sends email with project details.
+  - It always calls `emitRealtimeProjectUpdate([clientId, professionalId], {projectId})`, which sends `project:updated`.
+  - Its `session.role === "ADMIN"` branch is unreachable, because an admin can never pass the ownership query.
+- Attachments helper (`:227-245`): every id must be a `StoredFile` owned by the caller with `purpose = project-work:{projectId}` and `isPublic=false`, else 400 `One or more uploaded files are unavailable.`
+- **Transactions:** only `approve-milestone` (OFFLINE) uses `$transaction`. Every other action performs multiple independent writes.
+- Default success response for actions without an explicit return: `200 {ok:true}`.
+
+| ID | action | Body (beyond `action`, `projectId:int>0`) | Preconditions / validation | DB writes | Timeline type / notifications | Response |
+|---|---|---|---|---|---|---|
+| A1 | `create-milestone` | `title` 2..160, `amount` int≥0, `description?` ≤2000 nullish, `deadline?` ISO datetime nullish | `existingTotal + amount ≤ max(bidAmount, existingTotal)` when the ceiling is >0 (400). Deadline within job `jobDate..deadline` (400). | `ProjectMilestone.create` with status IN_PROGRESS if no milestone is IN_PROGRESS, REVISION_REQUESTED or AWAITING_CLIENT_REVIEW, else UPCOMING | `MILESTONE_CREATED` | 200 `{ok:true}` |
+| A2 | `create-milestones` | `milestones[1..50]` of `{title 1..160, amount≥0, description?, deadline?}` | same budget ceiling on the sum; each deadline in window | a sequential `create` loop; the first becomes IN_PROGRESS when none is active | `MILESTONE_CREATED` per milestone (N notifications and emails) | 200 `{ok:true}` |
+| A3 | `update-milestone` | `milestoneId`, `title` 1..160, `amount≥0`, `description?` | Milestone must be in the project (404). Not APPROVED (400). `otherTotal + amount ≤ bidAmount` (400). **No check for PAYMENT_PROCESSING or AWAITING_ADMIN_APPROVAL (funded)** — lowering a funded milestone reduces the later payout `[VALIDATED 2026-09-17 · [V-42](../validation/LOCAL_VALIDATION_LOG.md)]`. | `ProjectMilestone.update` | `MILESTONE_UPDATED` | 200 |
+| A4 | `delete-milestone` | `milestoneId` | In project (404). Blocks only APPROVED and AWAITING_CLIENT_REVIEW (400). **Funded milestones (PAYMENT_PROCESSING, AWAITING_ADMIN_APPROVAL) and IN_PROGRESS can be deleted.** | `ProjectMilestone.delete`. This fails with an FK error (giving 500) if any `ProjectWorkUpload` references the milestone (`ON DELETE RESTRICT`) | `MILESTONE_DELETED` | 200 |
+| A5 | `start-work` | - | Project status must be READY_TO_START (409). Optimistic `updateMany` claim (409 on race). | ProjectTracking → IN_PROGRESS with `startedAt`; first UPCOMING milestone → IN_PROGRESS; `currentStage` = its title | `WORK_STARTED` | 200 |
+| A6 | `update-progress` | `progress` int 0..100, `stage?` ≤160, `note?` ≤2000 | **No status precondition** | ProjectTracking `status = IN_PROGRESS` (**unconditional**; COMPLETED → IN_PROGRESS `[VALIDATED 2026-09-17 · [V-43](../validation/LOCAL_VALIDATION_LOG.md)]`), progress, currentStage | `PROGRESS_UPDATED` | 200 |
+| A7 | `upload-work` | `milestoneId?`, `title` 2..160, `note?`, `attachmentIds[1..10]` | Project status IN_PROGRESS or REVISION_REQUESTED (409). Attachments valid (400). `milestoneId` **not verified to belong to the project.** | `ProjectWorkUpload.create {status UPLOADED, roundNumber 2 if REVISION_REQUESTED else 1, filesJson}` | `WORK_UPLOADED` / `REVISED_WORK_UPLOADED` | 200 |
+| A8 | `submit-milestone` | `milestoneId`, `note` 2..2000, `attachmentIds[1..10]` | Milestone in project with status IN_PROGRESS or REVISION_REQUESTED (409) | `ProjectWorkUpload.create SUBMITTED`; milestone → AWAITING_CLIENT_REVIEW with `submittedAt`; project → AWAITING_CLIENT_REVIEW | `MILESTONE_SUBMITTED` / `REVISED_WORK_SUBMITTED` | 200 |
+| A9 | `request-revision` | `milestoneId`, `note` 2..2000 | Milestone AWAITING_CLIENT_REVIEW (409) | `ProjectRevisionRequest.create`; milestone → REVISION_REQUESTED; project → REVISION_REQUESTED | `REVISION_REQUESTED` | 200 |
+| A10 | `approve-milestone` | `milestoneId` | **If job.paymentMethod = OFFLINE:** milestone AWAITING_CLIENT_REVIEW (409). **Else** 402 `{error:"Milestones must be paid from the client wallet.", paymentRequired:true}`, and the client must call W6 | OFFLINE `$transaction`: claim milestone → PAYMENT_PROCESSING (409 if taken); `Payment.upsert` (provider `offline`, COMPLETED, fees 0, idempotencyKey `offline-milestone-{id}`); milestone → APPROVED; `ProjectTransaction.create OFFLINE_MILESTONE_PAYMENT COMPLETED`; next UPCOMING → IN_PROGRESS; project → IN_PROGRESS | `MILESTONE_PAID` | 200 `{ok, paymentMethod:"OFFLINE", charged, professionalReceives, adminReceives:0, platformEarnings:0, status:"COMPLETED", message}` or 402, 409, 500 |
+| A11 | `submit-final-work` | `note` 2..2000, `attachmentIds[1..10]` | ≥1 milestone and **all** APPROVED (409). Attachments valid. | `ProjectWorkUpload.create FINAL_SUBMITTED`; project → FINAL_WORK_SUBMITTED | `FINAL_WORK_SUBMITTED` | 200 |
+| A12 | `request-client` | `title?` 2..160, `note` 2..2000 | none | timeline only | `PROFESSIONAL_REQUEST` (no generic notification) plus explicit `notifyUsers([client], PROJECT_REQUEST)` | 200 |
+| A13 | `complete-project` | - | Status not COMPLETED and not AWAITING_PROFESSIONAL_CONFIRMATION (409). **Any other status is accepted, including READY_TO_START with unpaid milestones.** Optimistic claim. | project → AWAITING_PROFESSIONAL_CONFIRMATION | `PROJECT_COMPLETION_REQUESTED` plus `notifyUsers([professional], PROJECT_COMPLETION_REQUESTED)` | 200 |
+| A14 | `confirm-project-completion` | - | Status AWAITING_PROFESSIONAL_CONFIRMATION (409). Optimistic claim. | project → COMPLETED, progress 100, `completedAt`; `ClientJob.updateMany → CLOSED` | `PROJECT_COMPLETED` plus `notifyUsers([client], PROJECT_COMPLETED)` | 200 |
+| A15 | `submit-review` | `rating` int 1..5, `comment?` ≤2000 | Role must be CLIENT (403) even though listed as shared. **No project-status precondition** (a review is possible before completion). | `ProjectReview.upsert` on unique `trackingId`; reads all of the professional's reviews and updates `User.averageRating` (1 dp) and `reviewCount` | `PROJECT_REVIEW_SUBMITTED` | 200 `{ok:true, reviewId}` |
+| A16 | `respond-to-review` | `response` 2..2000 | Review exists (409) | `ProjectReview.update professionalResponse, professionalResponseAt` (overwritable) | `REVIEW_RESPONSE_SUBMITTED` | 200 `{ok:true}` |
+| A17 | `submit-dispute` | `issueType` 2..80, `priority?` LOW\|MEDIUM\|HIGH (default MEDIUM), `message` 10..4000 | Status in READY_TO_START, IN_PROGRESS, AWAITING_CLIENT_REVIEW, REVISION_REQUESTED, FINAL_WORK_SUBMITTED, COMPLETED or CLOSED (409). **AWAITING_PROFESSIONAL_CONFIRMATION is excluded.** No existing OPEN dispute (409; not atomic). | `ProjectDispute.create OPEN` | `DISPUTE_RAISED` timeline event (notifies the other party); background `notifyDisputeRaised` notifies admins (`admin:*` events) and the other party **again** (a duplicate notification to the counterparty) | 200 `{ok:true, disputeId}` |
+
+---
+
+## B.6 Marketplace domain (`app/api/marketplace/**`), all public
+
+| ID | Endpoint | Behaviour | Response | Source |
+|---|---|---|---|---|
+| M1 | `GET /api/marketplace/jobs` (static file) | OPEN jobs in the date window, `take 100`, newest first. **Does not exclude jobs with running projects** (unlike M7 and `listOpenJobs`). | Bare array `[{id,title,description,category,locationLabel,locationState,locationDistrict,budgetMin,budgetMax,hourlyRate,timingType,createdAt(ISO),clientName (first name only),clientVerified}]` | `app/api/marketplace/jobs/route.ts:6-43` |
+| M2 | `GET /api/marketplace/categories` | `listCategories()` | Bare array `MarketplaceCategory[] = {id,name,slug,description,iconName,segment,parentId,professionalCount}` | `src/lib/queries/marketplace.ts:189`, `src/lib/types/marketplace.ts:79-88` |
+| M3 | `GET /api/marketplace/professionals` | `listProfessionals()`: active PROFESSIONAL users, take 50 | Bare array `MarketplaceProfessional[] = {id:string,name,title,avatar,rating,reviews,hourlyRate,location,availability,verified,skills[],bio,approximateDistanceKm?,displayPoint?}` | `marketplace.ts:264`, `types/marketplace.ts:1-17` |
+| M4 | `GET /api/marketplace/jobs` via `[resource]` | `listOpenJobs()` returns `MarketplaceJob[]` (take 50). **Unreachable**: Next.js serves the static `marketplace/jobs/route.ts` first. | n/a | `app/api/marketplace/[resource]/route.ts:19`, `marketplace.ts:288` |
+| M5 | `GET /api/marketplace/professional?id=` | `id` int>0 (400); `getProfessional(id)` (404) | `MarketplaceProfessional` | `marketplace.ts:379`. No in-repo caller found `[NEEDS VALIDATION]` |
+| M6 | `GET /api/marketplace/professional-detail?id=` | `getPublicProfessionalProfile`: a `DetailedProfessional` with `email, phone, address, professionalLatitude/Longitude, lastLoginAt, governmentIdUrl, licenseUrl, insuranceUrl, selfieUrl` stripped | `PublicProfessionalProfile` (`[NEEDS VALIDATION]` exact fields, see `src/lib/types/marketplace.ts:19-78`) | `marketplace.ts:472-491` |
+| M7 | `GET /api/marketplace/job?id=` | `getOpenJob`: null if a running project exists or the job is not OPEN or outside the date window or missing title, description or category (404) | `MarketplaceJob = {id,title,description,category,budgetMin,budgetMax,urgency,workMode,location,locationAddress (approx),locationLat/Lng (fuzzed),jobDate,deadline,timingType,hourlyRate,createdAt,status:"OPEN",proposalCount,client:{name,avatar,rating},attachments[],milestones[]}` | `marketplace.ts:493-578` |
+
+- Errors for `[resource]`: 400 (bad id), 404 (`Not found` / `… not found.`), 500 `Unable to load marketplace data.` (logged). M1 has no try/catch, so it falls through to the framework 500.
+- **Defect:** `MarketplaceJob.proposalCount` = `_count.favoriteJobs` (saved count) (`marketplace.ts:550-570`).
+- No auth, caching headers or rate limiting.
+
+---
+
+## B.7 Payments domain (`app/api/payments/razorpay/**`), public
+
+| ID | Endpoint | Behaviour | Source |
+|---|---|---|---|
+| Y1 | `GET /api/payments/razorpay/config` | `200 {enabled: RAZORPAY_ENABLED!=="false" && keyId present, keyId: string|null, currency:"INR"}`. Exposes only the public key id. No in-repo caller found `[NEEDS VALIDATION]`. | `config/route.ts:4-11`, `src/lib/razorpay.ts:14-18` |
+| Y2 | `POST /api/payments/razorpay/order` | Tombstone: always `410 {error:"Milestones are paid from the client wallet. Fund the wallet first."}`. Status: **Retired**. | `order/route.ts:4-9` |
+| Y3 | `POST /api/payments/razorpay/verify` | Tombstone: always `410 {error:"Milestone payments must be verified through the wallet flow."}` | `verify/route.ts:4-9` |
+
+The origin check still applies to Y2 and Y3, so a cross-origin POST gets 403 before 410.
+
+---
+
+## B.8 Wallet domain (`app/api/wallet/**`)
+
+Money model (from `src/lib/wallet-ledger.ts:5-20`): `CLIENT_FEE_RATE = PROFESSIONAL_FEE_RATE = 0.1`.
+- `clientFeeAmount = ceil(base*0.1)`, `clientChargeAmount = base + clientFee`.
+- `professionalPayoutAmount = base − ceil(base*0.1)`.
+- `adminNetAmount = clientCharge − professionalPayout`.
+- Example: base ₹1,000 gives client ₹1,100, professional ₹900, platform ₹200.
+- Amounts are **integer rupees**. Razorpay amounts are ×100 paise (`razorpay.ts:80`).
+
+### W1 GET /api/wallet
+- Cookie, any role (401 without a session). `ensureWallet(userId)` **creates a wallet row on read** if it is missing (`wallet-ledger.ts:24-33`).
+- Response `200 {wallet: Wallet, total, grossTotal, commission, available, reserved, withdrawals: ProjectWithdrawal[] (≤10), transactions: WalletTransaction[] (≤50)}`:
+  - `total` and `grossTotal` are both the sum of COMPLETED `MILESTONE_EARNING` rows (identical values).
+  - `commission` is the sum of `Payment.commissionAmount` where `professionalId = me` and COMPLETED.
+  - `reserved` is `wallet.pendingBalance` for CLIENT/PROFESSIONAL.
+  - `available` is `max(0, balance − pendingBalance)`.
+  - For ADMIN, `available` is the raw balance and `reserved` is 0.
+
+### W2 POST /api/wallet (withdrawal request)
+- Auth: cookie; role CLIENT or PROFESSIONAL, else **401** `Sign-in required.` (not 403).
+- Body: `{amount:int>0, destinationType?: BANK|CARD|UPI (default BANK), destinationLabel: string 2..120}`, else 400.
+- **Transaction (`:74-91`):** a raw SQL `UPDATE "Wallet" SET "pendingBalance" = "pendingBalance" + amount WHERE id=… AND balance − pendingBalance ≥ amount`, which is an atomic reservation. If `rowcount≠1` it returns 400 `Withdrawal amount exceeds your available balance.` Otherwise `ProjectWithdrawal.create {professionalId: me, status:PENDING}`.
+- **Note:** clients' withdrawals are stored in the `professionalId` column (naming mismatch). Other errors are re-thrown (`:98`), giving the framework 500.
+- Response `201 {withdrawal}`. Processing (approve or pay out) is done by admin endpoints (F1: `PATCH /api/admin/finance/withdrawals/{id}`).
+- No notifications, realtime events or audit entries.
+
+### W3 POST /api/wallet/deposit/order
+- If `isRazorpayConfigured()` is false (`RAZORPAY_ENABLED!=="false"` and key id plus secret), it returns **503** before auth.
+- Auth: cookie (401); role CLIENT (403).
+- Body: `{amount:int 1..1,000,000}` rupees, else 400.
+- **External:** `createRazorpayOrder` sends `POST https://api.razorpay.com/v1/orders` with Basic auth, `amount = rupees*100`, `receipt: servio_wallet_{userId}_{ts}`, `notes {purpose:"wallet_top_up", clientId}` (`razorpay.ts:70-104`). A Razorpay error **throws**, giving an unhandled 500.
+- DB: `ensureWallet`; `WalletTransaction.create {type WALLET_TOP_UP, status PENDING, amount, providerReference: orderId, idempotencyKey: wallet-topup-{orderId}}`.
+- Response `200 {enabled:true, keyId, orderId, amount (paise), currency:"INR"}`. Consumed by Razorpay Checkout in `src/routes/client/earnings.tsx:140-190`.
+
+### W4 POST /api/wallet/deposit/verify
+- 503 if not configured. Cookie (401). CLIENT (403).
+- Body: `{razorpayOrderId, razorpayPaymentId, razorpaySignature}` (non-empty strings).
+- The signature is checked as HMAC-SHA256(`orderId|paymentId`, key secret) with a timing-safe compare (`razorpay.ts:106-118`). Failure or a bad body returns 400 `Payment verification failed.`
+- The `WalletTransaction` is looked up by unique `providerReference`. It must belong to the caller's wallet (404). If already COMPLETED it returns `200 {ok:true, alreadyProcessed:true}`.
+- **Transaction:** `creditWalletFromVerifiedProvider`:
+  1. Upsert the wallet.
+  2. Re-read the transaction and require PENDING, otherwise throw `Wallet top-up is invalid or already processed.` That throw is uncaught in the route, so it returns 500.
+  3. `Wallet.balance += amount` (the amount stored at order time, not the amount from Razorpay).
+  4. Set the transaction to COMPLETED with `metadataJson {providerPaymentId}` (`wallet-ledger.ts:83-104`).
+- Response `200 {ok:true, amount}`.
+- **Concurrency — double credit confirmed:** the PENDING check in step 2 is a plain read, and step 4 is an unconditional update. Concurrent verify calls under PostgreSQL READ COMMITTED both pass the check and **double-credit**: one 5,000 top-up was credited **20,000** (20 concurrent calls) and **25,000** in another round; losing calls return 500. No webhook is needed `[VALIDATED 2026-09-17 · [V-41](../validation/LOCAL_VALIDATION_LOG.md)]`. Verify racing the webhook was not tested. A conditional `updateMany where status=PENDING` would close this. Contrast W6, which uses a conditional claim.
+- Payment capture state is not fetched from Razorpay; the checkout signature is trusted.
+- No notification, realtime event or audit entry.
+
+### W5 POST /api/wallet/deposit/fail
+- Cookie (401), any role. Body `{orderId: string≥1, reason?: string ≤240}` (400).
+- Finds a `WalletTransaction` by `providerReference` in the caller's wallet (404). If COMPLETED it returns `{ok:true}` without changes. Otherwise it sets `status=FAILED` and `metadataJson {reason}`.
+- **No Razorpay check:** a client can mark its own PENDING top-up FAILED even if the payment later captures (webhook reconciliation in F1 `[NEEDS VALIDATION — not testable locally]`).
+- Response `200 {ok:true}`.
+
+### W6 POST /api/wallet/milestone (fund milestone from wallet)
+- Cookie (401), CLIENT (403). Body `{projectId:int>0, milestoneId:int>0}` (400).
+- Authz: the project must have `clientId = me`, and the milestone must be in it with status `AWAITING_CLIENT_REVIEW`, else 409 `This milestone is not ready for payment.`
+- **Transaction (`maxWait 10s, timeout 30s`, `:47-135`):**
+  1. Claim: `updateMany` milestone AWAITING_CLIENT_REVIEW → PAYMENT_PROCESSING. If count≠1, throw, giving 409.
+  2. `Payment.upsert` on unique `milestoneId` (create: provider `wallet`, status PENDING, fee split, `idempotencyKey wallet-milestone-{id}`). If it is already COMPLETED, throw, giving 409.
+  3. `fundMilestoneFromWallet`: find the **first** ADMIN user (`findFirst role ADMIN`). Debit the client wallet by `clientChargeAmount` with a conditional `updateMany balance ≥ amount`; if that fails, throw `Insufficient wallet balance.`, giving **402**. Write a `WalletTransaction MILESTONE_PAYMENT` (−) with idempotencyKey `payment-{id}-client-debit`. Credit the admin wallet with `ADMIN_MILESTONE_RECEIPT` (+) using `payment-{id}-admin-credit` (`wallet-ledger.ts:106-138`).
+  4. Payment → `FUNDED`.
+  5. `Invoice.upsert` on unique paymentId (`INV-{year}-{paymentId padded 6}`, amount = client charge, commissionAmount = adminNet, netAmount = professional payout).
+  6. Milestone → `AWAITING_ADMIN_APPROVAL`.
+  7. `ProjectTransaction.create {type WALLET_MILESTONE_FUNDED, status PENDING_ADMIN_PAYOUT, amount = base}`.
+  8. Read the remaining client balance.
+- **After commit:**
+  - `notifyMilestoneFunded` notifies the professional (`MILESTONE_FUNDED`), then all admins via `notifyRole`, which emits `notification:new`, `admin:notification`, `admin:overview-update`, and no `admin:operations-update` (the type does not match its keywords).
+  - `emitRealtimeProjectUpdate` sends `project:updated` to both parties.
+- **Response 200:** `{ok:true, charged, professionalReceives, adminReceives (= charged, misleading name), platformEarnings (= adminNet), remainingBalance, status:"FUNDED", message}`.
+- **Errors:** 402 insufficient balance, 409, 500 (message shown only in development).
+- **Not done here:** no `ProjectTimelineEvent`, and the next milestone is not activated. The professional's release happens in admin payout (F1 `POST /api/admin/finance/milestone-payout`, `releaseMilestoneToProfessional`).
+
+---
+
+## B.9 v1 namespace and the rewrite
+
+### B.9.1 Precedence (Next.js 16 docs)
+
+`next.config.ts:20-26` returns a **plain array** from `rewrites()`. The bundled Next 16 docs state: *"When the `rewrites` function returns an array, rewrites are applied after checking the filesystem (pages and `/public` files) and before dynamic routes"* (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/rewrites.md:48`). They are therefore `afterFiles` rewrites. The routing order is: headers → redirects → **proxy** → beforeFiles → **filesystem/static routes** → **afterFiles rewrites** → dynamic routes → fallback (`rewrites.md:87-98`, `03-file-conventions/proxy.md:204-215`).
+
+| Request | Resolution | Evidence |
+|---|---|---|
+| `/api/v1/messages` | The **physical** `app/api/v1/messages/route.ts` (a static filesystem route) wins; the rewrite is never applied. `/api/messages` does **not** exist (404) `[VALIDATED 2026-09-17 · [V-13](../validation/LOCAL_VALIDATION_LOG.md)]`. | filesystem is checked before afterFiles |
+| `/api/v1/professionals` | Physical `app/api/v1/professionals/route.ts` wins. `/api/professionals` does not exist. | same |
+| `/api/v1/client/jobs`, `/api/v1/wallet/deposit/order`, `/api/v1/portal/project-actions`, … | No physical match, so the rewrite goes to `/api/client/jobs` etc. | afterFiles |
+| `/api/v1/client/jobs/12`, `/api/v1/portal/notifications`, `/api/v1/marketplace/job?id=5` | The rewrite runs before dynamic matching, so `/api/client/jobs/[id]` and `/api/portal/[resource]` are served, with query strings preserved. | afterFiles then dynamic |
+| `/api/v1/portal/invoices/{id}` | Rewritten to `/api/portal/invoices/{id}`, served by `app/api/portal/invoices/[paymentId]/route.tsx` (R13). Works. Linked from `src/routes/client/earnings.tsx:728` and `src/routes/professional/earnings.tsx:517`. | OK (corrected by orchestrator: earlier draft missed the `.tsx` route) |
+| `/api/v1/v1/...` | **404** — not rewritten twice (e.g. `/api/v1/v1/marketplace/categories` → 404) `[CORRECTED 2026-09-17 · [V-13](../validation/LOCAL_VALIDATION_LOG.md)]` | runtime |
+
+- The proxy runs **before** rewrites on the original path. Both `/api/v1/*` and `/api/*` start with `/api/`, so the Origin check applies identically.
+- The custom server (`server.mjs`) uses `app.getRequestHandler()`, so the config rewrites stay active.
+- **Consequence:** there is no true versioning. `/api/v1/*` is an alias of the unversioned handlers, except the two v1-only endpoints. Front-end usage is mixed: for example `/api/portal/notifications` has 16 call sites while `/api/v1/portal/professional-jobs` has 7.
+
+### V1 GET /api/v1/messages
+- Cookie `getSession` (401), any role.
+- **Mode A: `?conversationId=<uuid>` (`:31-46`).** `SocketConversation.findUnique` with the first 100 messages ascending (404 if missing). Allowed for ADMIN or either participant, else 403. Response `200 {conversation: SocketConversation & {messages: SocketMessage[]}}`.
+- **Mode B: contact list (`:48-206`).**
+  - Non-admin contacts are the counterparties of all the user's projects (any status), plus existing conversation partners, plus admins in conversations. Only active users are included.
+  - ADMIN contacts are **all users except self** (unbounded), and conversations are **all conversations** in the system.
+  - Response `200 {role, contacts:[{id,firstName,lastName,avatarUrl,role,name,conversationId|null,lastMessage|null,unreadCount,projects:[{id,jobId,title,category,status,progress,completedMilestones,totalMilestones,isCompleted,updatedAt}],activeProject|null}]}`, sorted by last message time then name.
+- DB: ProjectTracking (with job and milestones.payment), SocketConversation ×2, User ×2, `SocketMessage.groupBy(senderId)`. Unpaginated.
+
+### V2 PATCH /api/v1/messages
+- Cookie (401). The body is cast with no zod: `{conversationId?: string, all?: boolean}`. Invalid JSON throws, giving 500.
+- `all:true`: marks every unread message where `receiverId = me` as read, then emits `message:read {conversationId, messageIds, readAt}` to each sender, once per conversation. **The full `messageIds` list for that sender is sent with each conversation event** (`:233-241`). Response `{success:true}`.
+- Otherwise `conversationId` is required (400). The conversation must exist (404). The caller must be ADMIN or a participant (403). Messages received by the caller in that conversation are marked read, and `message:read` is emitted to their distinct senders. Response `200 {success:true}`.
+
+### V3 POST /api/v1/messages
+- Cookie (401). Body cast with no zod: `{recipientId: number, text: string, job?: string, projectId?: number}`. `recipientId` must be a safe integer and the trimmed `text` non-empty (400). **No maximum length.** Invalid JSON gives 500.
+- **Authz and gating (`:289-315`):**
+  - The recipient must exist (404). ADMIN→ADMIN is refused (404 `Recipient is unavailable.`).
+  - When **neither** side is ADMIN, a non-COMPLETED `ProjectTracking` must exist between the pair (matching `projectId` if given), else 403 `Messaging is available for running projects only.`
+  - **Any non-admin can message any ADMIN user id, and any ADMIN can message any user, without a project.** Recipient `isActive` is not checked.
+- **DB:**
+  - `SocketConversation.findFirst` for the pair in either order; create it if missing (uuid id, denormalized names and avatars, `job` label).
+  - `SocketMessage.create` (uuid).
+  - `SocketConversation.update updatedAt` (and relabel the job when it was a placeholder).
+  - Not transactional.
+- **Side effects:** `notifyUsers([recipient], NEW_MESSAGE, href by role: /admin/messages | /professional/messages | /messages)` writes a DB row, emits `notification:new` and sends **email per message** to opted-in recipients. Then `emitRealtimeMessage([sender, recipient], {...message, conversationId})` sends `message:new`.
+- Response `200 {conversationId, message: SocketMessage}`.
+- No rate limit, so a spam or email-flood vector exists.
+
+### V4 GET /api/v1/professionals
+- Public. Query (zod `:5-24`):
+
+| Param | Type |
+|---|---|
+| `query` | string ≤200 |
+| `segment` | string ≤50 |
+| `parentCategoryId`, `categoryId`, `subcategoryId` | coerced int>0 |
+| `category`, `city`, `state`, `district` | string ≤100 |
+| `minRating` | coerced number 0..5 |
+| `verified` | `z.coerce.boolean()`. **Defect:** any non-empty string, including `"false"`, becomes `true` |
+| `availability` | string ≤60 |
+| `distanceKm` | coerced number >0, ≤500 (requires `originLat` and `originLng`, else 400) |
+| `originLat`, `originLng` | coerced number (no range check) |
+| `sort` | `recommended \| rating \| distance \| most-reviewed \| price` |
+| `page` | int ≥1, default 1 |
+| `limit` | int 1..50, default 20 |
+
+- Response `200 {professionals: ProfessionalDiscoveryResult[], total, page, limit, hasMore, facets:{cities:[], categories:[]}}`. The facets are **always empty arrays** (`src/lib/queries/professional-discovery.ts:532-539`). `ProfessionalDiscoveryResult = {id:string, name, title, avatarUrl, verified, rating, reviewCount, hourlyRate, location, approximateDistanceKm, availabilityStatus, skills[], bio, displayPoint?:{lat,lng}}` (fuzzed; the key is omitted when unknown) (`:300-336`).
+- Errors: `400 {error:{code:"VALIDATION_ERROR", message, details}}`; `500 {error:{code:"INTERNAL_ERROR", message}}`.
+- Distance mode fetches up to `min(page*limit+20, 200)` candidates and filters in memory (`:425`). Results beyond 200 candidates are unreachable in distance mode `[NEEDS VALIDATION — not testable locally]`.
+
+---
+
+## B.10 Realtime (Socket.IO)
+
+### B.10.1 Server and connection
+
+| Aspect | Implementation | Evidence |
+|---|---|---|
+| Server | Socket.IO `Server` attached to the same Node HTTP server as Next.js. Path `/api/realtime`. | `server.mjs:28-35` |
+| CORS | `{origin: REALTIME_ALLOWED_ORIGIN ?? APP_URL, credentials:true}` if set, else Socket.IO defaults | `server.mjs:18`, `:34` |
+| Handshake auth | Reads the `servio_session` cookie from the handshake headers and runs `jwtVerify` (HS256, `AUTH_SECRET`). Requires `userId` to be a positive integer. **If** `DATABASE_URL` is set **and** `payload.sessionId` is a string, it queries `sessions` joined with `"User"` through a raw `pg` pool (max 2) and rejects revoked, expired or inactive sessions. Otherwise it accepts on signature alone. Failure gives `Error("Unauthorized realtime connection")`. | `server.mjs:38-68` |
+| Socket data | `socket.data.userId`, and `socket.data.role` **from the JWT claim** (not refreshed from the DB, unlike `verifySession`) | `server.mjs:62-63` |
+| Rooms | `user:<userId>` for every socket; `admins` **and** `admin:room` when `role === "ADMIN"` | `server.mjs:70-76` |
+| Client→server events | **None registered.** Sockets are receive-only. | `server.mjs:70-76` |
+| Emit bridge | `globalThis.__servioIo = io` (`server.mjs:77`). `src/lib/realtime.ts` reads this global, and every emit **silently no-ops** if it is undefined (for example under `next dev` without `server.mjs`, or on serverless hosting). | `src/lib/realtime.ts:14-18`, each function |
+| Long-lived sessions | A socket stays connected after logout or revocation; auth is checked only at handshake. | `server.mjs:38` |
+| Scaling | No Socket.IO adapter (Redis etc.), so rooms are per process. Multi-instance deployments lose cross-instance delivery. | `server.mjs` |
+
+### B.10.2 Events
+
+All events go server→client. "Emitter path" is the `src/lib/realtime.ts` function plus its callers.
+
+| # | Event | Room(s) | Payload | Emitter (lib) | Callers (route/lib) | Client listeners |
+|---|---|---|---|---|---|---|
+| E1 | `notification:new` | `user:<id>` | `{id?, type, title, description, href, createdAt}` | `emitRealtimeNotification` `realtime.ts:19-31` | `notifyUsers` (`marketplace-notifications.ts:290`), `notifyRole` (`:109`); direct: `app/api/admin/verifications/route.ts:123` (F1). Indirect callers: C3, C9, C10, P9, A1-A17, W6, V3, plus F1 auth register (`auth/[action]/route.ts:195,424`), admin disputes, milestone-payout | `RealtimeNotifications.tsx:130`, `AdminRealtime.tsx:119`, `routes/client/dashboard.tsx:103`, `routes/client/my-jobs.tsx:127`, `routes/professional/dashboard.tsx:98`, `routes/professional/running-projects.tsx:129`, `app/project/[projectId]/tracking/page.tsx:273` |
+| E2 | `notification:new` (admin broadcast) | `admins` | `{id?, type (default "ADMIN_ALERT"), title, description?, href?, createdAt}` | `emitAdminNotification` `realtime.ts:66-83` | `notifyRole("ADMIN")` (`marketplace-notifications.ts:117`); P13 (`professional/verification/route.ts:57`) | `AdminRealtime.tsx:119` |
+| E3 | `admin:notification` | `admins` | same as E2 | `emitAdminNotification` `realtime.ts:81` | same as E2 | `AdminRealtime.tsx:118` |
+| E4 | `message:new` | `user:<sender>`, `user:<recipient>` | `SocketMessage` row `{id, conversationId, senderId, receiverId, body, readAt, createdAt, …}` | `emitRealtimeMessage` `realtime.ts:33-37` | V3 (`v1/messages/route.ts:372`) | `MessagesWorkspace.tsx:170`, `RealtimeNotifications.tsx:131` (filters `receiverId === userId`), `AdminRealtime.tsx:124` |
+| E5 | `message:read` | `user:<sender>` | `{conversationId, messageIds: string[], readAt}` | `emitRealtimeMessageRead` `realtime.ts:39-43` | V2 (`v1/messages/route.ts:235`, `:267`) | `MessagesWorkspace.tsx:177-189` |
+| E6 | `project:updated` | `user:<client>`, `user:<professional>` | `{projectId}` (refetch signal) | `emitRealtimeProjectUpdate` `realtime.ts:45-52` | project-actions `event()` (`:222`), W6 (`wallet/milestone:144`), accept (`project-request-actions.ts:164`), F1 `admin/finance/milestone-payout/route.ts:121` | `RealtimeNotifications.tsx:132`, `MessagesWorkspace.tsx:195`, `AdminRealtime.tsx:125`, `routes/client/dashboard.tsx:102`, `my-jobs.tsx:126`, `professional/dashboard.tsx:99`, `running-projects.tsx:128`, `tracking/page.tsx:272` |
+| E7 | `proposal:new` | `user:<id>` | `{jobId}` | `emitRealtimeProposalNew` `realtime.ts:54-58` | C9 (`client/project-requests:119`), P9 (`professional/proposals:116,154`), `project-request-actions.ts:51,90,161` | `RealtimeNotifications.tsx:133`, `client/dashboard.tsx:101`, `my-jobs.tsx:125`, `professional/dashboard.tsx:100`, `running-projects.tsx:130`, `tracking/page.tsx:274` |
+| E8 | `admin:overview-update` | `admins` | `{}` or `{userId, status?}` | `emitAdminOverviewUpdate` / co-emitted by E9-E11 (`realtime.ts:85-102`) | `notifyRole("ADMIN")` (always), P13, F1 admin verifications | `AdminRealtime.tsx:123` |
+| E9 | `admin:verifications-update` | `admins` | `{}` or `{userId}` / `{userId,status}` | `emitAdminVerificationsUpdate` `realtime.ts:89-92` | P13 (`professional/verification:63`), `notifyRole` when the type contains `VERIFICATION`, F1 `admin/verifications:133` | `AdminRealtime.tsx:120` |
+| E10 | `admin:operations-update` | `admins` | `{}` | `emitAdminOperationsUpdate` `realtime.ts:94-97` | `notifyRole("ADMIN")` when the type contains `JOB`, `DISPUTE` or `PROJECT` (for example NEW_JOB from C3, DISPUTE_RAISED from A17) | `AdminRealtime.tsx:121` |
+| E11 | `admin:users-update` | `admins` | `{}` | `emitAdminUsersUpdate` `realtime.ts:99-102` | `notifyRole("ADMIN")` when the type contains `ACCOUNT` or `USER` (NEW_ACCOUNT from F1 auth register) | `AdminRealtime.tsx:122` |
+
+- Distinct custom event names: **10** (`notification:new`, `admin:notification`, `message:new`, `message:read`, `project:updated`, `proposal:new`, `admin:overview-update`, `admin:verifications-update`, `admin:operations-update`, `admin:users-update`). Built-in `connect_error` is observed in `AdminRealtime.tsx:65`.
+- **Client-side fan-out:** listeners mostly re-dispatch DOM `CustomEvent`s (`servio:notification`, `servio:message`, `servio:project-update`, `servio:proposal`, `servio:admin-*`) and refetch over REST (`AdminRealtime.tsx:69-116`, `RealtimeNotifications.tsx:117-129`).
+- **Connections per tab:** several components each open their own `io()` connection (`RealtimeNotifications`, `MessagesWorkspace`, dashboard pages, the tracking page), so a single tab can hold 2-3 sockets.
+- **Dead room:** `admin:room` is joined but nothing emits to it.
+- **Duplicate admin toasts `[VALIDATED 2026-09-17 · [V-53](../validation/LOCAL_VALIDATION_LOG.md)]`:** `notifyRole("ADMIN")` emits `notification:new` with `id` to `user:<adminId>` (dedupe key `id:N`), **and** `admin:notification` plus `notification:new` without `id` to `admins` (key `type|title|href`). `AdminRealtime` dedupes by key (`:69-75`), so an admin sees the same alert twice (2 toasts per admin event observed in Chrome).
+- **Missed events:** realtime is best-effort only. `RealtimeNotifications` also polls REST every 15 s and on focus (`RealtimeNotifications.tsx:~95-103`).
+
+---
+
+## B.11 Findings (known issues in Part B)
+
+| Severity | Title | Evidence | Impact |
+|---|---|---|---|
+| High | Funded milestones can be re-priced; deletion is guarded only by an FK | `portal/project-actions/route.ts:415-466` (`update-milestone` blocks only APPROVED), `:467-484` (`delete-milestone` blocks only APPROVED and AWAITING_CLIENT_REVIEW) | A client can change `amount` on a milestone in PAYMENT_PROCESSING or AWAITING_ADMIN_APPROVAL after wallet funding. Increases are capped by the agreed total (400), but **decreases are accepted** (2000→500 → 200) and admin payout pays from the **current** amount: client charged 2,200, Payment still records proPayout 1,800, professional received 450 — the professional is underpaid and the platform keeps the difference `[CORRECTED 2026-09-17 · [V-42](../validation/LOCAL_VALIDATION_LOG.md)]`. Deleting a funded milestone is stopped only incidentally: `ProjectWorkUpload.milestoneId` is `ON DELETE RESTRICT` (`prisma/migrations/202608310001_database_integrity_guards/migration.sql:67`), which surfaces as a 500 "Unable to update the project." `[VALIDATED 2026-09-17 · [V-42](../validation/LOCAL_VALIDATION_LOG.md)]`. `Payment.milestone_id` has no FK in the migrations `[VALIDATED 2026-09-17 · [V-01](../validation/LOCAL_VALIDATION_LOG.md)]`. An IN_PROGRESS or UPCOMING milestone without uploads can be deleted freely |
+| High | `update-progress` bypasses the state machine | `project-actions/route.ts:281-292` | A professional can set any project (AWAITING_CLIENT_REVIEW, FINAL_WORK_SUBMITTED, COMPLETED…) back to IN_PROGRESS (COMPLETED → IN_PROGRESS observed) `[VALIDATED 2026-09-17 · [V-43](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| High | Wallet top-up double-credit race | `wallet/deposit/verify/route.ts:43-52`, `src/lib/wallet-ledger.ts:88-103` | Concurrent verify calls each credit the wallet (one 5,000 top-up credited 20,000 / 25,000 locally) `[VALIDATED 2026-09-17 · [V-41](../validation/LOCAL_VALIDATION_LOG.md)]`; verify plus the webhook untested |
+| Medium | `complete-project` has no readiness precondition | `project-actions/route.ts:765-783` | A client can start closure from READY_TO_START or IN_PROGRESS with unpaid milestones (READY_TO_START → 200 AWAITING_PROFESSIONAL_CONFIRMATION; `submit-review` on the unfinished project → 200) `[VALIDATED 2026-09-17 · [V-34b/c](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| Medium | Hire-request accept is not transactional | `src/lib/project-request-actions.ts:99-144` | A failure mid-way leaves the job CLOSED with no ProjectTracking, or a project without milestones |
+| ~~Medium~~ Retracted | ~~Broken invoice links~~ | Route exists as `app/api/portal/invoices/[paymentId]/route.tsx` (R13) | Not an issue; original analysis globbed only `route.ts` |
+| Medium | `POST /api/professional/profile` returns the full User row | `professional/profile/route.ts:98-118`; `User.passwordHash` exists (`prisma/schema.prisma:117`) | The bcrypt `passwordHash`, `googleId` and every other User column are returned to the account owner. Prisma returns all scalar fields when no `select` is given `[VALIDATED 2026-09-17 · [KI-030](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| Medium | Notification GET scans all milestones and 100 global jobs per poll | `portal/[resource]/route.ts:75-88` | Load grows with total data; polled every 15 s; cross-tenant title matching |
+| Medium | No rate limiting on messaging, proposals, uploads or Razorpay order creation | §B.1.4 | Spam, email flooding (`notifyUsers` emails every message), storage abuse |
+| Medium | Verification PUT accepts arbitrary URLs and always resets status to PENDING | `professional/verification/route.ts:7-13`, `:51-55` | Unvalidated document references; an approved professional can reset their own status |
+| Medium | APIs do not require email verification | `proxy.ts:87`, no `requireVerifiedUser` calls | Unverified accounts can transact over the API `[VALIDATED 2026-09-17 · [V-22](../validation/LOCAL_VALIDATION_LOG.md), [V-23](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| Medium | Non-admins can message any admin, and admins list every user and conversation | `v1/messages/route.ts:124-137`, `:293-315` | Bypasses the running-project gate; unbounded admin queries |
+| Low-Medium | Duplicate dispute notification to the counterparty | `project-actions/route.ts:926-956`, `marketplace-notifications.ts:324-334` | Two notifications and two emails per dispute |
+| Low-Medium | `verified=false` treated as true | `v1/professionals/route.ts:16` | Wrong search results |
+| Low-Medium | Publishing a draft via PATCH does not notify professionals | `client/jobs/[id]/route.ts:283-332` vs `client/jobs/route.ts:234-240` | Jobs published from drafts get no announcement `[VALIDATED 2026-09-17 · [V-46](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| Low-Medium | Uncaught `request.json()` and invalid JWTs return 500 instead of 400/401 | `project-actions:136`, `v1/messages:212,278`, `project-requests/[id]:18`, `proposals:22,60`, `project-files:19`, `verification/upload:22` | Misleading status codes and noisy error logs |
+| Low | `proposalCount` is really the favorite count | `portal/[resource]/route.ts:671,706`, `src/lib/queries/marketplace.ts` getOpenJob | Wrong UI figures |
+| Low | Static `marketplace/jobs` shadows `[resource]=jobs`, with different shape and filtering | `app/api/marketplace/jobs/route.ts`, `[resource]/route.ts:19` | Dead code; M1 shows jobs that already have running projects |
+| Low | 500 responses leak `error.message` | `client/jobs/route.ts:177,245`, `client/jobs/[id]/route.ts:242,336,358`, `professional/profile/route.ts:64,122` | Internal detail disclosure (Prisma errors) |
+| Low | Non-atomic milestone replacement in job PATCH | `client/jobs/[id]/route.ts:317-331` | A partial failure loses milestones |
+| Low | Earnings export `selected` ids hit two tables | `professional/earnings/export/route.ts:65-83` | Wrong rows in the PDF |
+| Low | Withdrawal for CLIENT stored in `professionalId`; wrong-role response is 401 | `wallet/route.ts:57,84` | Naming confusion; misleading status |
+| Low | `adminReceives` equals the client charge | `wallet/milestone/route.ts:151` | Misleading API field |
+| Low | ADMIN gets `viewerRole:"PROFESSIONAL"` | `portal/[resource]/route.ts:836` | UI may show professional actions to an admin |
+| Low | `submit-review` allowed at any status; listed as "shared" but client-only | `project-actions:129`, `:832-837` | Premature reviews; misleading code |
+| Low | Socket role from JWT claim; revocation check skipped without `DATABASE_URL` or `sessionId`; sockets survive logout | `server.mjs:46-63` | Stale privileges on long-lived sockets |
+| Low | `admin:room` joined but unused; multiple sockets per tab; possible duplicate admin toasts | `server.mjs:74`, §B.10.2 | Dead code, extra connections |
+| Low | `apiSuccess`/`apiError` unused; 3+ response shapes | `src/lib/api-response.ts`; §B.1.3 | Inconsistent client contract |
+| Low | No in-repo caller for `GET /api/client/account`, `GET /api/payments/razorpay/config`, `GET /api/marketplace/professional` | grep over `src/`, `app/` | Possibly dead endpoints `[NEEDS VALIDATION]` |
+| Medium (dev/local only) | Local-storage path normalization vs prefix check (dev only) | `verification/documents/[...storageKey]/route.ts:29-38`, `project-file-storage.ts:37-42` | Cross-user read of verification documents via `..%2F` in local mode `[VALIDATED 2026-09-17 · [V-35](../validation/LOCAL_VALIDATION_LOG.md)]` |
+| Info | Uploaded files without a work record are never cleaned up | `portal/project-files/route.ts`, `verification/upload/route.ts` | Storage growth |
+
+---
+
+## B.12 Discrepancies against existing API documentation
+
+| Existing doc | Claim | Code reality |
+|---|---|---|
+| root `openapi.yaml` | Server `/api/v1`; path `/client/proposals/{id}` (PATCH accept/reject) | No such route. The implementation is `PATCH /api/client/project-requests/{id}` with actions accept, reject **and counter** |
+| root `openapi.yaml` | `Error` schema `{error:{code,message,details}}` | Only `GET /api/v1/professionals` uses it. Every other endpoint returns `{error: string}` |
+| root `openapi.yaml` | `/portal/project` listed as its own path | It is one resource of `app/api/portal/[resource]/route.ts`. Query params `id`/`jobId` are undocumented |
+| root `openapi.yaml` | Covers 6 paths, no request or response schemas | 48 method handlers / 79 logical endpoints in Part B alone |
+| `project-docs/docs/openapi.yaml` | `/api/v1/professionals` `sort` enum `[recommended, rating, distance, most-reviewed]` | The code also accepts `price` |
+| `project-docs/docs/openapi.yaml` | `minRating` integer; `distanceKm` minimum 1 | The code uses a number (decimals allowed) and `distanceKm > 0` (for example 0.5 is valid) |
+| `project-docs/docs/openapi.yaml` | Missing params | The code also accepts `segment`, `parentCategoryId`, `categoryId`, `subcategoryId`, `state`, `district` |
+| `project-docs/docs/openapi.yaml` | `verified: boolean`; facets with `FacetItem` values | `z.coerce.boolean` treats `"false"` as true; facets are always empty arrays |
+| `project-docs/docs/openapi.yaml` | `displayPoint` nullable; `ErrorResponse` for 400 and 500 | `displayPoint` is omitted (undefined) rather than null; the 500 body has no `details` |
+| `project-docs/docs/API_CONTRACT.md` | "New and migrated endpoints use `{ data: {} }` envelope" | No endpoint returns `{data}`. `apiSuccess` has zero call sites |
+| `project-docs/docs/API_CONTRACT.md` | "migrated to physical versioned route folders"; `/api/v1/website/*` group | Only `v1/messages` and `v1/professionals` are physical; `website` does not exist (no `app/api/website`) |
+| `project-docs/docs/API_CONTRACT.md` | "Portal: project client or professional" | Also ADMIN for `portal/project` and `payment-details`; any authenticated role for notifications, messages and wallet |
+| `docs/_archive/2026-09-14-flat-docs/api-reference.md` | `project-actions` is 786 lines; actions table lacks create-milestones, update-milestone, delete-milestone | 964 lines; 18 actions |
+| `docs/_archive/2026-09-14-flat-docs/api-reference.md` | `create-milestone` "(max 5)" | No per-project cap; `create-milestones` accepts up to 50 per call |
+| `docs/_archive/2026-09-14-flat-docs/api-reference.md` | "`approve-milestone` creates the payment, activates the next milestone" | Only for OFFLINE jobs. WALLET jobs get 402, and payment happens in `POST /api/wallet/milestone`, which leaves the milestone AWAITING_ADMIN_APPROVAL (the next milestone is not activated there) |
+| `docs/_archive/2026-09-14-flat-docs/api-reference.md` | "a retried Razorpay callback cannot double-credit" | A sequential retry is safe. The concurrent case is not guaranteed (see §B.8 W4) |
+| `docs/_archive/2026-09-14-flat-docs/api-reference.md` | Realtime table omits `admin:users-update`; payload of `admin:*` is `{}` | `admin:users-update` exists; verifications and overview payloads may carry `{userId,status}` |
+| `docs/_archive/2026-09-14-flat-docs/api-reference.md` | `/api/v1/*` uses the `{error:{code,…}}` envelope | Only `v1/professionals`; `v1/messages` uses `{error:string}` |
+| `docs/_archive/2026-09-14-flat-docs/api-reference.md` | Line counts `client/jobs` 240, `client/jobs/[id]` 353 | 249 and 362 |
+| `docs/_archive/2026-09-14-flat-docs/api-reference.md` | Mentions `src/lib/api-response.test.ts` | That file does not exist (only `src/lib/api-response.ts`) |
+| `docs/_archive/2026-09-14-flat-docs/api-reference.md` | Bearer tokens "for the mobile client" | Only `client/jobs` accepts Bearer, and a Bearer POST without `Origin` is rejected by the proxy with 403 `[VALIDATED 2026-09-17 · [V-20](../validation/LOCAL_VALIDATION_LOG.md)]`; no mobile client exists in this repo `[NEEDS VALIDATION — not testable locally]` |
+
+## B.13 Open [NEEDS VALIDATION] / [UNKNOWN] items
+
+1. ~~Whether an unverified-email user can hold a session~~ — yes, via `login-phone-password` `[VALIDATED 2026-09-17 · [V-23](../validation/LOCAL_VALIDATION_LOG.md)]`.
+2. W4 double-credit race reproduced locally (READ COMMITTED) `[VALIDATED 2026-09-17 · [V-41](../validation/LOCAL_VALIDATION_LOG.md)]`. Still open: how the webhook (F1) interacts with W4 and W5.
+3. `Payment.milestone_id` has no FK on migration-built DBs `[VALIDATED 2026-09-17 · [V-01](../validation/LOCAL_VALIDATION_LOG.md)]`; deleting a funded milestone (A4) → 500 via the `ProjectWorkUpload` FK `[VALIDATED 2026-09-17 · [V-42](../validation/LOCAL_VALIDATION_LOG.md)]`. Cascade behaviour when deleting draft jobs (C6) still untested.
+4. Whether the front end displays or stores the P6 response (it contains `passwordHash`).
+5. Exact `PublicProfessionalProfile` / `DetailedProfessional` field list (M6).
+6. Hosting: `globalThis.__servioIo` exists only under `server.mjs`. On Vercel or serverless hosting all realtime emits silently no-op.
+7. Whether `GET /api/client/account`, `GET /api/payments/razorpay/config` and `GET /api/marketplace/professional` are used by external clients.
+8. Whether `portal/messages` (the `MessageConversation` model) is legacy.
+9. Whether admins need access to project files (R12) for dispute review.

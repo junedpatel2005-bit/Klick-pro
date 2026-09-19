@@ -1,8 +1,0 @@
-.env
-.env.*
-!.env.example
-node_modules
-.next
-prisma/*.db
-prisma/*.db-shm
-prisma/*.db-wal

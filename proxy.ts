@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { sessionCookie, verifySession } from "@/lib/auth";
+import { decodeSessionToken, sessionCookie } from "@/lib/session-token";
 
 function isTrustedStateChangingRequest(request: NextRequest) {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return true;
@@ -50,16 +50,11 @@ export async function proxy(request: NextRequest) {
   const isApiRoute = pathname.startsWith("/api/");
   const isAdminRoute = pathname.startsWith("/admin");
 
-  // Retrieve and verify session at most once per request if token exists
+  // Optimistic check only: the JWT signature is verified here, never the
+  // database. Revocation, account status and email verification are enforced
+  // by the layouts and route handlers that call verifySession().
   const token = request.cookies.get(sessionCookie)?.value;
-  let session: { userId: number; role: string; emailVerifiedAt?: Date | null } | null = null;
-  if (token) {
-    try {
-      session = await verifySession(token);
-    } catch {
-      session = null;
-    }
-  }
+  const session = token ? await decodeSessionToken(token) : null;
 
   // Every /admin/* page (besides the login screen itself) requires an ADMIN session.
   if (isAdminRoute && pathname !== "/admin/login") {
@@ -75,25 +70,15 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // Keep authenticated but unverified clients/professionals in the email verification flow
-  const verificationExempt = [
-    "/login",
-    "/signup",
-    "/verify",
-    "/verify-email",
-    "/forgot-password",
-    "/reset-password",
-  ].some((path) => pathname === path || pathname.startsWith(`${path}/`));
-
-  if (!isApiRoute && !verificationExempt && !isAdminRoute) {
-    if (session && session.role !== "ADMIN" && !session.emailVerifiedAt) {
-      return NextResponse.redirect(new URL("/verify", request.url));
-    }
-  }
+  // The email-verification gate lives in app/(portal)/layout.tsx, which has the
+  // full session row. It cannot run here: emailVerifiedAt is not in the JWT.
 
   const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-request-id", requestId);
+  // Lets server layouts know the current path (app/admin/layout.tsx uses it to
+  // skip its guard on the login screen).
+  requestHeaders.set("x-pathname", pathname);
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("x-request-id", requestId);

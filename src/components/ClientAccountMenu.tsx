@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { fetchCurrentUser, invalidateCurrentUser } from "@/lib/current-user";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -32,12 +33,8 @@ export function ClientAccountMenu() {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/v1/auth/me")
-      .then(async (response) => {
-        if (!response.ok) return null;
-        const data = (await response.json()) as { user: AccountUser | null };
-        return data.user ?? null;
-      })
+    void fetchCurrentUser()
+      .then((data) => (data.user as AccountUser | null) ?? null)
       .then((account) => {
         if (!active) return;
         setUser(account);
@@ -59,6 +56,7 @@ export function ClientAccountMenu() {
 
   async function logout() {
     await fetch("/api/v1/auth/logout", { method: "POST" });
+    invalidateCurrentUser();
     router.replace("/login");
   }
 

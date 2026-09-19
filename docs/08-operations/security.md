@@ -1,0 +1,322 @@
+# Security Architecture and Risk Register
+
+Last verified against code: 2026-09-16 (commit cd8f4fb); runtime-validated 2026-09-17
+
+> Scope: spec §15. Documents existing controls with evidence and records risks factually. No control is claimed unless verified in code or configuration.
+> Status legend: **Verified** (control present and effective as implemented), **Partial** (present with material gaps), **Not present**.
+> Deep detail on sessions, roles and the full API protection matrix: [../03-architecture/authentication-and-authorization.md](../03-architecture/authentication-and-authorization.md).
+> Risk IDs `RISK-SEC-NNN` are local to this document (they are unrelated to the `SEC-00x` IDs used in `project-docs/CURRENT_PROJECT_STATUS.md`).
+> Secret values are intentionally not reproduced anywhere in this document.
+
+---
+
+## 1. Security posture summary
+
+| # | Area | Status | One-line assessment |
+|---|---|---|---|
+| 1 | Authentication | Partial | Solid primitives (bcrypt 12, HS256 JWT + revocable DB session, hashed single-use tokens) undermined by a static-OTP mode, published demo credentials, no MFA, and no admin/user separation. |
+| 2 | Authorization | Partial | Every protected API checks session and role server-side with ownership filters; but 15+ duplicated helpers, no central guard, no admin sub-roles, one business-logic hole in milestone editing after funding. |
+| 3 | CSRF | Partial | Origin check on all mutating `/api/*` requests + `SameSite=Lax` cookie; the check also blocks legitimate webhooks and does not cover state-changing GETs. |
+| 4 | CORS | Partial | No CORS headers on HTTP APIs (same-origin only, by default). Socket.IO CORS is restricted only if `REALTIME_ALLOWED_ORIGIN`/`APP_URL` is set; no handshake Origin check. |
+| 5 | XSS | Partial | React auto-escaping everywhere; no user HTML rendered; CSP present but allows `'unsafe-inline'` scripts; CMS sanitizer is regex-based and bypassable (currently unused as an HTML sink). |
+| 6 | Input validation | Partial | zod used in 41 of 66 route files; 3 JSON-body handlers have no schema; no max length on registration password or message text. |
+| 7 | Output encoding | Verified (web) / Partial (other) | JSX escaping; e-mail templates HTML-escape interpolations; some 500 responses echo `error.message`. |
+| 8 | SQL injection | Verified | Prisma query builder everywhere; 3 raw statements all use tagged templates / `Prisma.sql` / `pg` parameters. |
+| 9 | Rate limiting | Partial | In-memory, per-process `Map`; keys use spoofable `X-Forwarded-For`; applied in 3 route files only. Runtime: rotating `X-Forwarded-For` was never limited [VALIDATED 2026-09-17 · [V-26](../validation/LOCAL_VALIDATION_LOG.md)]. |
+| 10 | Secrets management | Not present (repository hygiene) | Credential exports and a database dump are committed to git; demo passwords are embedded in client bundles. Runtime secrets are env-based. |
+| 11 | Cookie security | Partial | Session cookie httpOnly/Lax/path `/`; `secure` only when `NODE_ENV=production`; JWT also returned in login JSON. |
+| 12 | Token storage | Partial | Browser uses httpOnly cookie only; reset/verification tokens stored as SHA-256 hashes; login response body exposes the session JWT. |
+| 13 | File upload security | Partial | Size limits, extension allowlists, magic-byte checks, server-generated keys, private proxied access; avatars trust client MIME; no malware scanning. |
+| 14 | Admin protection | Partial | Admin pages/APIs role-checked server-side; admin login shares the user session, has no MFA, and can be reached through the general login and Google linking. |
+| 15 | API protection | Partial | Consistent authentication on protected endpoints; inconsistent status codes; unauthenticated paid-API proxy (`/api/geocode`); non-prod-open health endpoint. |
+| 16 | Webhook verification | Verified (signature) / broken (delivery) | HMAC-SHA256 with `timingSafeEqual` (Persona also checks timestamp); requests are rejected by the proxy before verification. |
+| 17 | Logging of sensitive data | Partial | Structured `logServerError` avoids bodies; development OTP codes are printed to console in non-production; Sentry captures exceptions without explicit scrubbing config. |
+| 18 | Audit logging | Partial | `recordAudit` used only for verification document upload/view; admin actions and auth events are not audited. |
+| 19 | Security headers | Partial | CSP, HSTS (preload), nosniff, `X-Frame-Options: SAMEORIGIN`, Referrer-Policy, Permissions-Policy set globally; CSP weakened by `'unsafe-inline'`. |
+| 20 | Database-level controls | Not present | No RLS, single DB role; authorization is application-only. |
+
+---
+
+## 2. Security checklist with evidence
+
+### 2.1 Authentication — Partial
+
+| Control | Status | Evidence |
+|---|---|---|
+| Password hashing bcrypt, cost 12 | Verified | `app/api/auth/[action]/route.ts:414, 870`; `app/api/admin/login/route.ts:36` |
+| Password policy (≥8, upper, lower, digit) | Partial (no max length) | `route.ts:30` |
+| Generic login failure messages | Verified (e-mail and admin login) | `route.ts:448-456`; `app/api/admin/login/route.ts:67-73` |
+| Account enumeration resistance | Partial — `forgot-password` is generic; `check-availability`, `register` (409), `send-phone-otp` (409), `send-phone-login-otp` (404) disclose existence | `route.ts:340-364, 391-406, 268-275, 547-548` |
+| Session: signed JWT + server-side revocable row, 7-day fixed lifetime | Verified | `src/lib/auth.ts:12-45` |
+| Session invalidation on password reset / deactivation | Verified | `route.ts:872-875`; `app/api/admin/users/[id]/route.ts:22-27` |
+| Reset & verification tokens: 32 random bytes, stored as SHA-256, single use, expiring (1 h / 30 min / 24 h) | Verified | `route.ts:74-85, 742-750, 792-800, 857-876` |
+| OTP: hashed, 10-min expiry, 5 attempts, atomic consume (development provider) or Twilio Verify | Partial — static code possible (RISK-SEC-001) | `src/lib/phone-otp-provider.ts:25-32, 76-88, 110-164` |
+| Google OAuth state parameter | Verified | `route.ts:115-141` |
+| Google OAuth account linking safety | Partial — auto-links any existing account (incl. ADMIN) by e-mail | `route.ts:169-192` |
+| E-mail verification enforcement | Partial — pages and 2 login paths only; `login-phone-password` issues a cookie to unverified users | `proxy.ts:78-91`; `route.ts:637-652` |
+| MFA | Not present | — |
+| Demo/seed credentials not exposed | **Not present** — hard-coded in login pages | `src/routes/login.tsx:15-26, 299-318`; `app/admin/login/page.tsx:54-58, 230-240` |
+
+### 2.2 Authorization — Partial
+
+| Control | Status | Evidence |
+|---|---|---|
+| Server-side role checks on every protected API | Verified (by inspection of all 66 route files) | auth doc §21 |
+| Ownership (IDOR) checks | Verified for inspected resources: jobs, requests, projects, files, payments, invoices, wallets, notifications, locations, verification documents | auth doc §21 |
+| Role taken from DB, not JWT | Verified for HTTP; **Socket.IO uses JWT claim** | `src/lib/auth.ts:40-44`; `server.mjs:62-63` |
+| Central, reusable guard | Not present (15+ local variants) | auth doc §22 |
+| Admin least privilege / sub-roles | Not present | `prisma/schema.prisma:1150-1154` |
+| Business-state integrity for money flows | Partial — milestone amount editable/deletable after funding (RISK-SEC-007) | `app/api/portal/project-actions/route.ts:415-484`; `app/api/admin/finance/milestone-payout/route.ts:62-68`; `src/lib/wallet-ledger.ts:140-172` |
+| DB-level authorization (RLS) | Not present | `prisma/migrations/**` |
+
+### 2.3 CSRF — Partial
+
+Mechanism (`proxy.ts:4-14, 44-46`): for any path starting `/api/` with method POST/PUT/PATCH/DELETE, the request is allowed only if the `Origin` header equals `request.nextUrl.origin` or equals `APP_URL` exactly; a missing `Origin` returns `403 {"error":"Request origin is not allowed."}`. The session cookie is `SameSite=Lax` (`src/lib/auth.ts:69`), which independently prevents cross-site POST requests from carrying the cookie in modern browsers.
+
+| Edge case | Effect | Severity |
+|---|---|---|
+| Server-to-server webhooks (`/api/webhooks/razorpay`, `/api/webhooks/persona`) send no `Origin` | Rejected with 403 before signature verification → payment/KYC webhooks never processed. Runtime: no `Origin` → 403; `APP_URL` Origin → 401 invalid signature [VALIDATED 2026-09-17 · [V-20](../validation/LOCAL_VALIDATION_LOG.md)] | High (RISK-SEC-004) |
+| Mobile / Bearer / curl clients | Must send an `Origin` header for any mutation; the "mobile-ready" `/api/v1` namespace is not usable for writes without it (`Authorization: Bearer` POST without Origin → 403) [VALIDATED 2026-09-17 · [V-20](../validation/LOCAL_VALIDATION_LOG.md)] | Medium (functional) |
+| `APP_URL` with trailing slash or different scheme/port | Never matches a browser `Origin` | Low (config) |
+| App behind a reverse proxy where `nextUrl.origin` ≠ public origin | All browser mutations 403 unless `APP_URL` is set correctly. Proven locally even without a proxy: under `server.mjs` a genuine same-origin request at `http://127.0.0.1:3100` (with `APP_URL=http://localhost:3100`) → 403; only the exact `APP_URL` Origin passes, so the `nextUrl.origin` branch is effectively not relied upon [PARTIALLY VALIDATED 2026-09-17 · [V-20](../validation/LOCAL_VALIDATION_LOG.md)]; real reverse-proxy behaviour `[NEEDS VALIDATION — not testable locally]` | Medium (availability) |
+| `Origin: null` (sandboxed iframe, some redirects) | Rejected | Correct behaviour |
+| Attacker-controlled `Host` in non-browser requests | Can satisfy `Origin == nextUrl.origin`, but such requests carry no victim cookie → not a CSRF vector | None |
+| State-changing GET endpoints | Not covered: `GET /api/portal/invoices/[paymentId]` upserts an invoice; `GET /api/auth/google` performs login (protected by `state`) | Low |
+| Socket.IO `/api/realtime` | Not routed through the proxy; server only emits (no client→server events), so no CSRF-able actions | None |
+
+No synchronizer/double-submit CSRF tokens are used.
+
+### 2.4 CORS — Partial
+
+| Surface | Behaviour | Evidence |
+|---|---|---|
+| HTTP APIs | No `Access-Control-*` headers are emitted by any handler or `next.config.ts`; cross-origin browser reads are blocked by default | `next.config.ts:28-45` (no CORS headers) |
+| Socket.IO | `cors: { origin: REALTIME_ALLOWED_ORIGIN ?? APP_URL, credentials: true }` if set; **if neither is set, `cors` is `undefined`** (Socket.IO default: no CORS headers for polling). Because `server.mjs:18` reads these before `.env` is loaded, values present only in `.env` also result in no CORS config [VALIDATED 2026-09-17 · [V-10](../validation/LOCAL_VALIDATION_LOG.md)]. No `allowRequest` Origin check for WebSocket upgrades; cross-site WebSocket hijacking is mitigated only by the `SameSite=Lax` cookie not being sent on cross-site WebSocket handshakes. | `server.mjs:18, 32-35` |
+
+### 2.5 XSS protection — Partial
+
+| Control | Status | Evidence |
+|---|---|---|
+| React/JSX escaping of user content | Verified | general |
+| `dangerouslySetInnerHTML` | Single use: shadcn `ChartStyle` injecting CSS variables from developer-defined chart config (no user input) | `src/components/ui/chart.tsx:72-88` |
+| CMS rich text | `sanitizeCmsHtml` (regex allowlist) runs on CMS hero description; output is rendered as **text** in `AboutHero` (`{description}`), so no HTML sink exists today. The sanitizer is bypassable with nested tags (e.g. a tag split around an inner allowed-removal tag re-forms after single-pass replacement). CKEditor packages are dependencies but no import was found. | `src/lib/sanitizeCmsHtml.ts:28-56`; `src/lib/cms-file.ts:74, 106`; `src/components/AboutHero.tsx:40-45`; `package.json:22-23` |
+| CSP | Present globally; `script-src 'self' 'unsafe-inline'` (+ `'unsafe-eval'` in dev), Razorpay and Google Maps hosts; `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'self'`, `upgrade-insecure-requests` | `next.config.ts:4-17` |
+| User-controlled URLs in `href`/`src` | `profilePhotoUrl` (zod `.url()`, any scheme) stored as `avatarUrl` and rendered in `<img src>` (not script-executing); `companyWebsite` rendered in `<a href>` on professional profile, but it is **not writable through any API** (not in the zod schemas, unknown keys stripped; a `javascript:` value was not stored) — only `scripts/add-faker-clients.ts` writes it, so the risk is limited to data inserted outside the app [CORRECTED 2026-09-17 · [V-34](../validation/LOCAL_VALIDATION_LOG.md)]; verification document values starting with `/` rendered as `<iframe src>`/`<img src>` in admin UI | `app/api/profile/route.ts:11-16, 119`; `app/(portal)/professional-profile/page.tsx:419-430`; `app/admin/verifications/page.tsx:544-556` |
+| E-mail HTML | `escapeHtml` applied to headings, descriptions, URLs | `src/lib/email.ts:13, 48-61, 90-92` |
+
+### 2.6 Input validation — Partial
+
+- zod (or `parseReportRequest`) is imported in **41 of 66** route files.
+- The 25 files without zod: `auth/me`, `client/account`, `client/verification`, `dashboard`, `geocode`, `search`, `marketplace/jobs`, `payments/razorpay/{config,order,verify}`, `verification/persona/{start,status}`, `webhooks/persona`, `professional/favorite-jobs/[jobId]`, `professional/verification/upload`, `professional/verification/documents/[...storageKey]`, `profile/avatar`, `portal/project-files`, `portal/project-files/[fileId]`, `portal/payment-details/[paymentId]`, `portal/invoices/[paymentId]`, `admin/data/[resource]`, `admin/database-status`, `admin/sidebar-counts`, `v1/messages`. Most take no body, validate path params manually, or validate multipart files manually.
+- **JSON bodies consumed without any schema (3 handlers):** `POST /api/v1/messages` and `PATCH /api/v1/messages` (type-cast `request.json()`; no max length on `text`), `PATCH /api/admin/sidebar-counts` (cast; only `section` string compared). Evidence: `app/api/v1/messages/route.ts:212, 278-288`; `app/api/admin/sidebar-counts/route.ts:50`.
+- Malformed JSON not caught (unhandled 500): `POST/PATCH /api/admin/services`, `PATCH /api/admin/users/[id]` (inside try → 500), `POST /api/contact`, `POST /api/portal/project-actions` (inside try → 500), `v1/messages` POST/PATCH.
+- Missing upper bounds: registration/reset password length (`route.ts:30`); message text (`v1/messages`).
+- Cookie values parsed without validation: `servio_admin_seen_*` → `new Date(value)` (invalid → 500) (`app/api/admin/sidebar-counts/route.ts:13-16`).
+
+### 2.7 Output encoding — Verified (web) / Partial
+
+| Item | Status | Evidence |
+|---|---|---|
+| HTML output | Verified via React | — |
+| JSON APIs | `NextResponse.json` | — |
+| Error detail leakage | Partial — `error.message` returned to clients on 500 | `app/api/client/jobs/route.ts:176-179, 244-247`; `app/api/client/jobs/[id]/route.ts:240-244, 334-338, 356-360`; `app/api/professional/profile/route.ts:62-66, 120-124`; dev-only in `wallet/milestone`, `admin/finance/milestone-payout`; `webhooks/razorpay` stores `error.message` in DB only |
+| `Content-Disposition` filenames | Sanitised in `portal/project-files/[fileId]` (`\\`, CR/LF, `"` replaced); verification documents use server-generated UUID names | `app/api/portal/project-files/[fileId]/route.ts:33`; `professional/verification/documents/[...storageKey]/route.ts:41,54` |
+| PDF reports | `@react-pdf/renderer` (no HTML injection surface) | `src/lib/reports/pdf/*` |
+
+### 2.8 SQL injection protection — Verified
+
+| Raw SQL site | Parameterisation | Evidence |
+|---|---|---|
+| OTP attempt/consume `UPDATE "OtpCode"` | `db.$executeRaw(Prisma.sql\`…${value}…\`)` — bound parameters | `src/lib/phone-otp-provider.ts:149-158` |
+| Wallet withdrawal reservation `UPDATE "Wallet"` | `tx.$executeRaw(Prisma.sql\`…\`)` | `app/api/wallet/route.ts:75-80` |
+| Health check `SELECT 1` | static tagged template | `app/api/admin/database-status/route.ts:28` |
+| Socket.IO session lookup | `pg` `pool.query(text, [payload.sessionId])` — positional parameter | `server.mjs:47-50` |
+| Maintenance script | `Prisma.sql` tagged templates, no user input | `scripts/project-db-check.ts` |
+
+No `$queryRawUnsafe` / `$executeRawUnsafe` usage exists outside the generated client. All other data access uses the Prisma query builder.
+
+### 2.9 Rate limiting — Partial
+
+Implementation (`src/lib/rate-limit.ts`):
+- Fixed-window counter in a module-level `Map<string, {count, reset}>`; cleanup of expired keys at most every 5 minutes (`:20-34`).
+- In non-production the map is pinned on `global` to survive hot reload; in production it is a plain module singleton (`:9-17`). **State is per Node process / serverless instance, lost on restart, and not shared across instances.**
+- `rateLimit(key, limit=5, windowMs=60_000)` (`:36-48`); `clearRateLimit` on successful credential login (`:73-75`); `checkRateLimit` unused.
+
+Call sites (3 route files):
+
+| Endpoint | Key | Limit | Evidence |
+|---|---|---|---|
+| All `POST /api/auth/*` actions | `<action>:<XFF[0] or "local">` (+ e-mail for `login`) | 5 / 60 s | `app/api/auth/[action]/route.ts:238-243` |
+| `send-phone-otp`, `forgot-password-phone` | `…:<XFF>:<phone>` | 3 / 10 min | `route.ts:277, 770` |
+| `verify-phone`, `verify-forgot-password-phone` | `…:<XFF>:<phone>` | 5 / 10 min | `route.ts:298, 785` |
+| `POST /api/admin/login` | `admin-login:<XFF>:<username>` | 5 / 15 min | `app/api/admin/login/route.ts:53-54` |
+| `GET /api/geocode` | `geocode:<XFF>` | 20 / 60 s | `app/api/geocode/route.ts:49` |
+
+Weaknesses: the client IP is the first `X-Forwarded-For` entry, which a client can set arbitrarily unless the edge overwrites it: locally, same XFF → 401×5 then 429, rotating XFF → never limited [VALIDATED 2026-09-17 · [V-26](../validation/LOCAL_VALIDATION_LOG.md)]; production edge handling `[NEEDS VALIDATION — not testable locally]`; no global/API-wide limiting; no limiting on `contact`, messaging, uploads, exports (PDF rendering), proposals, or job creation; no account lockout; no CAPTCHA. Also, `logout` is rate limited to 5/min per IP (all users behind one NAT share it).
+
+### 2.10 Secrets management — Not present (repository hygiene)
+
+| Item | Finding | Evidence |
+|---|---|---|
+| Runtime secrets | Read from environment variables (`AUTH_SECRET`, `RAZORPAY_*`, `PERSONA_*`, `TWILIO_*`, `SMTP_*`, `FILE_STORAGE_*`, `GOOGLE_*`, `ADMIN_BOOTSTRAP_*`, `SENTRY_DSN`); `.env` is git-ignored; `.env.example` lists names | `.gitignore`; `.env.example` |
+| `AUTH_SECRET` | Required (throws if missing); no length/entropy check; single key shared by session JWT and phone-proof JWT; no rotation mechanism (rotating invalidates all sessions) | `src/lib/auth.ts:7-9`; `src/lib/dev-phone-otp.ts:8` |
+| **Tracked sensitive files** | `git ls-files` lists `CLIENT_CREDENTIALS.md`, `clients-credentials.json`, `online.dump` (database dump). Contents were deliberately not opened. Removing them from HEAD does not remove them from history. | `git ls-files` at `cd8f4fb` |
+| Credential export script | `scripts/export-client-credentials.ts` queries all CLIENT users and writes a Markdown table and JSON list containing names, e-mails, phones, addresses and the **plaintext default seed passwords** (hard-coded in the script). This is the evident generator of the two tracked credential files. | `scripts/export-client-credentials.ts:12-60` |
+| Demo credentials in client bundles | Seed admin username + password literal in `app/admin/login/page.tsx`; seed client and professional e-mails + password literals in `src/routes/login.tsx` (quick-login signs in immediately). These match `prisma/seed.ts` accounts. | `app/admin/login/page.tsx:54-58`; `src/routes/login.tsx:15-26`; `prisma/seed.ts:809-822` |
+| `DEV_PHONE_OTP` | Static OTP value intended for Development/Preview; code comment directs Preview **and Production** to set it while the "temporary mode" is used; a fixed fallback code applies in non-production when unset | `src/lib/phone-otp-provider.ts:25-32`; `.env.example` comments |
+| Google Maps key fallback | Server geocoding falls back to `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (a browser-exposed key) when `GOOGLE_MAPS_SERVER_KEY` is unset | `app/api/geocode/route.ts:56-57` |
+| Unused secret names | `SMS_API_KEY`, `SMS_API_SECRET`, `SMS_SENDER_ID`, `SMS_API_URL` in `.env.example` have no code references; `ADMIN_EMAIL` is required by code but missing from `.env.example` | grep |
+| Secret scanning / pre-commit hooks | Not present `[NEEDS VALIDATION — not testable locally]` (no config found) | — |
+
+### 2.11 Cookie security — Partial
+
+| Cookie | httpOnly | secure | SameSite | Path | Max-Age | Signed/opaque | Evidence |
+|---|---|---|---|---|---|---|---|
+| `servio_session` | yes | **prod only** | Lax | / | 7 d | HS256 JWT | `src/lib/auth.ts:66-72` |
+| `servio_phone_verification` | yes | prod only | Lax | / | 10 min | HS256 JWT | `src/lib/dev-phone-otp.ts:48-54` |
+| `servio_google_oauth` | yes | prod only | Lax | / | 10 min | unsigned JSON (state compared) | `route.ts:124-130` |
+| `servio_admin_seen_verifications` / `_operations` | yes | **never** | Lax | / | 30 d | plain timestamp (non-sensitive) | `app/api/admin/sidebar-counts/route.ts:69-90` |
+
+Notes: no `__Host-` prefix; preview deployments running with `NODE_ENV=production` get `secure`; a staging server started with a non-production `NODE_ENV` over HTTPS would send cookies without `secure` `[NEEDS VALIDATION — not testable locally]`. Runtime (production server): `servio_session=…; Path=/; Max-Age=604800; Secure; HttpOnly; SameSite=lax` [VALIDATED 2026-09-17 · [V-32](../validation/LOCAL_VALIDATION_LOG.md)]. HSTS with `includeSubDomains; preload` is sent on all responses (`next.config.ts:35-37`).
+
+### 2.12 Token storage — Partial
+
+| Token | Where stored | Status |
+|---|---|---|
+| Session JWT (browser) | httpOnly cookie | Verified |
+| Session JWT (login response) | **Also in JSON body** of `POST /api/auth/login` (`token`), readable by any script on the page | Partial (RISK-SEC-011) — `route.ts:518-530` |
+| Session record | `sessions` table, id only (no token stored) | Verified |
+| Reset / e-mail verification tokens | SHA-256 hash in `ApiToken`; raw token only in e-mail link (query string) or, for phone reset, in the JSON response | Verified / Partial |
+| OTP codes | SHA-256 hash in `OtpCode` (4 digits → trivially brute-forceable offline if the table leaks; acceptable given 10-min expiry) | Verified |
+| Google access token | Used transiently, not stored | Verified |
+| Client local storage | No auth tokens (only UI flags and post-job drafts) | Verified — `src/routes/client/dashboard.tsx:86,144`; `src/routes/client/post-job.tsx:149-395` |
+
+### 2.13 File upload security — Partial
+
+| Upload | Auth | Size | Type checks | Storage key | Read access | Evidence |
+|---|---|---|---|---|---|---|
+| Verification documents `POST /api/professional/verification/upload` | PROFESSIONAL | 1 B – 10 MB | extension ∈ {jpg, jpeg, png, webp, pdf} **and** `validateProjectFile` (extension→MIME allowlist + magic bytes) | `verification/<userId>/<uuid><ext>` (server-generated) | Owner PROFESSIONAL or ADMIN via `GET …/documents/[...storageKey]`; `Cache-Control: private, no-store`; audit logged | `app/api/professional/verification/upload/route.ts:14-51`; `…/documents/[...storageKey]/route.ts:29-58` |
+| Project work files `POST /api/portal/project-files` | PROFESSIONAL assigned to project; status gate | ≤ 15 MB each, ≤ 10 files | extension allowlist (pdf, png, jpg, jpeg, webp, doc, docx, txt) + declared MIME must match + magic bytes (txt: no NUL bytes) | `projects/<projectId>/<uuid><ext>`; `StoredFile` row with owner & purpose; cleanup on failure | Project client/professional only (not ADMIN); served inline with stored MIME + `nosniff` + sanitised filename | `src/lib/project-file-storage.ts:14-35, 117-164`; `app/api/portal/project-files/route.ts`; `…/[fileId]/route.ts` |
+| Avatar `POST /api/profile/avatar` | CLIENT or PROFESSIONAL | ≤ 5 MB | **client-declared `file.type` only** (jpeg/png/webp); no magic-byte check | `avatars/<userId>/<uuid><ext>` | Only the owner can fetch via `GET /api/profile/avatar?key=` (prefix check). Runtime: stored `avatarUrl` is **relative**; another user 404, admin 404, anonymous 401; saving the profile with that URL → 400 "Enter a valid photo URL." [VALIDATED 2026-09-17 · [V-40](../validation/LOCAL_VALIDATION_LOG.md)] | `app/api/profile/avatar/route.ts:11-57, 60-82` |
+| Storage backend | S3-compatible when `FILE_STORAGE_PROVIDER=s3` (private `GetObject` via server, **no presigned URLs**, no public ACL set); local filesystem `.project-work-files/` with a storage-root path guard only (encoded `..%2F` in verification document paths reads **another user's** document — RISK-SEC-032 [FOUND IN VALIDATION 2026-09-17 · [V-35](../validation/LOCAL_VALIDATION_LOG.md)]); refused in production (every upload 500 "Local file storage is disabled in production…") [FOUND IN VALIDATION 2026-09-17 · PROD-STORAGE] | — | — | — | — | `src/lib/project-file-storage.ts:37-115` |
+
+Not present: antivirus/malware scanning, image re-encoding (EXIF stripping), per-user storage quotas, content-disposition `attachment` for PDFs (served inline). Verification "URL" fields submitted via `PUT /api/professional/verification` are free strings (≤ 500 chars) not tied to uploaded keys (RISK-SEC-027).
+
+### 2.14 Admin protection — Partial
+
+| Control | Status | Evidence |
+|---|---|---|
+| `/admin/*` pages require DB role ADMIN (proxy) | Verified | `proxy.ts:63-68` |
+| Admin APIs require ADMIN in handler | Verified for all 15 admin API files; `admin/database-status` open when `NODE_ENV !== "production"` | auth doc §21.8 |
+| Separate admin login endpoint | Present, but not exclusive — ADMIN can log in via `/api/auth/login` and Google | `route.ts:446-533, 169-206` |
+| Separate admin session / shorter TTL / idle timeout | Not present | `app/api/admin/login/route.ts:77-81` |
+| MFA / step-up for admin | Not present | — |
+| Admin login rate limit | Partial (in-memory, 5/15 min, spoofable key) | `app/api/admin/login/route.ts:53-59` |
+| Bootstrap safety | Partial — only while zero admins exist; requires env (password ≥ 12); submitted username ignored during bootstrap; `ADMIN_EMAIL` undocumented | `app/api/admin/login/route.ts:17-42, 61-65` |
+| Admin action audit trail | Not present | `recordAudit` call sites: 2 (verification docs) |
+| Protection against deleting/deactivating the last admin | Not present (deleting all admins re-opens bootstrap) | `app/api/admin/users/[id]/route.ts` |
+| Demo admin credentials published in UI | **Present (risk)** | `app/admin/login/page.tsx:54-58` |
+
+### 2.15 API protection — Partial
+
+| Control | Status | Evidence |
+|---|---|---|
+| Authentication on non-public endpoints | Verified (66/66 files inspected) | auth doc §21 |
+| Consistent 401/403/404 semantics | Not present (drift) | auth doc §22 |
+| Unauthenticated endpoints with cost/abuse potential | `GET /api/geocode` (paid Google API), `POST /api/contact` (DB writes, no limit), `GET /api/search`, `GET /api/marketplace/*`, `GET /api/v1/professionals` (no rate limit) | respective files |
+| Public data minimisation | Verified for `professional-detail` (strips e-mail, phone, address, coordinates, KYC URLs, last login); `marketplace/jobs` exposes client first name only; portal job lists use approximate address and jittered display points | `src/lib/queries/marketplace.ts:467-491`; `app/api/marketplace/jobs/route.ts`; `app/api/portal/[resource]/route.ts:646-664` |
+| Request correlation id | Verified (`x-request-id`) | `proxy.ts:93-99` |
+| API versioning | `/api/v1/:path*` rewrite to `/api/:path*`; `app/api/v1/{messages,professionals}` are physical routes (filesystem routes win over `afterFiles` rewrites, so `/api/messages` and `/api/professionals` do not exist) | `next.config.ts:21-27` |
+
+### 2.16 Webhook signature verification — Verified (signature), broken (delivery)
+
+| Webhook | Verification | Replay / idempotency | Evidence |
+|---|---|---|---|
+| Razorpay `POST /api/webhooks/razorpay` | Requires webhook configured; HMAC-SHA256(raw body, `RAZORPAY_WEBHOOK_SECRET`) vs `X-Razorpay-Signature`, length check + `timingSafeEqual` | Event id stored in `RazorpayWebhookEvent` with status machine (RECEIVED/PROCESSING/PROCESSED/FAILED), amount and currency cross-checked | `src/lib/razorpay.ts:120-126`; `app/api/webhooks/razorpay/route.ts:29-184` |
+| Persona `POST /api/webhooks/persona` | `Persona-Signature` must contain `t=` within ±300 s and a `v1=` HMAC-SHA256(`t.body`) match (`timingSafeEqual`) | Timestamp tolerance; idempotency `[NEEDS VALIDATION — not testable locally]` in `handlePersonaWebhook` | `src/lib/persona.ts:72-97` |
+| Client-side payment verification | `POST /api/wallet/deposit/verify` checks HMAC(`order|payment`, key secret) with `timingSafeEqual` and wallet ownership | idempotent on COMPLETED | `src/lib/razorpay.ts:106-118`; `app/api/wallet/deposit/verify/route.ts` |
+| **Delivery** | Both webhook routes are under `/api/` and are POSTs without an `Origin` header → `proxy.ts` returns 403 before the handler | — | `proxy.ts:44-46` (RISK-SEC-004) |
+
+### 2.17 Logging of sensitive data — Partial
+
+| Finding | Evidence |
+|---|---|
+| Development OTP provider prints `code for <phone> (<role>): <code>` via `console.log` when `NODE_ENV !== "production"` (includes Preview environments that do not set `NODE_ENV=production`). Runtime: `[phone-otp:development] code for <phone> (<role>): <code>` observed in the dev server log [VALIDATED 2026-09-17 · [V-27](../validation/LOCAL_VALIDATION_LOG.md)] | `src/lib/phone-otp-provider.ts:84-86` |
+| `logServerError` logs event, error message and caller-supplied context only (documented intent: no bodies/secrets); forwards the exception to Sentry | `src/lib/server-logger.ts:6-15` |
+| Various `console.error(event, error)` calls log full error objects (Prisma errors may include query parameters/values) | e.g. `app/api/portal/[resource]/route.ts:923`; `app/api/client/jobs/route.ts:175`; `app/api/professional/proposals/route.ts:169`; `app/api/portal/project-actions/route.ts:961` |
+| Twilio errors logged with full error object | `src/lib/phone-otp-provider.ts:100, 186` |
+| Razorpay webhook stores full raw payload JSON (payment entity, may contain customer e-mail/contact) in `RazorpayWebhookEvent.payloadJson` | `app/api/webhooks/razorpay/route.ts:44-52` |
+| No logging of passwords, session tokens, reset tokens or Authorization headers was found | grep of `console.*` in `src`, `app`, `server.mjs` |
+| Sentry: DSN from env; no `beforeSend` scrubbing or `sendDefaultPii` configuration found | `sentry.server.config.ts`, `sentry.edge.config.ts`, `instrumentation-client.ts` |
+| `scripts/export-client-credentials.ts` prints counts to console and writes credential files to the repo root | `scripts/export-client-credentials.ts:28` |
+
+---
+
+## 3. Risk register
+
+Severity scale: **Critical** (direct account/admin takeover or mass data exposure with little effort), **High** (serious impact or broken security-relevant functionality), **Medium**, **Low**, **Info**.
+
+| ID | Severity | Finding | Evidence | Recommendation |
+|---|---|---|---|---|
+| RISK-SEC-001 | Critical `[NEEDS VALIDATION: deployed env — not testable locally]` | Static/known phone OTP. Unless `PHONE_OTP_PROVIDER=twilio`, OTPs come from `DEV_PHONE_OTP` (or a fixed default in non-production); the code comment instructs Preview and Production to set `DEV_PHONE_OTP`. With a known code, anyone who knows a CLIENT/PROFESSIONAL phone number can log in (`login-phone`) or obtain a password-reset token (`verify-forgot-password-phone`). In production without Twilio and without `DEV_PHONE_OTP`, a random code is stored but never delivered (phone flows unusable). Runtime (development provider, `DEV_PHONE_OTP` unset): send → fixed dev code, printed to server log, verify → 200 [VALIDATED 2026-09-17 · [V-27](../validation/LOCAL_VALIDATION_LOG.md)]. | `src/lib/phone-otp-provider.ts:25-32, 76-88`; `app/api/auth/[action]/route.ts:553-601, 779-802` | Require Twilio (or another real provider) in any internet-facing environment; fail closed when `NODE_ENV=production` and provider ≠ real; remove the static-code path from production builds. |
+| RISK-SEC-002 | Critical `[NEEDS VALIDATION: whether seed ran on shared DB — not testable locally]` | Working demo credentials shipped in client bundles: seed admin username + password (admin login "Auto-fill demo credentials"), seed client and professional credentials (user login "Quick fill" that signs in immediately). They match `prisma/seed.ts`. If the seed was applied to a shared/production DB, this is full admin takeover. Runtime: the in-bundle client, professional and admin credentials all sign in against a locally seeded DB [VALIDATED 2026-09-17 · [V-29](../validation/LOCAL_VALIDATION_LOG.md)]. | `app/admin/login/page.tsx:54-58, 230-240`; `src/routes/login.tsx:15-26, 299-318`; `prisma/seed.ts:809-822` | Remove quick-fill UI (or gate by an explicit non-production flag at build time); rotate/disable seed accounts in every shared database; never seed production. |
+| RISK-SEC-003 | Critical | Sensitive artefacts committed to git: `CLIENT_CREDENTIALS.md`, `clients-credentials.json` (generated by `scripts/export-client-credentials.ts`, containing user PII and plaintext default passwords) and `online.dump` (database dump). | `git ls-files`; `scripts/export-client-credentials.ts:30-60` | Remove from the repository **and history** (e.g. `git filter-repo`), treat all contained credentials/data as exposed (reset passwords, rotate any secrets in the dump), add ignore rules and secret scanning. |
+| RISK-SEC-004 | High [VALIDATED 2026-09-17 · [V-20](../validation/LOCAL_VALIDATION_LOG.md)] (live delivery `[NEEDS VALIDATION — not testable locally]`) | Proxy Origin check rejects all server-to-server webhooks (no `Origin` header) → Razorpay captures/failures and Persona KYC updates are never processed; wallet funding then depends solely on the client-side verify call. Runtime: razorpay/persona POST without `Origin` → 403; with `APP_URL` Origin → 401 invalid signature; Bearer POST without Origin → 403. | `proxy.ts:4-14, 44-46`; `app/api/webhooks/*` | Exempt `/api/webhooks/*` (signature-verified) from the Origin check; consider allowing Bearer-authenticated requests without Origin. |
+| RISK-SEC-005 | High [VALIDATED 2026-09-17 · [V-25](../validation/LOCAL_VALIDATION_LOG.md)] (edge header handling `[NEEDS VALIDATION — not testable locally]`) | Password-reset and e-mail verification links are built from `X-Forwarded-Host`/`Host` (`publicAppOrigin`). An attacker can request a reset for a victim with a forged host so the e-mailed link points to an attacker domain, leaking the token when clicked (the proxy Origin check is satisfiable by a non-browser client that sets `Origin` equal to the forged host). Runtime: `forgot-password` with `X-Forwarded-Host: evil.example` → 200 and the e-mailed reset link pointed to `https://evil.example/reset-password?token=…`; links follow `Host`, not `APP_URL`; Google `redirect_uri` also follows `X-Forwarded-Host`. | `app/api/auth/[action]/route.ts:45-73, 753-760, 86-94` | Build security links only from a configured canonical `APP_URL`; ignore request host headers for this purpose. |
+| RISK-SEC-006 | High | Admin authentication is not separated from user authentication: same cookie/session/TTL; `POST /api/auth/login` accepts ADMIN; Google OAuth auto-links an admin account by e-mail; no MFA, no step-up, no audit trail for admin actions; any admin can delete/deactivate all admins. | `app/api/auth/[action]/route.ts:446-533, 169-206`; `app/api/admin/login/route.ts:76-81`; `app/api/admin/users/[id]/route.ts` | Restrict general login and OAuth linking to non-admin roles; add MFA and shorter sessions for admins; audit admin actions; prevent removal of the last admin. |
+| RISK-SEC-007 | High [CORRECTED 2026-09-17 · [V-42](../validation/LOCAL_VALIDATION_LOG.md)] (UI exposure `[NEEDS VALIDATION]`) | Milestones remain editable after wallet funding. `update-milestone` blocks only `APPROVED`; admin payout computes the professional amount from the **current** `milestone.amount`. Runtime: **raising** a funded milestone is blocked by the agreed-total cap (400), but **lowering** it is allowed (2000 → 500, 200); the payout then paid the professional 450 while the client had been charged 2200 and `Payment` still records proPayout 1800 → professional underpaid, platform keeps the difference. Deleting a funded milestone → 500 (blocked only by the FK, not by a state check). | `app/api/portal/project-actions/route.ts:415-484`; `app/api/admin/finance/milestone-payout/route.ts:27-68`; `src/lib/wallet-ledger.ts:140-172` | Freeze amount once a payment exists (status ∈ PAYMENT_PROCESSING, AWAITING_ADMIN_APPROVAL, FUNDED); compute payouts from `Payment.baseAmount`. |
+| RISK-SEC-008 | Medium [VALIDATED 2026-09-17 · [V-26](../validation/LOCAL_VALIDATION_LOG.md)] | Rate limiting is in-memory, per instance, keyed on client-controlled `X-Forwarded-For`, and applied only to auth, admin login and geocode. Combined with 4-digit OTPs (5 attempts per code, new codes obtainable by rotating the XFF value in development-provider mode) this weakens brute-force protection. | `src/lib/rate-limit.ts`; `app/api/auth/[action]/route.ts:42-43, 238-243` | Use a shared store (Redis/DB) and a trusted client-IP source; add per-account limits and lockout; limit uploads, exports, messaging, contact. |
+| RISK-SEC-009 | Medium [VALIDATED 2026-09-17 · [V-23](../validation/LOCAL_VALIDATION_LOG.md)] | E-mail verification bypass: `login-phone-password` sets the session cookie even when returning 403 for an unverified e-mail; APIs (except `POST /api/profile`) do not check `emailVerifiedAt`. Runtime: 403 + valid `servio_session`; with it `/api/auth/me` 200 and `POST /api/client/jobs` 201; pages redirect to `/verify`. E-mail/password and phone-OTP login correctly issue no session. | `app/api/auth/[action]/route.ts:637-652` | Do not issue a session before verification; enforce verification in a shared API guard. |
+| RISK-SEC-010 | Medium [PARTIALLY VALIDATED 2026-09-17 · [V-24](../validation/LOCAL_VALIDATION_LOG.md)] | Open redirect: `next` paths are accepted if they start with `/` and not `//`; a value like `/\attacker.example` is normalised by URL parsers/browsers to a protocol-relative URL (server redirect after Google login; `window.location.assign` after password login). Runtime: `GET /api/v1/auth/google?next=/%5Cevil.example` stores `/\evil.example` unmodified in `servio_google_oauth`; the guard passes and `new URL(next, request.url)` resolves to `http://evil.example/`. The callback end-to-end needs real Google credentials `[NEEDS VALIDATION — not testable locally]`. | `app/api/auth/[action]/route.ts:199-207`; `src/routes/login.tsx:73-83` | Resolve against the app origin and require the resulting origin to equal the app origin; reject backslashes. |
+| RISK-SEC-011 | Medium | Session JWT returned in the login JSON body (readable by JS, bypassing httpOnly under XSS); Bearer tokens accepted on 2 endpoints with a 7-day non-refreshable lifetime. | `app/api/auth/[action]/route.ts:518-530`; `app/api/auth/me/route.ts:6-10`; `app/api/client/jobs/route.ts:49-52` | Remove `token` from web login responses; if mobile needs tokens, add a dedicated token endpoint with shorter-lived access tokens and refresh rotation. |
+| RISK-SEC-012 | Medium | CSP permits `'unsafe-inline'` scripts (and `'unsafe-eval'` in dev), so CSP gives little XSS mitigation. | `next.config.ts:6` | Move to nonce- or hash-based CSP (Next.js supports nonces via Proxy). |
+| RISK-SEC-013 | Medium [VALIDATED 2026-09-17 · [V-28](../validation/LOCAL_VALIDATION_LOG.md), [V-10](../validation/LOCAL_VALIDATION_LOG.md)] | Socket.IO: session revocation check is skipped if `DATABASE_URL` is unset **in the process environment** (a value only in `.env` is not seen by `server.mjs:9-11` → a revoked token opened a new socket) or the JWT lacks `sessionId` (fail-open); room membership uses the JWT `role` claim (stale after demotion); no CORS restriction or Origin check when `REALTIME_ALLOWED_ORIGIN`/`APP_URL` are unset; open sockets are not disconnected on revocation (runtime: socket still connected 4 s after logout; a new connection with the revoked token is rejected when the pool exists). | `server.mjs:18, 32-35, 38-68` | Fail closed; read role from DB; enforce Origin in `allowRequest`; disconnect sockets on logout/deactivation. |
+| RISK-SEC-014 | Low | Account enumeration via `check-availability`, `register` 409, `send-phone-otp` 409, `send-phone-login-otp` 404. | `app/api/auth/[action]/route.ts:268-275, 340-364, 391-406, 547-548` | Rate-limit strongly and return uniform responses where UX permits. |
+| RISK-SEC-015 | Medium [VALIDATED 2026-09-17 · [V-21](../validation/LOCAL_VALIDATION_LOG.md)] | E-mail case handling inconsistent: `register`, `forgot-password`, `check-availability`, `update-email` store/look up e-mail as typed, while `login` lower-cases. Mixed-case registrations cannot log in with e-mail/password — runtime: 401 both as typed and lower-cased, even after e-mail verification; case-variant duplicate accounts are possible. | `app/api/auth/[action]/route.ts:34, 391, 449-450, 740` | Normalise e-mail (trim + lower-case) at every write and lookup; add a case-insensitive unique index. |
+| RISK-SEC-016 | Medium | No audit trail for admin and authentication events (logins, role-sensitive changes, payouts, user deletion, CMS edits); `recordAudit` has 2 call sites. | `src/lib/audit-log.ts` usages | Record audit events for auth and all admin mutations. |
+| RISK-SEC-017 | Low | Admin bootstrap quirks: while no admin exists any submitted username is accepted (only the env password is checked); `ADMIN_EMAIL` is required but undocumented, so bootstrap silently fails if unset (runtime: admin login 401, no admin created [VALIDATED 2026-09-17 · [V-31](../validation/LOCAL_VALIDATION_LOG.md)]). | `app/api/admin/login/route.ts:17-23, 61-70` | Compare submitted username to `ADMIN_BOOTSTRAP_USERNAME`; document `ADMIN_EMAIL`; prefer a CLI bootstrap over a login side effect. |
+| RISK-SEC-018 | Low | `GET /api/geocode` is an unauthenticated proxy to the paid Google Geocoding API (falls back to the public browser key), protected only by the per-instance XFF-keyed limiter. | `app/api/geocode/route.ts:48-58` | Require a session or add robust shared rate limiting; never fall back to the public key. |
+| RISK-SEC-019 | Low | `v1/messages`: no schema validation, unbounded message length; any authenticated user can open a conversation with any ADMIN user id; recipient `isActive` not checked. | `app/api/v1/messages/route.ts:275-315` | Add zod schema with length limits; decide and document whether user→admin messaging is intended. |
+| RISK-SEC-020 | Low | Avatar uploads trust the client-declared MIME type without magic-byte validation; served only to the owner, limiting impact (runtime: other user/admin 404, anonymous 401; the relative `avatarUrl` is also rejected by profile save with 400 — functional defect) [VALIDATED 2026-09-17 · [V-40](../validation/LOCAL_VALIDATION_LOG.md)]. | `app/api/profile/avatar/route.ts:38-48` | Reuse `validateProjectFile`-style signature checks; re-encode images. |
+| RISK-SEC-021 | Low | `sanitizeCmsHtml` is a single-pass regex sanitizer that can be bypassed by nested/split tags; currently its output is rendered as text, so not exploitable today. | `src/lib/sanitizeCmsHtml.ts:28-56`; `src/components/AboutHero.tsx:40-45` | Use a DOM-based sanitizer (e.g. DOMPurify/sanitize-html) before ever rendering CMS HTML. |
+| RISK-SEC-022 | Low | Internal error messages returned to clients on 500 in several handlers. | `app/api/client/jobs/route.ts:176-179`; `app/api/client/jobs/[id]/route.ts:240-244`; `app/api/professional/profile/route.ts:62-66` | Return generic messages; log details server-side with request id. |
+| RISK-SEC-023 | Low | Token/session hygiene: expired `sessions`, `ApiToken`, `OtpCode` rows never purged; prior reset/verification tokens not invalidated on reissue; no authenticated password change; `update-email` needs no re-authentication and does not revoke sessions. | `app/api/auth/[action]/route.ts:667-765` | Add cleanup job; invalidate previous tokens; add password change with re-auth; require password for e-mail change. |
+| RISK-SEC-024 | Low | Development OTP codes logged to console in non-production environments [VALIDATED 2026-09-17 · [V-27](../validation/LOCAL_VALIDATION_LOG.md)]. | `src/lib/phone-otp-provider.ts:84-86` | Log only in local development (explicit flag), never in Preview. |
+| RISK-SEC-025 | Low | `redirect()` called inside `try/catch` in server layouts/pages is swallowed by the catch and replaced (e.g. unverified users sent to `/login` instead of `/verify`). | `app/(portal)/layout.tsx:16-39`; `app/professional/setup/page.tsx:10-20`; `app/admin/page.tsx`; `app/admin/cms/page.tsx` | Move `redirect()` calls outside `try` blocks. |
+| RISK-SEC-026 | Low | Logout returns 500 and leaves the cookie when the JWT is invalid/expired; logout is subject to the 5/min per-IP auth limiter. | `app/api/auth/[action]/route.ts:654-666, 238-243` | Always clear the cookie; exclude logout from credential rate limiting. |
+| RISK-SEC-027 | Low | Verification document fields accept arbitrary strings (≤ 500) not bound to uploaded storage keys; admin UI loads any `/`-prefixed value in an `<iframe>`/`<img>` (same-origin GETs; CSP limits external frames/images). | `app/api/professional/verification/route.ts:7-13, 51-55`; `app/admin/verifications/page.tsx:544-556` | Accept only keys under `verification/<userId>/` produced by the upload endpoint. |
+| RISK-SEC-028 | Info | No database-level authorization (RLS) and a single DB role for app, socket server and migrations. | `prisma/migrations/**`; `server.mjs:9-11`; `prisma.config.ts` | Consider least-privilege DB roles (separate migration role) and RLS for high-value tables. |
+| RISK-SEC-029 | Low | Single `AUTH_SECRET` (no length check, no key id/rotation) signs both session and phone-proof JWTs; `secure` cookie flag depends on `NODE_ENV`. | `src/lib/auth.ts:7-9, 68`; `src/lib/dev-phone-otp.ts:8` | Enforce ≥ 32 bytes; separate keys per purpose with `kid`; set `secure` based on deployment URL scheme. |
+| RISK-SEC-030 | Low | `GET /api/admin/database-status` requires no authentication when `NODE_ENV !== "production"` (Preview/staging exposure). Runtime: production 401 without cookie; development 200 `{"connected":true,…}` without cookie [VALIDATED 2026-09-17 · [V-30](../validation/LOCAL_VALIDATION_LOG.md)]. | `app/api/admin/database-status/route.ts:10-24` | Require ADMIN in all environments or use a separate unauthenticated liveness probe without DB detail. |
+| RISK-SEC-032 | Medium [FOUND IN VALIDATION 2026-09-17 · [V-35](../validation/LOCAL_VALIDATION_LOG.md)] | Cross-user verification document read (local storage provider only): the owner-prefix check runs on the raw joined key, then the local provider's `path.resolve` normalises encoded `..`. Professional B requesting `…/documents/verification/<B>/..%2F<A>%2F<file>` (or `%2e%2e%2f`) received A's ID document (200); literal `../` and `%2e%2e/` segments → 403. Production refuses local storage; S3 keys are literal, so exposure is development/non-production environments using real documents. | `src/lib/project-file-storage.ts` (local path resolution); verification documents route | Decode and normalise the key, reject any `..` segment, then check the `verification/<userId>/` prefix; ensure the resolved path stays inside the user's folder. |
+| RISK-SEC-033 | Critical [FOUND IN VALIDATION 2026-09-17 · [V-41](../validation/LOCAL_VALIDATION_LOG.md)] | Wallet top-up double credit: concurrent `POST /api/wallet/deposit/verify` calls for one PENDING top-up are not serialised. One 5,000 top-up was credited 20,000 (20 concurrent calls) and 25,000 in another round; losing requests return 500. Reproducible with browser-side verify calls only (no webhook needed). | `app/api/wallet/deposit/verify/route.ts`; `src/lib/wallet-ledger.ts` | Make the PENDING→COMPLETED transition atomic (conditional update / row lock / unique ledger reference) and credit only when that update affects exactly one row. |
+| RISK-SEC-034 | Medium [FOUND IN VALIDATION 2026-09-17 · KI-030] | `POST /api/professional/profile` returns the full user record including `passwordHash` (bcrypt) in the JSON response. | `app/api/professional/profile/route.ts` | Select/omit fields explicitly; never serialise `passwordHash`. |
+| RISK-SEC-031 | Low | Unanchored cookie regex in `GET /api/auth/me` (`servio_session=([^;]+)`) could read a differently named cookie whose name ends with `servio_session`. | `app/api/auth/me/route.ts:8-9` | Use `request.cookies.get(sessionCookie)`. |
+
+Counts: Critical 4, High 4, Medium 10, Low 15, Info 1 (incl. RISK-SEC-032–034 added from runtime validation 2026-09-17).
+
+---
+
+## 4. Relationship to existing docs
+
+| Existing doc | Assessment |
+|---|---|
+| `project-docs/PRODUCTION_HARDENING_REPORT.md` | Partially obsolete: says sessions are stateless/non-revocable (now revocable). Its open items on missing authorization integration tests remain true (no tests exist). |
+| `project-docs/CURRENT_PROJECT_STATUS.md` (SEC-001 CSP `unsafe-inline`) | Still accurate; tracked here as RISK-SEC-012. |
+| `project-docs/docs/backend/16.2-authentication-and-authorization.md`, `16.7-file-storage-and-cdn.md` | High-level and partially accurate; superseded by this document and the authentication/authorization document. |
+| `docs/_archive/2026-09-14-flat-docs/review-findings.md` §2 (helper duplication), §9 (per-process rate limiting), "strengths" list (revocable sessions, central CSRF) | Accurate in substance; does not record the webhook/Origin conflict, static OTP, committed credentials, demo credentials, or milestone-after-funding issue. To be retired by orchestrator. |
+
+---
+
+## 5. Items needing validation
+
+| ID | Item |
+|---|---|
+| NV-SEC-01 | Deployed values of `PHONE_OTP_PROVIDER`, `DEV_PHONE_OTP`, `NODE_ENV` in Preview/Production (RISK-SEC-001, -024, -029, -030). |
+| NV-SEC-02 | Whether seed accounts exist in any shared database (RISK-SEC-002). |
+| NV-SEC-03 | Whether webhooks currently receive 403 in production (RISK-SEC-004). |
+| NV-SEC-04 | Whether the hosting edge overwrites `Host`, `X-Forwarded-Host`, `X-Forwarded-For` (RISK-SEC-005, -008). |
+| NV-SEC-05 | Contents/age of `online.dump` and credential files and whether the repository has ever been public or shared (RISK-SEC-003). Not opened by design. |
+| NV-SEC-06 | Whether the admin UI or client UI allows editing a milestone after funding (RISK-SEC-007 exploitability via UI vs direct API). |
+| NV-SEC-07 | Where `companyWebsite` is written and whether its scheme is validated (potential `javascript:` link on professional profile). |
+| NV-SEC-08 | Deployment topology: Socket.IO requires the long-lived `server.mjs`; on a serverless platform, realtime and in-memory rate limits behave differently. |

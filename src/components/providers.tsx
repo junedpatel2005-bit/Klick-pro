@@ -1,14 +1,15 @@
 "use client";
 
 import { Toaster } from "@/components/ui/sonner";
-import { RealtimeNotifications } from "@/components/RealtimeNotifications";
 import { GoogleMapsProvider } from "@/components/GoogleMapsProvider";
 
+// RealtimeNotifications is intentionally NOT mounted here: it belongs to the
+// signed-in surfaces only (PortalShell, AdminPortal). Mounting it globally kept
+// a socket open on marketing pages for anonymous visitors.
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <GoogleMapsProvider>
       {children}
-      <RealtimeNotifications />
       <Toaster
         position="top-right"
         offset="76px"

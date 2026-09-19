@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import { db } from "@/lib/db";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -13,35 +12,21 @@ export async function GET(request: Request) {
   }
 
   try {
+    // verifySession returns the joined user row, so the profile fields below
+    // need no second query. It throws for revoked sessions and inactive users.
     const session = await verifySession(token);
-    const user = await db.user.findUnique({
-      where: { id: session.userId },
-      select: {
-        id: true,
-        role: true,
-        firstName: true,
-        lastName: true,
-        avatarUrl: true,
-        email: true,
-        emailVerifiedAt: true,
-        isActive: true,
-      },
-    });
-    if (!user || !user.isActive) {
-      return NextResponse.json({ user: null });
-    }
     return NextResponse.json({
       user: {
-        id: String(user.id),
-        role: user.role,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        emailVerifiedAt: user.emailVerifiedAt,
-        avatarUrl: user.avatarUrl,
+        id: String(session.userId),
+        role: session.role,
+        firstName: session.firstName,
+        lastName: session.lastName,
+        email: session.email,
+        emailVerifiedAt: session.emailVerifiedAt,
+        avatarUrl: session.avatarUrl,
       },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ user: null });
   }
 }

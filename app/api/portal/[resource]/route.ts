@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma } from "@generated/prisma/client";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -47,6 +47,7 @@ export async function GET(
           },
         },
         orderBy: { createdAt: "desc" },
+        take: 100,
       });
       const projectIdFor = (href: string | null) => {
         if (!href) return null;
@@ -72,18 +73,19 @@ export async function GET(
         const match = notification.href?.match(/[?&]dispute=(\d+)(?:&|$)/);
         return match ? [Number(match[1])] : [];
       });
-      const [disputes, milestones, allRecentJobs] = await Promise.all([
+      const [disputes, milestones] = await Promise.all([
         db.projectDispute.findMany({
           where: { id: { in: legacyDisputeIds } },
           select: { id: true, trackingId: true },
         }),
+        // Scoped to this user: the fuzzy title match below would otherwise
+        // read every milestone on the platform and could resolve a
+        // notification to another tenant's project.
         db.projectMilestone.findMany({
+          where: { OR: [{ clientId: session.userId }, { professionalId: session.userId }] },
           select: { title: true, trackingId: true },
-        }),
-        db.clientJob.findMany({
-          take: 100,
-          orderBy: { id: "desc" },
-          select: { id: true, title: true },
+          orderBy: { createdAt: "desc" },
+          take: 200,
         }),
       ]);
       const disputeProjectMap = new Map(
@@ -150,9 +152,6 @@ export async function GET(
       }
       const jobMap = new Map<number, string | null>();
       const jobClientMap = new Map<number, string>();
-      for (const job of allRecentJobs) {
-        if (job.title?.trim()) jobMap.set(job.id, job.title.trim());
-      }
       for (const job of directJobs) {
         const title = job.title?.trim() || job.category?.trim() || null;
         if (title) jobMap.set(job.id, title);
@@ -371,7 +370,9 @@ export async function GET(
           rating: isClient ? review.professionalRating! : review.rating!,
           comment: isClient ? review.professionalComment : review.comment,
           professionalResponse: review.professionalResponse,
-          clientName: isClient ? userMap.get(review.professionalId) ?? "Professional" : userMap.get(review.clientId) ?? "Client",
+          clientName: isClient
+            ? (userMap.get(review.professionalId) ?? "Professional")
+            : (userMap.get(review.clientId) ?? "Client"),
           projectId: projectMap.get(review.trackingId)?.job.id ?? null,
           projectTitle: projectMap.get(review.trackingId)?.job.title ?? null,
           createdAt: (
@@ -648,6 +649,20 @@ export async function GET(
         favoriteCounts.map((entry) => [entry.jobId, entry._count._all]),
       );
 
+      // One grouped read instead of an aggregate per completed project.
+      const completedEarnings = await db.projectTransaction.groupBy({
+        by: ["trackingId"],
+        where: {
+          trackingId: { in: completedProjects.map((project) => project.id) },
+          professionalId: session.userId,
+          status: "COMPLETED",
+        },
+        _sum: { amount: true },
+      });
+      const earningsByProject = new Map(
+        completedEarnings.map((entry) => [entry.trackingId, entry._sum.amount ?? 0]),
+      );
+
       return NextResponse.json({
         professional,
         openJobs: visibleOpenJobs
@@ -784,27 +799,15 @@ export async function GET(
           })),
           currentStage: project.currentStage,
         })),
-        completedProjects: await Promise.all(
-          completedProjects.map(async (project) => {
-            const earnings = await db.projectTransaction.aggregate({
-              where: {
-                trackingId: project.id,
-                professionalId: session.userId,
-                status: "COMPLETED",
-              },
-              _sum: { amount: true },
-            });
-            return {
-              id: project.id,
-              jobId: project.jobId,
-              jobTitle: jobMap.get(project.jobId)?.title ?? `Job #${project.jobId}`,
-              clientName: clientMap.get(project.clientId) ?? "Client",
-              completedAt: project.completedAt?.toISOString() ?? project.updatedAt.toISOString(),
-              amount: earnings._sum.amount ?? 0,
-              currency: "INR",
-            };
-          }),
-        ),
+        completedProjects: completedProjects.map((project) => ({
+          id: project.id,
+          jobId: project.jobId,
+          jobTitle: jobMap.get(project.jobId)?.title ?? `Job #${project.jobId}`,
+          clientName: clientMap.get(project.clientId) ?? "Client",
+          completedAt: project.completedAt?.toISOString() ?? project.updatedAt.toISOString(),
+          amount: earningsByProject.get(project.id) ?? 0,
+          currency: "INR",
+        })),
       });
     }
     if (resource === "project") {

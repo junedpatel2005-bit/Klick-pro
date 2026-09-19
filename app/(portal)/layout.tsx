@@ -1,42 +1,32 @@
 import { PortalShell, PortalTitleProvider } from "@/components/PortalShell";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 
 export default async function PortalLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const token = (await cookies()).get(sessionCookie)?.value;
   if (!token) redirect("/login");
-  let portalUser: {
-    firstName: string;
-    lastName: string;
-    role: string;
-    avatarUrl: string | null;
-  } | null = null;
+
+  // verifySession already joins the user row and rejects revoked sessions and
+  // inactive users, so no second lookup is needed here. Redirects stay outside
+  // the try block: redirect() signals by throwing, and catching it here would
+  // turn every redirect into the /login fallback.
+  let session;
   try {
-    const session = await verifySession(token);
-    const user = await db.user.findUnique({
-      where: { id: session.userId },
-      select: {
-        firstName: true,
-        lastName: true,
-        role: true,
-        avatarUrl: true,
-        isActive: true,
-        emailVerifiedAt: true,
-      },
-    });
-    if (!user?.isActive) redirect("/login");
-    if (session.role !== "ADMIN" && !user.emailVerifiedAt) redirect("/verify");
-    portalUser = {
-      firstName: user.firstName,
-      lastName: user.lastName,
-      role: user.role,
-      avatarUrl: user.avatarUrl,
-    };
+    session = await verifySession(token);
   } catch {
-    redirect("/login");
+    session = null;
   }
+  if (!session) redirect("/login");
+  if (session.role !== "ADMIN" && !session.emailVerifiedAt) redirect("/verify");
+
+  const portalUser = {
+    firstName: session.firstName,
+    lastName: session.lastName,
+    role: session.role as string,
+    avatarUrl: session.avatarUrl,
+  };
+
   return (
     <PortalTitleProvider>
       <PortalShell initialUser={portalUser}>{children}</PortalShell>

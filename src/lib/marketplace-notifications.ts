@@ -11,6 +11,7 @@ import {
   emitAdminVerificationsUpdate,
 } from "@/lib/realtime";
 import { sendNotificationEmail } from "@/lib/email";
+import { enqueueBackgroundJob } from "@/lib/background-jobs";
 
 type BroadcastNotification = {
   type: string;
@@ -130,7 +131,10 @@ async function notifyRole(
         emitAdminVerificationsUpdate();
       }
     }
-    await sendEmails(recipients, notification);
+    // Email leaves the request path: SMTP delivery must not hold the response open.
+    enqueueBackgroundJob("notification.email.role", () => sendEmails(recipients, notification), {
+      type: notification.type,
+    });
   } catch (error) {
     // A failed notification must never block account creation or job publishing.
     logServerError("marketplace.notification.broadcast.failed", error, {
@@ -294,7 +298,11 @@ export async function notifyUsers(userIds: number[], notification: BroadcastNoti
         createdAt: notification.createdAt.toISOString(),
       }),
     );
-    await sendEmails(recipients, { ...storedNotification, emailDetails });
+    enqueueBackgroundJob(
+      "notification.email.direct",
+      () => sendEmails(recipients, { ...storedNotification, emailDetails }),
+      { type: notification.type },
+    );
   } catch (error) {
     logServerError("marketplace.notification.direct.failed", error, {
       userIds: ids.join(","),

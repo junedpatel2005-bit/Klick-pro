@@ -3,6 +3,26 @@ import nodemailer from "nodemailer";
 
 let emailConfigurationWarningShown = false;
 
+// One pooled SMTP connection for the whole process. Building a transport per
+// message opened a fresh SMTP connection inside the HTTP response path.
+const globalForMail = globalThis as typeof globalThis & {
+  __servioMailTransporter?: nodemailer.Transporter;
+};
+
+function mailTransporter() {
+  const port = Number(process.env.SMTP_PORT ?? 587);
+  globalForMail.__servioMailTransporter ??= nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port,
+    secure: port === 465,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 50,
+  });
+  return globalForMail.__servioMailTransporter;
+}
+
 function klickProSender() {
   const configuredSender = process.env.SMTP_FROM?.trim();
   if (!configuredSender) return configuredSender;
@@ -80,12 +100,7 @@ export async function sendAuthEmail(
   actionUrl: string,
   action: string,
 ) {
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT ?? 587),
-    secure: Number(process.env.SMTP_PORT ?? 587) === 465,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  });
+  const transporter = mailTransporter();
   const websiteUrl = publicAppOrigin();
   const safeHeading = escapeHtml(heading);
   const safeAction = escapeHtml(action);
@@ -147,12 +162,7 @@ export async function sendNotificationEmail(input: {
     }
     return;
   }
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT ?? 587),
-    secure: Number(process.env.SMTP_PORT ?? 587) === 465,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  });
+  const transporter = mailTransporter();
   const origin = publicAppOrigin();
   const websiteUrl = origin ?? undefined;
   const actionUrl = absoluteAppUrl(input.href, origin);

@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import { invalidateCurrentUser } from "@/lib/current-user";
 import { ExternalLink, LogOut, ShieldCheck } from "lucide-react";
 import { useDatabaseStatus } from "@/hooks/use-database-status";
 
@@ -26,6 +27,7 @@ export function AdminHeader() {
 
   async function logout() {
     await fetch("/api/v1/auth/logout", { method: "POST" });
+    invalidateCurrentUser();
     router.replace("/admin/login");
   }
 

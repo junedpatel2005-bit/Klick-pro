@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { closestCenter, DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import dynamic from "next/dynamic";
+import { moveItem } from "@/lib/move-item";
+import type { DragHandle } from "@/components/cms/CmsSortable";
 import {
   ArrowRight,
   Award,
@@ -57,6 +57,18 @@ const iconMap = {
   mail: Mail,
 };
 
+// CMS-only, loaded lazily: public visitors to /professional-home never download @dnd-kit.
+const SortableBoard = dynamic(
+  () => import("@/components/cms/CmsSortable").then((m) => m.SortableBoard),
+  { ssr: false },
+);
+const SortableItem = dynamic(
+  () => import("@/components/cms/CmsSortable").then((m) => m.SortableItem),
+  {
+    ssr: false,
+  },
+);
+
 export default function ProfessionalHome({
   cmsMode = false,
   cmsContent,
@@ -77,8 +89,6 @@ export default function ProfessionalHome({
   const [jobs, setJobs] = useState<HomeJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const content =
     cmsContent ??
@@ -137,9 +147,32 @@ export default function ProfessionalHome({
     const from = content.items.findIndex((item) => item.id === activeId);
     const to = content.items.findIndex((item) => item.id === overId);
     if (from >= 0 && to >= 0) {
-      onCmsChange?.({ ...content, items: arrayMove(content.items, from, to) });
+      onCmsChange?.({ ...content, items: moveItem(content.items, from, to) });
     }
   };
+
+  const itemsGridClassName = `grid gap-6 ${
+    content.items && content.items.length === 1
+      ? "mx-auto max-w-md"
+      : content.items && content.items.length === 2
+        ? "md:grid-cols-2"
+        : "md:grid-cols-2 lg:grid-cols-3"
+  }`;
+
+  // Shared by the sortable (CMS) and plain (public) grids.
+  const renderItemCard = (item: MarketingItem, drag?: DragHandle) => (
+    <SortableProfessionalCard
+      key={item.id}
+      item={item}
+      cmsMode={cmsMode}
+      drag={drag}
+      selected={selectedId === item.id}
+      onSelect={() => onSelect?.(item.id)}
+      onChange={(changes) => updateItem(item.id, changes)}
+      onDelete={() => onDelete?.(item.id)}
+      onDuplicate={() => onDuplicate?.(item.id)}
+    />
+  );
 
   const updateItem = (id: string, changes: Partial<MarketingItem>) => {
     onCmsChange?.({
@@ -280,43 +313,26 @@ export default function ProfessionalHome({
           {/* Draggable Sortable Feature Cards */}
           {content.items && content.items.length > 0 && (
             <div className="mt-12">
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={(event) => {
-                  if (cmsMode && event.over && event.active.id !== event.over.id) {
-                    updateItemOrder(String(event.active.id), String(event.over.id));
+              {cmsMode ? (
+                <SortableBoard
+                  ids={content.items.map((item) => item.id)}
+                  onReorder={(from, to) =>
+                    onCmsChange?.({ ...content, items: moveItem(content.items, from, to) })
                   }
-                }}
-              >
-                <SortableContext
-                  items={content.items.map((item) => item.id)}
-                  strategy={rectSortingStrategy}
                 >
-                  <div
-                    className={`grid gap-6 ${
-                      content.items.length === 1
-                        ? "mx-auto max-w-md"
-                        : content.items.length === 2
-                          ? "md:grid-cols-2"
-                          : "md:grid-cols-2 lg:grid-cols-3"
-                    }`}
-                  >
+                  <div className={itemsGridClassName}>
                     {content.items.map((item) => (
-                      <SortableProfessionalCard
-                        key={item.id}
-                        item={item}
-                        cmsMode={cmsMode}
-                        selected={selectedId === item.id}
-                        onSelect={() => onSelect?.(item.id)}
-                        onChange={(changes) => updateItem(item.id, changes)}
-                        onDelete={() => onDelete?.(item.id)}
-                        onDuplicate={() => onDuplicate?.(item.id)}
-                      />
+                      <SortableItem key={item.id} id={item.id}>
+                        {(drag) => renderItemCard(item, drag)}
+                      </SortableItem>
                     ))}
                   </div>
-                </SortableContext>
-              </DndContext>
+                </SortableBoard>
+              ) : (
+                <div className={itemsGridClassName}>
+                  {content.items.map((item) => renderItemCard(item))}
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -404,6 +420,7 @@ export default function ProfessionalHome({
 function SortableProfessionalCard({
   item,
   cmsMode,
+  drag,
   selected,
   onSelect,
   onChange,
@@ -412,16 +429,13 @@ function SortableProfessionalCard({
 }: {
   item: MarketingItem;
   cmsMode: boolean;
+  drag?: DragHandle;
   selected: boolean;
   onSelect?: () => void;
   onChange: (changes: Partial<MarketingItem>) => void;
   onDelete?: () => void;
   onDuplicate?: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: item.id,
-  });
-
   const Icon = iconMap[item.icon as keyof typeof iconMap] ?? ShieldCheck;
 
   const editable = (field: "title" | "description") =>
@@ -437,15 +451,14 @@ function SortableProfessionalCard({
 
   return (
     <article
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      {...(cmsMode ? attributes : {})}
-      {...(cmsMode ? listeners : {})}
+      ref={drag?.ref}
+      style={drag?.style}
+      {...(drag?.handleProps ?? {})}
       onClick={cmsMode ? onSelect : undefined}
       className={`relative rounded-2xl border border-border bg-card p-7 shadow-soft transition ${
         cmsMode ? "cursor-grab active:cursor-grabbing hover:border-primary/40" : ""
       } ${selected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""} ${
-        isDragging ? "z-10 scale-[1.02] opacity-70 shadow-2xl" : ""
+        drag?.isDragging ? "z-10 scale-[1.02] opacity-70 shadow-2xl" : ""
       }`}
     >
       <div className="grid h-12 w-12 place-items-center rounded-xl bg-primary/10 text-primary mb-4">

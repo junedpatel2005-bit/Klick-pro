@@ -10,7 +10,7 @@ const config = tseslint.config(
       ".next/**",
       ".project-work-files/**",
       "**/node_modules/**",
-      "src/generated/**",
+      "generated/**",
       "tmp/**",
     ],
   },

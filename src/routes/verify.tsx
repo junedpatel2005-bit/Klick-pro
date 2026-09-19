@@ -32,10 +32,37 @@ export default function Verify() {
       }
     };
     void checkStatus();
-    const interval = window.setInterval(() => void checkStatus(), 2000);
+
+    // Backs off 2s -> 30s and pauses on a hidden tab. A fixed 2s poll meant 30
+    // requests a minute for as long as this page stayed open.
+    const BACKOFF_MS = [2000, 5000, 15000, 30000];
+    let step = 0;
+    let timer = 0;
+    const scheduleNext = () => {
+      timer = window.setTimeout(async () => {
+        if (!active) return;
+        if (document.visibilityState === "visible") {
+          await checkStatus();
+          if (step < BACKOFF_MS.length - 1) step += 1;
+        }
+        if (active) scheduleNext();
+      }, BACKOFF_MS[step]);
+    };
+    scheduleNext();
+
+    // Coming back to the tab is the moment the user most likely just clicked
+    // the link in their inbox, so check immediately and restart the backoff.
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      step = 0;
+      void checkStatus();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
       active = false;
-      window.clearInterval(interval);
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 

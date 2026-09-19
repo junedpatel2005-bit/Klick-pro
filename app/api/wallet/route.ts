@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { ensureWallet } from "@/lib/wallet-ledger";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@generated/prisma/client";
 
 async function sessionFrom(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;

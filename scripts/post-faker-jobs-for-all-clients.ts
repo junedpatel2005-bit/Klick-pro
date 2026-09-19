@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { faker } from "@faker-js/faker";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../src/generated/prisma/client";
+import { PrismaClient } from "../generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is required to post jobs.");

@@ -33,7 +33,8 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@generated/*": ["./generated/*"]
     },
     "allowJs": true,
     "incremental": true,

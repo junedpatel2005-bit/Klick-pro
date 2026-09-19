@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
+import { fetchCurrentUser } from "@/lib/current-user";
 import { useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
@@ -34,10 +35,9 @@ export function AppShell({
 
   useEffect(() => {
     if (!initialUser) {
-      fetch("/api/v1/auth/me")
-        .then((response) => (response.ok ? response.json() : null))
-        .then((data: { user?: PortalUser } | null) => {
-          if (data?.user) setUser(data.user);
+      void fetchCurrentUser()
+        .then((data) => {
+          if (data.user) setUser(data.user as PortalUser);
         })
         .catch(() => {});
     }

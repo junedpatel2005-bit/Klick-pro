@@ -4,10 +4,9 @@ Servio is a Next.js application with a custom Node.js/Socket.IO server, PostgreS
 
 ## Requirements
 
-- Node.js 20.9 or newer
+- Node.js 22 (pinned in `package.json` `engines` and `.nvmrc`; CI runs 22)
 - npm
-- PostgreSQL 16 or a hosted PostgreSQL database
-- Docker Desktop is optional, but useful for running PostgreSQL locally
+- PostgreSQL 16 or newer, installed natively (see below)
 
 ## Local setup
 
@@ -32,11 +31,13 @@ Servio is a Next.js application with a custom Node.js/Socket.IO server, PostgreS
 
    On macOS/Linux, use `cp .env.example .env` instead.
 
-4. Edit `.env` and set at least these values:
+4. Edit `.env` and set at least these values (see the PostgreSQL section below
+   for how to create the databases):
 
    ```dotenv
-   DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE"
-   DIRECT_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE"
+   DATABASE_URL="postgresql://servio:PASSWORD@localhost:5432/servio_dev"
+   DIRECT_URL="postgresql://servio:PASSWORD@localhost:5432/servio_dev"
+   SHADOW_DATABASE_URL="postgresql://servio:PASSWORD@localhost:5432/servio_shadow"
    APP_URL="http://localhost:3000"
    REALTIME_ALLOWED_ORIGIN="http://localhost:3000"
    AUTH_SECRET="replace-with-a-long-random-secret"
@@ -68,20 +69,42 @@ Servio is a Next.js application with a custom Node.js/Socket.IO server, PostgreS
 
    Open <http://localhost:3000>.
 
-## Local PostgreSQL with Docker
+## Local PostgreSQL
 
-If PostgreSQL is not already available, start a local container:
+PostgreSQL runs natively on the development machine. Install it first:
+
+- **Windows** — the EnterpriseDB installer from postgresql.org. Add its `bin` directory to `PATH` so `psql` and `createdb` are available.
+- **macOS** — `brew install postgresql@16 && brew services start postgresql@16`
+- **Debian/Ubuntu** — `sudo apt install postgresql-16`
+
+### Create the role and three databases
 
 ```bash
-docker run --name servio-postgres -e POSTGRES_DB=servio -e POSTGRES_USER=servio -e POSTGRES_PASSWORD=servio_password -p 5432:5432 -d postgres:16-alpine
+# CREATEDB is required: prisma migrate dev creates and drops a shadow database.
+createuser --pwprompt --createdb servio
+
+createdb --owner=servio servio_dev      # development data
+createdb --owner=servio servio_shadow   # used by prisma migrate dev only
+createdb --owner=servio servio_test     # disposable; wiped by the test suite
 ```
 
-Then use these connection strings in `.env`:
+`servio_test` must stay separate from `servio_dev`. The test harness refuses to run when
+`TEST_DATABASE_URL` and `DATABASE_URL` point at the same database.
 
-```dotenv
-DATABASE_URL="postgresql://servio:servio_password@localhost:5432/servio"
-DIRECT_URL="postgresql://servio:servio_password@localhost:5432/servio"
+### Before running any Prisma command, check which database you are pointed at
+
+**An exported shell variable overrides `.env`.** This has already caused one incident: an
+inherited `DATABASE_URL` beat the intended configuration and a `prisma db push` plus seed ran
+against a real local database instead of the throwaway one. `npm run build` also runs
+`prisma migrate deploy`, so a build with a stray variable set will migrate whatever it points at.
+
+```bash
+echo $DATABASE_URL        # bash / Git Bash — expect empty, or your intended dev database
+$env:DATABASE_URL         # PowerShell
 ```
+
+If it is set and you did not mean it, `unset DATABASE_URL` (bash) or
+`Remove-Item Env:DATABASE_URL` (PowerShell) before continuing.
 
 ## Useful commands
 
@@ -112,14 +135,8 @@ For production, add the matching HTTPS callback URL for the deployed domain.
 
 To create the first administrator in a new database, set `ADMIN_BOOTSTRAP_USERNAME` and `ADMIN_BOOTSTRAP_PASSWORD` in `.env` before using the admin bootstrap flow.
 
-## Flutter app
+## Mobile client
 
-The mobile client is in `flutter_app/`. Install Flutter, then run:
-
-```bash
-cd flutter_app
-flutter pub get
-flutter run
-```
-
-Configure the API base URL according to the device or emulator being used; `localhost` from a physical device refers to the device itself, not the development computer.
+There is no mobile client in this repository. The `flutter_app/` directory referenced by earlier
+versions of this README no longer exists. The `/api/v1` namespace remains, so a future client
+has a stable surface to target.

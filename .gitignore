@@ -41,3 +41,21 @@ prisma/*.db-wal
 
 .vercel
 .project-work-files
+
+# Local scratch and large binaries - kept outside the repo tree so the dev
+# server file watcher and git do not walk them.
+tmp/
+*.dump
+*.mp4
+dump-contents.txt
+
+# Prisma client output (run: npx prisma generate)
+generated/
+
+# Generated seed-account credential dumps - never commit these.
+CLIENT_CREDENTIALS.md
+clients-credentials.json
+*credentials*.json
+
+# Local-only scratch output (credential dumps, exports).
+.local/

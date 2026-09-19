@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { fetchCurrentUser } from "@/lib/current-user";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -29,9 +30,8 @@ export function SiteHeader({
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<{ role: string } | null>(null);
   useEffect(() => {
-    fetch("/api/v1/auth/me")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { user?: { role: string } } | null) => setUser(data?.user ?? null))
+    void fetchCurrentUser()
+      .then((data) => setUser(data.user ? { role: data.user.role ?? "" } : null))
       .catch(() => setUser(null));
   }, []);
   const homeHref = user?.role === "PROFESSIONAL" ? "/professional-home" : "/";

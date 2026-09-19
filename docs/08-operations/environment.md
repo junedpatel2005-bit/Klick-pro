@@ -1,0 +1,174 @@
+# Environment Configuration
+
+Last verified against code: 2026-09-16 (commit cd8f4fb); runtime-validated 2026-09-17
+
+> Scope: every `process.env` read in `app/`, `src/`, `server.mjs`, `proxy.ts`, `next.config.ts`, `prisma.config.ts`, `instrumentation*.ts`, `sentry.*.config.ts`, `scripts/` and `prisma/seed.ts` (generated client `src/generated/**` excluded). Only variable **names** from `.env.example` were inspected; `.env` was not opened. No secret values appear in this document.
+
+Related: [deployment.md](./deployment.md) · [troubleshooting.md](./troubleshooting.md) · [security.md](./security.md) · [../03-architecture/integrations.md](../03-architecture/integrations.md)
+
+---
+
+## 1. How configuration is loaded
+
+| Context | Loader | Evidence |
+|---|---|---|
+| Next.js app (dev and prod, via `server.mjs`) | Next.js built-in `.env*` loading when `next({ dev })` prepares the app | `server.mjs:16` |
+| `server.mjs` top-level (DB pool, port, socket CORS, `AUTH_SECRET`) | `DATABASE_URL` (revocation pool, `:9-11`), `NODE_ENV`, `HOSTNAME`, `PORT` and `REALTIME_ALLOWED_ORIGIN`/`APP_URL` (`:13-18`) are read **before** `.env` is loaded, so they must be real process environment variables. If they exist only in `.env`: the revocation pool is `null` and **revoked session tokens can still open new sockets** (fail-open), and Socket.IO sends **no CORS header**. `AUTH_SECRET` is read after `await app.prepare()` (`:36`), so a value in `.env` works. [VALIDATED 2026-09-17 · [V-10](../validation/LOCAL_VALIDATION_LOG.md)] | `server.mjs:9-18,36` |
+| Prisma CLI (`migrate`, `generate`, seed) | `import "dotenv/config"` | `prisma.config.ts:3` |
+| Scripts and seed | `import "dotenv/config"` at the top of every `scripts/*.ts` and `prisma/seed.ts` | e.g. `scripts/add-faker-clients.ts:1` |
+| Browser bundle | Only `NEXT_PUBLIC_*` variables are inlined at **build time** | `src/components/GoogleMapsProvider.tsx:24-52`, `instrumentation-client.ts:8-9` |
+
+There is **no central, validated env schema** (no zod env module). Each consumer reads `process.env` directly. Only `AUTH_SECRET` (`src/lib/auth.ts:8`) and `DATABASE_URL` (`src/lib/db.ts:20-26`) fail fast at import time.
+
+`.gitignore` ignores `.env` and `.env.*` but whitelists `.env.example`. `.vercelignore` also excludes `.env`/`.env.*`.
+
+---
+
+## 2. Variable reference
+
+Legend — **Req**: `Required` (app/feature fails), `Required (prod)`, `Optional` (feature degrades), `Internal` (set by runtime/tooling). **Pub**: `Yes` = `NEXT_PUBLIC_` (exposed to browser bundle).
+
+### 2.1 Core runtime
+
+| Variable | Purpose | Req / behaviour if missing | Used by | Example format | Pub |
+|---|---|---|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection for the Prisma client (pooled `pg.Pool`, max 5) and for the Socket.IO session-revocation pool (max 2). The comment in `db.ts` refers to a Supabase PgBouncer endpoint. | **Required.** `src/lib/db.ts` throws `DATABASE_URL is required.` at import → every DB-backed route/page fails. In `server.mjs` a missing value — **including a value present only in `.env`** — silently disables the socket revocation check (`dbPool = null`, sockets still authenticate via JWT only; a revoked token opened a new socket) [VALIDATED 2026-09-17 · [V-10](../validation/LOCAL_VALIDATION_LOG.md)]. | `src/lib/db.ts:19`, `server.mjs:9-10`, `prisma.config.ts:8`, all `scripts/*.ts`, `prisma/seed.ts:21` | `postgresql://USER:PASSWORD@HOST:6543/DB?pgbouncer=true` | No |
+| `DIRECT_URL` | Session-capable (non-pooled) connection used by Prisma CLI (`migrate deploy`). | Optional; falls back to `DATABASE_URL`, then to a dummy `postgresql://localhost:5432/prisma_validate` (lets `prisma validate/generate` run with no DB). Migrations through a transaction pooler may fail without it `[NEEDS VALIDATION]`. | `prisma.config.ts:7` | `postgresql://USER:PASSWORD@HOST:5432/DB` | No |
+| `AUTH_SECRET` | HS256 key for the `servio_session` JWT, dev-phone-OTP cookie JWT, and Socket.IO handshake verification. | **Required.** `src/lib/auth.ts:8` throws at import. `server.mjs:41` rejects **all** socket connections if unset. `src/lib/dev-phone-otp.ts:8` uses a non-null assertion. | `src/lib/auth.ts:7`, `src/lib/dev-phone-otp.ts:8`, `server.mjs:36,41` | long random string (≥32 bytes) | No |
+| `APP_URL` | Canonical public origin: (a) allowed `Origin` for state-changing `/api/*` requests; (b) fallback Socket.IO CORS origin; (c) absolute links in emails; (d) OAuth/email-link origin fallback. | Optional in code, **effectively required in prod** behind proxies/custom domains: with it unset, only same-origin mutations pass `proxy.ts`; email links become relative/null. With it set, under `server.mjs` only an `Origin` exactly equal to `APP_URL` passed — a genuine same-origin request at `127.0.0.1` while `APP_URL=http://localhost:…` got 403, so browse at exactly `APP_URL` [FOUND IN VALIDATION 2026-09-17 · [V-20](../validation/LOCAL_VALIDATION_LOG.md)]. Reset/verification links are built from `Host`/`X-Forwarded-Host`, **not** `APP_URL` [VALIDATED 2026-09-17 · [V-25](../validation/LOCAL_VALIDATION_LOG.md)]. The Socket.IO fallback is read before `.env` loads (see §1). | `proxy.ts:12`, `server.mjs:18`, `src/lib/email.ts:23`, `app/api/auth/[action]/route.ts:63` | `https://app.example.com` (no trailing path) | No |
+| `REALTIME_ALLOWED_ORIGIN` | CORS origin for Socket.IO (`/api/realtime`). | Optional; falls back to `APP_URL`. If both unset — or set only in `.env`, because `server.mjs:18` reads them before `.env` loads — no CORS config is passed (polling responses carry no `Access-Control-Allow-Origin`) [VALIDATED 2026-09-17 · [V-10](../validation/LOCAL_VALIDATION_LOG.md)]. `.env.example` comments it as required in production. | `server.mjs:18` | `https://app.example.com` | No |
+| `NODE_ENV` | `production` switches: Next prod mode in `server.mjs`, `Secure` cookies, CSP without `unsafe-eval`, local file storage disabled, no Prisma/rate-limit globals caching, dev OTP fallback disabled, admin guard on `/api/admin/database-status`, error-detail suppression. `test` switches `db.ts` to `TEST_DATABASE_URL`. | Internal. Set by `npm start` via `cross-env NODE_ENV=production`; `npm run dev` leaves it unset (dev mode). | `server.mjs:13`, `next.config.ts:3`, `src/lib/auth.ts:68`, `src/lib/db.ts:19,52`, `src/lib/project-file-storage.ts:45`, `src/lib/phone-otp-provider.ts:31,84`, `src/lib/rate-limit.ts:15`, `src/lib/dev-phone-otp.ts:50`, `app/api/admin/database-status/route.ts:12`, `app/api/wallet/milestone/route.ts:174`, `app/api/admin/finance/milestone-payout/route.ts:143`, `app/api/auth/[action]/route.ts:126` | `production` / `development` / `test` | No |
+| `PORT` | HTTP listen port of the custom server. | Optional; default `3000`. | `server.mjs:15` | `3000` | No |
+| `HOSTNAME` | Bind address of the custom server (also passed to `next()`). | Optional; default `0.0.0.0`. Git Bash (and many Linux/container environments) pre-set `HOSTNAME` to the machine name: the server then listens **only on the LAN IP** (`localhost`/`127.0.0.1` unreachable, app exposed on the LAN). Set it explicitly (`127.0.0.1` locally, `0.0.0.0` in containers). See [troubleshooting T-22](./troubleshooting.md). [VALIDATED 2026-09-17 · [V-11](../validation/LOCAL_VALIDATION_LOG.md)] | `server.mjs:14` | `0.0.0.0` | No |
+| `NEXT_RUNTIME` | Selects Sentry server vs edge init in `instrumentation.ts`. | Internal (set by Next.js). | `instrumentation.ts:2,6` | `nodejs` / `edge` | No |
+| `TEST_DATABASE_URL` | DB URL used when `NODE_ENV=test`. | Only relevant for `NODE_ENV=test`; `db.ts` throws if missing. **Residual**: the Vitest suites that set `NODE_ENV=test` were deleted in commit `185afc9`. | `src/lib/db.ts:19-24` | `postgresql://…/servio_integration_test` | No |
+
+### 2.2 Email (SMTP, nodemailer)
+
+| Variable | Purpose | Req / behaviour if missing | Used by | Example format | Pub |
+|---|---|---|---|---|---|
+| `SMTP_HOST` | SMTP server | Optional. `isEmailConfigured()` requires HOST+USER+PASS+FROM; notification emails are skipped with a one-time `console.warn`. **Auth emails (`sendAuthEmail`) do not check this** and attempt to send anyway → failure (logged via `background.job.failed` or returned as 500 for the change-email flow). | `src/lib/email.ts:84,127,151` | `smtp.example.com` | No |
+| `SMTP_PORT` | SMTP port; `465` ⇒ implicit TLS | Optional; default `587` | `src/lib/email.ts:85-86,152-153` | `587` | No |
+| `SMTP_USER` | SMTP username | As `SMTP_HOST` | `src/lib/email.ts:87,128,154` | `apikey` | No |
+| `SMTP_PASS` | SMTP password | As `SMTP_HOST` | `src/lib/email.ts:87,129,154` | `<secret>` | No |
+| `SMTP_FROM` | Sender; display name is forced to `Klick-Pro <address>` | As `SMTP_HOST` | `src/lib/email.ts:7,130` | `Klick-Pro <no-reply@example.com>` | No |
+
+### 2.3 File storage (verification documents, project files)
+
+| Variable | Purpose | Req / behaviour if missing | Used by | Example format | Pub |
+|---|---|---|---|---|---|
+| `FILE_STORAGE_PROVIDER` | `s3` selects S3-compatible storage; anything else selects local disk (`.project-work-files/`). | **Required (prod) = `s3`.** Local provider throws `Local file storage is disabled in production` on first use when `NODE_ENV=production`: every upload (project files, verification documents, avatars) returns 500 [FOUND IN VALIDATION 2026-09-17 · PROD-STORAGE]. | `src/lib/project-file-storage.ts:112` | `s3` / `local` | No |
+| `FILE_STORAGE_BUCKET` | Bucket name | Required when `s3`; throws on first storage call | `src/lib/project-file-storage.ts:67` | `servio-files` | No |
+| `FILE_STORAGE_REGION` | Region | Required when `s3`; throws | `src/lib/project-file-storage.ts:68` | `ap-south-1` | No |
+| `FILE_STORAGE_ENDPOINT` | Custom endpoint (R2, MinIO, Supabase S3…) | Optional (AWS default) | `src/lib/project-file-storage.ts:74` | `https://<account>.r2.cloudflarestorage.com` | No |
+| `FILE_STORAGE_FORCE_PATH_STYLE` | Path-style addressing | Optional; only `"true"` enables | `src/lib/project-file-storage.ts:75` | `true` | No |
+| `FILE_STORAGE_ACCESS_KEY_ID` | Static credentials | Optional; if either key missing, AWS SDK default credential chain is used | `src/lib/project-file-storage.ts:77,79` | `<key id>` | No |
+| `FILE_STORAGE_SECRET_ACCESS_KEY` | Static credentials | As above | `src/lib/project-file-storage.ts:77,80` | `<secret>` | No |
+
+### 2.4 Admin bootstrap
+
+| Variable | Purpose | Req / behaviour if missing | Used by | Example format | Pub |
+|---|---|---|---|---|---|
+| `ADMIN_BOOTSTRAP_USERNAME` | Username for first-admin auto-creation on `POST /api/admin/login` | Optional. Bootstrap is skipped unless USERNAME, **`ADMIN_EMAIL`** and PASSWORD (≥12 chars) are all set. | `app/api/admin/login/route.ts:18` | `platform-admin` | No |
+| `ADMIN_BOOTSTRAP_PASSWORD` | Password for bootstrap admin (bcrypt cost 12) | As above; must be ≥12 characters | `app/api/admin/login/route.ts:19` | `<secret ≥12 chars>` | No |
+| `ADMIN_EMAIL` | Email for bootstrap admin | **Required for bootstrap but missing from `.env.example` and README.** Without it bootstrap silently returns `null`: admin login with the bootstrap credentials → 401 "Invalid administrator credentials.", no admin created [VALIDATED 2026-09-17 · [V-31](../validation/LOCAL_VALIDATION_LOG.md)]. | `app/api/admin/login/route.ts:20-23` | `admin@example.com` | No |
+
+### 2.5 Phone OTP (Twilio Verify / development mode)
+
+| Variable | Purpose | Req / behaviour if missing | Used by | Example format | Pub |
+|---|---|---|---|---|---|
+| `PHONE_OTP_PROVIDER` | `twilio` = real SMS via Twilio Verify; any other value = DB-stored development code | Optional; default `development` | `src/lib/phone-otp-provider.ts:14` | `development` / `twilio` | No |
+| `DEV_PHONE_OTP` | Fixed code for development mode | Optional. Unset + non-production ⇒ built-in fixed dev code (`phone-otp-provider.ts:31`) and the code is printed to the server log (`[phone-otp:development] code for <phone> (<role>): …`) — treat dev logs as sensitive [VALIDATED 2026-09-17 · [V-27](../validation/LOCAL_VALIDATION_LOG.md)]. Verification fails with 400 whenever the DB session `TimeZone` ≠ UTC (see [T-23](./troubleshooting.md)) [FOUND IN VALIDATION 2026-09-17 · V-27]. Unset + production (not observed at runtime) ⇒ random code that is **neither sent nor logged** (users cannot complete OTP). | `src/lib/phone-otp-provider.ts:26` | 4 digits | No |
+| `TWILIO_ACCOUNT_SID` | Twilio account | Required when provider=`twilio`, else `503 The SMS provider is not configured yet.` | `src/lib/phone-otp-provider.ts:40,47` | `AC…` | No |
+| `TWILIO_AUTH_TOKEN` | Twilio token | As above | `src/lib/phone-otp-provider.ts:41,47` | `<secret>` | No |
+| `TWILIO_VERIFY_SERVICE_SID` | Verify service (4-digit code length per `.env.example` comment) | As above | `src/lib/phone-otp-provider.ts:42,96,172` | `VA…` | No |
+
+### 2.6 Google (OAuth, Maps, geocoding)
+
+| Variable | Purpose | Req / behaviour if missing | Used by | Example format | Pub |
+|---|---|---|---|---|---|
+| `GOOGLE_CLIENT_ID` | Google OAuth 2.0 login (`GET /api/auth/google`, callback `/api/v1/auth/google`) — **implemented** | Optional; missing ID or secret ⇒ redirect `/login?oauthError=google-not-configured` | `app/api/auth/[action]/route.ts:102` | `…apps.googleusercontent.com` | No |
+| `GOOGLE_CLIENT_SECRET` | OAuth client secret | As above | `app/api/auth/[action]/route.ts:103` | `<secret>` | No |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Browser Maps JS key; also **server fallback** for geocoding | Optional; maps UI reports not configured. Build-time inlined. | `src/components/GoogleMapsProvider.tsx:24,52`, `app/api/geocode/route.ts:57` | `AIza…` (HTTP-referrer restricted) | **Yes** |
+| `NEXT_PUBLIC_GOOGLE_MAPS_JS_ENABLED` | Kill-switch for Maps JS | Optional; only `"false"` disables | `src/components/GoogleMapsProvider.tsx:25` | `true` | **Yes** |
+| `GOOGLE_MAPS_SERVER_KEY` | Server-side Geocoding API key | Optional; falls back to public key; neither ⇒ `503 Address search is not configured on the server.` | `app/api/geocode/route.ts:57` | `AIza…` (IP restricted) | No |
+| `GEO_OBFUSCATION_SALT` | Salt for deterministic 1.2–2.0 km display-point offset of locations | **Missing from `.env.example`.** If unset, `createDisplayPoint` returns `null` (no approximate map point). | `src/lib/geo.ts:41` | random string | No |
+
+### 2.7 Persona (KYC)
+
+| Variable | Purpose | Req / behaviour if missing | Used by | Example format | Pub |
+|---|---|---|---|---|---|
+| `PERSONA_ENABLED` | Feature flag | Optional; only `"true"` enables | `src/lib/persona.ts:7` | `false` | No |
+| `PERSONA_API_KEY` | Persona API | Required with flag; else `isPersonaConfigured()` false | `src/lib/persona.ts:8` | `<secret>` | No |
+| `PERSONA_TEMPLATE_ID` | Inquiry template | As above | `src/lib/persona.ts:9` | `itmpl_…` | No |
+| `PERSONA_WEBHOOK_SECRET` | Webhook HMAC secret | Needed for `POST /api/webhooks/persona` | `src/lib/persona.ts:10` | `<secret>` | No |
+
+### 2.8 Razorpay (payments, Route payouts)
+
+| Variable | Purpose | Req / behaviour if missing | Used by | Example format | Pub |
+|---|---|---|---|---|---|
+| `RAZORPAY_ENABLED` | Explicit opt-**out** flag | Optional; enabled unless exactly `"false"` (`razorpay.ts:14`) | `src/lib/razorpay.ts:14`, `scripts/check-razorpay-sandbox.ts:10` | `true` | No |
+| `RAZORPAY_KEY_ID` | API key id (also returned to client for Checkout via `razorpayConfig()`) | Required for payments; else wallet deposit returns `503 Online wallet funding is not configured.` | `src/lib/razorpay.ts:5`, `scripts/check-razorpay-sandbox.ts:4,12` | `rzp_test_…` / `rzp_live_…` | No (served via API) |
+| `RAZORPAY_KEY_SECRET` | API secret | As above | `src/lib/razorpay.ts:6`, `scripts/check-razorpay-sandbox.ts:5` | `<secret>` | No |
+| `RAZORPAY_WEBHOOK_SECRET` | Webhook signature secret | Missing ⇒ every webhook `401 Invalid Razorpay webhook.` | `src/lib/razorpay.ts:7`, `scripts/check-razorpay-sandbox.ts:6` | `<secret>` | No |
+| `RAZORPAY_ROUTE_ENABLED` | Enables Route linked-account transfers/payouts | Optional; only `"true"` enables; else transfer helpers return `null` | `src/lib/razorpay.ts:8`, `scripts/check-razorpay-sandbox.ts:11` | `false` | No |
+
+### 2.9 Observability (Sentry)
+
+| Variable | Purpose | Req / behaviour if missing | Used by | Example format | Pub |
+|---|---|---|---|---|---|
+| `SENTRY_DSN` | Server + edge Sentry init | Optional; Sentry disabled when unset | `sentry.server.config.ts:4-5`, `sentry.edge.config.ts:4-5` | `https://<key>@o<org>.ingest.sentry.io/<project>` | No |
+| `NEXT_PUBLIC_SENTRY_DSN` | Browser Sentry init | Optional; build-time inlined | `instrumentation-client.ts:8-9` | same format | **Yes** |
+
+No `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` or release variable is read; `next.config.ts` does not wrap with `withSentryConfig` (no source-map upload / release tagging).
+
+---
+
+## 3. Discrepancies between code and `.env.example`
+
+### 3.1 Used in code but missing from `.env.example` (orchestrator to decide; file not edited)
+
+| Variable | Impact | Evidence |
+|---|---|---|
+| `ADMIN_EMAIL` | **High for fresh installs** – following `.env.example`/README, the admin bootstrap never runs. | `app/api/admin/login/route.ts:20-21` |
+| `GEO_OBFUSCATION_SALT` | Approximate map display points are never produced. | `src/lib/geo.ts:41-42` |
+| `TEST_DATABASE_URL` | Only for `NODE_ENV=test`; residual from removed test suite. | `src/lib/db.ts:19` |
+| `PORT`, `HOSTNAME` | Optional server bind settings (defaults 3000 / 0.0.0.0). | `server.mjs:14-15` |
+| `NODE_ENV`, `NEXT_RUNTIME` | Runtime-managed; not expected in `.env.example`. | — |
+
+### 3.2 Listed in `.env.example` but not read anywhere in code
+
+| Variable | Note |
+|---|---|
+| `SMS_API_KEY`, `SMS_API_SECRET`, `SMS_SENDER_ID`, `SMS_API_URL` | `.env.example` itself marks them "Reserved for a future SMS provider". No usage in `app/`, `src/`, `scripts/`. **Planned/inferred only.** |
+
+All other `.env.example` names are consumed by code.
+
+### 3.3 CI environment (`.github/workflows/quality.yml`)
+
+CI sets only: `DATABASE_URL`, `DIRECT_URL` (ephemeral Postgres 16 service), `AUTH_SECRET` (CI-only placeholder), `APP_URL`, `REALTIME_ALLOWED_ORIGIN`. All optional integrations are absent in CI, so `npm run build` must succeed without them.
+
+---
+
+## 4. Minimum sets
+
+| Scenario | Variables |
+|---|---|
+| Local dev (basic) | `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `APP_URL=http://localhost:3000`, `REALTIME_ALLOWED_ORIGIN=http://localhost:3000`, `FILE_STORAGE_PROVIDER=local` (README step 4). Maps keys optional. Email verification requires SMTP (see troubleshooting). |
+| Production (inferred from code guards) | Local set **plus** `NODE_ENV=production` (via `npm start`), `FILE_STORAGE_PROVIDER=s3` + bucket/region/credentials, SMTP_* (email verification gates non-admin users, `proxy.ts:78-91`), `PHONE_OTP_PROVIDER=twilio` + TWILIO_* (or explicit `DEV_PHONE_OTP`), Razorpay keys + webhook secret if payments are used, `GEO_OBFUSCATION_SALT`, `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` recommended. |
+
+---
+
+## 5. Security notes
+
+- Only three `NEXT_PUBLIC_*` variables exist; all are designed to be public (Maps browser key, Maps flag, Sentry DSN). No server secret uses the `NEXT_PUBLIC_` prefix.
+- `GOOGLE_MAPS_SERVER_KEY` falls back to the **public** browser key on the server (`app/api/geocode/route.ts:57`); a referrer-restricted browser key will typically fail server-side geocoding `[NEEDS VALIDATION — not testable locally]`.
+- No secret-manager integration detected; values come from process environment only.
+
+## Relationship to existing docs
+
+| Existing doc | Status |
+|---|---|
+| `.env.example` | Accurate for names it lists; incomplete (§3.1); contains reserved unused SMS vars (§3.2). |
+| `README.md` "Local setup" step 4 | Accurate minimal set; omits `ADMIN_EMAIL` in the admin bootstrap paragraph. |
+| `project-docs/src/routes/docs/environment-setup.md` | **Obsolete** – describes RS256 key pairs, Supabase Storage, VAPID/web-push variables and a docker-compose file that do not exist in code. Superseded by this document. |

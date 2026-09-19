@@ -1,3 +1,8 @@
+> **OBSOLETE (2026-09-19).** This runbook describes a Supabase-based setup
+> (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, pooler ports) that does not match the code —
+> none of those variables are read anywhere in the repository. Development now uses a native
+> PostgreSQL install; follow the README instead. Kept for history only.
+
 # ENVIRONMENT SETUP RUNBOOK
 
 Local development for the Service Marketplace Platform. Follow top to bottom; each section leaves a working state.

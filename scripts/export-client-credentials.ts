@@ -2,7 +2,7 @@ import "dotenv/config";
 import fs from "fs";
 import path from "path";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../src/generated/prisma/client";
+import { PrismaClient } from "../generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is required.");
@@ -65,8 +65,18 @@ async function main() {
     });
   });
 
-  const mdPath = path.resolve(process.cwd(), "CLIENT_CREDENTIALS.md");
-  const jsonPath = path.resolve(process.cwd(), "clients-credentials.json");
+  // This file contains live account credentials. It must never land in the repo,
+  // so the destination is explicit and the default is a gitignored directory.
+  const outFlag = process.argv.indexOf("--out");
+  const outDir = outFlag !== -1 ? process.argv[outFlag + 1] : null;
+  if (outFlag !== -1 && !outDir) {
+    throw new Error("--out requires a directory path.");
+  }
+  const targetDir = path.resolve(process.cwd(), outDir ?? ".local");
+  fs.mkdirSync(targetDir, { recursive: true });
+
+  const mdPath = path.join(targetDir, "CLIENT_CREDENTIALS.md");
+  const jsonPath = path.join(targetDir, "clients-credentials.json");
 
   fs.writeFileSync(mdPath, mdContent, "utf8");
   fs.writeFileSync(jsonPath, JSON.stringify(jsonList, null, 2), "utf8");
