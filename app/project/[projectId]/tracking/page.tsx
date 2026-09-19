@@ -484,7 +484,8 @@ export default function SharedProjectTrackingPage() {
   const canFinal =
     data.milestones.length > 0 &&
     data.milestones.every(
-      (m) => m.status === "APPROVED" || m.status === "COMPLETED" || m.payment?.status === "COMPLETED",
+      (m) =>
+        m.status === "APPROVED" || m.status === "COMPLETED" || m.payment?.status === "COMPLETED",
     );
   const totalMilestoneValue = data.milestones.reduce(
     (total, milestone) => total + milestone.amount,
@@ -646,7 +647,8 @@ export default function SharedProjectTrackingPage() {
       prev.map((m, index) => {
         const pct = distribution[index] ?? 1;
         const rawAmount = totalAgreed > 0 ? Math.round((remainingMilestoneAmount * pct) / 100) : 0;
-        const amount = index === prev.length - 1 ? Math.max(0, remainingMilestoneAmount - allocated) : rawAmount;
+        const amount =
+          index === prev.length - 1 ? Math.max(0, remainingMilestoneAmount - allocated) : rawAmount;
         allocated += amount;
         return {
           ...m,
@@ -716,7 +718,9 @@ export default function SharedProjectTrackingPage() {
       milestone.status === "AWAITING_CLIENT_REVIEW" ||
       Boolean(milestone.submittedAt);
     if (hasWork) {
-      setEditMilestoneError("Work has already been submitted for this milestone, so it can no longer be edited.");
+      setEditMilestoneError(
+        "Work has already been submitted for this milestone, so it can no longer be edited.",
+      );
       return;
     }
     if (data?.project.status === "COMPLETED") {
@@ -779,7 +783,9 @@ export default function SharedProjectTrackingPage() {
       editingMilestone.status === "AWAITING_CLIENT_REVIEW" ||
       Boolean(editingMilestone.submittedAt);
     if (hasWork) {
-      setEditMilestoneError("Work has already been submitted for this milestone, so it can no longer be edited.");
+      setEditMilestoneError(
+        "Work has already been submitted for this milestone, so it can no longer be edited.",
+      );
       return;
     }
     if (data?.project.status === "COMPLETED") {
@@ -936,10 +942,7 @@ export default function SharedProjectTrackingPage() {
 
   return (
     <AppShell>
-      <CelebrationConfetti
-        active={showCelebration}
-        onComplete={() => setShowCelebration(false)}
-      />
+      <CelebrationConfetti active={showCelebration} onComplete={() => setShowCelebration(false)} />
       <main className="mx-auto max-w-6xl space-y-6">
         {message && (
           <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
@@ -994,7 +997,8 @@ export default function SharedProjectTrackingPage() {
             <div className="min-w-0 flex-1">
               <p className="text-sm font-bold">Admin Project Oversight Mode</p>
               <p className="text-xs text-purple-800/85 dark:text-purple-300/85">
-                Viewing workspace in read-only audit mode. Full access to inspect deliverables, revisions, financial breakdown, and project timeline events.
+                Viewing workspace in read-only audit mode. Full access to inspect deliverables,
+                revisions, financial breakdown, and project timeline events.
               </p>
             </div>
           </div>
@@ -1097,7 +1101,8 @@ export default function SharedProjectTrackingPage() {
                         All Milestones Approved! Ready to close project?
                       </p>
                       <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-400/90">
-                        All milestone deliverables have been verified and approved. You can now close and complete this project.
+                        All milestone deliverables have been verified and approved. You can now
+                        close and complete this project.
                       </p>
                     </div>
                     <Button
@@ -1114,7 +1119,8 @@ export default function SharedProjectTrackingPage() {
                     <div>
                       <p className="font-semibold text-foreground">Project in Progress</p>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        {completed} of {data.milestones.length} milestone deliverables approved. Once all milestones are completed, you can close and complete this project.
+                        {completed} of {data.milestones.length} milestone deliverables approved.
+                        Once all milestones are completed, you can close and complete this project.
                       </p>
                     </div>
                     <Button
@@ -1794,7 +1800,11 @@ export default function SharedProjectTrackingPage() {
                             {!isApproved && !isAwaitingReview && !isRevision && !isInProgress && (
                               <Layers className="h-3.5 w-3.5" />
                             )}
-                            {isApproved ? (m.payment?.status === "COMPLETED" ? "Done · Paid Out" : "Done · Approved") : label(m.status)}
+                            {isApproved
+                              ? m.payment?.status === "COMPLETED"
+                                ? "Done · Paid Out"
+                                : "Done · Approved"
+                              : label(m.status)}
                           </span>
                           {overdueDays !== null && (
                             <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">
@@ -1815,138 +1825,152 @@ export default function SharedProjectTrackingPage() {
                       )}
 
                       {/* Milestone Deliverables & Proof History (Requirement 8) */}
-                      {milestoneUploads.length > 0 && (() => {
-                        const sortedUploads = [...milestoneUploads].sort(
-                          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-                        );
-                        const latestUpload = sortedUploads[sortedUploads.length - 1];
-                        const earlierUploads = sortedUploads.slice(0, -1);
-                        const milestoneRevisions = data.timeline.filter(
-                          (e) =>
-                            e.milestoneId === m.id &&
-                            (e.type === "REVISION_REQUESTED" ||
-                              e.title.toLowerCase().includes("revision requested")),
-                        );
+                      {milestoneUploads.length > 0 &&
+                        (() => {
+                          const sortedUploads = [...milestoneUploads].sort(
+                            (a, b) =>
+                              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+                          );
+                          const latestUpload = sortedUploads[sortedUploads.length - 1];
+                          const earlierUploads = sortedUploads.slice(0, -1);
+                          const milestoneRevisions = data.timeline.filter(
+                            (e) =>
+                              e.milestoneId === m.id &&
+                              (e.type === "REVISION_REQUESTED" ||
+                                e.title.toLowerCase().includes("revision requested")),
+                          );
 
-                        return (
-                          <div className="space-y-3 pt-2">
-                            {/* Comparison header if multiple rounds exist */}
-                            {earlierUploads.length > 0 && (
-                              <div className="flex items-center gap-2 rounded-xl bg-primary/5 border border-primary/20 px-3.5 py-2.5 text-xs font-semibold text-primary">
-                                <Split className="h-4 w-4 shrink-0" />
-                                <span>
-                                  Deliverable History: {sortedUploads.length} rounds submitted. You can compare earlier submissions with the latest proof below.
-                                </span>
-                              </div>
-                            )}
+                          return (
+                            <div className="space-y-3 pt-2">
+                              {/* Comparison header if multiple rounds exist */}
+                              {earlierUploads.length > 0 && (
+                                <div className="flex items-center gap-2 rounded-xl bg-primary/5 border border-primary/20 px-3.5 py-2.5 text-xs font-semibold text-primary">
+                                  <Split className="h-4 w-4 shrink-0" />
+                                  <span>
+                                    Deliverable History: {sortedUploads.length} rounds submitted.
+                                    You can compare earlier submissions with the latest proof below.
+                                  </span>
+                                </div>
+                              )}
 
-                            {/* Earlier Submissions (Archived Proofs) */}
-                            {earlierUploads.map((upload, uIdx) => {
-                              const uploadFiles = uploadAttachments(upload);
-                              const relatedRevision = milestoneRevisions[uIdx] || data.revisions[0];
-                              return (
-                                <div key={upload.id} className="space-y-2">
-                                  <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 opacity-90">
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                                        <History className="h-3.5 w-3.5 text-muted-foreground" />
-                                        Earlier Proof (Round {upload.roundNumber || uIdx + 1})
-                                      </p>
-                                      <span className="text-xs text-muted-foreground">{date(upload.createdAt)}</span>
+                              {/* Earlier Submissions (Archived Proofs) */}
+                              {earlierUploads.map((upload, uIdx) => {
+                                const uploadFiles = uploadAttachments(upload);
+                                const relatedRevision =
+                                  milestoneRevisions[uIdx] || data.revisions[0];
+                                return (
+                                  <div key={upload.id} className="space-y-2">
+                                    <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 opacity-90">
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                                          <History className="h-3.5 w-3.5 text-muted-foreground" />
+                                          Earlier Proof (Round {upload.roundNumber || uIdx + 1})
+                                        </p>
+                                        <span className="text-xs text-muted-foreground">
+                                          {date(upload.createdAt)}
+                                        </span>
+                                      </div>
+                                      {upload.note && (
+                                        <p className="mt-1.5 text-sm text-foreground/80 italic">
+                                          &ldquo;{upload.note}&rdquo;
+                                        </p>
+                                      )}
+                                      {uploadFiles.length > 0 && (
+                                        <div className="mt-2.5 flex flex-wrap gap-2">
+                                          {uploadFiles.map((file) => (
+                                            <Button
+                                              key={file.id}
+                                              size="sm"
+                                              variant="outline"
+                                              asChild
+                                              className="h-7 gap-1.5 text-xs bg-background"
+                                            >
+                                              <a href={file.url} target="_blank" rel="noreferrer">
+                                                <FileText className="h-3 w-3 text-muted-foreground" />
+                                                {file.name}
+                                              </a>
+                                            </Button>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
-                                    {upload.note && (
-                                      <p className="mt-1.5 text-sm text-foreground/80 italic">&ldquo;{upload.note}&rdquo;</p>
-                                    )}
-                                    {uploadFiles.length > 0 && (
-                                      <div className="mt-2.5 flex flex-wrap gap-2">
-                                        {uploadFiles.map((file) => (
-                                          <Button
-                                            key={file.id}
-                                            size="sm"
-                                            variant="outline"
-                                            asChild
-                                            className="h-7 gap-1.5 text-xs bg-background"
-                                          >
-                                            <a href={file.url} target="_blank" rel="noreferrer">
-                                              <FileText className="h-3 w-3 text-muted-foreground" />
-                                              {file.name}
-                                            </a>
-                                          </Button>
-                                        ))}
+
+                                    {/* Client revision request feedback following this submission */}
+                                    {relatedRevision && (
+                                      <div className="rounded-xl border border-rose-200/80 bg-rose-50/60 dark:bg-rose-950/20 p-3 text-rose-900 dark:text-rose-200 text-xs">
+                                        <p className="font-bold uppercase tracking-wider flex items-center gap-1.5 text-[11px] text-rose-700 dark:text-rose-400">
+                                          <AlertCircle className="h-3.5 w-3.5" />
+                                          Client Requested Changes (Round{" "}
+                                          {upload.roundNumber || uIdx + 1})
+                                        </p>
+                                        <p className="mt-1 text-xs leading-relaxed">
+                                          {"description" in relatedRevision
+                                            ? relatedRevision.description
+                                            : relatedRevision.note}
+                                        </p>
                                       </div>
                                     )}
                                   </div>
+                                );
+                              })}
 
-                                  {/* Client revision request feedback following this submission */}
-                                  {relatedRevision && (
-                                    <div className="rounded-xl border border-rose-200/80 bg-rose-50/60 dark:bg-rose-950/20 p-3 text-rose-900 dark:text-rose-200 text-xs">
-                                      <p className="font-bold uppercase tracking-wider flex items-center gap-1.5 text-[11px] text-rose-700 dark:text-rose-400">
-                                        <AlertCircle className="h-3.5 w-3.5" />
-                                        Client Requested Changes (Round {upload.roundNumber || uIdx + 1})
-                                      </p>
-                                      <p className="mt-1 text-xs leading-relaxed">
-                                        {"description" in relatedRevision
-                                          ? relatedRevision.description
-                                          : relatedRevision.note}
-                                      </p>
+                              {/* Latest Submission (Current Deliverable) */}
+                              {latestUpload &&
+                                (() => {
+                                  const latestFiles = uploadAttachments(latestUpload);
+                                  const isResubmission = latestUpload.roundNumber > 1;
+                                  return (
+                                    <div
+                                      className={`rounded-xl border p-4 shadow-xs ${
+                                        isApproved
+                                          ? "border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-950/10"
+                                          : isAwaitingReview
+                                            ? "border-purple-500/40 bg-purple-50/30 dark:bg-purple-950/20 ring-1 ring-purple-500/20"
+                                            : isRevision
+                                              ? "border-amber-500/30 bg-amber-50/20 dark:bg-amber-950/10"
+                                              : "border-border/90 bg-muted/20"
+                                      }`}
+                                    >
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <p className="text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 text-foreground">
+                                          <Upload className="h-3.5 w-3.5 text-primary" />
+                                          {isResubmission
+                                            ? `Latest Resubmitted Proof (Round ${latestUpload.roundNumber})`
+                                            : "Milestone Deliverable Submitted"}
+                                        </p>
+                                        <span className="text-xs text-muted-foreground">
+                                          {date(latestUpload.createdAt)}
+                                        </span>
+                                      </div>
+                                      {latestUpload.note && (
+                                        <p className="mt-2 text-sm text-foreground font-medium">
+                                          {latestUpload.note}
+                                        </p>
+                                      )}
+                                      {latestFiles.length > 0 && (
+                                        <div className="mt-2.5 flex flex-wrap gap-2">
+                                          {latestFiles.map((file) => (
+                                            <Button
+                                              key={file.id}
+                                              size="sm"
+                                              variant="outline"
+                                              asChild
+                                              className="h-8 gap-1.5 text-xs font-medium"
+                                            >
+                                              <a href={file.url} target="_blank" rel="noreferrer">
+                                                <FileText className="h-3.5 w-3.5 text-primary" />
+                                                {file.name}
+                                              </a>
+                                            </Button>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-
-                            {/* Latest Submission (Current Deliverable) */}
-                            {latestUpload && (() => {
-                              const latestFiles = uploadAttachments(latestUpload);
-                              const isResubmission = latestUpload.roundNumber > 1;
-                              return (
-                                <div
-                                  className={`rounded-xl border p-4 shadow-xs ${
-                                    isApproved
-                                      ? "border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-950/10"
-                                      : isAwaitingReview
-                                        ? "border-purple-500/40 bg-purple-50/30 dark:bg-purple-950/20 ring-1 ring-purple-500/20"
-                                        : isRevision
-                                          ? "border-amber-500/30 bg-amber-50/20 dark:bg-amber-950/10"
-                                          : "border-border/90 bg-muted/20"
-                                  }`}
-                                >
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <p className="text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 text-foreground">
-                                      <Upload className="h-3.5 w-3.5 text-primary" />
-                                      {isResubmission
-                                        ? `Latest Resubmitted Proof (Round ${latestUpload.roundNumber})`
-                                        : "Milestone Deliverable Submitted"}
-                                    </p>
-                                    <span className="text-xs text-muted-foreground">{date(latestUpload.createdAt)}</span>
-                                  </div>
-                                  {latestUpload.note && (
-                                    <p className="mt-2 text-sm text-foreground font-medium">{latestUpload.note}</p>
-                                  )}
-                                  {latestFiles.length > 0 && (
-                                    <div className="mt-2.5 flex flex-wrap gap-2">
-                                      {latestFiles.map((file) => (
-                                        <Button
-                                          key={file.id}
-                                          size="sm"
-                                          variant="outline"
-                                          asChild
-                                          className="h-8 gap-1.5 text-xs font-medium"
-                                        >
-                                          <a href={file.url} target="_blank" rel="noreferrer">
-                                            <FileText className="h-3.5 w-3.5 text-primary" />
-                                            {file.name}
-                                          </a>
-                                        </Button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        );
-                      })()}
+                                  );
+                                })()}
+                            </div>
+                          );
+                        })()}
 
                       {/* Active Revision Request feedback if milestone is awaiting resubmission */}
                       {m.status === "REVISION_REQUESTED" && (
@@ -1968,37 +1992,38 @@ export default function SharedProjectTrackingPage() {
                       )}
 
                       {/* Actions: Professional Submit */}
-                      {isProfessional && ["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status) && (
-                        <div className="pt-2 border-t flex flex-col sm:flex-row sm:items-center gap-2">
-                          <FilePicker
-                            inputId={`milestone-${m.id}-files`}
-                            files={files}
-                            setFiles={setFiles}
-                          />
-                          <Input
-                            value={note}
-                            onChange={(e) => setNote(e.target.value)}
-                            placeholder={
-                              m.status === "REVISION_REQUESTED"
-                                ? "Describe changes/fixes made in this revised deliverable..."
-                                : "Deliverable note or comment for client"
-                            }
-                            className="flex-1"
-                          />
-                          <Button
-                            disabled={busy === "submit-milestone"}
-                            onClick={() => submit(m.id)}
-                            className="gap-1.5 shrink-0"
-                          >
-                            <Upload className="h-4 w-4" />
-                            {busy === "submit-milestone"
-                              ? "Submitting…"
-                              : m.status === "REVISION_REQUESTED"
-                                ? "Submit Revised Proof"
-                                : "Request Payment"}
-                          </Button>
-                        </div>
-                      )}
+                      {isProfessional &&
+                        ["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status) && (
+                          <div className="pt-2 border-t flex flex-col sm:flex-row sm:items-center gap-2">
+                            <FilePicker
+                              inputId={`milestone-${m.id}-files`}
+                              files={files}
+                              setFiles={setFiles}
+                            />
+                            <Input
+                              value={note}
+                              onChange={(e) => setNote(e.target.value)}
+                              placeholder={
+                                m.status === "REVISION_REQUESTED"
+                                  ? "Describe changes/fixes made in this revised deliverable..."
+                                  : "Deliverable note or comment for client"
+                              }
+                              className="flex-1"
+                            />
+                            <Button
+                              disabled={busy === "submit-milestone"}
+                              onClick={() => submit(m.id)}
+                              className="gap-1.5 shrink-0"
+                            >
+                              <Upload className="h-4 w-4" />
+                              {busy === "submit-milestone"
+                                ? "Submitting…"
+                                : m.status === "REVISION_REQUESTED"
+                                  ? "Submit Revised Proof"
+                                  : "Request Payment"}
+                            </Button>
+                          </div>
+                        )}
 
                       {/* Actions: Client Review */}
                       {isClient && m.status === "AWAITING_CLIENT_REVIEW" && (
@@ -2054,80 +2079,82 @@ export default function SharedProjectTrackingPage() {
 
           {/* Work Upload Tab */}
           <TabsContent value="uploads" className="space-y-6">
-            {isProfessional && ["IN_PROGRESS", "REVISION_REQUESTED"].includes(data.project.status) && (
-              <section className="rounded-2xl border bg-card p-5 shadow-soft">
-                <div>
-                  <h2 className="text-lg font-semibold">Upload Work</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Share ongoing work and files with the client. This does not submit a milestone.
-                  </p>
-                </div>
-                <div className="mt-4 grid gap-3 [&_input]:rounded-md [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_select]:rounded-md [&_select]:border [&_select]:bg-background [&_select]:px-3 [&_select]:py-2 [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
-                  <input
-                    value={workTitle}
-                    onChange={(e) => setWorkTitle(e.target.value)}
-                    placeholder="Work title (for example, Homepage Design)"
-                  />
-                  <textarea
-                    value={workNote}
-                    onChange={(e) => setWorkNote(e.target.value)}
-                    placeholder="Work update / description"
-                  />
-                  <label className="grid gap-1 text-sm font-medium">
-                    Related milestone{" "}
-                    <span className="font-normal text-muted-foreground">(optional)</span>
-                    <select
-                      value={workMilestoneId}
-                      onChange={(e) => setWorkMilestoneId(e.target.value)}
+            {isProfessional &&
+              ["IN_PROGRESS", "REVISION_REQUESTED"].includes(data.project.status) && (
+                <section className="rounded-2xl border bg-card p-5 shadow-soft">
+                  <div>
+                    <h2 className="text-lg font-semibold">Upload Work</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Share ongoing work and files with the client. This does not submit a
+                      milestone.
+                    </p>
+                  </div>
+                  <div className="mt-4 grid gap-3 [&_input]:rounded-md [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_select]:rounded-md [&_select]:border [&_select]:bg-background [&_select]:px-3 [&_select]:py-2 [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
+                    <input
+                      value={workTitle}
+                      onChange={(e) => setWorkTitle(e.target.value)}
+                      placeholder="Work title (for example, Homepage Design)"
+                    />
+                    <textarea
+                      value={workNote}
+                      onChange={(e) => setWorkNote(e.target.value)}
+                      placeholder="Work update / description"
+                    />
+                    <label className="grid gap-1 text-sm font-medium">
+                      Related milestone{" "}
+                      <span className="font-normal text-muted-foreground">(optional)</span>
+                      <select
+                        value={workMilestoneId}
+                        onChange={(e) => setWorkMilestoneId(e.target.value)}
+                      >
+                        <option value="auto">
+                          {current ? `Current milestone: ${current.title}` : "No current milestone"}
+                        </option>
+                        <option value="none">No related milestone</option>
+                        {data.milestones
+                          .filter((milestone) =>
+                            ["IN_PROGRESS", "REVISION_REQUESTED"].includes(milestone.status),
+                          )
+                          .map((milestone) => (
+                            <option key={milestone.id} value={milestone.id}>
+                              {milestone.title}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <FilePicker
+                      inputId="work-upload-files"
+                      files={workFiles}
+                      setFiles={setWorkFiles}
+                    />
+                  </div>
+                  <div className="mt-4">
+                    <Button
+                      disabled={busy === "upload-work"}
+                      onClick={() => {
+                        if (!workTitle.trim() || !workFiles.length)
+                          return setMessage("Enter a work title and choose at least one file.");
+                        void actionWithFiles(
+                          "upload-work",
+                          {
+                            milestoneId:
+                              workMilestoneId === "auto"
+                                ? (current?.id ?? null)
+                                : workMilestoneId === "none"
+                                  ? null
+                                  : Number(workMilestoneId),
+                            title: workTitle,
+                            note: workNote || null,
+                          },
+                          workFiles,
+                        );
+                      }}
                     >
-                      <option value="auto">
-                        {current ? `Current milestone: ${current.title}` : "No current milestone"}
-                      </option>
-                      <option value="none">No related milestone</option>
-                      {data.milestones
-                        .filter((milestone) =>
-                          ["IN_PROGRESS", "REVISION_REQUESTED"].includes(milestone.status),
-                        )
-                        .map((milestone) => (
-                          <option key={milestone.id} value={milestone.id}>
-                            {milestone.title}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                  <FilePicker
-                    inputId="work-upload-files"
-                    files={workFiles}
-                    setFiles={setWorkFiles}
-                  />
-                </div>
-                <div className="mt-4">
-                  <Button
-                    disabled={busy === "upload-work"}
-                    onClick={() => {
-                      if (!workTitle.trim() || !workFiles.length)
-                        return setMessage("Enter a work title and choose at least one file.");
-                      void actionWithFiles(
-                        "upload-work",
-                        {
-                          milestoneId:
-                            workMilestoneId === "auto"
-                              ? (current?.id ?? null)
-                              : workMilestoneId === "none"
-                                ? null
-                                : Number(workMilestoneId),
-                          title: workTitle,
-                          note: workNote || null,
-                        },
-                        workFiles,
-                      );
-                    }}
-                  >
-                    {busy === "upload-work" ? "Uploading…" : "Upload Work"}
-                  </Button>
-                </div>
-              </section>
-            )}
+                      {busy === "upload-work" ? "Uploading…" : "Upload Work"}
+                    </Button>
+                  </div>
+                </section>
+              )}
             <section className="rounded-2xl border bg-card p-5 shadow-soft">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -2318,7 +2345,8 @@ export default function SharedProjectTrackingPage() {
           <DialogHeader>
             <DialogTitle>Close & Complete Project</DialogTitle>
             <DialogDescription>
-              All milestones have been reviewed and approved. Confirming will close this project, finalize records, and invite both parties to exchange ratings and reviews.
+              All milestones have been reviewed and approved. Confirming will close this project,
+              finalize records, and invite both parties to exchange ratings and reviews.
             </DialogDescription>
           </DialogHeader>
           <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-950 dark:text-emerald-200">
@@ -2428,21 +2456,28 @@ export default function SharedProjectTrackingPage() {
                         <div className="space-y-2 rounded-2xl border border-border bg-muted/40 p-4 text-left text-sm">
                           <div className="flex items-center justify-between">
                             <span className="text-muted-foreground">Milestone</span>
-                            <span className="font-semibold text-foreground">{approvalMilestone.title}</span>
+                            <span className="font-semibold text-foreground">
+                              {approvalMilestone.title}
+                            </span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-muted-foreground">Paid to professional</span>
                             <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                              ₹{approvalSuccess.professionalReceives.toLocaleString("en-IN")} (100% full payout)
+                              ₹{approvalSuccess.professionalReceives.toLocaleString("en-IN")} (100%
+                              full payout)
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-muted-foreground">Platform fee deduction</span>
-                            <span className="font-medium text-emerald-600 dark:text-emerald-400">₹0 (0% cut)</span>
+                            <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                              ₹0 (0% cut)
+                            </span>
                           </div>
                           {!offlinePayment && (
                             <div className="flex items-center justify-between border-t border-border pt-2 text-xs">
-                              <span className="text-muted-foreground">Remaining wallet balance</span>
+                              <span className="text-muted-foreground">
+                                Remaining wallet balance
+                              </span>
                               <span className="font-bold text-foreground">
                                 ₹{approvalSuccess.remainingBalance.toLocaleString("en-IN")}
                               </span>
@@ -2487,7 +2522,9 @@ export default function SharedProjectTrackingPage() {
                           </div>
                           <div className="flex justify-between gap-4 border-t border-border pt-3">
                             <span className="font-semibold">
-                              {offlinePayment ? "Amount paid offline" : "Total to pay to professional"}
+                              {offlinePayment
+                                ? "Amount paid offline"
+                                : "Total to pay to professional"}
                             </span>
                             <span className="font-bold text-primary">
                               ₹{clientCharge.toLocaleString("en-IN")}
@@ -2496,8 +2533,8 @@ export default function SharedProjectTrackingPage() {
                         </div>
                         {offlinePayment ? null : (
                           <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
-                            Approval will transfer ₹{clientCharge.toLocaleString("en-IN")} directly from your
-                            wallet to {professional}'s account immediately.
+                            Approval will transfer ₹{clientCharge.toLocaleString("en-IN")} directly
+                            from your wallet to {professional}'s account immediately.
                           </p>
                         )}
                         {!offlinePayment && (
@@ -2662,7 +2699,9 @@ export default function SharedProjectTrackingPage() {
                       setRevisionMilestone(null);
                       setRevisionFeedback("");
                     } catch (err) {
-                      setRevisionError(err instanceof Error ? err.message : "Unable to request revision.");
+                      setRevisionError(
+                        err instanceof Error ? err.message : "Unable to request revision.",
+                      );
                     } finally {
                       setSubmittingRevision(false);
                     }

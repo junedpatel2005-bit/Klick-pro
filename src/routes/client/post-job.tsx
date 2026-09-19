@@ -211,6 +211,7 @@ export default function PostJob() {
         })
         .catch(() => setMessage("This draft could not be opened."));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editJobId, today]);
   useEffect(() => {
     if (!hydrated || editJobId) return;

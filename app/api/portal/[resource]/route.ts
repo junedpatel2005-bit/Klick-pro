@@ -371,7 +371,9 @@ export async function GET(
           rating: isClient ? review.professionalRating! : review.rating!,
           comment: isClient ? review.professionalComment : review.comment,
           professionalResponse: review.professionalResponse,
-          clientName: isClient ? userMap.get(review.professionalId) ?? "Professional" : userMap.get(review.clientId) ?? "Client",
+          clientName: isClient
+            ? (userMap.get(review.professionalId) ?? "Professional")
+            : (userMap.get(review.clientId) ?? "Client"),
           projectId: projectMap.get(review.trackingId)?.job.id ?? null,
           projectTitle: projectMap.get(review.trackingId)?.job.title ?? null,
           createdAt: (

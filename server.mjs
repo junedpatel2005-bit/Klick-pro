@@ -13,6 +13,7 @@ const dbPool = process.env.DATABASE_URL
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME ?? "0.0.0.0";
+const hostname = process.env.HOSTNAME ?? "localhost";
 const port = Number(process.env.PORT ?? 3000);
 const useWebpack = process.env.NEXT_WEBPACK === "1" || process.env.NEXT_WEBPACK === "true";
 const app = next({
@@ -84,5 +85,9 @@ io.on("connection", (socket) => {
 globalThis.__servioIo = io;
 
 httpServer.listen(port, hostname, () => {
-  console.log(`> Servio ready on http://${hostname}:${port}`);
+  const localUrl = `http://localhost:${port}`;
+  const networkInfo = hostname === "0.0.0.0" ? ` (network: http://0.0.0.0:${port})` : "";
+  console.log(`> Servio ready on ${localUrl}${networkInfo}`);
+  const displayHost = hostname === "0.0.0.0" ? "localhost" : hostname;
+  console.log(`> Klick-Pro ready on http://${displayHost}:${port}`);
 });

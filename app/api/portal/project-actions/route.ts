@@ -431,7 +431,10 @@ export async function POST(request: NextRequest) {
         project.status === "COMPLETED"
       ) {
         return NextResponse.json(
-          { error: "Milestones that are awaiting review, have submitted work, or are completed cannot be modified." },
+          {
+            error:
+              "Milestones that are awaiting review, have submitted work, or are completed cannot be modified.",
+          },
           { status: 400 },
         );
       }
@@ -503,7 +506,10 @@ export async function POST(request: NextRequest) {
         project.status === "COMPLETED"
       ) {
         return NextResponse.json(
-          { error: "This milestone has submitted work, is active, completed, or approved and cannot be deleted." },
+          {
+            error:
+              "This milestone has submitted work, is active, completed, or approved and cannot be deleted.",
+          },
           { status: 400 },
         );
       }
@@ -556,7 +562,9 @@ export async function POST(request: NextRequest) {
       });
       await event(
         upload.roundNumber > 1 ? "REVISED_WORK_UPLOADED" : "WORK_UPLOADED",
-        upload.roundNumber > 1 ? `Revised work uploaded (Round ${upload.roundNumber})` : "Work uploaded",
+        upload.roundNumber > 1
+          ? `Revised work uploaded (Round ${upload.roundNumber})`
+          : "Work uploaded",
         input.note ?? input.title,
         {
           milestoneId: input.milestoneId ?? undefined,
@@ -815,10 +823,7 @@ export async function POST(request: NextRequest) {
     }
     if (input.action === "complete-project") {
       if (project.status === "COMPLETED")
-        return NextResponse.json(
-          { error: "This project is already completed." },
-          { status: 409 },
-        );
+        return NextResponse.json({ error: "This project is already completed." }, { status: 409 });
       const pendingMilestonesCount = await db.projectMilestone.count({
         where: {
           trackingId: project.id,

@@ -968,13 +968,17 @@ function Empty({ view }: { view: "jobs" | "disputes" }) {
 }
 
 function JobTimelineSection({ timeline }: { timeline: AdminTimelineItem[] }) {
-  const [filter, setFilter] = useState<"ALL" | "PAYMENT" | "MILESTONE" | "PROOF" | "COMPLETION">("ALL");
+  const [filter, setFilter] = useState<"ALL" | "PAYMENT" | "MILESTONE" | "PROOF" | "COMPLETION">(
+    "ALL",
+  );
 
   const filteredTimeline = useMemo(() => {
     if (filter === "ALL") return timeline;
     if (filter === "PAYMENT") return timeline.filter((item) => item.type === "PAYMENT");
     if (filter === "MILESTONE")
-      return timeline.filter((item) => item.type === "MILESTONE_COMPLETED" || item.type === "MILESTONE_CREATED");
+      return timeline.filter(
+        (item) => item.type === "MILESTONE_COMPLETED" || item.type === "MILESTONE_CREATED",
+      );
     if (filter === "PROOF") return timeline.filter((item) => item.type === "PROOF_SUBMITTED");
     if (filter === "COMPLETION")
       return timeline.filter((item) => item.type === "PROJECT_COMPLETED");
@@ -1008,7 +1012,8 @@ function JobTimelineSection({ timeline }: { timeline: AdminTimelineItem[] }) {
             </span>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Chronological log of payments, completed milestones, submitted proofs, and project completion.
+            Chronological log of payments, completed milestones, submitted proofs, and project
+            completion.
           </p>
         </div>
 

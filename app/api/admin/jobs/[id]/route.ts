@@ -246,9 +246,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   );
   const hiredProId = project?.professionalId ?? hiredProposal?.professionalId;
   const hiredPro = hiredProId ? professionalsById.get(hiredProId) : null;
-  const proName = hiredPro
-    ? `${hiredPro.firstName} ${hiredPro.lastName}`.trim()
-    : "Professional";
+  const proName = hiredPro ? `${hiredPro.firstName} ${hiredPro.lastName}`.trim() : "Professional";
 
   // 1. Initial Job Posted Event
   timelineItems.push({
@@ -329,7 +327,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             url: item.url || item.fileUrl || null,
           }));
         }
-      } catch {}
+      } catch {
+        // ignore malformed JSON
+      }
     }
 
     let itemType: TimelineItem["type"] = "OTHER";
@@ -362,10 +362,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       actorRole === "CLIENT"
         ? clientName
         : actorRole === "PROFESSIONAL"
-        ? proName
-        : actorRole === "ADMIN"
-        ? "Admin"
-        : "System";
+          ? proName
+          : actorRole === "ADMIN"
+            ? "Admin"
+            : "System";
 
     timelineItems.push({
       id: `te-${event.id}`,
@@ -394,7 +394,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             url: item.url || item.fileUrl || null,
           }));
         }
-      } catch {}
+      } catch {
+        // ignore malformed JSON
+      }
     }
     if (files.length === 0 && upload.fileName) {
       files = [{ name: upload.fileName, url: upload.fileUrl ?? null }];
@@ -520,9 +522,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   // Sort newest first
-  timelineItems.sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
+  timelineItems.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   return NextResponse.json({
     job: {

@@ -519,9 +519,7 @@ export async function getDetailedProfessional(id: number): Promise<DetailedProfe
       createdAt: (r.clientReviewedAt ?? r.createdAt).toISOString(),
       professionalResponse: r.professionalResponse,
       projectTitle: t?.job?.title ?? null,
-      reviewerName: c
-        ? `${c.firstName} ${c.lastName?.[0] ?? ""}.`.trim()
-        : "Verified Client",
+      reviewerName: c ? `${c.firstName} ${c.lastName?.[0] ?? ""}.`.trim() : "Verified Client",
       reviewerAvatar: c?.avatarUrl ?? null,
       reviewerCategory: t?.job?.category ?? null,
     };

@@ -920,9 +920,7 @@ export default function JobDetails({
           <section className="mt-8 rounded-2xl border border-border bg-card p-6 shadow-xs">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
               <div>
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  About the Client
-                </h2>
+                <h2 className="text-xl font-bold flex items-center gap-2">About the Client</h2>
                 <p className="mt-0.5 text-sm text-muted-foreground">
                   Feedback from professionals who previously worked with this client
                 </p>
@@ -958,9 +956,13 @@ export default function JobDetails({
                           {review.reviewerName[0]?.toUpperCase() ?? "P"}
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-foreground">{review.reviewerName}</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {review.reviewerName}
+                          </p>
                           {review.reviewerCategory && (
-                            <p className="text-xs text-muted-foreground">{review.reviewerCategory}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {review.reviewerCategory}
+                            </p>
                           )}
                         </div>
                       </div>
@@ -970,7 +972,9 @@ export default function JobDetails({
                             <Star
                               key={i}
                               className={`h-3 w-3 ${
-                                i < review.rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"
+                                i < review.rating
+                                  ? "fill-amber-400 text-amber-400"
+                                  : "text-muted-foreground/30"
                               }`}
                             />
                           ))}
@@ -1705,7 +1709,9 @@ export default function JobDetails({
           {negotiateTarget?.lastBidAmount != null && (
             <div className="rounded-xl border border-border bg-muted/40 p-3.5 space-y-1.5 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground font-medium">Current / Last Bid Amount:</span>
+                <span className="text-muted-foreground font-medium">
+                  Current / Last Bid Amount:
+                </span>
                 <span className="text-sm font-bold text-foreground">
                   ₹{negotiateTarget.lastBidAmount.toLocaleString("en-IN")}
                 </span>
