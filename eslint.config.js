@@ -6,13 +6,7 @@ import tseslint from "typescript-eslint";
 
 const config = tseslint.config(
   {
-    ignores: [
-      ".next/**",
-      ".project-work-files/**",
-      "**/node_modules/**",
-      "generated/**",
-      "tmp/**",
-    ],
+    ignores: [".next/**", ".project-work-files/**", "**/node_modules/**", "generated/**", "tmp/**"],
   },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],

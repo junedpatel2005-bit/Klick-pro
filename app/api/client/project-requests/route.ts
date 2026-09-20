@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
 
   await notifyUsers([professionalId], {
     type: "NEW_HIRE_REQUEST",
-    title: "New hire request",
+    title: `${job.title ?? "Job"} · New hire request`,
     description: `${clientName} sent you a hire request for ${job.title ?? "a job"}.`,
     href: `/job/${jobId}?requestId=${requestRecord.id}`,
     emailDetails: [

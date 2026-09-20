@@ -100,6 +100,7 @@ type Data = {
   };
   job: {
     title: string | null;
+    description: string | null;
     jobDate: string | null;
     deadline: string | null;
     budgetMax: number | null;
@@ -491,7 +492,8 @@ export default function SharedProjectTrackingPage() {
     (total, milestone) => total + milestone.amount,
     0,
   );
-  const totalAgreed = Math.max(data.agreedAmount ?? 0, totalMilestoneValue);
+  const totalAgreed =
+    data.agreedAmount && data.agreedAmount > 0 ? data.agreedAmount : totalMilestoneValue;
   const unassignedMilestoneAmount = Math.max(0, totalAgreed - totalMilestoneValue);
   const remainingMilestoneAmount = unassignedMilestoneAmount;
 
@@ -1217,6 +1219,18 @@ export default function SharedProjectTrackingPage() {
                 </div>
               )}
             </section>
+
+            {data.job?.description && (
+              <section className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-soft">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary" />
+                  <h2 className="text-base font-semibold">Project Description</h2>
+                </div>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                  {data.job.description}
+                </p>
+              </section>
+            )}
 
             {isClient && data.project.status !== "COMPLETED" && (
               <section className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-card p-5 sm:p-6 shadow-soft">

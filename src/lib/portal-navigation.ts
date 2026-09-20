@@ -31,8 +31,8 @@ export const clientItems: NavigationItem[] = [
 
 export const professionalItems: NavigationItem[] = [
   { to: "/professional/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/professional/my-jobs", icon: FolderKanban, label: "My Jobs" },
-  { to: "/professional/running-projects", icon: Briefcase, label: "Running Projects" },
+  { to: "/professional/my-jobs", icon: FolderKanban, label: "Find Jobs" },
+  { to: "/professional/running-projects", icon: Briefcase, label: "Active Projects" },
   { to: "/professional/reports", icon: FileBarChart, label: "Reports" },
   { to: "/professional/messages", icon: MessageSquare, label: "Messages" },
   { to: "/verification", icon: BadgeCheck, label: "Verification" },
@@ -51,8 +51,8 @@ export const clientMobileItems: NavigationItem[] = [
 
 export const professionalMobileItems: NavigationItem[] = [
   { to: "/professional/dashboard", icon: Home, label: "Home" },
-  { to: "/professional/my-jobs", icon: Briefcase, label: "Jobs" },
-  { to: "/professional/running-projects", icon: Briefcase, label: "Running" },
+  { to: "/professional/my-jobs", icon: Briefcase, label: "Find Jobs" },
+  { to: "/professional/running-projects", icon: Briefcase, label: "Active" },
   { to: "/professional/reviews", icon: Star, label: "Reviews" },
   { to: "/professional/messages", icon: MessageSquare, label: "Messages" },
   { to: "/earnings", icon: Wallet, label: "Earnings" },

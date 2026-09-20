@@ -407,24 +407,21 @@ export async function notifyMilestonePayoutApproved(input: {
   platformEarnings: number;
   clientId: number;
   professionalId: number;
+  jobTitle?: string | null;
 }) {
   const href = `/project/${input.projectId}/tracking`;
   const payout = `₹${input.payoutAmount.toLocaleString("en-IN")}`;
-  await notifyUsers([input.clientId], {
-    type: "MILESTONE_PAYOUT_APPROVED",
-    title: "Professional payout approved",
-    description: `The payout of ${payout} for ${input.milestoneTitle} has been approved and released.`,
-    href,
-  });
+  const jobTitle = input.jobTitle?.trim() || `Project #${input.projectId}`;
+  // Only notify the professional and admin. The client performed the approval and does not receive a self-notification.
   await notifyUsers([input.professionalId], {
     type: "MILESTONE_PAYOUT_APPROVED",
-    title: "Your milestone payment was released",
-    description: `${payout} for ${input.milestoneTitle} has been added to your wallet.`,
+    title: `${jobTitle} · Milestone approved & payment released`,
+    description: `The client approved ${input.milestoneTitle}. ${payout} has been added to your wallet.`,
     href: "/professional/earnings",
   });
   await notifyRole("ADMIN", {
     type: "MILESTONE_PAYOUT_APPROVED",
-    title: "Milestone payout completed",
+    title: `${jobTitle} · Milestone payout completed`,
     description: `${payout} was released for ${input.milestoneTitle}. Platform earnings: ₹${input.platformEarnings.toLocaleString("en-IN")}.`,
     href: `/admin/finance?project=${input.projectId}`,
   });

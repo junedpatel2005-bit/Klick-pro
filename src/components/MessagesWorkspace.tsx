@@ -303,7 +303,7 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
             <p className={`mt-1 text-sm ${admin ? "text-slate-400" : "text-muted-foreground"}`}>
               {admin
                 ? "Review and reply to client and professional conversations."
-                : "Chat with people connected to your running projects."}
+                : "Chat with people connected to your active projects."}
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-400">

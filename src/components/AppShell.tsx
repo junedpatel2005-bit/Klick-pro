@@ -12,6 +12,13 @@ import {
   professionalItems,
   professionalMobileItems,
 } from "@/lib/portal-navigation";
+import { useSidebarCollapse } from "@/hooks/use-sidebar-collapse";
+import dynamic from "next/dynamic";
+
+const RealtimeNotifications = dynamic(
+  () => import("@/components/RealtimeNotifications").then((m) => m.RealtimeNotifications),
+  { ssr: false },
+);
 
 type PortalUser = {
   firstName: string;
@@ -59,10 +66,25 @@ export function AppShell({
       ? { firstName: "", lastName: "", role: "PROFESSIONAL", avatarUrl: null }
       : null);
 
+  const { collapsed: sidebarCollapsed, toggle: toggleSidebar } = useSidebarCollapse();
+
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
-      {navigationUser && <AppSidebar items={items} pathname={pathname} user={navigationUser} />}
-      <div className={navigationUser ? "lg:pl-64" : ""}>
+      <RealtimeNotifications />
+      {navigationUser && (
+        <AppSidebar
+          items={items}
+          pathname={pathname}
+          user={navigationUser}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={toggleSidebar}
+        />
+      )}
+      <div
+        className={`transition-[padding] duration-200 ease-[cubic-bezier(0.2,0,0,1)] will-change-[padding] ${
+          navigationUser ? (sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-64") : ""
+        }`}
+      >
         <AppHeader role={activeUser?.role ?? (isProfessional ? "PROFESSIONAL" : "CLIENT")} />
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <button

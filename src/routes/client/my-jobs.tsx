@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { io } from "socket.io-client";
+import { toast } from "sonner";
 import {
   ArrowRight,
   BriefcaseBusiness,
@@ -32,6 +33,7 @@ type Job = {
   updatedAt: string;
   createdAt: string;
   jobDate: string | null;
+  agreedAmount?: number | null;
 };
 
 type Filter = "ALL" | Job["status"] | "SCHEDULED";
@@ -63,6 +65,9 @@ function readableStatus(status: Job["status"]) {
 }
 
 function jobBudget(job: Job) {
+  if (job.projectId && job.agreedAmount != null) {
+    return `₹${job.agreedAmount.toLocaleString("en-US")}`;
+  }
   if (job.timingType === "HOURLY") {
     return job.hourlyRate == null
       ? "Rate not set"
@@ -86,7 +91,6 @@ export default function MyJobs() {
   const [status, setStatus] = useState<Filter>("ALL");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
-  const [posted, setPosted] = useState(false);
 
   const load = () =>
     void fetch("/api/v1/client/jobs")
@@ -101,10 +105,27 @@ export default function MyJobs() {
   useEffect(load, []);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("posted") === "1") {
-      setPosted(true);
-      window.history.replaceState(null, "", "/my-jobs");
-    }
+    const checkPosted = () => {
+      const isParamPosted =
+        typeof window !== "undefined" &&
+        new URLSearchParams(window.location.search).get("posted") === "1";
+      let isSessionPosted = false;
+      try {
+        isSessionPosted = sessionStorage.getItem("klickpro:job-posted") === "1";
+        if (isSessionPosted) sessionStorage.removeItem("klickpro:job-posted");
+      } catch {
+        /* ignore storage error */
+      }
+
+      if (isParamPosted || isSessionPosted) {
+        if (isParamPosted) window.history.replaceState(null, "", "/my-jobs");
+        toast.success("Job posted successfully!", {
+          description: "Professionals in this category will be notified.",
+          duration: 5000,
+        });
+      }
+    };
+    checkPosted();
   }, []);
 
   useEffect(() => {
@@ -197,11 +218,6 @@ export default function MyJobs() {
 
   return (
     <>
-      {posted ? (
-        <p className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-          Your job was posted. Professionals in this category will be notified.
-        </p>
-      ) : null}
       <section className="relative overflow-hidden rounded-3xl border border-primary/10 bg-[linear-gradient(115deg,var(--color-ink),var(--color-primary))] px-6 py-7 text-white shadow-card sm:px-8 sm:py-9">
         <div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-cta/20 blur-3xl" />
         <div className="absolute -bottom-28 left-1/3 h-48 w-48 rounded-full bg-white/10 blur-3xl" />

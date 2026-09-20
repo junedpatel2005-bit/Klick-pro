@@ -1608,7 +1608,7 @@ export default function JobDetails({
             </DialogTitle>
             <DialogDescription>
               {viewerRole === "PROFESSIONAL"
-                ? "The client's terms were accepted. You can now manage this project from Running Projects."
+                ? "The client's terms were accepted. You can now manage this project from Active Projects."
                 : "You have accepted the proposal. You can now track project milestones, fund escrow, and collaborate with your hired professional."}
             </DialogDescription>
           </DialogHeader>
@@ -1619,7 +1619,7 @@ export default function JobDetails({
                   variant="outline"
                   onClick={() => router.push("/professional/running-projects")}
                 >
-                  Go to Running Projects
+                  Go to Active Projects
                 </Button>
                 <Button
                   onClick={() => {

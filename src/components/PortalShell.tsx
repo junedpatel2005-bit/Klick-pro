@@ -19,6 +19,7 @@ import {
   professionalItems,
   professionalMobileItems,
 } from "@/lib/portal-navigation";
+import { useSidebarCollapse } from "@/hooks/use-sidebar-collapse";
 
 // Socket + notification listener for signed-in surfaces only, loaded lazily so
 // socket.io-client stays out of the shared client entry.
@@ -91,11 +92,23 @@ export function PortalShell({
     avatarUrl: null,
   };
 
+  const { collapsed: sidebarCollapsed, toggle: toggleSidebar } = useSidebarCollapse();
+
   return (
     <div className="min-h-screen bg-background pb-16 lg:pb-0">
       <RealtimeNotifications />
-      <AppSidebar items={items} pathname={pathname} user={navigationUser} />
-      <div className="lg:pl-64">
+      <AppSidebar
+        items={items}
+        pathname={pathname}
+        user={navigationUser}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebar}
+      />
+      <div
+        className={`transition-[padding] duration-200 ease-[cubic-bezier(0.2,0,0,1)] will-change-[padding] ${
+          sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-64"
+        }`}
+      >
         <AppHeader role={activeUser?.role ?? (isProfessional ? "PROFESSIONAL" : "CLIENT")} />
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           {pathname !== "/dashboard" && pathname !== "/professional/dashboard" && (

@@ -44,7 +44,7 @@ export async function respondToProjectRequest(
     await db.projectRequest.update({ where: { id: requestId }, data: { status: "REJECTED" } });
     await notifyUsers([otherPartyId], {
       type: "REQUEST_DECLINED",
-      title: "Request Declined",
+      title: `${job?.title ?? "Project"} · Request Declined`,
       description: `Your request for ${job?.title ?? "the job"} was declined.`,
       href: `/job/${hireRequest.jobId}`,
     });
@@ -89,7 +89,7 @@ export async function respondToProjectRequest(
     });
     await notifyUsers([otherPartyId], {
       type: "REQUEST_COUNTERED",
-      title: "New Counter-Offer",
+      title: `${job?.title ?? "Project"} · New Counter-Offer`,
       description: `New terms proposed for ${job?.title ?? "the job"}: ₹${counterInput.bidAmount.toLocaleString()}.`,
       href: `/job/${hireRequest.jobId}`,
     });
@@ -125,17 +125,48 @@ export async function respondToProjectRequest(
     },
   });
   if (job.milestones.length > 0) {
-    await db.projectMilestone.createMany({
-      data: job.milestones.map((milestone) => ({
+    const totalPercentage = job.milestones.reduce((sum, m) => sum + (m.percentage || 0), 0);
+    let allocatedAmount = 0;
+    const projectMilestonesData = job.milestones.map((milestone, index) => {
+      const isLast = index === job.milestones.length - 1;
+      const milestonePct =
+        milestone.percentage || (totalPercentage > 0 ? 0 : 100 / job.milestones.length);
+      const computedAmount =
+        totalPercentage > 0
+          ? Math.round((hireRequest.bidAmount * milestonePct) / totalPercentage)
+          : Math.round(hireRequest.bidAmount / job.milestones.length);
+
+      const amount = isLast
+        ? Math.max(1, hireRequest.bidAmount - allocatedAmount)
+        : Math.max(1, computedAmount);
+
+      allocatedAmount += amount;
+
+      return {
         trackingId: tracking.id,
         clientId: hireRequest.clientId,
         professionalId: hireRequest.professionalId,
         title: milestone.title,
         description: milestone.description,
-        amount:
-          milestone.amount ?? Math.round((hireRequest.bidAmount * milestone.percentage) / 100),
+        amount,
+        status: "UPCOMING" as const,
+      };
+    });
+
+    await db.projectMilestone.createMany({
+      data: projectMilestonesData,
+    });
+  } else {
+    await db.projectMilestone.create({
+      data: {
+        trackingId: tracking.id,
+        clientId: hireRequest.clientId,
+        professionalId: hireRequest.professionalId,
+        title: "Project Completion",
+        description: "Full project delivery and completion",
+        amount: hireRequest.bidAmount,
         status: "UPCOMING",
-      })),
+      },
     });
   }
   await db.projectTimelineEvent.create({
@@ -149,9 +180,10 @@ export async function respondToProjectRequest(
     },
   });
   const clientAccepted = actor.role === "CLIENT";
+  const jobTitle = job.title ?? "Project";
   await notifyUsers([otherPartyId], {
     type: "REQUEST_ACCEPTED",
-    title: clientAccepted ? "Congratulations! You got the project" : "Request Accepted",
+    title: `${jobTitle} · ${clientAccepted ? "Congratulations! You got the project" : "Request Accepted"}`,
     description: clientAccepted
       ? `Congratulations! The client accepted your proposal for ${job.title ?? "the project"}. You got the project.`
       : `Your request for ${job.title ?? "the job"} was accepted.`,

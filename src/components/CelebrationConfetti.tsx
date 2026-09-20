@@ -31,7 +31,7 @@ const COLORS = [
 
 export function CelebrationConfetti({
   active,
-  durationMs = 4500,
+  durationMs = 2400,
   onComplete,
 }: {
   active: boolean;
@@ -39,6 +39,11 @@ export function CelebrationConfetti({
   onComplete?: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  });
 
   useEffect(() => {
     if (!active) return;
@@ -60,7 +65,7 @@ export function CelebrationConfetti({
     window.addEventListener("resize", handleResize);
 
     const particles: Particle[] = [];
-    const count = 160;
+    const count = 140;
 
     // Generate burst from 2 bottom corners + center
     for (let i = 0; i < count; i++) {
@@ -102,15 +107,15 @@ export function CelebrationConfetti({
 
       if (progress >= 1) {
         ctx.clearRect(0, 0, width, height);
-        onComplete?.();
+        onCompleteRef.current?.();
         return;
       }
 
       ctx.clearRect(0, 0, width, height);
 
-      const gravity = 0.38;
+      const gravity = 0.42;
       const drag = 0.985;
-      const globalOpacity = progress > 0.7 ? 1 - (progress - 0.7) / 0.3 : 1;
+      const globalOpacity = progress > 0.65 ? Math.max(0, 1 - (progress - 0.65) / 0.35) : 1;
 
       for (const p of particles) {
         p.vx *= drag;
@@ -144,14 +149,23 @@ export function CelebrationConfetti({
 
     animationId = requestAnimationFrame(render);
 
+    const safetyTimer = setTimeout(() => {
+      cancelAnimationFrame(animationId);
+      if (canvas && ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      onCompleteRef.current?.();
+    }, durationMs + 80);
+
     return () => {
+      clearTimeout(safetyTimer);
       window.removeEventListener("resize", handleResize);
       cancelAnimationFrame(animationId);
       if (canvas && ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
     };
-  }, [active, durationMs, onComplete]);
+  }, [active, durationMs]);
 
   if (!active) return null;
 

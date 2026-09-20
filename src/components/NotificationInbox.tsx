@@ -238,12 +238,6 @@ export function NotificationInbox({ admin: _isAdmin = false }: { admin?: boolean
 
   useEffect(() => {
     void load();
-    window.addEventListener("servio:notification", load);
-    window.addEventListener("servio:notifications-read", load);
-    return () => {
-      window.removeEventListener("servio:notification", load);
-      window.removeEventListener("servio:notifications-read", load);
-    };
   }, [load]);
 
   // Split into Project items & Other items

@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       });
       await notifyUsers([job.userId], {
         type: "PROPOSAL_UPDATED",
-        title: "Proposal Updated",
+        title: `${job.title ?? "Project"} · Proposal Updated`,
         description: `A professional updated their proposal for ${job.title ?? "your job"}.`,
         href: `/job/${job.id}`,
         emailDetails: [
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
     });
     await notifyUsers([job.userId], {
       type: "NEW_PROPOSAL",
-      title: "New Proposal",
+      title: `${job.title ?? "Project"} · New Proposal`,
       description: `${professional ? `${professional.firstName} ${professional.lastName}` : "A professional"} sent a proposal for ${job.title ?? "your job"}.`,
       href: `/job/${job.id}`,
       emailDetails: [

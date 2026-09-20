@@ -31,8 +31,23 @@ export function RealtimeNotifications() {
     else if (notification.type.includes("DISPUTE")) actionLabel = "Check Dispute";
     else if (notification.type.includes("VERIFICATION")) actionLabel = "Inspect Status";
 
-    toast(notification.title, {
-      icon: <CircleCheck className="h-5 w-5 text-emerald-400" />,
+    let titleContent: React.ReactNode = notification.title;
+    if (notification.title.includes(" · ")) {
+      const [projectName, ...actionParts] = notification.title.split(" · ");
+      titleContent = (
+        <div className="flex flex-col gap-0.5">
+          <span className="font-bold text-foreground text-sm leading-snug">{projectName}</span>
+          <span className="text-xs font-semibold text-primary">{actionParts.join(" · ")}</span>
+        </div>
+      );
+    } else {
+      titleContent = (
+        <span className="font-bold text-foreground text-sm leading-snug">{notification.title}</span>
+      );
+    }
+
+    toast(titleContent, {
+      icon: <CircleCheck className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />,
       description: notification.description,
       action: notification.href
         ? {
@@ -76,19 +91,21 @@ export function RealtimeNotifications() {
         const response = await fetch("/api/portal/notifications", { cache: "no-store" });
         if (!response.ok) return;
         const notifications = (await response.json()) as RealtimeNotification[];
+        let hasNew = false;
         for (const notification of notifications) {
           const key =
             notification.id != null ? `id:${notification.id}` : notificationKey(notification);
           const isNew = !seenNotifications.current.has(key);
           seenNotifications.current.add(key);
           if (showNew && isNew && !notification.readAt) {
+            hasNew = true;
             showNotification(notification);
           }
         }
-        // Historical unread notifications belong in the inbox and badge. They
-        // are added to the seen set but are not replayed on the initial load.
         notificationsInitialized.current = true;
-        window.dispatchEvent(new CustomEvent("servio:notification"));
+        if (hasNew) {
+          window.dispatchEvent(new CustomEvent("servio:notification"));
+        }
       } catch {
         // The inbox remains available if the background refresh is unavailable.
       }
@@ -119,7 +136,7 @@ export function RealtimeNotifications() {
       }
     }, SAFETY_POLL_MS);
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") void loadMissed();
+      if (document.visibilityState === "visible") void loadMissed(true);
     };
     const onFocus = () => void loadMissed(true);
     window.addEventListener("focus", onFocus);
@@ -139,11 +156,10 @@ export function RealtimeNotifications() {
     };
     const onProposal = (payload?: unknown) => {
       window.dispatchEvent(new CustomEvent("servio:proposal", { detail: payload }));
-      window.dispatchEvent(new CustomEvent("servio:notification"));
     };
     // Manager-level reconnect only: "connect" would also fire on first mount,
     // duplicating the initial load. A reconnect may have missed live pushes.
-    const onReconnect = () => void loadMissed(true);
+    const onReconnect = () => void loadMissed(false);
     socket.io.on("reconnect", onReconnect);
     socket.on("notification:new", onNotification);
     socket.on("message:new", onMessage);

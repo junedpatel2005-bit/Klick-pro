@@ -237,7 +237,7 @@ export default function RunningProjectsPage() {
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="font-display text-xl font-semibold">
-                {view === "active" ? "Running projects" : "Completed projects"}
+                {view === "active" ? "Active projects" : "Completed projects"}
               </h2>
               <Button
                 variant={view === "completed" ? "default" : "outline"}
@@ -247,7 +247,7 @@ export default function RunningProjectsPage() {
                   setStatusFilter("ALL");
                 }}
               >
-                {view === "active" ? "Completed projects" : "Back to running projects"}
+                {view === "active" ? "Completed projects" : "Back to active projects"}
               </Button>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">

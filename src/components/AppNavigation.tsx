@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ElementType } from "react";
+import { Menu } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -85,19 +86,51 @@ export function AppSidebar({
   items,
   pathname,
   user,
+  collapsed = false,
+  onToggleCollapse,
 }: {
   items: NavigationItem[];
   pathname: string;
   user: NavigationUser;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }) {
   const unreadMessages = useUnreadMessages(pathname);
   const unreadNotifications = useUnreadNotifications(pathname);
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-border bg-surface lg:block">
-      <div className="flex h-16 items-center px-5">
-        <Logo />
+    <aside
+      className={`fixed inset-y-0 left-0 z-30 hidden border-r border-border bg-surface lg:block transition-[width] duration-200 ease-[cubic-bezier(0.2,0,0,1)] will-change-[width] overflow-hidden select-none ${
+        collapsed ? "w-[72px]" : "w-64"
+      }`}
+    >
+      <div className="flex h-16 items-center px-4 border-b border-border/40 overflow-hidden">
+        <div
+          className={`flex items-center shrink-0 transition-opacity duration-150 ${
+            collapsed ? "opacity-0 pointer-events-none hidden" : "opacity-100"
+          }`}
+        >
+          <Logo collapsed={false} />
+        </div>
+        {onToggleCollapse && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleCollapse();
+            }}
+            className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer ${
+              collapsed ? "mx-auto text-foreground" : "ml-auto"
+            }`}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        )}
       </div>
-      <nav className="px-3 py-2">
+
+      <nav className="flex flex-col gap-1.5 px-4 py-3 overflow-hidden">
         {items.map((item) => {
           const itemPath = item.to.split("?")[0];
           const active = pathname === itemPath || pathname.startsWith(`${itemPath}/`);
@@ -105,17 +138,42 @@ export function AppSidebar({
             <Link
               key={item.to}
               href={item.to}
-              className={`mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${active ? "bg-primary font-medium text-primary-foreground shadow-soft" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+              title={collapsed ? item.label : undefined}
+              className={`group relative flex h-10 w-full items-center rounded-xl transition-colors ${
+                active
+                  ? "bg-primary font-medium text-primary-foreground shadow-soft"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
             >
-              <item.icon className="h-4 w-4" />
-              {item.label}
+              <div className="grid h-10 w-10 shrink-0 place-items-center">
+                <item.icon className="h-5 w-5 transition-transform duration-150 group-hover:scale-105" />
+              </div>
+              <span
+                className={`text-sm font-medium whitespace-nowrap overflow-hidden transition-opacity duration-150 ${
+                  collapsed ? "opacity-0 pointer-events-none hidden" : "opacity-100"
+                }`}
+              >
+                {item.label}
+              </span>
               {item.label === "Messages" && unreadMessages > 0 && !active && (
-                <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-cta px-1 text-[10px] font-bold text-cta-foreground">
+                <span
+                  className={
+                    collapsed
+                      ? "absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-cta px-1 text-[9px] font-bold text-cta-foreground"
+                      : "ml-auto mr-3 grid h-5 min-w-5 place-items-center rounded-full bg-cta px-1 text-[10px] font-bold text-cta-foreground"
+                  }
+                >
                   {unreadMessages > 99 ? "99+" : unreadMessages}
                 </span>
               )}
               {item.label === "Notifications" && unreadNotifications > 0 && !active && (
-                <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-cta px-1 text-[10px] font-bold text-cta-foreground">
+                <span
+                  className={
+                    collapsed
+                      ? "absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-cta px-1 text-[9px] font-bold text-cta-foreground"
+                      : "ml-auto mr-3 grid h-5 min-w-5 place-items-center rounded-full bg-cta px-1 text-[10px] font-bold text-cta-foreground"
+                  }
+                >
                   {unreadNotifications > 99 ? "99+" : unreadNotifications}
                 </span>
               )}
@@ -123,21 +181,39 @@ export function AppSidebar({
           );
         })}
       </nav>
-      <div className="absolute inset-x-3 bottom-4 flex items-center gap-3 rounded-xl border border-border bg-muted/50 p-3">
-        <Avatar className="h-9 w-9">
-          <AvatarImage
-            src={user.avatarUrl ?? undefined}
-            alt={`${user.firstName} ${user.lastName}`}
-          />
-          <AvatarFallback>
-            {`${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase() || "U"}
-          </AvatarFallback>
-        </Avatar>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-foreground">
-            {user.firstName} {user.lastName}
-          </p>
-          <p className="text-xs capitalize text-muted-foreground">{user.role.toLowerCase()}</p>
+
+      <div className="absolute inset-x-0 bottom-4 px-4 overflow-hidden">
+        <div
+          title={
+            collapsed
+              ? `${user.firstName} ${user.lastName} (${user.role.toLowerCase()})`
+              : undefined
+          }
+          className={`flex h-12 w-full items-center rounded-xl border border-border bg-muted/50 transition-colors overflow-hidden ${
+            collapsed ? "justify-center" : "px-1.5"
+          }`}
+        >
+          <div className="grid h-10 w-10 shrink-0 place-items-center">
+            <Avatar className="h-8 w-8">
+              <AvatarImage
+                src={user.avatarUrl ?? undefined}
+                alt={`${user.firstName} ${user.lastName}`}
+              />
+              <AvatarFallback>
+                {`${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase() || "U"}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+          <div
+            className={`min-w-0 whitespace-nowrap pl-1 transition-opacity duration-150 ${
+              collapsed ? "opacity-0 pointer-events-none hidden" : "opacity-100"
+            }`}
+          >
+            <p className="truncate text-sm font-semibold text-foreground">
+              {user.firstName} {user.lastName}
+            </p>
+            <p className="text-xs capitalize text-muted-foreground">{user.role.toLowerCase()}</p>
+          </div>
         </div>
       </div>
     </aside>

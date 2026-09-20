@@ -144,7 +144,12 @@ export async function GET(request: NextRequest) {
         clientId: user.id,
         jobId: { in: jobs.map((job) => job.id) },
       },
-      select: { id: true, jobId: true, status: true },
+      select: {
+        id: true,
+        jobId: true,
+        status: true,
+        request: { select: { bidAmount: true } },
+      },
     });
     const proposalCounts = await db.projectRequest.groupBy({
       by: ["jobId"],
@@ -166,6 +171,7 @@ export async function GET(request: NextRequest) {
           ...job,
           status,
           projectId: project?.id ?? null,
+          agreedAmount: project?.request?.bidAmount ?? null,
           proposalCount: status === "RUNNING" ? 0 : (proposalCountByJob.get(job.id) ?? 0),
         };
       }),

@@ -523,6 +523,7 @@ export async function GET(
                 orderBy: { createdAt: "asc" },
                 include: { payment: { select: { status: true } } },
               },
+              request: { select: { bidAmount: true } },
             },
           }),
           db.projectTracking.findMany({
@@ -770,11 +771,14 @@ export async function GET(
           acceptedAt: project.acceptedAt.toISOString(),
           deadline: jobMap.get(project.jobId)?.deadline?.toISOString() ?? null,
           budget:
-            jobMap.get(project.jobId)?.timingType === "HOURLY"
-              ? (jobMap.get(project.jobId)?.hourlyRate ?? null)
-              : (jobMap.get(project.jobId)?.budgetMax ??
-                jobMap.get(project.jobId)?.budgetMin ??
-                null),
+            project.request?.bidAmount ??
+            (project.milestones.length > 0
+              ? project.milestones.reduce((acc, m) => acc + m.amount, 0)
+              : jobMap.get(project.jobId)?.timingType === "HOURLY"
+                ? (jobMap.get(project.jobId)?.hourlyRate ?? null)
+                : (jobMap.get(project.jobId)?.budgetMax ??
+                  jobMap.get(project.jobId)?.budgetMin ??
+                  null)),
           timingType: jobMap.get(project.jobId)?.timingType ?? "FIXED",
           progress:
             project.status === "COMPLETED"

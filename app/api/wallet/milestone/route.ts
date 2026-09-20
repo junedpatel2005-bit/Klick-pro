@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid milestone payment request." }, { status: 400 });
   const project = await db.projectTracking.findFirst({
     where: { id: parsed.data.projectId, clientId: session.userId },
+    include: { job: { select: { title: true } } },
   });
   const milestone = project
     ? await db.projectMilestone.findFirst({
@@ -161,14 +162,6 @@ export async function POST(request: NextRequest) {
       },
       { maxWait: 10000, timeout: 30000 },
     );
-    await notifyMilestoneFunded({
-      projectId: project.id,
-      milestoneId: milestone.id,
-      milestoneTitle: milestone.title,
-      amount: money.baseAmount,
-      clientId: project.clientId,
-      professionalId: project.professionalId,
-    });
     void notifyMilestonePayoutApproved({
       projectId: project.id,
       milestoneTitle: milestone.title,
@@ -176,6 +169,7 @@ export async function POST(request: NextRequest) {
       platformEarnings: 0,
       clientId: project.clientId,
       professionalId: project.professionalId,
+      jobTitle: project.job?.title,
     }).catch(() => undefined);
     emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
       projectId: project.id,

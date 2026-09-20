@@ -2,6 +2,23 @@
 @source "../src";
 @source "../app";
 
+/* Hand cursor on all buttons and interactive button roles */
+button,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"],
+input[type="button"]:disabled,
+input[type="submit"]:disabled,
+input[type="reset"]:disabled {
+  cursor: not-allowed;
+}
+
 /* Keep the CMS CKEditor toolbar visible when the admin panel is narrow. */
 .cms-editor .ck.ck-editor {
   width: 100%;

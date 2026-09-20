@@ -156,6 +156,9 @@ export async function POST(request: NextRequest) {
         id: input.projectId,
         OR: [{ clientId: session.userId }, { professionalId: session.userId }],
       },
+      include: {
+        job: { select: { title: true } },
+      },
     });
     if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
     const event = async (
@@ -211,9 +214,11 @@ export async function POST(request: NextRequest) {
           session.role === "ADMIN"
             ? [project.clientId, project.professionalId]
             : [project.clientId, project.professionalId].filter((id) => id !== session.userId);
+        const jobTitle = project.job?.title?.trim() || `Project #${project.id}`;
+        const notificationTitle = title.includes(" · ") ? title : `${jobTitle} · ${title}`;
         await notifyUsers(partnerRecipients, {
           type: `PROJECT_ACTIVITY_${type}`,
-          title,
+          title: notificationTitle,
           description: description ?? title,
           href: `/project/${project.id}/tracking`,
           emailDetails: activityDetails,
@@ -345,9 +350,14 @@ export async function POST(request: NextRequest) {
         },
       });
       const jobTitle = jobDates?.title?.trim() || `Project #${project.id}`;
-      await event("MILESTONE_CREATED", `Milestone created · ${jobTitle}`, input.title, {
-        milestoneId: milestone.id,
-      });
+      await event(
+        "MILESTONE_CREATED",
+        `${jobTitle} · New Milestone Added`,
+        `New milestone added: ${input.title} (₹${input.amount.toLocaleString("en-IN")})`,
+        {
+          milestoneId: milestone.id,
+        },
+      );
     }
     if (input.action === "create-milestones") {
       const projectRequest = await db.projectRequest.findUnique({
@@ -407,9 +417,14 @@ export async function POST(request: NextRequest) {
             status,
           },
         });
-        await event("MILESTONE_CREATED", `Milestone created · ${jobTitle}`, m.title, {
-          milestoneId: created.id,
-        });
+        await event(
+          "MILESTONE_CREATED",
+          `${jobTitle} · New Milestone Added`,
+          `New milestone added: ${m.title} (₹${m.amount.toLocaleString("en-IN")})`,
+          {
+            milestoneId: created.id,
+          },
+        );
       }
     }
     if (input.action === "update-milestone") {
@@ -813,10 +828,11 @@ export async function POST(request: NextRequest) {
       });
     }
     if (input.action === "request-client") {
+      const jobTitle = project.job?.title?.trim() || `Project #${project.id}`;
       await event("PROFESSIONAL_REQUEST", input.title ?? "Request sent to client", input.note);
       await notifyUsers([project.clientId], {
         type: "PROJECT_REQUEST",
-        title: input.title ?? "Request from your professional",
+        title: `${jobTitle} · ${input.title ?? "Request from your professional"}`,
         description: input.note,
         href: `/project/${project.id}/tracking`,
       });
@@ -859,9 +875,10 @@ export async function POST(request: NextRequest) {
         "Project completed and closed",
         "All milestones were approved and the client successfully closed the project.",
       );
+      const jobTitle = project.job?.title?.trim() || `Project #${project.id}`;
       await notifyUsers([project.professionalId], {
         type: "PROJECT_COMPLETED",
-        title: "Project closed and completed",
+        title: `${jobTitle} · Project closed and completed`,
         description: "The client approved all deliverables and closed the project.",
         href: `/project/${project.id}/tracking`,
       });
@@ -895,9 +912,10 @@ export async function POST(request: NextRequest) {
         "The professional confirmed project completion after the client requested confirmation.",
         { progress: 100 },
       );
+      const jobTitle = project.job?.title?.trim() || `Project #${project.id}`;
       await notifyUsers([project.clientId], {
         type: "PROJECT_COMPLETED",
-        title: "Project completed",
+        title: `${jobTitle} · Project completed`,
         description: "The professional confirmed that your project is complete.",
         href: `/project/${project.id}/tracking`,
       });

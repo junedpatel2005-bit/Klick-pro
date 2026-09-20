@@ -519,6 +519,11 @@ export default function PostJob() {
       }
       if (mode === "publish") {
         localStorage.removeItem(postJobDraftKey);
+        try {
+          sessionStorage.setItem("klickpro:job-posted", "1");
+        } catch {
+          /* ignore storage error */
+        }
         router.push("/my-jobs?posted=1");
       } else setMessage("Draft saved.");
     } catch {
