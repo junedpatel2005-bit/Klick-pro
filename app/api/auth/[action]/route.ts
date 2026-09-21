@@ -21,10 +21,7 @@ import { clearRateLimit, rateLimit } from "@/lib/rate-limit";
 import { sendAuthEmail } from "@/lib/email";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { logServerError } from "@/lib/server-logger";
-import {
-  notifyAdminsOfNewAccount,
-  notifyClientsOfNewProfessional,
-} from "@/lib/marketplace-notifications";
+import { notifyAdminsOfNewAccount } from "@/lib/marketplace-notifications";
 import { isValidInternationalPhoneNumber } from "@/lib/phone-validation";
 
 const passwordSchema = z.string().min(8).regex(/[A-Z]/).regex(/[a-z]/).regex(/\d/);
@@ -191,10 +188,7 @@ export async function GET(
         });
       }
       if (createdAccount && user.role !== "ADMIN") {
-        await Promise.all([
-          notifyAdminsOfNewAccount(user),
-          ...(user.role === "PROFESSIONAL" ? [notifyClientsOfNewProfessional(user)] : []),
-        ]);
+        await notifyAdminsOfNewAccount(user);
       }
       const redirect =
         saved.nextPath?.startsWith("/") && !saved.nextPath.startsWith("//")
@@ -420,10 +414,7 @@ export async function POST(
     enqueueBackgroundJob(
       "notifications.new_account",
       async () => {
-        await Promise.all([
-          notifyAdminsOfNewAccount(user),
-          ...(user.role === "PROFESSIONAL" ? [notifyClientsOfNewProfessional(user)] : []),
-        ]);
+        await notifyAdminsOfNewAccount(user);
       },
       { userId: user.id },
     );

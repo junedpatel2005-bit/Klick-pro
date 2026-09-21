@@ -28,12 +28,12 @@ request.
 
 Defined in [`src/lib/auth.ts`](../src/lib/auth.ts).
 
-| Property | Value |
-| --- | --- |
-| Cookie name | `servio_session` |
-| Format | JWT, HS256, signed with `AUTH_SECRET` via `jose` |
-| Claims | `userId`, `role`, `sessionId` |
-| Lifetime | 7 days |
+| Property     | Value                                                        |
+| ------------ | ------------------------------------------------------------ |
+| Cookie name  | `servio_session`                                             |
+| Format       | JWT, HS256, signed with `AUTH_SECRET` via `jose`             |
+| Claims       | `userId`, `role`, `sessionId`                                |
+| Lifetime     | 7 days                                                       |
 | Cookie flags | `httpOnly`, `sameSite=lax`, `secure` in production, `path=/` |
 
 The JWT is **not** self-sufficient. `sessionId` points at a row in the `Session` table, and
@@ -50,13 +50,13 @@ This makes sessions genuinely revocable — logout, password reset and admin dea
 
 ### Helpers
 
-| Function | Guarantees |
-| --- | --- |
-| `verifySession(token)` | Valid signature, live session row, active user |
-| `requireAuthenticatedUser(token)` | Alias of the above |
-| `requireVerifiedUser(token)` | The above **plus** `emailVerifiedAt` is set |
-| `revokeSession(token)` | Marks the session row revoked |
-| `createSession({ userId, role })` | Issues a JWT and inserts the session row |
+| Function                          | Guarantees                                     |
+| --------------------------------- | ---------------------------------------------- |
+| `verifySession(token)`            | Valid signature, live session row, active user |
+| `requireAuthenticatedUser(token)` | Alias of the above                             |
+| `requireVerifiedUser(token)`      | The above **plus** `emailVerifiedAt` is set    |
+| `revokeSession(token)`            | Marks the session row revoked                  |
+| `createSession({ userId, role })` | Issues a JWT and inserts the session row       |
 
 ### Bearer tokens
 
@@ -78,13 +78,13 @@ This is applied per-route, not globally. Most handlers are cookie-only.
 Role checks are written inline in each handler. There is no shared guard, and the local helper has
 been rewritten several times under different names:
 
-| Helper name | Occurrences |
-| --- | --- |
-| `getClient` | 5 |
-| `requireAdmin` | 4 |
-| `getSession` | 4 |
-| `getProfessional` | 2 |
-| `sessionFromRequest` | 1 |
+| Helper name          | Occurrences |
+| -------------------- | ----------- |
+| `getClient`          | 5           |
+| `requireAdmin`       | 4           |
+| `getSession`         | 4           |
+| `getProfessional`    | 2           |
+| `sessionFromRequest` | 1           |
 
 52 files call `verifySession` directly. Behaviour differs subtly between copies — some re-check
 `isActive` against the database even though `verifySession` already did, some don't.
@@ -101,6 +101,7 @@ matches neither the request origin nor `APP_URL`:
 ```json
 { "error": "Request origin is not allowed." }
 ```
+
 → `403`
 
 A missing `Origin` is treated as untrusted. Native mobile clients must send one.
@@ -141,30 +142,30 @@ ApiErrorCode = { authentication, authorization, conflict, internal,
 **No route uses it.** `apiSuccess` and `apiError` have zero call sites. All 65 handlers call
 `NextResponse.json` directly, producing at least five different shapes:
 
-| Shape | Where |
-| --- | --- |
+| Shape                                   | Where                                           |
+| --------------------------------------- | ----------------------------------------------- |
 | `{ error: { code, message, details } }` | `/api/v1/*` — hand-rolled to match the envelope |
-| `{ error: "Plain sentence." }` | Most handlers |
-| `{ ok: true }` | `/api/contact` |
-| `{ received: true }` | `/api/webhooks/persona` |
-| Bare object or array | Many `GET` handlers — e.g. `{ jobs: [...] }` |
+| `{ error: "Plain sentence." }`          | Most handlers                                   |
+| `{ ok: true }`                          | `/api/contact`                                  |
+| `{ received: true }`                    | `/api/webhooks/persona`                         |
+| Bare object or array                    | Many `GET` handlers — e.g. `{ jobs: [...] }`    |
 
 **If you are adding an endpoint, use `apiSuccess`/`apiError`.** They already exist and are tested;
 adopting them is how the surface converges rather than diverges further.
 
 ### Status codes in use
 
-| Code | Meaning here |
-| --- | --- |
-| `200` | Success |
-| `400` | Validation failure |
-| `401` | No session, or session invalid |
-| `403` | Wrong role, or CSRF origin rejected |
+| Code  | Meaning here                                                |
+| ----- | ----------------------------------------------------------- |
+| `200` | Success                                                     |
+| `400` | Validation failure                                          |
+| `401` | No session, or session invalid                              |
+| `403` | Wrong role, or CSRF origin rejected                         |
 | `404` | Not found, also used to hide records the caller may not see |
-| `409` | Conflict — duplicate email, already-accepted offer |
-| `410` | Deliberately retired endpoint (see below) |
-| `429` | Rate limited |
-| `500` | Unhandled |
+| `409` | Conflict — duplicate email, already-accepted offer          |
+| `410` | Deliberately retired endpoint (see below)                   |
+| `429` | Rate limited                                                |
+| `500` | Unhandled                                                   |
 
 ## Pagination
 
@@ -186,11 +187,11 @@ process multiplies the effective limit.
 
 ## Logging, audit and background work
 
-| Helper | Call sites | Notes |
-| --- | --- | --- |
-| `logServerError` ([`server-logger.ts`](../src/lib/server-logger.ts)) | 9 | Structured error log with request context |
-| `recordAudit` ([`audit-log.ts`](../src/lib/audit-log.ts)) | 2 | Both in verification-document routes only |
-| `enqueueBackgroundJob` ([`background-jobs.ts`](../src/lib/background-jobs.ts)) | 3 | In-process, fire-and-forget — **not durable**; a restart loses queued work |
+| Helper                                                                         | Call sites | Notes                                                                      |
+| ------------------------------------------------------------------------------ | ---------- | -------------------------------------------------------------------------- |
+| `logServerError` ([`server-logger.ts`](../src/lib/server-logger.ts))           | 9          | Structured error log with request context                                  |
+| `recordAudit` ([`audit-log.ts`](../src/lib/audit-log.ts))                      | 2          | Both in verification-document routes only                                  |
+| `enqueueBackgroundJob` ([`background-jobs.ts`](../src/lib/background-jobs.ts)) | 3          | In-process, fire-and-forget — **not durable**; a restart loses queued work |
 
 Most handlers still `console.error` directly. Sentry is wired through `@sentry/nextjs` with
 `instrumentation.ts`, `sentry.server.config.ts` and `sentry.edge.config.ts`.
@@ -201,10 +202,10 @@ Line counts are included because several handlers are large enough to be a desig
 
 ### Authentication
 
-| Endpoint | Methods | Lines |
-| --- | --- | --- |
+| Endpoint             | Methods   | Lines   |
+| -------------------- | --------- | ------- |
 | `/api/auth/[action]` | GET, POST | **882** |
-| `/api/auth/me` | GET | 47 |
+| `/api/auth/me`       | GET       | 47      |
 
 `/api/auth/[action]` is a single handler dispatching on the path segment across 17 actions:
 
@@ -218,74 +219,74 @@ Registration and email login deliberately **do not** issue a normal session unti
 
 ### Client
 
-| Endpoint | Methods | Lines |
-| --- | --- | --- |
-| `/api/client/jobs` | GET, POST | 240 |
-| `/api/client/jobs/[id]` | GET, PATCH, DELETE | 353 |
-| `/api/client/jobs/export` | POST | 98 |
-| `/api/client/payments/export` | POST | 93 |
-| `/api/client/project-requests` | POST | 122 |
-| `/api/client/project-requests/[id]` | PATCH | 59 |
-| `/api/client/account` | GET | 83 |
-| `/api/client/verification` | GET | 19 |
+| Endpoint                            | Methods            | Lines |
+| ----------------------------------- | ------------------ | ----- |
+| `/api/client/jobs`                  | GET, POST          | 240   |
+| `/api/client/jobs/[id]`             | GET, PATCH, DELETE | 353   |
+| `/api/client/jobs/export`           | POST               | 98    |
+| `/api/client/payments/export`       | POST               | 93    |
+| `/api/client/project-requests`      | POST               | 122   |
+| `/api/client/project-requests/[id]` | PATCH              | 59    |
+| `/api/client/account`               | GET                | 83    |
+| `/api/client/verification`          | GET                | 19    |
 
 ### Professional
 
-| Endpoint | Methods | Lines |
-| --- | --- | --- |
-| `/api/professional/profile` | GET, POST | 126 |
-| `/api/professional/proposals` | GET, POST | 172 |
-| `/api/professional/project-requests/[id]` | PATCH | 60 |
-| `/api/professional/favorite-jobs/[jobId]` | POST, DELETE | 61 |
-| `/api/professional/verification` | GET, PUT | 66 |
-| `/api/professional/verification/upload` | POST | 71 |
-| `/api/professional/verification/documents/[...storageKey]` | GET | 65 |
-| `/api/professional/razorpay-account` | GET, PUT | 51 |
-| `/api/professional/jobs/export` | POST | 154 |
-| `/api/professional/earnings/export` | POST | 126 |
+| Endpoint                                                   | Methods      | Lines |
+| ---------------------------------------------------------- | ------------ | ----- |
+| `/api/professional/profile`                                | GET, POST    | 126   |
+| `/api/professional/proposals`                              | GET, POST    | 172   |
+| `/api/professional/project-requests/[id]`                  | PATCH        | 60    |
+| `/api/professional/favorite-jobs/[jobId]`                  | POST, DELETE | 61    |
+| `/api/professional/verification`                           | GET, PUT     | 66    |
+| `/api/professional/verification/upload`                    | POST         | 71    |
+| `/api/professional/verification/documents/[...storageKey]` | GET          | 65    |
+| `/api/professional/razorpay-account`                       | GET, PUT     | 51    |
+| `/api/professional/jobs/export`                            | POST         | 154   |
+| `/api/professional/earnings/export`                        | POST         | 126   |
 
 ### Shared portal — the project workspace
 
-| Endpoint | Methods | Lines |
-| --- | --- | --- |
-| `/api/portal/[resource]` | GET, PATCH, DELETE | **1,010** |
-| `/api/portal/project-actions` | POST | **786** |
-| `/api/portal/project-files` | POST | 99 |
-| `/api/portal/project-files/[fileId]` | GET | 56 |
-| `/api/portal/payment-details/[paymentId]` | GET | 52 |
+| Endpoint                                  | Methods            | Lines     |
+| ----------------------------------------- | ------------------ | --------- |
+| `/api/portal/[resource]`                  | GET, PATCH, DELETE | **1,010** |
+| `/api/portal/project-actions`             | POST               | **786**   |
+| `/api/portal/project-files`               | POST               | 99        |
+| `/api/portal/project-files/[fileId]`      | GET                | 56        |
+| `/api/portal/payment-details/[paymentId]` | GET                | 52        |
 
 **`/api/portal/project-actions` is the domain core.** One `POST` handler switching on an `action`
 field in the body, implementing the project state machine:
 
-| Action | Effect |
-| --- | --- |
-| `start-work` | `READY_TO_START` → `IN_PROGRESS` |
-| `update-progress` | Sets progress percentage and current stage |
-| `create-milestone` | Adds a milestone (max 5) |
-| `upload-work` | Attaches files to the active milestone |
-| `submit-milestone` | → `AWAITING_CLIENT_REVIEW` |
-| `request-revision` | → `REVISION_REQUESTED` |
-| `approve-milestone` | Creates the payment, activates the next milestone |
-| `submit-final-work` | Requires every milestone `APPROVED` |
-| `request-client` / `complete-project` / `confirm-project-completion` | Completion handshake |
-| `submit-review` / `respond-to-review` | Ratings |
-| `submit-dispute` | Opens a dispute |
+| Action                                                               | Effect                                            |
+| -------------------------------------------------------------------- | ------------------------------------------------- |
+| `start-work`                                                         | `READY_TO_START` → `IN_PROGRESS`                  |
+| `update-progress`                                                    | Sets progress percentage and current stage        |
+| `create-milestone`                                                   | Adds a milestone (max 5)                          |
+| `upload-work`                                                        | Attaches files to the active milestone            |
+| `submit-milestone`                                                   | → `AWAITING_CLIENT_REVIEW`                        |
+| `request-revision`                                                   | → `REVISION_REQUESTED`                            |
+| `approve-milestone`                                                  | Creates the payment, activates the next milestone |
+| `submit-final-work`                                                  | Requires every milestone `APPROVED`               |
+| `request-client` / `complete-project` / `confirm-project-completion` | Completion handshake                              |
+| `submit-review` / `respond-to-review`                                | Ratings                                           |
+| `submit-dispute`                                                     | Opens a dispute                                   |
 
 `approve-milestone` branches on `job.paymentMethod` — an `OFFLINE` job records the approval without
 moving wallet money.
 
 ### Money
 
-| Endpoint | Methods | Lines |
-| --- | --- | --- |
-| `/api/wallet` | GET, POST | 101 |
-| `/api/wallet/deposit/order` | POST | 55 |
-| `/api/wallet/deposit/verify` | POST | 54 |
-| `/api/wallet/deposit/fail` | POST | 37 |
-| `/api/wallet/milestone` | POST | 181 |
-| `/api/payments/razorpay/config` | GET | 11 |
-| `/api/payments/razorpay/order` | POST | **410 Gone** |
-| `/api/payments/razorpay/verify` | POST | **410 Gone** |
+| Endpoint                        | Methods   | Lines        |
+| ------------------------------- | --------- | ------------ |
+| `/api/wallet`                   | GET, POST | 101          |
+| `/api/wallet/deposit/order`     | POST      | 55           |
+| `/api/wallet/deposit/verify`    | POST      | 54           |
+| `/api/wallet/deposit/fail`      | POST      | 37           |
+| `/api/wallet/milestone`         | POST      | 181          |
+| `/api/payments/razorpay/config` | GET       | 11           |
+| `/api/payments/razorpay/order`  | POST      | **410 Gone** |
+| `/api/payments/razorpay/verify` | POST      | **410 Gone** |
 
 The last two are deliberate tombstones. They return `410` so older clients cannot bypass wallet
 settlement:
@@ -307,36 +308,36 @@ where non-null, so a retried Razorpay callback cannot double-credit.
 
 ### Admin
 
-| Endpoint | Methods | Lines |
-| --- | --- | --- |
-| `/api/admin/login` | POST | 83 |
-| `/api/admin/users/[id]` | GET, PATCH, DELETE | 155 |
-| `/api/admin/jobs/[id]` | GET, PATCH, DELETE | 180 |
-| `/api/admin/verifications` | GET, PATCH | 135 |
-| `/api/admin/disputes/[id]` | GET, PATCH | 138 |
-| `/api/admin/disputes/[id]/messages` | POST | 55 |
-| `/api/admin/finance/payouts` | POST | 106 |
-| `/api/admin/finance/milestone-payout` | POST | 150 |
-| `/api/admin/finance/withdrawals/[id]` | PATCH | 81 |
-| `/api/admin/services` | GET, POST, PATCH, DELETE | 130 |
-| `/api/admin/cms` | GET, PUT | 147 |
-| `/api/admin/support` | POST, PUT, DELETE | 57 |
-| `/api/admin/data/[resource]` | GET | 267 |
-| `/api/admin/reports/[resource]` | POST | 234 |
-| `/api/admin/sidebar-counts` | GET, PATCH | 102 |
-| `/api/admin/database-status` | GET | 40 |
+| Endpoint                              | Methods                  | Lines |
+| ------------------------------------- | ------------------------ | ----- |
+| `/api/admin/login`                    | POST                     | 83    |
+| `/api/admin/users/[id]`               | GET, PATCH, DELETE       | 155   |
+| `/api/admin/jobs/[id]`                | GET, PATCH, DELETE       | 180   |
+| `/api/admin/verifications`            | GET, PATCH               | 135   |
+| `/api/admin/disputes/[id]`            | GET, PATCH               | 138   |
+| `/api/admin/disputes/[id]/messages`   | POST                     | 55    |
+| `/api/admin/finance/payouts`          | POST                     | 106   |
+| `/api/admin/finance/milestone-payout` | POST                     | 150   |
+| `/api/admin/finance/withdrawals/[id]` | PATCH                    | 81    |
+| `/api/admin/services`                 | GET, POST, PATCH, DELETE | 130   |
+| `/api/admin/cms`                      | GET, PUT                 | 147   |
+| `/api/admin/support`                  | POST, PUT, DELETE        | 57    |
+| `/api/admin/data/[resource]`          | GET                      | 267   |
+| `/api/admin/reports/[resource]`       | POST                     | 234   |
+| `/api/admin/sidebar-counts`           | GET, PATCH               | 102   |
+| `/api/admin/database-status`          | GET                      | 40    |
 
 ### Public and marketplace
 
-| Endpoint | Methods | Auth | Lines |
-| --- | --- | --- | --- |
-| `/api/marketplace/[resource]` | GET | public | 58 |
-| `/api/marketplace/jobs` | GET | public | 43 |
-| `/api/search` | GET | public | 27 |
-| `/api/geocode` | GET | public | 101 |
-| `/api/contact` | POST | public | 17 |
-| `/api/v1/professionals` | GET | public | 62 |
-| `/api/v1/messages` | GET, PATCH, POST | session | 377 |
+| Endpoint                      | Methods          | Auth    | Lines |
+| ----------------------------- | ---------------- | ------- | ----- |
+| `/api/marketplace/[resource]` | GET              | public  | 58    |
+| `/api/marketplace/jobs`       | GET              | public  | 43    |
+| `/api/search`                 | GET              | public  | 27    |
+| `/api/geocode`                | GET              | public  | 101   |
+| `/api/contact`                | POST             | public  | 17    |
+| `/api/v1/professionals`       | GET              | public  | 62    |
+| `/api/v1/messages`            | GET, PATCH, POST | session | 377   |
 
 `/api/v1/professionals` is the richest query surface — filters for segment, category tier,
 city/state/district, minimum rating, verified, availability and distance, with
@@ -345,20 +346,20 @@ filtering requires `originLat` and `originLng` together or returns `400`.
 
 ### Profile and shared
 
-| Endpoint | Methods | Lines |
-| --- | --- | --- |
-| `/api/profile` | GET, POST | 158 |
-| `/api/profile/avatar` | GET, POST | 82 |
-| `/api/profile/locations` | GET, POST | 53 |
-| `/api/profile/locations/[id]` | PATCH, DELETE | 68 |
-| `/api/dashboard` | GET | 103 |
+| Endpoint                      | Methods       | Lines |
+| ----------------------------- | ------------- | ----- |
+| `/api/profile`                | GET, POST     | 158   |
+| `/api/profile/avatar`         | GET, POST     | 82    |
+| `/api/profile/locations`      | GET, POST     | 53    |
+| `/api/profile/locations/[id]` | PATCH, DELETE | 68    |
+| `/api/dashboard`              | GET           | 103   |
 
 ### Webhooks
 
-| Endpoint | Verification |
-| --- | --- |
+| Endpoint                 | Verification                                                                                                |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------- |
 | `/api/webhooks/razorpay` | HMAC signature; events recorded in `RazorpayWebhookEvent` with a processing state so replays are idempotent |
-| `/api/webhooks/persona` | `Persona-Signature` header; events recorded in `PersonaWebhookEvent`, unique on `providerEventId` |
+| `/api/webhooks/persona`  | `Persona-Signature` header; events recorded in `PersonaWebhookEvent`, unique on `providerEventId`           |
 
 Both read the **raw body text** before parsing — signature verification depends on the exact bytes.
 Do not add body parsing ahead of them.
@@ -368,21 +369,21 @@ API-001.
 
 ### Verification
 
-| Endpoint | Methods |
-| --- | --- |
-| `/api/verification/persona/start` | POST |
-| `/api/verification/persona/status` | GET |
+| Endpoint                           | Methods |
+| ---------------------------------- | ------- |
+| `/api/verification/persona/start`  | POST    |
+| `/api/verification/persona/status` | GET     |
 
 ## Dispatch routes
 
 Four endpoints switch on a dynamic segment rather than having separate files:
 
-| Route | Behaviour |
-| --- | --- |
-| `/api/portal/[resource]` | 1,010 lines, `if (resource === ...)` chains across GET/PATCH/DELETE |
-| `/api/admin/data/[resource]` | Generic admin table reads |
-| `/api/admin/reports/[resource]` | Report generation |
-| `/api/marketplace/[resource]` | Public listings |
+| Route                           | Behaviour                                                           |
+| ------------------------------- | ------------------------------------------------------------------- |
+| `/api/portal/[resource]`        | 1,010 lines, `if (resource === ...)` chains across GET/PATCH/DELETE |
+| `/api/admin/data/[resource]`    | Generic admin table reads                                           |
+| `/api/admin/reports/[resource]` | Report generation                                                   |
+| `/api/marketplace/[resource]`   | Public listings                                                     |
 
 This keeps the URL space tidy but produces very large files, defeats per-route code splitting, and
 makes it hard to see at a glance which resources exist or what each returns. New resources are
@@ -396,17 +397,17 @@ knowing when events appear to vanish.
 
 Rooms: `user:<userId>` for each connected user; `admins` and `admin:room` for staff.
 
-| Event | Room | Payload |
-| --- | --- | --- |
-| `notification:new` | `user:<id>` | `{ id, type, title, description, href, createdAt }` |
-| `message:new` | `user:<id>` | Message record |
-| `message:read` | `user:<id>` | Read-receipt marker |
-| `project:updated` | `user:<id>` | `{ projectId }` — a signal to re-fetch |
-| `proposal:new` | `user:<id>` | `{ jobId }` |
-| `admin:notification` | `admins` | Also re-emitted as `notification:new` |
-| `admin:overview-update` | `admins` | `{}` |
-| `admin:verifications-update` | `admins` | `{}` |
-| `admin:operations-update` | `admins` | `{}` |
+| Event                        | Room        | Payload                                             |
+| ---------------------------- | ----------- | --------------------------------------------------- |
+| `notification:new`           | `user:<id>` | `{ id, type, title, description, href, createdAt }` |
+| `message:new`                | `user:<id>` | Message record                                      |
+| `message:read`               | `user:<id>` | Read-receipt marker                                 |
+| `project:updated`            | `user:<id>` | `{ projectId }` — a signal to re-fetch              |
+| `proposal:new`               | `user:<id>` | `{ jobId }`                                         |
+| `admin:notification`         | `admins`    | Also re-emitted as `notification:new`               |
+| `admin:overview-update`      | `admins`    | `{}`                                                |
+| `admin:verifications-update` | `admins`    | `{}`                                                |
+| `admin:operations-update`    | `admins`    | `{}`                                                |
 
 Handshake auth in [`server.mjs`](../server.mjs) verifies the JWT signature **and** checks the
 `sessions` table for revocation, expiry and `isActive` — the same guarantees as `verifySession`,

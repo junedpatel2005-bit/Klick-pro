@@ -1,0 +1,2 @@
+ALTER TABLE "ClientJob"
+ADD COLUMN IF NOT EXISTS "totalJobHours" INTEGER;

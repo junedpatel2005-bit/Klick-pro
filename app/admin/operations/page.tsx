@@ -11,11 +11,15 @@ import {
   Clock3,
   ExternalLink,
   FileCheck,
+  Gavel,
   Layers,
   MapPin,
+  Paperclip,
   PlayCircle,
   Power,
+  Scale,
   Search,
+  ShieldAlert,
   SlidersHorizontal,
   Sparkles,
   Trash2,
@@ -70,11 +74,17 @@ type Job = {
 };
 type Dispute = {
   id: number;
+  trackingId?: number;
   issueType: string;
   priority: string;
   message: string;
   reporterRole: string;
   status: string;
+  disputeRound?: number;
+  decision?: string | null;
+  decisionReason?: string | null;
+  refundAmount?: number | null;
+  payoutAmount?: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -84,7 +94,35 @@ type OperationsData = {
   stats: { totalJobs: number; openJobs: number; scheduledJobs: number };
 };
 type DisputeDetails = {
-  dispute: Dispute & { trackingId: number; message: string };
+  dispute: Dispute & {
+    trackingId: number;
+    disputeRound?: number;
+    message: string;
+    evidence?: Array<{
+      id?: number;
+      name: string;
+      url: string;
+      mimeType?: string;
+      sizeBytes?: number;
+    }>;
+    responseMessage?: string | null;
+    responseEvidence?: Array<{
+      id?: number;
+      name: string;
+      url: string;
+      mimeType?: string;
+      sizeBytes?: number;
+    }>;
+    respondedAt?: string | null;
+    respondentAction?: string | null;
+    decision?: string | null;
+    decisionReason?: string | null;
+    decisionAt?: string | null;
+    refundAmount?: number | null;
+    payoutAmount?: number | null;
+  };
+  disputeCount?: number;
+  disputeLimit?: number;
   client: { id: number; firstName: string; lastName: string; email: string } | null;
   professional: { id: number; firstName: string; lastName: string; email: string } | null;
   job: { id: number; title: string | null } | null;
@@ -107,6 +145,7 @@ type DisputeDetails = {
   financial: {
     milestoneTotal: number;
     paidAmount: number;
+    inEscrow?: number;
     remainingAmount: number;
     approvedTotal: number;
     unpaidApproved: number;
@@ -457,6 +496,55 @@ export default function OperationsPage() {
     setMessage(`Case #${details.dispute.id} is now ${label(data.dispute.status)}.`);
   }
 
+  async function executeDisputeDecision(
+    details: DisputeDetails,
+    decision: "CLIENT_WINS" | "PROFESSIONAL_WINS" | "PARTIAL_SETTLEMENT",
+    reason: string,
+    refundAmount?: number,
+    payoutAmount?: number,
+  ) {
+    const response = await fetch(`/api/v1/admin/disputes/${details.dispute.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        decision,
+        reason,
+        refundAmount,
+        payoutAmount,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error ?? "Unable to execute dispute decision.");
+
+    setSelectedDispute((current) =>
+      current && current.dispute.id === details.dispute.id
+        ? {
+            ...current,
+            dispute: {
+              ...current.dispute,
+              ...data.dispute,
+              status: "RESOLVED",
+            },
+          }
+        : current,
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            disputes: current.disputes.map((item) =>
+              item.id === details.dispute.id
+                ? { ...item, ...data.dispute, status: "RESOLVED" }
+                : item,
+            ),
+          }
+        : current,
+    );
+    setMessage(
+      `Case #${details.dispute.id} decided: ${decision === "CLIENT_WINS" ? "Client Wins (Refunded)" : decision === "PROFESSIONAL_WINS" ? "Freelancer Wins (Released)" : "Partial Settlement (Split)"}.`,
+    );
+  }
+
   async function toggleJobStatus(job: JobDetails) {
     const nextStatus = job.status === "CLOSED" ? "OPEN" : "CLOSED";
     const response = await fetch(`/api/v1/admin/jobs/${job.id}`, {
@@ -739,6 +827,9 @@ export default function OperationsPage() {
             setDisputeDetailsStatus("idle");
           }}
           onToggle={(details) => setConfirmDisputeAction(details)}
+          onDecide={(details, decision, reason, refund, payout) =>
+            executeDisputeDecision(details, decision, reason, refund, payout)
+          }
         />
       )}
       {confirmDisputeAction && (
@@ -1479,17 +1570,68 @@ function DisputeDetailsPanel({
   status,
   onClose,
   onToggle,
+  onDecide,
 }: {
   details: DisputeDetails | null;
   status: "idle" | "loading" | "error";
   onClose: () => void;
   onToggle: (details: DisputeDetails) => void;
+  onDecide: (
+    details: DisputeDetails,
+    decision: "CLIENT_WINS" | "PROFESSIONAL_WINS" | "PARTIAL_SETTLEMENT",
+    reason: string,
+    refundAmount?: number,
+    payoutAmount?: number,
+  ) => Promise<void>;
 }) {
   const dispute = details?.dispute;
   const [recipient, setRecipient] = useState<"CLIENT" | "PROFESSIONAL">("CLIENT");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendMessage, setSendMessage] = useState("");
+
+  const [selectedDecision, setSelectedDecision] = useState<
+    "CLIENT_WINS" | "PROFESSIONAL_WINS" | "PARTIAL_SETTLEMENT"
+  >("CLIENT_WINS");
+  const [decisionNotes, setDecisionNotes] = useState("");
+  const [customRefund, setCustomRefund] = useState<number>(0);
+  const [customPayout, setCustomPayout] = useState<number>(0);
+  const [executingDecision, setExecutingDecision] = useState(false);
+
+  const inEscrow = details?.financial.inEscrow ?? details?.financial.unpaidApproved ?? 0;
+
+  useEffect(() => {
+    if (details) {
+      const escrow = details.financial.inEscrow ?? details.financial.unpaidApproved ?? 0;
+      setCustomRefund(Math.floor(escrow / 2));
+      setCustomPayout(Math.ceil(escrow / 2));
+    }
+  }, [details]);
+
+  async function handleExecuteDecision() {
+    if (!details || !decisionNotes.trim()) return;
+    setExecutingDecision(true);
+    try {
+      await onDecide(
+        details,
+        selectedDecision,
+        decisionNotes.trim(),
+        selectedDecision === "PARTIAL_SETTLEMENT"
+          ? customRefund
+          : selectedDecision === "CLIENT_WINS"
+            ? inEscrow
+            : 0,
+        selectedDecision === "PARTIAL_SETTLEMENT"
+          ? customPayout
+          : selectedDecision === "PROFESSIONAL_WINS"
+            ? inEscrow
+            : 0,
+      );
+      setDecisionNotes("");
+    } finally {
+      setExecutingDecision(false);
+    }
+  }
 
   async function sendAdminMessage() {
     if (!details || !draft.trim()) return;
@@ -1524,9 +1666,16 @@ function DisputeDetailsPanel({
       >
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white/95 px-5 py-5 sm:px-6 backdrop-blur-xs">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[.2em] text-indigo-600">
-              Dispute details
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-bold uppercase tracking-[.2em] text-indigo-600">
+                Dispute Adjudication
+              </p>
+              {dispute?.disputeRound && (
+                <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-700 border border-indigo-200">
+                  Round {dispute.disputeRound} of 3
+                </span>
+              )}
+            </div>
             <h2 id="dispute-details-title" className="mt-1 text-xl font-bold text-slate-900">
               {dispute
                 ? label(dispute.issueType)
@@ -1576,15 +1725,243 @@ function DisputeDetailsPanel({
                   Case #{dispute.id} · Updated {date(dispute.updatedAt)}
                 </span>
               </div>
+
+              {/* RESOLVED OUTCOME CARD */}
+              {details.dispute.status === "RESOLVED" && (
+                <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/60 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                      <span className="font-bold text-sm text-emerald-900">
+                        Dispute Resolved · {label(details.dispute.decision || "RESOLVED")}
+                      </span>
+                    </div>
+                    <div className="text-xs font-bold text-emerald-800">
+                      {details.dispute.refundAmount
+                        ? `Client Refund: ₹${details.dispute.refundAmount.toLocaleString()} `
+                        : ""}
+                      {details.dispute.payoutAmount
+                        ? `Freelancer Payout: ₹${details.dispute.payoutAmount.toLocaleString()}`
+                        : ""}
+                    </div>
+                  </div>
+                  {details.dispute.decisionReason && (
+                    <p className="text-xs text-slate-700 bg-white p-3 rounded-xl border border-emerald-200">
+                      &ldquo;{details.dispute.decisionReason}&rdquo;
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* ADJUDICATION DECISION SUITE */}
+              {details.dispute.status !== "RESOLVED" && (
+                <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50/50 p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
+                      <Gavel className="h-5 w-5 text-indigo-600" />
+                      Admin Adjudication & Decision Suite
+                    </div>
+                    <span className="text-xs font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-lg">
+                      Held in Escrow: ₹{inEscrow.toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Select a binding ruling. Submitting will execute automated double-entry wallet
+                    refunds/releases and update contract status.
+                  </p>
+
+                  <div className="grid sm:grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDecision("CLIENT_WINS")}
+                      className={`p-3 rounded-xl border text-left transition ${
+                        selectedDecision === "CLIENT_WINS"
+                          ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500 text-emerald-900"
+                          : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
+                      }`}
+                    >
+                      <p className="font-bold text-xs flex items-center gap-1.5">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        Client Wins
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Full refund to client wallet.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDecision("PROFESSIONAL_WINS")}
+                      className={`p-3 rounded-xl border text-left transition ${
+                        selectedDecision === "PROFESSIONAL_WINS"
+                          ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500 text-blue-900"
+                          : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
+                      }`}
+                    >
+                      <p className="font-bold text-xs flex items-center gap-1.5">
+                        <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                        Freelancer Wins
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Release payment to freelancer.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDecision("PARTIAL_SETTLEMENT")}
+                      className={`p-3 rounded-xl border text-left transition ${
+                        selectedDecision === "PARTIAL_SETTLEMENT"
+                          ? "border-purple-500 bg-purple-50 ring-2 ring-purple-500 text-purple-900"
+                          : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
+                      }`}
+                    >
+                      <p className="font-bold text-xs flex items-center gap-1.5">
+                        <Scale className="h-4 w-4 text-purple-600" />
+                        Partial Split
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Split funds between both parties.
+                      </p>
+                    </button>
+                  </div>
+
+                  {selectedDecision === "PARTIAL_SETTLEMENT" && (
+                    <div className="grid sm:grid-cols-2 gap-3 p-3 bg-white rounded-xl border border-purple-200">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                          Client Refund Amount (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={customRefund}
+                          onChange={(e) => setCustomRefund(Number(e.target.value))}
+                          className="w-full rounded-lg border border-slate-200 p-2 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
+                          placeholder="₹ to Client"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                          Freelancer Payout Amount (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={customPayout}
+                          onChange={(e) => setCustomPayout(Number(e.target.value))}
+                          className="w-full rounded-lg border border-slate-200 p-2 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
+                          placeholder="₹ to Freelancer"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-800 block mb-1">
+                      Ruling Justification / Resolution Notes *
+                    </label>
+                    <textarea
+                      value={decisionNotes}
+                      onChange={(e) => setDecisionNotes(e.target.value)}
+                      placeholder="Detail the rationale for this ruling..."
+                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs focus:ring-2 focus:ring-indigo-200 outline-none"
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end pt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleExecuteDecision}
+                      disabled={executingDecision || !decisionNotes.trim()}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs"
+                    >
+                      <Gavel className="mr-1.5 h-3.5 w-3.5" />
+                      {executingDecision ? "Executing Ruling..." : "Execute Binding Ruling"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* REPORTED ISSUE & EVIDENCE */}
               <div>
-                <h3 className="text-sm font-semibold text-slate-900">Reported issue</h3>
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Initial Claim ({label(dispute.reporterRole)})
+                </h3>
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-200">
                   {dispute.message}
                 </p>
                 <p className="mt-2 text-xs text-slate-500 font-medium">
                   Reported by {label(dispute.reporterRole)} · {date(dispute.createdAt)}
                 </p>
+
+                {details.dispute.evidence && details.dispute.evidence.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                      Complainant Evidence ({details.dispute.evidence.length} files)
+                    </p>
+                    <div className="grid sm:grid-cols-2 gap-2">
+                      {details.dispute.evidence.map((file, i) => (
+                        <a
+                          key={i}
+                          href={file.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2.5 hover:bg-slate-50 transition text-xs font-semibold text-indigo-700"
+                        >
+                          <Paperclip className="h-4 w-4 text-slate-400 shrink-0" />
+                          <span className="truncate">{file.name}</span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {/* RESPONDENT COUNTER-EXPLANATION & EVIDENCE */}
+              {details.dispute.responseMessage && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
+                      <ShieldAlert className="h-4 w-4" />
+                      Respondent Counter-Explanation
+                    </h3>
+                    {details.dispute.respondedAt && (
+                      <span className="text-[10px] text-amber-700 font-medium">
+                        Submitted {date(details.dispute.respondedAt)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800 bg-white p-3 rounded-xl border border-amber-200/80">
+                    {details.dispute.responseMessage}
+                  </p>
+                  {details.dispute.responseEvidence &&
+                    details.dispute.responseEvidence.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800 mb-1">
+                          Counter-Evidence ({details.dispute.responseEvidence.length} files)
+                        </p>
+                        <div className="grid sm:grid-cols-2 gap-2">
+                          {details.dispute.responseEvidence.map((file, i) => (
+                            <a
+                              key={i}
+                              href={file.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 rounded-xl border border-amber-200 bg-white p-2.5 hover:bg-amber-50/50 transition text-xs font-semibold text-amber-900"
+                            >
+                              <Paperclip className="h-4 w-4 text-amber-600 shrink-0" />
+                              <span className="truncate">{file.name}</span>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                </div>
+              )}
+
               <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
                 <h3 className="text-sm font-semibold text-slate-900">Contact participants</h3>
                 <p className="mt-1 text-xs text-slate-500">
@@ -1732,7 +2109,7 @@ function DisputeDetailsPanel({
                 <p className="text-xs text-slate-500">{details.professional?.email}</p>
               </div>
               <div className="border-t border-slate-200 pt-4">
-                <h3 className="text-sm font-semibold text-slate-900">Payments</h3>
+                <h3 className="text-sm font-semibold text-slate-900">Payments & Escrow</h3>
                 <dl className="mt-3 grid grid-cols-2 gap-2 text-center">
                   <div className="rounded-lg bg-white border border-slate-200 p-2 shadow-2xs">
                     <dt className="text-[10px] uppercase font-semibold text-slate-500">Paid</dt>
@@ -1742,10 +2119,10 @@ function DisputeDetailsPanel({
                   </div>
                   <div className="rounded-lg bg-white border border-slate-200 p-2 shadow-2xs">
                     <dt className="text-[10px] uppercase font-semibold text-slate-500">
-                      Remaining
+                      In Escrow
                     </dt>
-                    <dd className="mt-1 text-sm font-bold text-slate-900">
-                      ₹{details.financial.remainingAmount.toLocaleString()}
+                    <dd className="mt-1 text-sm font-bold text-indigo-700">
+                      ₹{inEscrow.toLocaleString()}
                     </dd>
                   </div>
                 </dl>

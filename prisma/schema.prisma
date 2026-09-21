@@ -257,6 +257,7 @@ model ClientJob {
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
   hourlyRate       Int?
+  totalJobHours    Int?
   timingType       String                @default("FIXED")
   paymentMethod    String                @default("WALLET")
   locationState    String?
@@ -347,10 +348,14 @@ model ProjectNegotiation {
   senderId          Int
   senderRole        String
   bidAmount         Int?
+  hourlyRate        Int?
+  totalJobHours     Int?
   duration          String?
   message           String
   createdAt         DateTime @default(now())
   previousBidAmount Int?
+  previousHourlyRate Int?
+  previousTotalJobHours Int?
   previousDuration  String?
   previousMessage   String?
 
@@ -387,6 +392,8 @@ model ProjectRequest {
   clientId        Int
   professionalId  Int
   bidAmount       Int
+  hourlyRate      Int?
+  totalJobHours   Int?
   duration        String
   coverLetter     String
   status          String           @default("PENDING")
@@ -806,19 +813,31 @@ model Invoice {
 }
 
 model ProjectDispute {
-  id              Int      @id @default(autoincrement())
-  trackingId      Int
-  reporterId      Int
-  reporterRole    String
-  clientId        Int
-  professionalId  Int
-  issueType       String
-  priority        String   @default("MEDIUM")
-  message         String
-  attachmentsJson String?  @default("[]")
-  status          String   @default("OPEN")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                      Int       @id @default(autoincrement())
+  trackingId              Int
+  reporterId              Int
+  reporterRole            String
+  clientId                Int
+  professionalId          Int
+  issueType               String
+  priority                String    @default("MEDIUM")
+  message                 String
+  attachmentsJson         String?   @default("[]")
+  status                  String    @default("OPEN")
+  disputeRound            Int       @default(1) @map("dispute_round")
+  milestoneId             Int?      @map("milestone_id")
+  responseMessage         String?   @map("response_message")
+  responseAttachmentsJson String?   @default("[]") @map("response_attachments_json")
+  respondedAt             DateTime? @map("responded_at")
+  respondentAction        String?   @map("respondent_action")
+  decision                String?   @map("decision")
+  decisionReason          String?   @map("decision_reason")
+  decisionAt              DateTime? @map("decision_at")
+  decidedBy               Int?      @map("decided_by")
+  refundAmount            Int?      @default(0) @map("refund_amount")
+  payoutAmount            Int?      @default(0) @map("payout_amount")
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   @@index([trackingId])
   @@index([clientId])

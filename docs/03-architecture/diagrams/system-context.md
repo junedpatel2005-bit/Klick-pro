@@ -58,15 +58,15 @@ flowchart TB
 
 ## Explanation
 
-| Element | Role | Evidence |
-|---|---|---|
-| Klick-Pro system | One deployable Node.js application serving marketing site, client and professional portals, admin console, REST-style API and realtime socket | `server.mjs`, `app/` |
-| Client / Professional | Share the same login mechanism and portal shell; separated by `User.role` | `src/lib/auth.ts`, `app/(portal)/**/layout.tsx` |
-| Administrator | Same application under `/admin`, username/password login, same session cookie | `app/api/admin/login/route.ts`, `proxy.ts:62-68` |
-| PostgreSQL | System of record | `src/lib/db.ts` |
-| S3-compatible bucket | Private project files, verification documents, avatars (local disk in development) | `src/lib/project-file-storage.ts` |
-| `data/*.json` | Editable CMS content written at runtime | `src/lib/cms-file.ts`, `home-cms-file.ts`, `marketing-cms.ts` |
-| External services | Payments, KYC, OTP, email, OAuth, maps, geocoding, monitoring | [integrations.md](../integrations.md) |
+| Element               | Role                                                                                                                                          | Evidence                                                      |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Klick-Pro system      | One deployable Node.js application serving marketing site, client and professional portals, admin console, REST-style API and realtime socket | `server.mjs`, `app/`                                          |
+| Client / Professional | Share the same login mechanism and portal shell; separated by `User.role`                                                                     | `src/lib/auth.ts`, `app/(portal)/**/layout.tsx`               |
+| Administrator         | Same application under `/admin`, username/password login, same session cookie                                                                 | `app/api/admin/login/route.ts`, `proxy.ts:62-68`              |
+| PostgreSQL            | System of record                                                                                                                              | `src/lib/db.ts`                                               |
+| S3-compatible bucket  | Private project files, verification documents, avatars (local disk in development)                                                            | `src/lib/project-file-storage.ts`                             |
+| `data/*.json`         | Editable CMS content written at runtime                                                                                                       | `src/lib/cms-file.ts`, `home-cms-file.ts`, `marketing-cms.ts` |
+| External services     | Payments, KYC, OTP, email, OAuth, maps, geocoding, monitoring                                                                                 | [integrations.md](../integrations.md)                         |
 
 Dotted arrows are browser-to-provider interactions; solid arrows are server-side or provider-to-server calls.
 

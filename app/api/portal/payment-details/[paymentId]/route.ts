@@ -31,14 +31,17 @@ export async function GET(
         select: { id: true, title: true, amount: true },
       })
     : null;
+  const isAdmin = session.role === "ADMIN";
+  const isClient = session.userId === payment.clientId;
   return NextResponse.json({
     id: payment.id,
-    amount: payment.amount,
+    amount: isClient || isAdmin ? payment.amount : payment.baseAmount,
     baseAmount: payment.baseAmount,
-    clientFeeAmount: payment.clientFeeAmount,
-    professionalPayoutAmount: payment.professionalPayoutAmount,
-    adminNetAmount: payment.adminNetAmount,
-    commissionAmount: payment.commissionAmount,
+    clientFeeAmount: isClient || isAdmin ? payment.clientFeeAmount : 0,
+    professionalPayoutAmount:
+      !isClient || isAdmin ? payment.professionalPayoutAmount : payment.baseAmount,
+    adminNetAmount: isAdmin ? payment.adminNetAmount : 0,
+    commissionAmount: !isClient || isAdmin ? payment.commissionAmount : 0,
     currency: payment.currency,
     provider: payment.provider,
     status: payment.status,

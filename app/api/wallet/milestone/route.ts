@@ -2,15 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import {
-  calculateMilestoneMoney,
-  fundMilestoneFromWallet,
-  releaseMilestoneToProfessional,
-} from "@/lib/wallet-ledger";
-import {
-  notifyMilestoneFunded,
-  notifyMilestonePayoutApproved,
-} from "@/lib/marketplace-notifications";
+import { calculateMilestoneMoney, fundMilestoneFromWallet } from "@/lib/wallet-ledger";
+import { notifyMilestoneFunded } from "@/lib/marketplace-notifications";
 import { emitRealtimeProjectUpdate } from "@/lib/realtime";
 
 const schema = z.object({
@@ -89,16 +82,9 @@ export async function POST(request: NextRequest) {
           },
           update: {},
         });
-        if (payment.status === "COMPLETED")
-          throw new Error("This milestone has already been paid.");
+        if (payment.status === "COMPLETED" || payment.status === "FUNDED")
+          throw new Error("This milestone has already been funded.");
         await fundMilestoneFromWallet(tx, {
-          paymentId: payment.id,
-          clientId: project.clientId,
-          professionalId: project.professionalId,
-          baseAmount: milestone.amount,
-          milestoneId: milestone.id,
-        });
-        await releaseMilestoneToProfessional(tx, {
           paymentId: payment.id,
           clientId: project.clientId,
           professionalId: project.professionalId,
@@ -107,7 +93,7 @@ export async function POST(request: NextRequest) {
         });
         await tx.payment.update({
           where: { id: payment.id },
-          data: { status: "COMPLETED", capturedAt: new Date() },
+          data: { status: "FUNDED", capturedAt: new Date() },
         });
         await tx.invoice.upsert({
           where: { paymentId: payment.id },
@@ -117,7 +103,7 @@ export async function POST(request: NextRequest) {
             clientId: project.clientId,
             professionalId: project.professionalId,
             amount: money.clientChargeAmount,
-            commissionAmount: 0,
+            commissionAmount: money.adminNetAmount,
             netAmount: money.professionalPayoutAmount,
             currency: "INR",
           },
@@ -125,7 +111,7 @@ export async function POST(request: NextRequest) {
         });
         await tx.projectMilestone.update({
           where: { id: milestone.id },
-          data: { status: "APPROVED", approvedAt: new Date() },
+          data: { status: "AWAITING_ADMIN_APPROVAL" },
         });
         await tx.projectTransaction.create({
           data: {
@@ -136,24 +122,10 @@ export async function POST(request: NextRequest) {
             amount: milestone.amount,
             currency: "INR",
             type: "WALLET_MILESTONE_FUNDED",
-            status: "COMPLETED",
-            description: `Milestone approved and paid: ${milestone.title}`,
+            status: "FUNDED",
+            description: `Milestone funded and awaiting payout approval: ${milestone.title}`,
           },
         });
-        const next = await tx.projectMilestone.findFirst({
-          where: { trackingId: project.id, status: "UPCOMING" },
-          orderBy: { createdAt: "asc" },
-        });
-        if (next) {
-          await tx.projectMilestone.update({
-            where: { id: next.id },
-            data: { status: "IN_PROGRESS" },
-          });
-          await tx.projectTracking.update({
-            where: { id: project.id },
-            data: { status: "IN_PROGRESS", currentStage: next.title },
-          });
-        }
         const clientWallet = await tx.wallet.findUnique({
           where: { userId: project.clientId },
           select: { balance: true },
@@ -162,14 +134,13 @@ export async function POST(request: NextRequest) {
       },
       { maxWait: 10000, timeout: 30000 },
     );
-    void notifyMilestonePayoutApproved({
+    void notifyMilestoneFunded({
       projectId: project.id,
+      milestoneId: milestone.id,
       milestoneTitle: milestone.title,
-      payoutAmount: money.professionalPayoutAmount,
-      platformEarnings: 0,
+      amount: money.baseAmount,
       clientId: project.clientId,
       professionalId: project.professionalId,
-      jobTitle: project.job?.title,
     }).catch(() => undefined);
     emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
       projectId: project.id,
@@ -177,12 +148,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       charged: money.clientChargeAmount,
-      professionalReceives: money.professionalPayoutAmount,
-      adminReceives: 0,
-      platformEarnings: 0,
+      milestoneAmount: money.baseAmount,
+      professionalReceives: money.baseAmount,
       remainingBalance: result.remainingBalance,
-      status: "COMPLETED",
-      message: `Milestone approved! ₹${money.professionalPayoutAmount.toLocaleString()} paid directly to professional.`,
+      status: "FUNDED",
+      message: `Milestone funded with ₹${money.baseAmount.toLocaleString("en-IN")}. The professional payout is waiting for admin approval.`,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "Insufficient wallet balance.")
@@ -194,7 +164,9 @@ export async function POST(request: NextRequest) {
       );
     if (
       error instanceof Error &&
-      (error.message.includes("already being paid") || error.message.includes("already been paid"))
+      (error.message.includes("already being paid") ||
+        error.message.includes("already been paid") ||
+        error.message.includes("already been funded"))
     )
       return NextResponse.json({ error: error.message }, { status: 409 });
     console.error("Wallet milestone settlement failed", error);

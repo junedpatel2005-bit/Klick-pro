@@ -25,6 +25,7 @@ export async function GET() {
       budgetMin: true,
       budgetMax: true,
       hourlyRate: true,
+      totalJobHours: true,
       timingType: true,
       createdAt: true,
       user: { select: { firstName: true, isVerified: true } },

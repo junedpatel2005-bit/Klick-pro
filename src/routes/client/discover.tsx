@@ -17,6 +17,7 @@ import { Home, LocateFixed, Map, SlidersHorizontal, Search } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { getAllStates, getDistrictsByState } from "@/lib/india-locations";
 
 const PAGE_SIZE = 50;
@@ -95,7 +96,9 @@ function DiscoverContent() {
         };
       },
       () => {
-        alert("Unable to retrieve your location. Please enable location access or enter a city.");
+        toast.error(
+          "Unable to retrieve your location. Please enable location access or enter a city.",
+        );
       },
     );
   }
@@ -110,7 +113,7 @@ function DiscoverContent() {
       };
       const address = profileData.profile?.address?.trim() || profileData.account?.address?.trim();
       if (!address) {
-        alert("Please add a primary address to your profile first.");
+        toast.warning("Please add a primary address to your profile first.");
         return;
       }
 
@@ -127,7 +130,7 @@ function DiscoverContent() {
       setDistanceKm((current) => (current === "" ? 25 : current));
       setPage(1);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Unable to use your primary address.");
+      toast.error(error instanceof Error ? error.message : "Unable to use your primary address.");
     }
   }
 

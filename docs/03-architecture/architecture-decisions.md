@@ -8,26 +8,26 @@ Related: [solution-architecture.md](./solution-architecture.md) · [integrations
 
 ## Index
 
-| ADR | Title | Status |
-|---|---|---|
+| ADR     | Title                                                                                  | Status                 |
+| ------- | -------------------------------------------------------------------------------------- | ---------------------- |
 | ADR-001 | Next.js App Router port of a Lovable TanStack Start app, keeping `src/routes/` screens | Accepted (implemented) |
-| ADR-002 | Custom Node server (`server.mjs`) hosting Next.js and Socket.IO | Accepted (implemented) |
-| ADR-003 | `proxy.ts` as the global request gate (origin check, page gating, request id) | Accepted (implemented) |
+| ADR-002 | Custom Node server (`server.mjs`) hosting Next.js and Socket.IO                        | Accepted (implemented) |
+| ADR-003 | `proxy.ts` as the global request gate (origin check, page gating, request id)          | Accepted (implemented) |
 | ADR-004 | Prisma 7 with `@prisma/adapter-pg` over a shared `pg.Pool`; generated client committed | Accepted (implemented) |
-| ADR-005 | Custom DB-backed revocable JWT sessions | Accepted (implemented) |
-| ADR-006 | One session cookie and session store for clients, professionals and admins | Accepted (implemented) |
-| ADR-007 | File-based JSON CMS in `data/` | Accepted (implemented) |
-| ADR-008 | Integer whole-rupee money fields | Accepted (implemented) |
-| ADR-009 | Internal wallet ledger with admin-wallet escrow for milestone settlement | Accepted (implemented) |
-| ADR-010 | Run `prisma migrate deploy` inside `npm run build` | Accepted (implemented) |
-| ADR-011 | `/api/v1` namespace via rewrite (reconciliation with project-docs ADR-001) | Partially implemented |
-| ADR-012 | shadcn/ui + Radix + Tailwind v4 UI kit | Accepted (implemented) |
-| ADR-013 | Provider abstraction for private file storage (local / S3-compatible) | Accepted (implemented) |
-| ADR-014 | Persona hosted KYC as an informational signal beside manual admin review | Partially implemented |
-| ADR-015 | Razorpay for payments, wallet top-up and Route payouts | Partially implemented |
-| ADR-016 | Feature-flag / credential-presence gating of every external integration | Accepted (implemented) |
-| ADR-017 | In-process background jobs, rate limiting and realtime (single-process assumptions) | Accepted (implemented) |
-| ADR-018 | Phone OTP via pluggable provider (development code or Twilio Verify) | Accepted (implemented) |
+| ADR-005 | Custom DB-backed revocable JWT sessions                                                | Accepted (implemented) |
+| ADR-006 | One session cookie and session store for clients, professionals and admins             | Accepted (implemented) |
+| ADR-007 | File-based JSON CMS in `data/`                                                         | Accepted (implemented) |
+| ADR-008 | Integer whole-rupee money fields                                                       | Accepted (implemented) |
+| ADR-009 | Internal wallet ledger with admin-wallet escrow for milestone settlement               | Accepted (implemented) |
+| ADR-010 | Run `prisma migrate deploy` inside `npm run build`                                     | Accepted (implemented) |
+| ADR-011 | `/api/v1` namespace via rewrite (reconciliation with project-docs ADR-001)             | Partially implemented  |
+| ADR-012 | shadcn/ui + Radix + Tailwind v4 UI kit                                                 | Accepted (implemented) |
+| ADR-013 | Provider abstraction for private file storage (local / S3-compatible)                  | Accepted (implemented) |
+| ADR-014 | Persona hosted KYC as an informational signal beside manual admin review               | Partially implemented  |
+| ADR-015 | Razorpay for payments, wallet top-up and Route payouts                                 | Partially implemented  |
+| ADR-016 | Feature-flag / credential-presence gating of every external integration                | Accepted (implemented) |
+| ADR-017 | In-process background jobs, rate limiting and realtime (single-process assumptions)    | Accepted (implemented) |
+| ADR-018 | Phone OTP via pluggable provider (development code or Twilio Verify)                   | Accepted (implemented) |
 
 ---
 
@@ -40,6 +40,7 @@ Related: [solution-architecture.md](./solution-architecture.md) · [integrations
 **Decision:** Next.js App Router owns routing (`app/`), while screen components remain in `src/routes/` with TanStack-style names and are rendered by thin `app/**/page.tsx` wrappers.
 
 **Evidence:**
+
 - `.lovable/project.json` → `"template": "tanstack_start_ts_2026-05-06"`.
 - `project-docs/src/routes/docs/nextjs-port-guide.md` ("From: Lovable export, TanStack Start + TanStack Router").
 - Initial commit `9bdbdc9` (2026-08-09) contains one-line `app/**/page.tsx` wrappers, `wrangler.jsonc` (`"name": "tanstack-start-app"`), `bun.lock`; `wrangler.jsonc` deleted in `bd751c8`, `bun.lock` in `185afc9`.
@@ -67,6 +68,7 @@ Related: [solution-architecture.md](./solution-architecture.md) · [integrations
 **Reason:** Not documented in repository (inferred need: Socket.IO requires a long-lived HTTP server sharing the app port).
 
 **Consequences:**
+
 - Requires a persistent Node.js host; incompatible with serverless deployment of the realtime path (conflicts with `project-docs/DEPLOY.md` Vercel instructions — [NEEDS VALIDATION — not testable locally] which host is used).
 - Next docs: custom servers cannot be combined with `output: "standalone"` (`node_modules/next/dist/docs/01-app/02-guides/custom-server.md:14`).
 - No Socket.IO adapter → single-instance only. Emitters silently no-op if `server.mjs` is not the entry point.
@@ -90,6 +92,7 @@ Related: [solution-architecture.md](./solution-architecture.md) · [integrations
 **Reason:** Code comment: "Adds a correlation id that API handlers can include in structured server logs" (`proxy.ts:38-41`). Other rationale: Not documented in repository.
 
 **Consequences:**
+
 - Every matched request with a cookie performs a DB session lookup.
 - The strict Origin rule blocks server-to-server webhooks (`/api/webhooks/*`) and non-browser/mobile clients from all mutating calls — see finding F-01 in [solution-architecture.md](./solution-architecture.md#10-architecture-findings) [PARTIALLY VALIDATED 2026-09-17 · [V-20](../validation/LOCAL_VALIDATION_LOG.md)]: locally both webhooks and Bearer POSTs without `Origin` → 403, and even a genuine same-origin `http://127.0.0.1:3100` request was rejected under `server.mjs` (only the exact `APP_URL` origin passes); live provider delivery [NEEDS VALIDATION — not testable locally].
 - Page protection is prefix-based and not role-aware; role enforcement is delegated to layouts and handlers.
@@ -232,13 +235,13 @@ Related: [solution-architecture.md](./solution-architecture.md) · [integrations
 
 **Reconciliation with project-docs ADR-001:**
 
-| ADR-001 rule | Implemented? | Evidence |
-|---|---|---|
-| Service layer is the only place for business logic | No — logic lives in handlers; `src/lib/services` has 1 file | `app/api/**` |
-| Every client/professional capability under `/api/v1`, in OpenAPI, tested | Partially — alias exists; OpenAPI incomplete; no tests | `next.config.ts`, `openapi.yaml` |
-| Server Actions only for admin | Satisfied trivially — no Server Actions anywhere | `grep "use server"` = 0 |
-| JWT access/refresh + Bearer, no cookie sessions | No — cookie session with DB row; Bearer accepted only by `/api/auth/me` and `/api/client/jobs` | `src/lib/auth.ts` |
-| Flutter in phase 2 | Prototype `flutter_app/` tracked at HEAD (calls `/api/auth/login`, extracts `Set-Cookie`), deleted in the working tree | `git ls-files flutter_app` |
+| ADR-001 rule                                                             | Implemented?                                                                                                           | Evidence                         |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Service layer is the only place for business logic                       | No — logic lives in handlers; `src/lib/services` has 1 file                                                            | `app/api/**`                     |
+| Every client/professional capability under `/api/v1`, in OpenAPI, tested | Partially — alias exists; OpenAPI incomplete; no tests                                                                 | `next.config.ts`, `openapi.yaml` |
+| Server Actions only for admin                                            | Satisfied trivially — no Server Actions anywhere                                                                       | `grep "use server"` = 0          |
+| JWT access/refresh + Bearer, no cookie sessions                          | No — cookie session with DB row; Bearer accepted only by `/api/auth/me` and `/api/client/jobs`                         | `src/lib/auth.ts`                |
+| Flutter in phase 2                                                       | Prototype `flutter_app/` tracked at HEAD (calls `/api/auth/login`, extracts `Set-Cookie`), deleted in the working tree | `git ls-files flutter_app`       |
 
 Additional blocker: `proxy.ts` rejects mutating API calls without an `Origin` header, which native mobile HTTP clients do not send.
 

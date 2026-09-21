@@ -4,7 +4,13 @@ import { notifyUsers } from "@/lib/marketplace-notifications";
 import { emitRealtimeProjectUpdate, emitRealtimeProposalNew } from "@/lib/realtime";
 
 type Actor = { userId: number; role: "CLIENT" | "PROFESSIONAL" };
-type CounterInput = { bidAmount: number; duration: string; message: string };
+type CounterInput = {
+  bidAmount: number;
+  hourlyRate?: number;
+  totalJobHours?: number;
+  duration: string;
+  message: string;
+};
 
 type ActionResult =
   | { error: string; status: number }
@@ -33,6 +39,7 @@ export async function respondToProjectRequest(
       title: true,
       status: true,
       userId: true,
+      timingType: true,
       milestones: {
         orderBy: { sortOrder: "asc" },
         select: { title: true, description: true, amount: true, percentage: true, sortOrder: true },
@@ -57,7 +64,20 @@ export async function respondToProjectRequest(
   if (action === "counter") {
     if (!counterInput)
       return { error: "Counter offer details are required.", status: 400 as const };
-    if (counterInput.bidAmount === hireRequest.bidAmount) {
+    const hourlyProjectTotal =
+      job?.timingType === "HOURLY" && counterInput.hourlyRate && counterInput.totalJobHours
+        ? counterInput.hourlyRate * counterInput.totalJobHours
+        : null;
+    if (job?.timingType === "HOURLY" && hourlyProjectTotal === null)
+      return { error: "Enter both an hourly rate and total job hours.", status: 400 as const };
+    if (hourlyProjectTotal !== null && hourlyProjectTotal > 10_000_000)
+      return { error: "Project total is too high.", status: 400 as const };
+    const bidAmount = hourlyProjectTotal ?? counterInput.bidAmount;
+    const sameHourlyTerms =
+      job?.timingType === "HOURLY" &&
+      counterInput.hourlyRate === hireRequest.hourlyRate &&
+      counterInput.totalJobHours === hireRequest.totalJobHours;
+    if (job?.timingType === "HOURLY" ? sameHourlyTerms : bidAmount === hireRequest.bidAmount) {
       return {
         error: `Counter-offer amount cannot be the same as the current bid amount (₹${hireRequest.bidAmount.toLocaleString()}). Please propose a different amount.`,
         status: 400 as const,
@@ -71,10 +91,14 @@ export async function respondToProjectRequest(
         professionalId: hireRequest.professionalId,
         senderId: actor.userId,
         senderRole: actor.role,
-        bidAmount: counterInput.bidAmount,
+        bidAmount,
+        hourlyRate: job?.timingType === "HOURLY" ? counterInput.hourlyRate : null,
+        totalJobHours: job?.timingType === "HOURLY" ? counterInput.totalJobHours : null,
         duration: counterInput.duration,
         message: counterInput.message,
         previousBidAmount: hireRequest.bidAmount,
+        previousHourlyRate: hireRequest.hourlyRate,
+        previousTotalJobHours: hireRequest.totalJobHours,
         previousDuration: hireRequest.duration,
         previousMessage: hireRequest.coverLetter,
       },
@@ -82,7 +106,9 @@ export async function respondToProjectRequest(
     const updated = await db.projectRequest.update({
       where: { id: requestId },
       data: {
-        bidAmount: counterInput.bidAmount,
+        bidAmount,
+        hourlyRate: job?.timingType === "HOURLY" ? counterInput.hourlyRate : null,
+        totalJobHours: job?.timingType === "HOURLY" ? counterInput.totalJobHours : null,
         duration: counterInput.duration,
         coverLetter: counterInput.message,
       },
@@ -90,7 +116,7 @@ export async function respondToProjectRequest(
     await notifyUsers([otherPartyId], {
       type: "REQUEST_COUNTERED",
       title: `${job?.title ?? "Project"} · New Counter-Offer`,
-      description: `New terms proposed for ${job?.title ?? "the job"}: ₹${counterInput.bidAmount.toLocaleString()}.`,
+      description: `New terms proposed for ${job?.title ?? "the job"}: ₹${bidAmount.toLocaleString()}.`,
       href: `/job/${hireRequest.jobId}`,
     });
     emitRealtimeProposalNew([hireRequest.clientId, hireRequest.professionalId], {

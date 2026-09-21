@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PageActionLoading } from "@/components/PageActionLoading";
 import {
   AlertCircle,
   ArrowDownLeft,
@@ -204,6 +207,13 @@ export default function AdminFinancePage() {
   const [selectedPayment, setSelectedPayment] = useState<EnrichedPayment | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    title: string;
+    description?: string;
+    confirmLabel?: string;
+    variant?: "default" | "destructive";
+    action: () => Promise<void>;
+  } | null>(null);
 
   const fetchFinance = async () => {
     setLoading(true);
@@ -460,47 +470,62 @@ export default function AdminFinancePage() {
 
   // --- Actions ---
 
-  async function handleApprovePayout(paymentId: number) {
-    if (!window.confirm(`Release milestone payout for transaction #${paymentId}?`)) return;
-
-    setBusyId(paymentId);
-    try {
-      const response = await fetch("/api/admin/finance/milestone-payout", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ paymentId }),
-      });
-      const res = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(res?.error ?? "Payout approval failed.");
-      }
-      await fetchFinance();
-      if (selectedPayment?.id === paymentId) {
-        setSelectedPayment((prev) => (prev ? { ...prev, status: "COMPLETED" } : null));
-      }
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Payout failed.");
-    } finally {
-      setBusyId(null);
-    }
+  function handleApprovePayout(paymentId: number) {
+    setConfirmAction({
+      title: "Release Milestone Payout?",
+      description: `Are you sure you want to release the milestone payout for transaction #${paymentId}? This will credit the professional's wallet.`,
+      confirmLabel: "Release Payout",
+      action: async () => {
+        setBusyId(paymentId);
+        try {
+          const response = await fetch("/api/admin/finance/milestone-payout", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ paymentId }),
+          });
+          const res = await response.json().catch(() => null);
+          if (!response.ok) {
+            throw new Error(res?.error ?? "Payout approval failed.");
+          }
+          toast.success(`Milestone payout #${paymentId} released successfully.`);
+          await fetchFinance();
+          if (selectedPayment?.id === paymentId) {
+            setSelectedPayment((prev) => (prev ? { ...prev, status: "COMPLETED" } : null));
+          }
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Payout failed.");
+        } finally {
+          setBusyId(null);
+        }
+      },
+    });
   }
 
-  async function handleWithdrawalStatus(withdrawalId: number, status: "COMPLETED" | "FAILED") {
-    if (!window.confirm(`Mark withdrawal #${withdrawalId} as ${status}?`)) return;
-    setBusyId(withdrawalId);
-    try {
-      const res = await fetch(`/api/admin/finance/withdrawals/${withdrawalId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) throw new Error("Failed to update withdrawal.");
-      await fetchFinance();
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Error updating withdrawal.");
-    } finally {
-      setBusyId(null);
-    }
+  function handleWithdrawalStatus(withdrawalId: number, status: "COMPLETED" | "FAILED") {
+    setConfirmAction({
+      title:
+        status === "COMPLETED" ? "Mark Withdrawal as Completed?" : "Mark Withdrawal as Failed?",
+      description: `Are you sure you want to mark withdrawal #${withdrawalId} as ${status}?`,
+      confirmLabel: status === "COMPLETED" ? "Complete" : "Mark as Failed",
+      variant: status === "FAILED" ? "destructive" : "default",
+      action: async () => {
+        setBusyId(withdrawalId);
+        try {
+          const res = await fetch(`/api/admin/finance/withdrawals/${withdrawalId}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ status }),
+          });
+          if (!res.ok) throw new Error("Failed to update withdrawal.");
+          toast.success(`Withdrawal #${withdrawalId} marked as ${status.toLowerCase()}.`);
+          await fetchFinance();
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Error updating withdrawal.");
+        } finally {
+          setBusyId(null);
+        }
+      },
+    });
   }
 
   return (
@@ -541,9 +566,13 @@ export default function AdminFinancePage() {
               <Coins className="h-3.5 w-3.5" />
             </span>
           </div>
-          <p className="mt-2 text-xl sm:text-2xl font-black text-slate-900">
-            {formatMoney(metrics.grossVolume)}
-          </p>
+          {loading ? (
+            <div className="mt-2 h-7 w-28 animate-pulse rounded-md bg-slate-200" />
+          ) : (
+            <p className="mt-2 text-xl sm:text-2xl font-black text-slate-900">
+              {formatMoney(metrics.grossVolume)}
+            </p>
+          )}
           <p className="mt-0.5 text-[11px] text-slate-400">Total client volume</p>
         </div>
 
@@ -557,9 +586,13 @@ export default function AdminFinancePage() {
               <Percent className="h-3.5 w-3.5" />
             </span>
           </div>
-          <p className="mt-2 text-xl sm:text-2xl font-black text-emerald-700">
-            +{formatMoney(metrics.platformCommission)}
-          </p>
+          {loading ? (
+            <div className="mt-2 h-7 w-28 animate-pulse rounded-md bg-emerald-200/70" />
+          ) : (
+            <p className="mt-2 text-xl sm:text-2xl font-black text-emerald-700">
+              +{formatMoney(metrics.platformCommission)}
+            </p>
+          )}
           <p className="mt-0.5 text-[11px] text-emerald-700 font-medium">Net platform revenue</p>
         </div>
 
@@ -573,9 +606,13 @@ export default function AdminFinancePage() {
               <ArrowUpRight className="h-3.5 w-3.5" />
             </span>
           </div>
-          <p className="mt-2 text-xl sm:text-2xl font-black text-slate-900">
-            {formatMoney(metrics.proDisbursements)}
-          </p>
+          {loading ? (
+            <div className="mt-2 h-7 w-28 animate-pulse rounded-md bg-slate-200" />
+          ) : (
+            <p className="mt-2 text-xl sm:text-2xl font-black text-slate-900">
+              {formatMoney(metrics.proDisbursements)}
+            </p>
+          )}
           <p className="mt-0.5 text-[11px] text-slate-400">Released milestone payouts</p>
         </div>
 
@@ -596,12 +633,20 @@ export default function AdminFinancePage() {
               <Clock className="h-3.5 w-3.5" />
             </span>
           </div>
-          <p className="mt-2 text-xl sm:text-2xl font-black text-amber-900">
-            {formatMoney(metrics.inEscrow)}
-          </p>
-          <p className="mt-0.5 text-[11px] text-amber-700 font-medium">
-            {data?.payments.filter((p) => p.status === "FUNDED").length ?? 0} waiting payout
-          </p>
+          {loading ? (
+            <div className="mt-2 h-7 w-28 animate-pulse rounded-md bg-amber-200/70" />
+          ) : (
+            <p className="mt-2 text-xl sm:text-2xl font-black text-amber-900">
+              {formatMoney(metrics.inEscrow)}
+            </p>
+          )}
+          {loading ? (
+            <div className="mt-1 h-3.5 w-24 animate-pulse rounded bg-amber-200/50" />
+          ) : (
+            <p className="mt-0.5 text-[11px] text-amber-700 font-medium">
+              {data?.payments.filter((p) => p.status === "FUNDED").length ?? 0} waiting payout
+            </p>
+          )}
         </div>
 
         {/* Card 5: Treasury Wallet */}
@@ -621,9 +666,13 @@ export default function AdminFinancePage() {
               <WalletCards className="h-3.5 w-3.5" />
             </span>
           </div>
-          <p className="mt-2 text-xl sm:text-2xl font-black text-indigo-950">
-            {formatMoney(metrics.adminBalance)}
-          </p>
+          {loading ? (
+            <div className="mt-2 h-7 w-28 animate-pulse rounded-md bg-indigo-200/70" />
+          ) : (
+            <p className="mt-2 text-xl sm:text-2xl font-black text-indigo-950">
+              {formatMoney(metrics.adminBalance)}
+            </p>
+          )}
           <p className="mt-0.5 text-[11px] text-indigo-700 font-medium">Platform wallet balance</p>
         </div>
       </div>
@@ -931,7 +980,16 @@ export default function AdminFinancePage() {
                 );
               })}
 
-              {!filteredItems.length && (
+              {loading &&
+                [1, 2, 3, 4, 5].map((i) => (
+                  <tr key={i} className="animate-pulse">
+                    <td colSpan={9} className="py-4 px-5">
+                      <div className="h-4 bg-slate-100 rounded-md w-full" />
+                    </td>
+                  </tr>
+                ))}
+
+              {!loading && !filteredItems.length && (
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-sm text-slate-500">
                     No transactions found matching your criteria.
@@ -955,6 +1013,27 @@ export default function AdminFinancePage() {
           copySuccess={copySuccess}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmAction !== null}
+        onOpenChange={(open) => !open && setConfirmAction(null)}
+        title={confirmAction?.title ?? ""}
+        description={confirmAction?.description}
+        confirmLabel={confirmAction?.confirmLabel}
+        variant={confirmAction?.variant}
+        loading={busyId !== null}
+        onConfirm={async () => {
+          if (confirmAction) {
+            await confirmAction.action();
+          }
+        }}
+      />
+
+      <PageActionLoading
+        active={busyId !== null}
+        title="Processing transaction…"
+        description="Updating transaction records and ledger balances."
+      />
     </div>
   );
 }

@@ -2,59 +2,293 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import { notifyDisputeResolved } from "@/lib/marketplace-notifications";
+import { notifyDisputeDecided, notifyDisputeResolved } from "@/lib/marketplace-notifications";
+import {
+  refundDisputeToClient,
+  releaseDisputeToProfessional,
+  settlePartialDispute,
+} from "@/lib/wallet-ledger";
+import { emitRealtimeProjectUpdate } from "@/lib/realtime";
 
-async function requireAdmin(request: NextRequest) {
+async function getAdminSession(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
-  if (!token) return false;
+  if (!token) return null;
   try {
-    return (await verifySession(token)).role === "ADMIN";
+    const session = await verifySession(token);
+    return session.role === "ADMIN" ? session : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
+const patchSchema = z.object({
+  status: z.enum(["OPEN", "RESOLVED", "WAITING_RESPONSE", "UNDER_ADMIN_REVIEW"]).optional(),
+  decision: z.enum(["CLIENT_WINS", "PROFESSIONAL_WINS", "PARTIAL_SETTLEMENT"]).optional(),
+  reason: z.string().trim().max(4000).optional(),
+  refundAmount: z.number().int().min(0).optional(),
+  payoutAmount: z.number().int().min(0).optional(),
+  milestoneId: z.number().int().positive().optional(),
+});
+
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await requireAdmin(request)))
-    return NextResponse.json({ error: "Admin access required." }, { status: 403 });
+  const adminSession = await getAdminSession(request);
+  if (!adminSession) return NextResponse.json({ error: "Admin access required." }, { status: 403 });
+
   const { id } = await params;
   const disputeId = Number(id);
   if (!Number.isInteger(disputeId) || disputeId < 1)
     return NextResponse.json({ error: "Invalid dispute ID." }, { status: 400 });
-  const parsed = z
-    .object({ status: z.enum(["OPEN", "RESOLVED"]) })
-    .safeParse(await request.json().catch(() => null));
+
+  const parsed = patchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
     return NextResponse.json({ error: "Invalid dispute update." }, { status: 400 });
+
   try {
-    const dispute = await db.projectDispute.update({
+    const dispute = await db.projectDispute.findUnique({
       where: { id: disputeId },
-      data: { status: parsed.data.status },
-      select: { id: true, status: true, trackingId: true, clientId: true, professionalId: true },
     });
+    if (!dispute) return NextResponse.json({ error: "Dispute not found." }, { status: 404 });
+
     const tracking = await db.projectTracking.findUnique({
       where: { id: dispute.trackingId },
-      select: { jobId: true },
+      select: { id: true, jobId: true },
     });
     const job = tracking
       ? await db.clientJob.findUnique({ where: { id: tracking.jobId }, select: { title: true } })
       : null;
+
+    const { decision, reason, refundAmount, payoutAmount, milestoneId } = parsed.data;
+
+    if (decision) {
+      // Find candidate milestone and payment associated with the project/dispute
+      const targetMilestoneId = milestoneId ?? dispute.milestoneId;
+      const payment = targetMilestoneId
+        ? await db.payment.findFirst({
+            where: {
+              projectTrackingId: dispute.trackingId,
+              milestoneId: targetMilestoneId,
+            },
+          })
+        : await db.payment.findFirst({
+            where: {
+              projectTrackingId: dispute.trackingId,
+              status: { in: ["FUNDED", "PENDING"] },
+            },
+            orderBy: { createdAt: "desc" },
+          });
+
+      const updatedDispute = await db.$transaction(async (tx) => {
+        if (decision === "CLIENT_WINS") {
+          const finalRefund =
+            refundAmount != null && refundAmount > 0 ? refundAmount : (payment?.amount ?? 0);
+
+          if (finalRefund > 0) {
+            await refundDisputeToClient(tx, {
+              disputeId,
+              paymentId: payment?.id,
+              clientId: dispute.clientId,
+              amount: finalRefund,
+              reason: reason || "Dispute decided in favor of client (Full Refund)",
+            });
+          }
+
+          if (payment) {
+            await tx.payment.update({
+              where: { id: payment.id },
+              data: { status: "REFUNDED" },
+            });
+          }
+
+          if (targetMilestoneId) {
+            await tx.projectMilestone.update({
+              where: { id: targetMilestoneId },
+              data: { status: "CANCELLED" },
+            });
+          }
+
+          const record = await tx.projectDispute.update({
+            where: { id: disputeId },
+            data: {
+              status: "RESOLVED",
+              decision: "CLIENT_WINS",
+              decisionReason: reason || "Admin decided in favor of client. Full refund issued.",
+              refundAmount: finalRefund,
+              payoutAmount: 0,
+              decisionAt: new Date(),
+              decidedBy: adminSession.userId,
+            },
+          });
+
+          await tx.projectTimelineEvent.create({
+            data: {
+              trackingId: dispute.trackingId,
+              actorId: adminSession.userId,
+              actorRole: "ADMIN",
+              type: "DISPUTE_RESOLVED",
+              title: "Dispute decided · Client Wins",
+              description: `Admin decided case #${disputeId} in favor of client. Refund: ₹${finalRefund.toLocaleString("en-IN")}.${reason ? ` Note: ${reason}` : ""}`,
+            },
+          });
+
+          return record;
+        } else if (decision === "PROFESSIONAL_WINS") {
+          const finalPayout =
+            payoutAmount != null && payoutAmount > 0
+              ? payoutAmount
+              : payment?.professionalPayoutAmount || payment?.baseAmount || 0;
+
+          if (finalPayout > 0) {
+            await releaseDisputeToProfessional(tx, {
+              disputeId,
+              paymentId: payment?.id,
+              professionalId: dispute.professionalId,
+              amount: finalPayout,
+              reason: reason || "Dispute decided in favor of professional (Payment Released)",
+            });
+          }
+
+          if (payment) {
+            await tx.payment.update({
+              where: { id: payment.id },
+              data: { status: "COMPLETED" },
+            });
+          }
+
+          if (targetMilestoneId) {
+            await tx.projectMilestone.update({
+              where: { id: targetMilestoneId },
+              data: { status: "APPROVED", approvedAt: new Date() },
+            });
+          }
+
+          const record = await tx.projectDispute.update({
+            where: { id: disputeId },
+            data: {
+              status: "RESOLVED",
+              decision: "PROFESSIONAL_WINS",
+              decisionReason: reason || "Admin decided in favor of professional. Payment released.",
+              refundAmount: 0,
+              payoutAmount: finalPayout,
+              decisionAt: new Date(),
+              decidedBy: adminSession.userId,
+            },
+          });
+
+          await tx.projectTimelineEvent.create({
+            data: {
+              trackingId: dispute.trackingId,
+              actorId: adminSession.userId,
+              actorRole: "ADMIN",
+              type: "DISPUTE_RESOLVED",
+              title: "Dispute decided · Freelancer Wins",
+              description: `Admin decided case #${disputeId} in favor of professional. Payout released: ₹${finalPayout.toLocaleString("en-IN")}.${reason ? ` Note: ${reason}` : ""}`,
+            },
+          });
+
+          return record;
+        } else {
+          // PARTIAL_SETTLEMENT
+          const finalRefund = refundAmount ?? 0;
+          const finalPayout = payoutAmount ?? 0;
+
+          await settlePartialDispute(tx, {
+            disputeId,
+            paymentId: payment?.id,
+            clientId: dispute.clientId,
+            professionalId: dispute.professionalId,
+            refundAmount: finalRefund,
+            payoutAmount: finalPayout,
+            reason: reason || "Admin partial dispute settlement",
+          });
+
+          if (payment) {
+            await tx.payment.update({
+              where: { id: payment.id },
+              data: { status: "COMPLETED" },
+            });
+          }
+
+          if (targetMilestoneId) {
+            await tx.projectMilestone.update({
+              where: { id: targetMilestoneId },
+              data: { status: "APPROVED", approvedAt: new Date() },
+            });
+          }
+
+          const record = await tx.projectDispute.update({
+            where: { id: disputeId },
+            data: {
+              status: "RESOLVED",
+              decision: "PARTIAL_SETTLEMENT",
+              decisionReason: reason || "Partial settlement split executed by admin.",
+              refundAmount: finalRefund,
+              payoutAmount: finalPayout,
+              decisionAt: new Date(),
+              decidedBy: adminSession.userId,
+            },
+          });
+
+          await tx.projectTimelineEvent.create({
+            data: {
+              trackingId: dispute.trackingId,
+              actorId: adminSession.userId,
+              actorRole: "ADMIN",
+              type: "DISPUTE_RESOLVED",
+              title: "Dispute decided · Partial Settlement",
+              description: `Admin settled case #${disputeId}: ₹${finalRefund.toLocaleString("en-IN")} refunded to client, ₹${finalPayout.toLocaleString("en-IN")} released to freelancer.${reason ? ` Note: ${reason}` : ""}`,
+            },
+          });
+
+          return record;
+        }
+      });
+
+      await notifyDisputeDecided({
+        disputeId,
+        trackingId: dispute.trackingId,
+        jobTitle: job?.title ?? null,
+        clientId: dispute.clientId,
+        professionalId: dispute.professionalId,
+        decision,
+        refundAmount: updatedDispute.refundAmount ?? 0,
+        payoutAmount: updatedDispute.payoutAmount ?? 0,
+        reason: updatedDispute.decisionReason ?? undefined,
+      });
+
+      emitRealtimeProjectUpdate([dispute.clientId, dispute.professionalId], {
+        projectId: dispute.trackingId,
+      });
+      return NextResponse.json({ dispute: updatedDispute });
+    }
+
+    // Status toggle without decision (e.g. reopen or status change)
+    const nextStatus = parsed.data.status ?? "RESOLVED";
+    const updated = await db.projectDispute.update({
+      where: { id: disputeId },
+      data: { status: nextStatus },
+    });
+
     await notifyDisputeResolved({
       trackingId: dispute.trackingId,
       jobTitle: job?.title ?? null,
-      status: parsed.data.status,
+      status: nextStatus === "RESOLVED" ? "RESOLVED" : "OPEN",
       clientId: dispute.clientId,
       professionalId: dispute.professionalId,
     });
-    return NextResponse.json({ dispute });
-  } catch {
+
+    emitRealtimeProjectUpdate([dispute.clientId, dispute.professionalId], {
+      projectId: dispute.trackingId,
+    });
+    return NextResponse.json({ dispute: updated });
+  } catch (error) {
+    console.error("admin.dispute.adjudicate.failed", error);
     return NextResponse.json({ error: "Unable to update dispute." }, { status: 500 });
   }
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await requireAdmin(request)))
-    return NextResponse.json({ error: "Admin access required." }, { status: 403 });
+  const adminSession = await getAdminSession(request);
+  if (!adminSession) return NextResponse.json({ error: "Admin access required." }, { status: 403 });
 
   const { id } = await params;
   const disputeId = Number(id);
@@ -73,7 +307,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const tracking = await db.projectTracking.findUnique({ where: { id: dispute.trackingId } });
 
-  const [client, professional, job, milestones, paid] = await Promise.all([
+  const [client, professional, job, milestones, paid, payments, disputeCount] = await Promise.all([
     db.user.findUnique({
       where: { id: dispute.clientId },
       select: { id: true, firstName: true, lastName: true, email: true },
@@ -101,6 +335,24 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           _sum: { amount: true },
         })
       : Promise.resolve({ _sum: { amount: null } }),
+    tracking
+      ? db.payment.findMany({
+          where: { projectTrackingId: tracking.id },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            amount: true,
+            baseAmount: true,
+            professionalPayoutAmount: true,
+            status: true,
+            milestoneId: true,
+            createdAt: true,
+          },
+        })
+      : Promise.resolve([]),
+    db.projectDispute.count({
+      where: { trackingId: dispute.trackingId },
+    }),
   ]);
 
   const approvedMilestones = milestones.filter((item) => item.status === "APPROVED");
@@ -108,9 +360,45 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const milestoneTotal = milestones.reduce((total, item) => total + item.amount, 0);
   const approvedTotal = approvedMilestones.reduce((total, item) => total + item.amount, 0);
   const paidAmount = paid._sum.amount ?? 0;
+  const inEscrow = payments
+    .filter((p) => p.status === "FUNDED")
+    .reduce((sum, p) => sum + p.amount, 0);
+
+  let evidence: {
+    id?: number;
+    name: string;
+    url: string;
+    mimeType?: string;
+    sizeBytes?: number;
+  }[] = [];
+  try {
+    if (dispute.attachmentsJson) evidence = JSON.parse(dispute.attachmentsJson);
+  } catch (err) {
+    void err;
+  }
+
+  let responseEvidence: {
+    id?: number;
+    name: string;
+    url: string;
+    mimeType?: string;
+    sizeBytes?: number;
+  }[] = [];
+  try {
+    if (dispute.responseAttachmentsJson)
+      responseEvidence = JSON.parse(dispute.responseAttachmentsJson);
+  } catch (err) {
+    void err;
+  }
 
   return NextResponse.json({
-    dispute,
+    dispute: {
+      ...dispute,
+      evidence,
+      responseEvidence,
+    },
+    disputeCount,
+    disputeLimit: 3,
     messages,
     client,
     professional,
@@ -126,10 +414,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         }
       : null,
     milestones,
+    payments,
     milestoneSummary: { completed: completedMilestones, total: milestones.length },
     financial: {
       milestoneTotal,
       paidAmount,
+      inEscrow,
       remainingAmount: Math.max(milestoneTotal - paidAmount, 0),
       approvedTotal,
       unpaidApproved: Math.max(approvedTotal - paidAmount, 0),

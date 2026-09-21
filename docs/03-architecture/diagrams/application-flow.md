@@ -79,18 +79,18 @@ flowchart TD
 
 ## Explanation
 
-| Step | Key code | Notes |
-|---|---|---|
-| Request gate | `proxy.ts`, `src/lib/auth.ts` | Session verified against DB on each check; several layers repeat it |
-| Job posting | `app/api/client/jobs/route.ts` | Drafts and published jobs; accepts cookie or Bearer token |
-| Proposal | `app/api/professional/proposals/route.ts` | Requires job `OPEN`; background notification job |
-| Hiring | `src/lib/project-request-actions.ts` `respondToProjectRequest()` | Accept closes the job and creates `ProjectTracking` |
-| Delivery | `app/api/portal/project-actions/route.ts` (17 actions) | Status transitions guarded by conditional `updateMany` claims |
-| Client UI switch | `app/project/[projectId]/tracking/page.tsx:389-399` | Offline jobs call `project-actions`; online jobs call `/api/wallet/milestone` |
-| Wallet funding | `app/api/wallet/deposit/*`, `app/api/webhooks/razorpay/route.ts` | Amounts whole rupees; paise at Razorpay boundary |
-| Escrow & release | `src/lib/wallet-ledger.ts` | 10% client fee + 10% professional fee; admin wallet holds funds |
-| Withdrawal | `app/api/wallet/route.ts`, `app/api/admin/finance/withdrawals/[id]/route.ts`, `app/api/admin/finance/payouts/route.ts` | Manual settlement or Razorpay Route |
-| Side effects | `src/lib/marketplace-notifications.ts`, `src/lib/realtime.ts` | `UserNotification` rows + socket events + optional email |
+| Step             | Key code                                                                                                               | Notes                                                                         |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Request gate     | `proxy.ts`, `src/lib/auth.ts`                                                                                          | Session verified against DB on each check; several layers repeat it           |
+| Job posting      | `app/api/client/jobs/route.ts`                                                                                         | Drafts and published jobs; accepts cookie or Bearer token                     |
+| Proposal         | `app/api/professional/proposals/route.ts`                                                                              | Requires job `OPEN`; background notification job                              |
+| Hiring           | `src/lib/project-request-actions.ts` `respondToProjectRequest()`                                                       | Accept closes the job and creates `ProjectTracking`                           |
+| Delivery         | `app/api/portal/project-actions/route.ts` (17 actions)                                                                 | Status transitions guarded by conditional `updateMany` claims                 |
+| Client UI switch | `app/project/[projectId]/tracking/page.tsx:389-399`                                                                    | Offline jobs call `project-actions`; online jobs call `/api/wallet/milestone` |
+| Wallet funding   | `app/api/wallet/deposit/*`, `app/api/webhooks/razorpay/route.ts`                                                       | Amounts whole rupees; paise at Razorpay boundary                              |
+| Escrow & release | `src/lib/wallet-ledger.ts`                                                                                             | 10% client fee + 10% professional fee; admin wallet holds funds               |
+| Withdrawal       | `app/api/wallet/route.ts`, `app/api/admin/finance/withdrawals/[id]/route.ts`, `app/api/admin/finance/payouts/route.ts` | Manual settlement or Razorpay Route                                           |
+| Side effects     | `src/lib/marketplace-notifications.ts`, `src/lib/realtime.ts`                                                          | `UserNotification` rows + socket events + optional email                      |
 
 ## Assumptions and Limitations
 

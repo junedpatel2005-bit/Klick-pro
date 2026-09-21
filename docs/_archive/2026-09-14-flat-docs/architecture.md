@@ -58,12 +58,12 @@ without adding a URL segment. `/dashboard` is served by
 
 ### App Router conventions in use
 
-| File | Where |
-| --- | --- |
-| `layout.tsx` | root, `(marketing)`, `(portal)`, `(portal)/(client)`, `(portal)/professional`, `admin` |
-| `loading.tsx` | root, `(portal)/professional`, `job/[jobId]`, `pro/[proId]`, `project/[projectId]` |
-| `error.tsx` | root only |
-| `not-found.tsx` | root only |
+| File            | Where                                                                                  |
+| --------------- | -------------------------------------------------------------------------------------- |
+| `layout.tsx`    | root, `(marketing)`, `(portal)`, `(portal)/(client)`, `(portal)/professional`, `admin` |
+| `loading.tsx`   | root, `(portal)/professional`, `job/[jobId]`, `pro/[proId]`, `project/[projectId]`     |
+| `error.tsx`     | root only                                                                              |
+| `not-found.tsx` | root only                                                                              |
 
 Route segment config is used sparingly: `export const runtime = "nodejs"` on 9 handlers,
 `dynamic = "force-dynamic"` on 2 pages, `revalidate = 0` on 1. Nothing uses `generateStaticParams`,
@@ -164,16 +164,16 @@ to a database that already recorded the old `0_init`, reconcile the checksum wit
 
 ## Build and run
 
-| Command | Effect |
-| --- | --- |
-| `npm run dev` | `node server.mjs` — Next dev + Socket.IO |
-| `npm run build` | `prisma migrate deploy && next build` — **migrations run during build** |
-| `npm start` | Production Node server |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` | ESLint (flat config) |
-| `npm test` | Vitest unit tests only; `tests/integration/**` is excluded |
-| `npm run test:integration` | Spins up a disposable PostgreSQL and runs the integration suite |
-| `npm run db:seed` | `prisma/seed.ts` — categories, professionals, jobs |
+| Command                    | Effect                                                                  |
+| -------------------------- | ----------------------------------------------------------------------- |
+| `npm run dev`              | `node server.mjs` — Next dev + Socket.IO                                |
+| `npm run build`            | `prisma migrate deploy && next build` — **migrations run during build** |
+| `npm start`                | Production Node server                                                  |
+| `npm run typecheck`        | `tsc --noEmit`                                                          |
+| `npm run lint`             | ESLint (flat config)                                                    |
+| `npm test`                 | Vitest unit tests only; `tests/integration/**` is excluded              |
+| `npm run test:integration` | Spins up a disposable PostgreSQL and runs the integration suite         |
+| `npm run db:seed`          | `prisma/seed.ts` — categories, professionals, jobs                      |
 
 Note that `build` applies migrations. A build against a production database will mutate its schema.
 
@@ -182,13 +182,13 @@ Note that `build` applies migrations. A build against a production database will
 Three parts of the schema are superseded but still present. Model usage counts, measured by files
 that call them:
 
-| Area | Files | Status |
-| --- | --- | --- |
-| `ProjectTracking` and friends | 19 | **Live.** The current project workflow. |
-| `HireJob` / `HireContract` / `HireMilestone` | 2 | Superseded by the above. |
-| `SocketConversation` / `SocketMessage` | 3 | Realtime chat store. |
-| `MessageConversation` / `Message` | 3 | A parallel messaging store. |
-| `Legacy*` (5 models) | 2 | Imported historical data. |
+| Area                                         | Files | Status                                  |
+| -------------------------------------------- | ----- | --------------------------------------- |
+| `ProjectTracking` and friends                | 19    | **Live.** The current project workflow. |
+| `HireJob` / `HireContract` / `HireMilestone` | 2     | Superseded by the above.                |
+| `SocketConversation` / `SocketMessage`       | 3     | Realtime chat store.                    |
+| `MessageConversation` / `Message`            | 3     | A parallel messaging store.             |
+| `Legacy*` (5 models)                         | 2     | Imported historical data.               |
 
 Two messaging table sets coexist. Establishing which is canonical and removing the other is worth
 doing before the schema grows further.

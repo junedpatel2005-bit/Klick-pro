@@ -350,28 +350,64 @@ export async function GET(
       ),
     })),
     requests: requestEntries,
-    payments: project.payments.map((item) => ({
-      title: `Payment #${item.id}`,
-      meta: formatDate(item.createdAt),
-      details: [
-        { label: "Status", value: formatStatus(item.status) },
-        { label: "Charged", value: formatMoney(item.amount, item.currency) },
-        { label: "Base amount", value: formatMoney(item.baseAmount, item.currency) },
-        { label: "Client fee", value: formatMoney(item.clientFeeAmount, item.currency) },
-        {
-          label: "Professional payout",
-          value: formatMoney(item.professionalPayoutAmount, item.currency),
-        },
-        { label: "Platform amount", value: formatMoney(item.adminNetAmount, item.currency) },
-        { label: "Provider", value: formatStatus(item.provider) },
-        {
-          label: "Reference",
-          value: item.razorpayPaymentId ?? item.providerReference ?? "Not recorded",
-        },
-        { label: "Captured", value: formatDate(item.capturedAt) },
-      ],
-      body: item.failureReason ? `Failure reason: ${item.failureReason}` : undefined,
-    })),
+    payments: project.payments.map((item) => {
+      const roleSpecificAmounts =
+        session.role === "ADMIN"
+          ? [
+              { label: "Charged", value: formatMoney(item.amount, item.currency) },
+              { label: "Base amount", value: formatMoney(item.baseAmount, item.currency) },
+              { label: "Client fee", value: formatMoney(item.clientFeeAmount, item.currency) },
+              {
+                label: "Professional payout",
+                value: formatMoney(item.professionalPayoutAmount, item.currency),
+              },
+              {
+                label: "Platform amount",
+                value: formatMoney(item.adminNetAmount, item.currency),
+              },
+            ]
+          : session.userId === project.clientId
+            ? [
+                { label: "Charged", value: formatMoney(item.amount, item.currency) },
+                {
+                  label: "Milestone amount",
+                  value: formatMoney(item.baseAmount, item.currency),
+                },
+                {
+                  label: "Client service fee",
+                  value: formatMoney(item.clientFeeAmount, item.currency),
+                },
+              ]
+            : [
+                {
+                  label: "Client milestone payment",
+                  value: formatMoney(item.baseAmount, item.currency),
+                },
+                {
+                  label: "Platform commission",
+                  value: formatMoney(item.commissionAmount, item.currency),
+                },
+                {
+                  label: "Net earnings",
+                  value: formatMoney(item.professionalPayoutAmount, item.currency),
+                },
+              ];
+      return {
+        title: `Payment #${item.id}`,
+        meta: formatDate(item.createdAt),
+        details: [
+          { label: "Status", value: formatStatus(item.status) },
+          ...roleSpecificAmounts,
+          { label: "Provider", value: formatStatus(item.provider) },
+          {
+            label: "Reference",
+            value: item.razorpayPaymentId ?? item.providerReference ?? "Not recorded",
+          },
+          { label: "Captured", value: formatDate(item.capturedAt) },
+        ],
+        body: item.failureReason ? `Failure reason: ${item.failureReason}` : undefined,
+      };
+    }),
     transactions: transactions.map((item) => ({
       title: item.description,
       meta: formatDate(item.createdAt),

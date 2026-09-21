@@ -30,6 +30,8 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { CelebrationConfetti } from "@/components/CelebrationConfetti";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PageActionLoading } from "@/components/PageActionLoading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -41,13 +43,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { calculateMilestoneMoney } from "@/lib/payment-fees";
+import { ProjectDisputeCenter, DisputeData } from "@/components/ProjectDisputeCenter";
 
-type Person = { firstName: string; lastName: string } | null;
+type Person = { firstName: string | null; lastName: string | null } | null;
 export type DraftMilestone = {
   title: string;
   amount: number | "";
-  percentage: number | "";
   description: string;
+  percentage?: number | "";
 };
 type Milestone = {
   id: number;
@@ -58,7 +62,15 @@ type Milestone = {
   status: string;
   submittedAt: string | null;
   approvedAt: string | null;
-  payment: { status: string; professionalPayoutAmount: number } | null;
+  payment?: {
+    status: string;
+    professionalPayoutAmount?: number | null;
+  } | null;
+};
+type Stage = {
+  title: string;
+  status: "COMPLETE" | "CURRENT" | "UPCOMING";
+  completedAt?: string | null;
 };
 type Event = {
   id: number;
@@ -129,15 +141,11 @@ type Data = {
     professionalResponse: string | null;
     professionalResponseAt: string | null;
   } | null;
-  dispute: {
-    id: number;
-    issueType: string;
-    priority: string;
-    message: string;
-    status: string;
-    reporterRole: string;
-    createdAt: string;
-  } | null;
+  dispute: DisputeData | null;
+  disputes?: DisputeData[];
+  disputeCount?: number;
+  disputeLimit?: number;
+  canRaiseDispute?: boolean;
 };
 
 const name = (p: Person, fallback: string) => (p ? `${p.firstName} ${p.lastName}` : fallback);
@@ -146,6 +154,7 @@ const label = (status: string) =>
     READY_TO_START: "Ready to Start",
     IN_PROGRESS: "In Progress",
     AWAITING_CLIENT_REVIEW: "Awaiting Client Review",
+    AWAITING_ADMIN_APPROVAL: "Awaiting Admin Payout Approval",
     REVISION_REQUESTED: "Revision Requested",
     FINAL_WORK_SUBMITTED: "Final Work Submitted",
     AWAITING_PROFESSIONAL_CONFIRMATION: "Awaiting Professional Confirmation",
@@ -165,6 +174,7 @@ function formatFileSize(bytes: number | null | undefined) {
 }
 function milestoneStatusStyle(status: string) {
   if (status === "APPROVED") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "AWAITING_ADMIN_APPROVAL") return "border-indigo-200 bg-indigo-50 text-indigo-700";
   if (status === "AWAITING_CLIENT_REVIEW") return "border-purple-200 bg-purple-50 text-purple-700";
   if (status === "REVISION_REQUESTED") return "border-red-200 bg-red-50 text-red-700";
   if (status === "IN_PROGRESS") return "border-amber-200 bg-amber-50 text-amber-700";
@@ -172,13 +182,19 @@ function milestoneStatusStyle(status: string) {
 }
 function milestoneAccent(status: string) {
   if (status === "APPROVED") return "border-l-emerald-500";
+  if (status === "AWAITING_ADMIN_APPROVAL") return "border-l-indigo-500";
   if (status === "AWAITING_CLIENT_REVIEW") return "border-l-purple-500";
   if (status === "REVISION_REQUESTED") return "border-l-red-500";
   if (status === "IN_PROGRESS") return "border-l-amber-500";
   return "border-l-border";
 }
 function milestoneOverdueDays(milestone: Milestone): number | null {
-  if (!milestone.dueDate || milestone.status === "APPROVED") return null;
+  if (
+    !milestone.dueDate ||
+    milestone.status === "APPROVED" ||
+    milestone.status === "AWAITING_ADMIN_APPROVAL"
+  )
+    return null;
   const diffMs = Date.now() - new Date(milestone.dueDate).getTime();
   const days = Math.ceil(diffMs / 86400000);
   return days > 0 ? days : null;
@@ -197,6 +213,83 @@ const disputeEligibleStatuses = [
   "COMPLETED",
   "CLOSED",
 ];
+
+function getTrackingLoadingMeta(busy: string | null): { title: string; description: string } {
+  switch (busy) {
+    case "approve-milestone":
+      return {
+        title: "Approving milestone payment…",
+        description: "Releasing funds from escrow directly to the professional's wallet.",
+      };
+    case "fund-milestone":
+      return {
+        title: "Funding milestone escrow…",
+        description: "Securing milestone funds safely in escrow.",
+      };
+    case "submit-milestone":
+      return {
+        title: "Submitting milestone deliverable…",
+        description: "Uploading work files and notifying the client for review.",
+      };
+    case "submit-final-work":
+      return {
+        title: "Submitting final project work…",
+        description: "Uploading final files and requesting completion review.",
+      };
+    case "upload-work":
+      return {
+        title: "Uploading files…",
+        description: "Saving deliverables and file attachments to the project.",
+      };
+    case "start-work":
+      return {
+        title: "Starting project…",
+        description: "Updating project status to In Progress.",
+      };
+    case "complete-project":
+    case "confirm-project-completion":
+      return {
+        title: "Completing project…",
+        description: "Finalizing contract terms and closing escrow.",
+      };
+    case "request-revision":
+      return {
+        title: "Requesting milestone revision…",
+        description: "Submitting revision feedback to the professional.",
+      };
+    case "create-milestone":
+    case "create-milestones":
+      return {
+        title: "Creating milestone…",
+        description: "Adding new milestone to the project plan.",
+      };
+    case "update-milestone":
+      return {
+        title: "Updating milestone…",
+        description: "Saving changes to milestone details.",
+      };
+    case "delete-milestone":
+      return {
+        title: "Deleting milestone…",
+        description: "Removing milestone from the project.",
+      };
+    case "update-progress":
+      return {
+        title: "Updating progress…",
+        description: "Saving milestone progress percentage.",
+      };
+    case "request-client":
+      return {
+        title: "Sending request to client…",
+        description: "Notifying the client of required project details.",
+      };
+    default:
+      return {
+        title: "Processing request…",
+        description: "Applying your changes to the project.",
+      };
+  }
+}
 
 export default function SharedProjectTrackingPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -224,6 +317,7 @@ export default function SharedProjectTrackingPage() {
     remainingBalance: number;
   } | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [confirmDeleteMilestoneOpen, setConfirmDeleteMilestoneOpen] = useState(false);
   const [revisionMilestone, setRevisionMilestone] = useState<Milestone | null>(null);
   const [revisionFeedback, setRevisionFeedback] = useState("");
   const [submittingRevision, setSubmittingRevision] = useState(false);
@@ -846,18 +940,18 @@ export default function SharedProjectTrackingPage() {
       );
       return;
     }
-    if (
-      !confirm(
-        `Are you sure you want to delete "${editingMilestone.title}"? This cannot be undone.`,
-      )
-    )
-      return;
+    setConfirmDeleteMilestoneOpen(true);
+  };
+
+  const executeDeleteMilestone = async () => {
+    if (!editingMilestone) return;
     setEditMilestoneError(null);
     try {
       await action("delete-milestone", {
         milestoneId: editingMilestone.id,
       });
       closeEditMilestoneModal();
+      setConfirmDeleteMilestoneOpen(false);
     } catch (e) {
       setEditMilestoneError(e instanceof Error ? e.message : "Failed to delete milestone.");
     }
@@ -876,23 +970,25 @@ export default function SharedProjectTrackingPage() {
       total +
       (milestone.status === "APPROVED" ||
       milestone.status === "COMPLETED" ||
-      milestone.payment?.status === "COMPLETED" ||
-      milestone.payment?.status === "FUNDED"
+      milestone.payment?.status === "COMPLETED"
         ? milestone.amount
         : 0),
     0,
   );
-  const clientPaidMilestoneTotal = paidToProfessional;
+  const clientPaidMilestoneTotal = data.milestones.reduce(
+    (total, milestone) =>
+      total +
+      (milestone.payment?.status === "FUNDED" || milestone.payment?.status === "COMPLETED"
+        ? milestone.amount
+        : 0),
+    0,
+  );
   const completedMilestones = data.milestones.filter(
-    (m) =>
-      m.status === "APPROVED" ||
-      m.status === "COMPLETED" ||
-      m.payment?.status === "COMPLETED" ||
-      m.payment?.status === "FUNDED",
+    (m) => m.status === "APPROVED" || m.status === "COMPLETED" || m.payment?.status === "COMPLETED",
   );
   const remainingProjectBalance = Math.max(
     0,
-    (totalMilestoneValue > 0 ? totalMilestoneValue : totalAgreed) - paidToProfessional,
+    (totalMilestoneValue > 0 ? totalMilestoneValue : totalAgreed) - clientPaidMilestoneTotal,
   );
   const remainingClientPayment = remainingProjectBalance;
   const unpaidMilestones = data.milestones.filter(
@@ -1333,8 +1429,7 @@ export default function SharedProjectTrackingPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        if (!data.dispute) setShowDisputeForm(true);
-                        document.getElementById("project-dispute")?.scrollIntoView({
+                        document.getElementById("project-dispute-center")?.scrollIntoView({
                           behavior: "smooth",
                           block: "start",
                         });
@@ -1491,125 +1586,21 @@ export default function SharedProjectTrackingPage() {
             )}
 
             {disputeEligibleStatuses.includes(data.project.status) && (
-              <section
-                id="project-dispute"
-                className="scroll-mt-24 rounded-2xl border bg-card p-5 shadow-soft"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="font-medium">Report issue / Raise dispute</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {data.dispute
-                        ? `${data.dispute.issueType} · ${data.dispute.status}`
-                        : "Escalate any unresolved payment, quality, or delivery issue."}
-                    </p>
-                    {data.dispute && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Raised by{" "}
-                        {(data.dispute.reporterRole === "CLIENT") === isClient
-                          ? "you"
-                          : data.dispute.reporterRole === "CLIENT"
-                            ? "the client"
-                            : "the professional"}
-                      </p>
-                    )}
-                  </div>
-                  {!data.dispute && data.project.status !== "COMPLETED" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowDisputeForm((value) => !value)}
-                    >
-                      {showDisputeForm
-                        ? "Hide report / dispute form"
-                        : "Report issue / Raise dispute"}
-                    </Button>
-                  )}
-                </div>
-
-                {showDisputeForm && !data.dispute && (
-                  <div className="mt-4 rounded-xl border bg-card p-4">
-                    <div className="grid gap-3">
-                      <label className="grid gap-2 text-sm font-medium">
-                        Issue type
-                        <select
-                          value={disputeType}
-                          onChange={(event) => setDisputeType(event.target.value)}
-                          className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        >
-                          <option value="PAYMENT">Payment</option>
-                          <option value="QUALITY">Quality</option>
-                          <option value="COMMUNICATION">Communication</option>
-                          <option value="DELIVERY">Delivery</option>
-                          <option value="OTHER">Other</option>
-                        </select>
-                      </label>
-                      <label className="grid gap-2 text-sm font-medium">
-                        Priority
-                        <select
-                          value={disputePriority}
-                          onChange={(event) => setDisputePriority(event.target.value)}
-                          className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        >
-                          <option value="LOW">Low</option>
-                          <option value="MEDIUM">Medium</option>
-                          <option value="HIGH">High</option>
-                        </select>
-                      </label>
-                      <label className="grid gap-2 text-sm font-medium">
-                        Message
-                        <textarea
-                          value={disputeMessage}
-                          onChange={(event) => setDisputeMessage(event.target.value)}
-                          placeholder="Describe the issue clearly and include any relevant context."
-                          className="min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        />
-                      </label>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setShowDisputeForm(false);
-                          setDisputeMessage("");
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          if (!disputeMessage.trim()) return setMessage("Add a dispute message.");
-                          void action("submit-dispute", {
-                            issueType: disputeType,
-                            priority: disputePriority,
-                            message: disputeMessage.trim(),
-                          });
-                          setShowDisputeForm(false);
-                          setDisputeMessage("");
-                        }}
-                      >
-                        Raise dispute
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                {data.dispute && (
-                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-sm">
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium uppercase tracking-wide text-amber-800">
-                      <span>Issue: {data.dispute.issueType.replaceAll("_", " ")}</span>
-                      <span>Priority: {data.dispute.priority}</span>
-                      <span>Status: {data.dispute.status}</span>
-                    </div>
-                    <p className="mt-3 whitespace-pre-wrap text-foreground">
-                      {data.dispute.message}
-                    </p>
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      Submitted {date(data.dispute.createdAt)}. The admin dispute team can review
-                      this case.
-                    </p>
-                  </div>
-                )}
-              </section>
+              <ProjectDisputeCenter
+                projectId={Number(projectId)}
+                viewerRole={data.viewerRole}
+                viewerUserId={
+                  isClient ? (data.project.clientId ?? 0) : (data.project.professionalId ?? 0)
+                }
+                projectStatus={data.project.status}
+                milestones={data.milestones}
+                dispute={data.dispute}
+                disputeCount={data.disputeCount}
+                disputeLimit={data.disputeLimit ?? 3}
+                canRaiseDispute={data.canRaiseDispute}
+                onAction={action}
+                busyAction={busy}
+              />
             )}
           </TabsContent>
 
@@ -1712,6 +1703,7 @@ export default function SharedProjectTrackingPage() {
                     m.status === "COMPLETED" ||
                     m.payment?.status === "COMPLETED";
                   const isAwaitingReview = m.status === "AWAITING_CLIENT_REVIEW";
+                  const isAwaitingAdmin = m.status === "AWAITING_ADMIN_APPROVAL";
                   const isRevision = m.status === "REVISION_REQUESTED";
                   const isInProgress = m.status === "IN_PROGRESS";
 
@@ -1721,13 +1713,15 @@ export default function SharedProjectTrackingPage() {
                       className={`relative rounded-2xl border bg-card p-5 sm:p-6 shadow-xs transition-all hover:shadow-soft space-y-4 ${
                         isApproved
                           ? "border-emerald-500/30 hover:border-emerald-500/50"
-                          : isAwaitingReview
-                            ? "border-purple-500/30 hover:border-purple-500/50"
-                            : isRevision
-                              ? "border-rose-500/30 hover:border-rose-500/50"
-                              : isInProgress
-                                ? "border-amber-500/30 hover:border-amber-500/50"
-                                : "border-border"
+                          : isAwaitingAdmin
+                            ? "border-indigo-500/30 hover:border-indigo-500/50"
+                            : isAwaitingReview
+                              ? "border-purple-500/30 hover:border-purple-500/50"
+                              : isRevision
+                                ? "border-rose-500/30 hover:border-rose-500/50"
+                                : isInProgress
+                                  ? "border-amber-500/30 hover:border-amber-500/50"
+                                  : "border-border"
                       }`}
                     >
                       {/* Top Row: Index, Title, Amount & Status */}
@@ -1737,11 +1731,13 @@ export default function SharedProjectTrackingPage() {
                             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${
                               isApproved
                                 ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                                : isAwaitingReview
-                                  ? "bg-purple-500/10 text-purple-700 dark:text-purple-400"
-                                  : isInProgress
-                                    ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                                    : "bg-primary/10 text-primary"
+                                : isAwaitingAdmin
+                                  ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
+                                  : isAwaitingReview
+                                    ? "bg-purple-500/10 text-purple-700 dark:text-purple-400"
+                                    : isInProgress
+                                      ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                      : "bg-primary/10 text-primary"
                             }`}
                           >
                             {index + 1}
@@ -1798,22 +1794,27 @@ export default function SharedProjectTrackingPage() {
                             className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${
                               isApproved
                                 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                                : isAwaitingReview
-                                  ? "border-purple-500/20 bg-purple-500/10 text-purple-700 dark:text-purple-400"
-                                  : isRevision
-                                    ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
-                                    : isInProgress
-                                      ? "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                                      : "border-border bg-muted/60 text-muted-foreground"
+                                : isAwaitingAdmin
+                                  ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
+                                  : isAwaitingReview
+                                    ? "border-purple-500/20 bg-purple-500/10 text-purple-700 dark:text-purple-400"
+                                    : isRevision
+                                      ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
+                                      : isInProgress
+                                        ? "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                        : "border-border bg-muted/60 text-muted-foreground"
                             }`}
                           >
                             {isApproved && <CheckCircle2 className="h-3.5 w-3.5" />}
+                            {isAwaitingAdmin && <Clock3 className="h-3.5 w-3.5" />}
                             {isAwaitingReview && <Sparkles className="h-3.5 w-3.5" />}
                             {isRevision && <AlertCircle className="h-3.5 w-3.5" />}
                             {isInProgress && <Clock3 className="h-3.5 w-3.5" />}
-                            {!isApproved && !isAwaitingReview && !isRevision && !isInProgress && (
-                              <Layers className="h-3.5 w-3.5" />
-                            )}
+                            {!isApproved &&
+                              !isAwaitingAdmin &&
+                              !isAwaitingReview &&
+                              !isRevision &&
+                              !isInProgress && <Layers className="h-3.5 w-3.5" />}
                             {isApproved
                               ? m.payment?.status === "COMPLETED"
                                 ? "Done · Paid Out"
@@ -2440,7 +2441,11 @@ export default function SharedProjectTrackingPage() {
             <div className="mt-4 space-y-3">
               {(() => {
                 const offlinePayment = data.job?.paymentMethod === "OFFLINE";
-                const clientCharge = approvalMilestone.amount;
+                const milestoneMoney = calculateMilestoneMoney(approvalMilestone.amount);
+                const clientFee = offlinePayment ? 0 : milestoneMoney.clientFeeAmount;
+                const clientCharge = offlinePayment
+                  ? approvalMilestone.amount
+                  : milestoneMoney.clientChargeAmount;
                 return (
                   <>
                     {approvalSuccess ? (
@@ -2455,7 +2460,7 @@ export default function SharedProjectTrackingPage() {
                         <div>
                           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                             <Sparkles className="h-3.5 w-3.5" />
-                            Milestone Approved & Paid! 🎉
+                            {offlinePayment ? "Milestone Approved & Paid! 🎉" : "Milestone Funded"}
                           </span>
                           <h3 className="mt-2 font-display text-3xl font-bold tracking-tight text-foreground">
                             ₹{approvalSuccess.charged.toLocaleString("en-IN")}
@@ -2463,7 +2468,7 @@ export default function SharedProjectTrackingPage() {
                           <p className="mt-1 text-sm text-muted-foreground">
                             {offlinePayment
                               ? `Marked as paid directly to ${professional}.`
-                              : `Directly transferred to ${professional}'s account.`}
+                              : "Payment received and waiting for admin payout approval."}
                           </p>
                         </div>
 
@@ -2475,16 +2480,17 @@ export default function SharedProjectTrackingPage() {
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Paid to professional</span>
+                            <span className="text-muted-foreground">
+                              Professional milestone amount
+                            </span>
                             <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                              ₹{approvalSuccess.professionalReceives.toLocaleString("en-IN")} (100%
-                              full payout)
+                              ₹{approvalSuccess.professionalReceives.toLocaleString("en-IN")}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Platform fee deduction</span>
-                            <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                              ₹0 (0% cut)
+                            <span className="text-muted-foreground">Client service fee</span>
+                            <span className="font-medium text-foreground">
+                              ₹{clientFee.toLocaleString("en-IN")}
                             </span>
                           </div>
                           {!offlinePayment && (
@@ -2529,16 +2535,18 @@ export default function SharedProjectTrackingPage() {
                             </span>
                           </div>
                           <div className="flex justify-between gap-4">
-                            <span className="text-muted-foreground">Platform deduction</span>
-                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                              ₹0 (0% cut)
+                            <span className="text-muted-foreground">
+                              Client service fee {offlinePayment ? "" : "(10%)"}
+                            </span>
+                            <span className="font-semibold text-foreground">
+                              ₹{clientFee.toLocaleString("en-IN")}
                             </span>
                           </div>
                           <div className="flex justify-between gap-4 border-t border-border pt-3">
                             <span className="font-semibold">
                               {offlinePayment
                                 ? "Amount paid offline"
-                                : "Total to pay to professional"}
+                                : "Total charged to your wallet"}
                             </span>
                             <span className="font-bold text-primary">
                               ₹{clientCharge.toLocaleString("en-IN")}
@@ -2547,8 +2555,9 @@ export default function SharedProjectTrackingPage() {
                         </div>
                         {offlinePayment ? null : (
                           <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
-                            Approval will transfer ₹{clientCharge.toLocaleString("en-IN")} directly
-                            from your wallet to {professional}'s account immediately.
+                            ₹{clientCharge.toLocaleString("en-IN")} will move from your wallet to
+                            the secure platform wallet. The professional payout is released only
+                            after admin approval.
                           </p>
                         )}
                         {!offlinePayment && (
@@ -2584,7 +2593,11 @@ export default function SharedProjectTrackingPage() {
                             }}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
                           >
-                            {busy === "approve-milestone" ? "Processing…" : "Approve & Pay"}
+                            {busy === "approve-milestone"
+                              ? "Processing…"
+                              : offlinePayment
+                                ? "Approve & Pay"
+                                : "Approve & Fund"}
                           </Button>
                         </DialogFooter>
                       </div>
@@ -3278,6 +3291,23 @@ export default function SharedProjectTrackingPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmDeleteMilestoneOpen}
+        onOpenChange={setConfirmDeleteMilestoneOpen}
+        title={editingMilestone ? `Delete "${editingMilestone.title}"?` : "Delete Milestone?"}
+        description="Are you sure you want to delete this milestone? This cannot be undone."
+        confirmLabel="Delete Milestone"
+        variant="destructive"
+        loading={busy === "delete-milestone"}
+        onConfirm={executeDeleteMilestone}
+      />
+
+      <PageActionLoading
+        active={busy !== null}
+        title={getTrackingLoadingMeta(busy).title}
+        description={getTrackingLoadingMeta(busy).description}
+      />
     </AppShell>
   );
 }

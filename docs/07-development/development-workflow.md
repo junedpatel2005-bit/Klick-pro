@@ -8,14 +8,14 @@ Related: [coding-standards.md](./coding-standards.md) · [testing-strategy.md](.
 
 ## 1. Prerequisites
 
-| Requirement | Version / detail | Evidence |
-|---|---|---|
-| Node.js | README: "20.9 or newer"; CI uses **Node 22**; `@types/node ^22`. Use Node 22 to match CI. No `engines` field or `.nvmrc`. | `README.md`, `.github/workflows/quality.yml` |
-| npm | Lockfile `package-lock.json` (use `npm ci`). `bun.lock` was removed in `185afc9`. | repo root |
-| PostgreSQL | 16 (CI service `postgres:16-alpine`; README Docker command). Hosted Postgres (likely Supabase pooler + direct URL) supported. | `quality.yml`, `src/lib/db.ts:28-30` |
-| Docker | Optional, only to run Postgres locally | `README.md` |
-| Accounts (optional) | SMTP, Google Cloud (Maps, OAuth), Twilio Verify, Razorpay Test Mode, Persona, S3-compatible storage, Sentry | `.env.example` |
-| OS notes | README gives Windows (`copy`) and macOS/Linux (`cp`) commands; `cross-env` used for `NODE_ENV` in `start` | `package.json` |
+| Requirement         | Version / detail                                                                                                              | Evidence                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| Node.js             | README: "20.9 or newer"; CI uses **Node 22**; `@types/node ^22`. Use Node 22 to match CI. No `engines` field or `.nvmrc`.     | `README.md`, `.github/workflows/quality.yml` |
+| npm                 | Lockfile `package-lock.json` (use `npm ci`). `bun.lock` was removed in `185afc9`.                                             | repo root                                    |
+| PostgreSQL          | 16 (CI service `postgres:16-alpine`; README Docker command). Hosted Postgres (likely Supabase pooler + direct URL) supported. | `quality.yml`, `src/lib/db.ts:28-30`         |
+| Docker              | Optional, only to run Postgres locally                                                                                        | `README.md`                                  |
+| Accounts (optional) | SMTP, Google Cloud (Maps, OAuth), Twilio Verify, Razorpay Test Mode, Persona, S3-compatible storage, Sentry                   | `.env.example`                               |
+| OS notes            | README gives Windows (`copy`) and macOS/Linux (`cp`) commands; `cross-env` used for `NODE_ENV` in `start`                     | `package.json`                               |
 
 ## 2. First-time setup
 
@@ -46,42 +46,42 @@ Email verification: non-admin users are redirected to `/verify` until `emailVeri
 
 ## 3. Daily commands (`package.json`)
 
-| Script | Command | Purpose | Side effects |
-|---|---|---|---|
-| `dev` | `node server.mjs` | Custom server: Next dev mode + Socket.IO (`/api/realtime`) | Port 3000 |
-| `build` | `prisma migrate deploy && next build` | Production build | **Applies migrations to `DIRECT_URL`/`DATABASE_URL`** |
-| `start` | `cross-env NODE_ENV=production node server.mjs` | Run production build | — |
-| `lint` | `eslint .` | ESLint + Prettier check (TS/TSX) | — |
-| `typecheck` | `tsc --noEmit` | Strict typecheck of `app/`, `src/`, `proxy.ts` | Writes `tsconfig.tsbuildinfo` (incremental) |
-| `format` | `prettier --write .` | Format **entire repo** | Rewrites files — avoid mass-formatting unrelated code |
-| `check:razorpay` | `tsx scripts/check-razorpay-sandbox.ts` | Validate Razorpay Test Mode env | Exit 1 on missing/live keys |
-| `db:seed` | `tsx prisma/seed.ts` | Demo categories, users, jobs, wallet/payments | DB writes (upserts + creates) |
-| `db:add-subcategory-jobs` | `tsx scripts/add-faker-subcategory-jobs.ts` | Faker jobs per subcategory | DB writes |
-| `db:add-juned-jobs` | `tsx scripts/add-faker-jobs-for-juned.ts` | Faker jobs for one hard-coded developer account | DB writes **and deletes** that account's demo project rows |
-| `db:add-faker-clients` | `tsx scripts/add-faker-clients.ts` | Faker client accounts with a shared default password | DB writes |
-| `db:post-faker-jobs` | `tsx scripts/post-faker-jobs-for-all-clients.ts` | Faker jobs for all clients | DB writes |
+| Script                    | Command                                          | Purpose                                                    | Side effects                                               |
+| ------------------------- | ------------------------------------------------ | ---------------------------------------------------------- | ---------------------------------------------------------- |
+| `dev`                     | `node server.mjs`                                | Custom server: Next dev mode + Socket.IO (`/api/realtime`) | Port 3000                                                  |
+| `build`                   | `prisma migrate deploy && next build`            | Production build                                           | **Applies migrations to `DIRECT_URL`/`DATABASE_URL`**      |
+| `start`                   | `cross-env NODE_ENV=production node server.mjs`  | Run production build                                       | —                                                          |
+| `lint`                    | `eslint .`                                       | ESLint + Prettier check (TS/TSX)                           | —                                                          |
+| `typecheck`               | `tsc --noEmit`                                   | Strict typecheck of `app/`, `src/`, `proxy.ts`             | Writes `tsconfig.tsbuildinfo` (incremental)                |
+| `format`                  | `prettier --write .`                             | Format **entire repo**                                     | Rewrites files — avoid mass-formatting unrelated code      |
+| `check:razorpay`          | `tsx scripts/check-razorpay-sandbox.ts`          | Validate Razorpay Test Mode env                            | Exit 1 on missing/live keys                                |
+| `db:seed`                 | `tsx prisma/seed.ts`                             | Demo categories, users, jobs, wallet/payments              | DB writes (upserts + creates)                              |
+| `db:add-subcategory-jobs` | `tsx scripts/add-faker-subcategory-jobs.ts`      | Faker jobs per subcategory                                 | DB writes                                                  |
+| `db:add-juned-jobs`       | `tsx scripts/add-faker-jobs-for-juned.ts`        | Faker jobs for one hard-coded developer account            | DB writes **and deletes** that account's demo project rows |
+| `db:add-faker-clients`    | `tsx scripts/add-faker-clients.ts`               | Faker client accounts with a shared default password       | DB writes                                                  |
+| `db:post-faker-jobs`      | `tsx scripts/post-faker-jobs-for-all-clients.ts` | Faker jobs for all clients                                 | DB writes                                                  |
 
 Not available: `test`, `test:*` (removed in `185afc9`), `prisma:*` wrappers, `postinstall`. There is no `next dev`/`next start` script; always use `dev`/`start` so Socket.IO runs.
 
 ## 4. Scripts catalogue (`scripts/`) — descriptions only, not executed
 
-| Script | Purpose | Reads/Writes | Risk |
-|---|---|---|---|
-| `add-faker-clients.ts` | Creates Indian demo client users with bcrypt-hashed shared default password; prints the password | Writes `User` etc. | Medium (demo accounts with known password) |
-| `add-faker-jobs-for-juned.ts` | Demo jobs for a hard-coded email; removes prior demo `ProjectTracking`/`ProjectRequest` rows for those jobs | Writes + deletes | Medium |
-| `add-faker-subcategory-jobs.ts` | One demo job per service subcategory | Writes | Low–medium |
-| `post-faker-jobs-for-all-clients.ts` | Demo jobs for every client | Writes | Medium (touches all clients) |
-| `backfill-admin-notifications.ts` | Backfills admin `UserNotification` rows from users/jobs/proposals; requires an active admin | Writes | Low |
-| `backfill-user-notifications.ts` | Backfills user notifications from project requests/negotiations/projects | Writes | Low |
-| `seed-category-hierarchy.ts` | Seeds 3-tier `ServiceCategory` tree (Residential/Commercial/Industrial) | Writes (upsert) | Low |
-| `reset-marketplace-catalog.ts` | **Destructive**: in one transaction deletes all project workflow rows, jobs, hire/negotiation rows, services and categories, detaches payments from milestones, then rebuilds catalog and remaps legacy categories (`:451-489`) | Deletes + writes | **High** — never run against shared/prod DB |
-| `check-hierarchy-summary.ts` | Prints the category tree | Read-only | None |
-| `project-db-check.ts` | Live DB audit: tables, `_prisma_migrations`, row counts, orphan checks | Read-only (`Prisma.sql`) | None |
-| `check-database-baseline.sql` | psql diagnostics: migration history, tables, orphan/CHECK preflights | Read-only | None |
-| `full-database-audit.sql` | psql schema/constraint/FK/index inventory | Read-only | None |
-| `check-razorpay-sandbox.ts` | Razorpay env validation | Env only | None |
-| `india-demo-locations.ts` | Static `INDIA_DEMO_CITIES` list; **no importer found** | — | Dead code |
-| `export-client-credentials.ts` | Queries all `CLIENT` users and writes `CLIENT_CREDENTIALS.md` and `clients-credentials.json` (including a password column) to the repo root. Both output files are currently **committed to git**. | Read DB, write files | **High (security)** — do not run; outputs must not be committed. See [security.md](../08-operations/security.md). |
+| Script                               | Purpose                                                                                                                                                                                                                         | Reads/Writes             | Risk                                                                                                              |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `add-faker-clients.ts`               | Creates Indian demo client users with bcrypt-hashed shared default password; prints the password                                                                                                                                | Writes `User` etc.       | Medium (demo accounts with known password)                                                                        |
+| `add-faker-jobs-for-juned.ts`        | Demo jobs for a hard-coded email; removes prior demo `ProjectTracking`/`ProjectRequest` rows for those jobs                                                                                                                     | Writes + deletes         | Medium                                                                                                            |
+| `add-faker-subcategory-jobs.ts`      | One demo job per service subcategory                                                                                                                                                                                            | Writes                   | Low–medium                                                                                                        |
+| `post-faker-jobs-for-all-clients.ts` | Demo jobs for every client                                                                                                                                                                                                      | Writes                   | Medium (touches all clients)                                                                                      |
+| `backfill-admin-notifications.ts`    | Backfills admin `UserNotification` rows from users/jobs/proposals; requires an active admin                                                                                                                                     | Writes                   | Low                                                                                                               |
+| `backfill-user-notifications.ts`     | Backfills user notifications from project requests/negotiations/projects                                                                                                                                                        | Writes                   | Low                                                                                                               |
+| `seed-category-hierarchy.ts`         | Seeds 3-tier `ServiceCategory` tree (Residential/Commercial/Industrial)                                                                                                                                                         | Writes (upsert)          | Low                                                                                                               |
+| `reset-marketplace-catalog.ts`       | **Destructive**: in one transaction deletes all project workflow rows, jobs, hire/negotiation rows, services and categories, detaches payments from milestones, then rebuilds catalog and remaps legacy categories (`:451-489`) | Deletes + writes         | **High** — never run against shared/prod DB                                                                       |
+| `check-hierarchy-summary.ts`         | Prints the category tree                                                                                                                                                                                                        | Read-only                | None                                                                                                              |
+| `project-db-check.ts`                | Live DB audit: tables, `_prisma_migrations`, row counts, orphan checks                                                                                                                                                          | Read-only (`Prisma.sql`) | None                                                                                                              |
+| `check-database-baseline.sql`        | psql diagnostics: migration history, tables, orphan/CHECK preflights                                                                                                                                                            | Read-only                | None                                                                                                              |
+| `full-database-audit.sql`            | psql schema/constraint/FK/index inventory                                                                                                                                                                                       | Read-only                | None                                                                                                              |
+| `check-razorpay-sandbox.ts`          | Razorpay env validation                                                                                                                                                                                                         | Env only                 | None                                                                                                              |
+| `india-demo-locations.ts`            | Static `INDIA_DEMO_CITIES` list; **no importer found**                                                                                                                                                                          | —                        | Dead code                                                                                                         |
+| `export-client-credentials.ts`       | Queries all `CLIENT` users and writes `CLIENT_CREDENTIALS.md` and `clients-credentials.json` (including a password column) to the repo root. Both output files are currently **committed to git**.                              | Read DB, write files     | **High (security)** — do not run; outputs must not be committed. See [security.md](../08-operations/security.md). |
 
 All scripts load `.env` via `dotenv/config` and use `DATABASE_URL` directly with **no environment guard or confirmation prompt**. `dotenv` never overrides variables already set in the shell, so an inherited `DATABASE_URL` silently wins over `.env` — this sent `prisma db push`/`db:seed` to the wrong local database during the 2026-09-17 validation run [FOUND IN VALIDATION 2026-09-17 · [S-11](../validation/LOCAL_VALIDATION_LOG.md)]. Scripts are outside `tsconfig.include` (not type-checked in CI).
 
@@ -121,26 +121,26 @@ The repository has no `migrate dev` script and migration folders use a hand-sequ
 
 ### 5.2 Rules and caveats
 
-| Rule | Why |
-|---|---|
-| Never edit an existing migration's SQL | Databases that already applied it never run the edited SQL, and nothing warns: Prisma 7.9.1 `migrate deploy`/`status` ignore the checksum mismatch (exit 0, "No pending migrations"), so `prisma migrate resolve` is **not** needed for deploy — the missing objects must be added by a new migration. This already happened to `0_init` (`185afc9`) and `202608120003_shared_project_tracking` (`6572a99`) — see [troubleshooting T-01](../08-operations/troubleshooting.md#t-01). [CORRECTED 2026-09-17 · [V-02](../validation/LOCAL_VALIDATION_LOG.md)] |
-| Never run `build`, seeds or scripts with `DATABASE_URL` pointing at shared/production | `build` applies migrations; scripts mutate/delete without guards. |
-| Use `DIRECT_URL` for migrations on pooled hosts | `prisma.config.ts:6-9` comment. |
-| `migrate dev` may prompt to **reset** a DB whose history diverged | Only use on disposable databases. |
+| Rule                                                                                  | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Never edit an existing migration's SQL                                                | Databases that already applied it never run the edited SQL, and nothing warns: Prisma 7.9.1 `migrate deploy`/`status` ignore the checksum mismatch (exit 0, "No pending migrations"), so `prisma migrate resolve` is **not** needed for deploy — the missing objects must be added by a new migration. This already happened to `0_init` (`185afc9`) and `202608120003_shared_project_tracking` (`6572a99`) — see [troubleshooting T-01](../08-operations/troubleshooting.md#t-01). [CORRECTED 2026-09-17 · [V-02](../validation/LOCAL_VALIDATION_LOG.md)] |
+| Never run `build`, seeds or scripts with `DATABASE_URL` pointing at shared/production | `build` applies migrations; scripts mutate/delete without guards.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Use `DIRECT_URL` for migrations on pooled hosts                                       | `prisma.config.ts:6-9` comment.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `migrate dev` may prompt to **reset** a DB whose history diverged                     | Only use on disposable databases.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ## 6. Git workflow (as evidenced)
 
-| Aspect | Evidence | Observation |
-|---|---|---|
-| Default branch | `main` (`origin/HEAD → origin/main`) | — |
-| Remote branches | `feature/login`, `juned1`, `juned3`, `vercel` | Person-named and purpose-named branches; no enforced prefix scheme |
-| Pull requests | Merge commit `cd8f4fb` "Merge pull request #2 from junedpatel2005-bit/juned1" | Only one PR merge in history; most work committed directly to `main` |
-| Commit messages | 156 of 163 subjects are `save` (plus `sa`, `sav`, `ave`) | No conventional commits; history is not self-describing |
-| Authors | Predominantly one author (`junedpatel3009-cpu`); 1–2 commits from others | — |
-| History start | 2026-08-09 (`9bdbdc9`) | — |
-| PR template / CODEOWNERS / branch protection | Not detected in repo (branch protection is a GitHub setting `[UNKNOWN]`) | — |
-| CI gate on PRs | `Quality` workflow: lint, typecheck, build | See [testing-strategy.md](./testing-strategy.md) §2 |
-| Uncommitted state at documentation time | `flutter_app/` deleted in working tree; new `docs/`, `graphify-out/` untracked | README still documents `flutter_app/` |
+| Aspect                                       | Evidence                                                                       | Observation                                                          |
+| -------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| Default branch                               | `main` (`origin/HEAD → origin/main`)                                           | —                                                                    |
+| Remote branches                              | `feature/login`, `juned1`, `juned3`, `vercel`                                  | Person-named and purpose-named branches; no enforced prefix scheme   |
+| Pull requests                                | Merge commit `cd8f4fb` "Merge pull request #2 from junedpatel2005-bit/juned1"  | Only one PR merge in history; most work committed directly to `main` |
+| Commit messages                              | 156 of 163 subjects are `save` (plus `sa`, `sav`, `ave`)                       | No conventional commits; history is not self-describing              |
+| Authors                                      | Predominantly one author (`junedpatel3009-cpu`); 1–2 commits from others       | —                                                                    |
+| History start                                | 2026-08-09 (`9bdbdc9`)                                                         | —                                                                    |
+| PR template / CODEOWNERS / branch protection | Not detected in repo (branch protection is a GitHub setting `[UNKNOWN]`)       | —                                                                    |
+| CI gate on PRs                               | `Quality` workflow: lint, typecheck, build                                     | See [testing-strategy.md](./testing-strategy.md) §2                  |
+| Uncommitted state at documentation time      | `flutter_app/` deleted in working tree; new `docs/`, `graphify-out/` untracked | README still documents `flutter_app/`                                |
 
 **Recommended (not currently practised):** short-lived branches (`feature/…`, `fix/…`), PRs into `main` with CI green, descriptive commit messages, PR description listing DB migrations, env changes and manual verification performed.
 
@@ -178,9 +178,9 @@ The repository has no `migrate dev` script and migration folders use a hand-sequ
 
 ## Relationship to existing docs
 
-| Existing doc | Status |
-|---|---|
-| `README.md` | Accurate for setup; stale for `flutter_app/` (deleted in working tree) and missing `ADMIN_EMAIL`. |
-| `project-docs/src/routes/docs/environment-setup.md` | Obsolete (monorepo, RS256 keys, docker-compose, Supabase Storage). |
-| `project-docs/src/routes/docs/nextjs-port-guide.md`, `M0-tickets.md`, `M1-tickets.md`, `project-delivery-plan.md` | Historical planning; not the current workflow. |
-| `project-docs/src/routes/docs/Coding Standards & Engineering Rules.md` §47–49 (git/PR/CI) | Normative targets not practised (see §6). |
+| Existing doc                                                                                                      | Status                                                                                            |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `README.md`                                                                                                       | Accurate for setup; stale for `flutter_app/` (deleted in working tree) and missing `ADMIN_EMAIL`. |
+| `project-docs/src/routes/docs/environment-setup.md`                                                               | Obsolete (monorepo, RS256 keys, docker-compose, Supabase Storage).                                |
+| `project-docs/src/routes/docs/nextjs-port-guide.md`, `M0-tickets.md`, `M1-tickets.md`, `project-delivery-plan.md` | Historical planning; not the current workflow.                                                    |
+| `project-docs/src/routes/docs/Coding Standards & Engineering Rules.md` §47–49 (git/PR/CI)                         | Normative targets not practised (see §6).                                                         |

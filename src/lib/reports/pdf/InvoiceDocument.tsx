@@ -228,6 +228,11 @@ export function InvoiceDocument({
   grossAmount,
   commissionAmount,
   netAmount,
+  grossLabel = "Gross amount",
+  feeLabel = "Platform commission",
+  netLabel = "Net payable",
+  lineDescription = "Gross payment collected from client",
+  note,
   currency,
   paymentReference,
 }: {
@@ -241,6 +246,11 @@ export function InvoiceDocument({
   grossAmount: number;
   commissionAmount: number;
   netAmount: number;
+  grossLabel?: string;
+  feeLabel?: string;
+  netLabel?: string;
+  lineDescription?: string;
+  note?: string;
   currency: string;
   paymentReference?: string | null;
 }) {
@@ -299,7 +309,7 @@ export function InvoiceDocument({
           <View style={styles.tableRow}>
             <View style={styles.descCol}>
               <Text style={styles.descTitle}>{description}</Text>
-              <Text style={styles.descSub}>Gross payment collected from client</Text>
+              <Text style={styles.descSub}>{lineDescription}</Text>
             </View>
             <Text style={styles.amountCol}>{money(grossAmount)}</Text>
           </View>
@@ -308,16 +318,16 @@ export function InvoiceDocument({
         <View style={styles.summaryWrap}>
           <View style={styles.summaryBox}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Gross amount</Text>
+              <Text style={styles.summaryLabel}>{grossLabel}</Text>
               <Text style={styles.summaryValue}>{money(grossAmount)}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Platform commission</Text>
+              <Text style={styles.summaryLabel}>{feeLabel}</Text>
               <Text style={styles.summaryValue}>-{money(commissionAmount)}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Net payable</Text>
+              <Text style={styles.totalLabel}>{netLabel}</Text>
               <Text style={styles.totalValue}>{money(netAmount)}</Text>
             </View>
           </View>
@@ -326,9 +336,8 @@ export function InvoiceDocument({
         <View style={styles.noteBlock}>
           <Text style={styles.noteTitle}>Note</Text>
           <Text style={styles.noteText}>
-            This invoice reflects a milestone payment processed through the Klick-Pro marketplace.
-            The net payable amount is the sum released to the professional after deducting the
-            platform commission from the gross amount collected from the client.
+            {note ??
+              "This invoice reflects a milestone payment processed through the Klick-Pro marketplace. The net payable amount is the sum released to the professional after deducting the platform commission from the gross amount collected from the client."}
           </Text>
         </View>
 

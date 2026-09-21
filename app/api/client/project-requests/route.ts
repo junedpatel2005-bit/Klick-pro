@@ -10,6 +10,8 @@ const bodySchema = z.object({
   jobId: z.coerce.number().int().positive(),
   professionalId: z.coerce.number().int().positive(),
   bidAmount: z.coerce.number().int().positive(),
+  hourlyRate: z.coerce.number().int().positive().max(1_000_000).optional(),
+  totalJobHours: z.coerce.number().int().positive().max(10_000).optional(),
   duration: z.string().trim().max(100),
   coverLetter: z.string().trim().max(5000).optional().or(z.literal("")),
 });
@@ -38,7 +40,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { jobId, professionalId, bidAmount, duration, coverLetter } = parsed.data;
+  const { jobId, professionalId, duration, coverLetter } = parsed.data;
 
   const job = await db.clientJob.findUnique({ where: { id: jobId } });
   if (!job || job.userId !== clientId) {
@@ -64,6 +66,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const hourlyProjectTotal =
+    job.timingType === "HOURLY" && parsed.data.hourlyRate && parsed.data.totalJobHours
+      ? parsed.data.hourlyRate * parsed.data.totalJobHours
+      : null;
+  if (job.timingType === "HOURLY" && hourlyProjectTotal === null)
+    return NextResponse.json(
+      { error: "Enter both an hourly rate and total job hours." },
+      { status: 400 },
+    );
+  if (hourlyProjectTotal !== null && hourlyProjectTotal > MAX_HIRE_REQUEST_BUDGET)
+    return NextResponse.json({ error: "Project total is too high." }, { status: 400 });
+  const bidAmount = hourlyProjectTotal ?? parsed.data.bidAmount;
   if (job.timingType !== "HOURLY" && job.budgetMin !== null && job.budgetMax !== null) {
     if (bidAmount < job.budgetMin || bidAmount > job.budgetMax) {
       return NextResponse.json(
@@ -100,6 +114,8 @@ export async function POST(request: NextRequest) {
       clientId,
       professionalId,
       bidAmount,
+      hourlyRate: job.timingType === "HOURLY" ? parsed.data.hourlyRate : null,
+      totalJobHours: job.timingType === "HOURLY" ? parsed.data.totalJobHours : null,
       duration,
       coverLetter: coverLetter || "",
       status: "PENDING",

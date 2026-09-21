@@ -2,40 +2,40 @@
 
 Last verified against code: 2026-09-16 (commit cd8f4fb); runtime-validated 2026-09-17
 
-| Field | Value |
-|---|---|
-| Brand | **Klick-Pro** (npm package `servio`; CSS/event prefixes `servio-`) |
-| Styling engine | Tailwind CSS `^4.2.1` via `@tailwindcss/postcss` (`postcss.config.mjs`). No `tailwind.config.*`; configuration lives in CSS. |
-| Token source | `src/styles.css` (554 lines) |
-| Component kit | shadcn/ui (`components.json`: style `new-york`, base colour `slate`, CSS variables, `rsc: false`, icon library `lucide`) on Radix primitives |
-| Variants / class merge | `class-variance-authority`, `cn()` in `src/lib/utils.ts:4` (clsx + tailwind-merge) |
-| Icons | `lucide-react ^0.575.0` (imported in 81 files) |
-| Toasts | `sonner ^2.0.7` |
-| Skeletons | `react-loading-skeleton ^3.5.0` via `src/components/LoadingSkeleton.tsx` |
-| Animation | `tw-animate-css` + custom keyframes in `src/styles.css` |
-| Related | [ui-specification.md](./ui-specification.md), [screen-inventory.md](./screen-inventory.md) |
+| Field                  | Value                                                                                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Brand                  | **Klick-Pro** (npm package `servio`; CSS/event prefixes `servio-`)                                                                           |
+| Styling engine         | Tailwind CSS `^4.2.1` via `@tailwindcss/postcss` (`postcss.config.mjs`). No `tailwind.config.*`; configuration lives in CSS.                 |
+| Token source           | `src/styles.css` (554 lines)                                                                                                                 |
+| Component kit          | shadcn/ui (`components.json`: style `new-york`, base colour `slate`, CSS variables, `rsc: false`, icon library `lucide`) on Radix primitives |
+| Variants / class merge | `class-variance-authority`, `cn()` in `src/lib/utils.ts:4` (clsx + tailwind-merge)                                                           |
+| Icons                  | `lucide-react ^0.575.0` (imported in 81 files)                                                                                               |
+| Toasts                 | `sonner ^2.0.7`                                                                                                                              |
+| Skeletons              | `react-loading-skeleton ^3.5.0` via `src/components/LoadingSkeleton.tsx`                                                                     |
+| Animation              | `tw-animate-css` + custom keyframes in `src/styles.css`                                                                                      |
+| Related                | [ui-specification.md](./ui-specification.md), [screen-inventory.md](./screen-inventory.md)                                                   |
 
 ---
 
 ## 1. CSS entry and structure (`src/styles.css`)
 
-| Lines | Block | Purpose | Live? |
-|---|---|---|---|
-| 1-3 | `@import "tailwindcss" source(none)`; `@source "../src"`; `@source "../app"` | Tailwind 4 with explicit content sources | Yes |
-| 5-86 | `.cms-editor .ck…`, `.cms-input`, `.cms-public-content …` | CKEditor-era CMS styles | **Dead**: no component uses these classes and CKEditor is not imported |
-| 88-113 | `.cms-live-editable`, admin document-preview close button override (`.fixed .mt-6.w-full.border…`), `body:has(.cms-live-editable)` | CMS inline editing outline; brittle structural selector hack | `.cms-live-editable` is referenced nowhere outside `src/styles.css` (dead); the structural hack may still match [NEEDS VALIDATION] |
-| 115-156 | `.cms-format-toolbar`, `.cms-format-btn*`, `.cms-visual-editor-actions-moved` | Floating B/I/U toolbar | **Dead**: not referenced outside `src/styles.css` |
-| 157-239 | `[data-admin-theme="light"] …` overrides | Admin light theme that remaps a legacy dark admin palette | **Dead**: no element sets `data-admin-theme` |
-| 241-267 | `.cms-db-section*` | Greyed DB-driven sections in the CMS canvas | **Dead**: not referenced outside `src/styles.css` |
-| 269-290 | `.admin-job-details-scroll` | Custom scrollbar for admin job/dispute modals | Yes (`app/admin/operations/page.tsx:859,1161`) |
-| 291 | `@import "tw-animate-css"` | Radix enter/exit animation utilities | Placed **after** rules, but Tailwind's build **does inline it**: built CSS contains `@keyframes enter` and `.animate-in` [CORRECTED 2026-09-17 · [V-03](../validation/LOCAL_VALIDATION_LOG.md)] |
-| 293 | `@custom-variant dark (&:is(.dark *))` | Class-based dark mode | Defined, never activated (§3.3) |
-| 295-342 | `@theme inline { … }` | Maps CSS variables to Tailwind tokens (colours, radii, fonts, shadows) | Yes |
-| 344-407 | `:root { … }` | Light theme values (OKLCH) | Yes |
-| 409-428 | `.dark { … }` | Dark theme values (partial) | Never applied |
-| 430-451 | `@layer base` | Border colour default, body font/colours, heading font | Yes |
-| 453-481 | `@layer utilities` | `.text-balance`, `.font-display`, `.gradient-hero`, `.gradient-primary`, `.gradient-cta`, `.grid-bg` | Partly (§6) |
-| 483-554 | `@keyframes` + utilities | `fade-in`, `slide-up`, `scale-in`, `login-button-shimmer`, `login-dot` | Login screens |
+| Lines   | Block                                                                                                                              | Purpose                                                                                              | Live?                                                                                                                                                                                           |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1-3     | `@import "tailwindcss" source(none)`; `@source "../src"`; `@source "../app"`                                                       | Tailwind 4 with explicit content sources                                                             | Yes                                                                                                                                                                                             |
+| 5-86    | `.cms-editor .ck…`, `.cms-input`, `.cms-public-content …`                                                                          | CKEditor-era CMS styles                                                                              | **Dead**: no component uses these classes and CKEditor is not imported                                                                                                                          |
+| 88-113  | `.cms-live-editable`, admin document-preview close button override (`.fixed .mt-6.w-full.border…`), `body:has(.cms-live-editable)` | CMS inline editing outline; brittle structural selector hack                                         | `.cms-live-editable` is referenced nowhere outside `src/styles.css` (dead); the structural hack may still match [NEEDS VALIDATION]                                                              |
+| 115-156 | `.cms-format-toolbar`, `.cms-format-btn*`, `.cms-visual-editor-actions-moved`                                                      | Floating B/I/U toolbar                                                                               | **Dead**: not referenced outside `src/styles.css`                                                                                                                                               |
+| 157-239 | `[data-admin-theme="light"] …` overrides                                                                                           | Admin light theme that remaps a legacy dark admin palette                                            | **Dead**: no element sets `data-admin-theme`                                                                                                                                                    |
+| 241-267 | `.cms-db-section*`                                                                                                                 | Greyed DB-driven sections in the CMS canvas                                                          | **Dead**: not referenced outside `src/styles.css`                                                                                                                                               |
+| 269-290 | `.admin-job-details-scroll`                                                                                                        | Custom scrollbar for admin job/dispute modals                                                        | Yes (`app/admin/operations/page.tsx:859,1161`)                                                                                                                                                  |
+| 291     | `@import "tw-animate-css"`                                                                                                         | Radix enter/exit animation utilities                                                                 | Placed **after** rules, but Tailwind's build **does inline it**: built CSS contains `@keyframes enter` and `.animate-in` [CORRECTED 2026-09-17 · [V-03](../validation/LOCAL_VALIDATION_LOG.md)] |
+| 293     | `@custom-variant dark (&:is(.dark *))`                                                                                             | Class-based dark mode                                                                                | Defined, never activated (§3.3)                                                                                                                                                                 |
+| 295-342 | `@theme inline { … }`                                                                                                              | Maps CSS variables to Tailwind tokens (colours, radii, fonts, shadows)                               | Yes                                                                                                                                                                                             |
+| 344-407 | `:root { … }`                                                                                                                      | Light theme values (OKLCH)                                                                           | Yes                                                                                                                                                                                             |
+| 409-428 | `.dark { … }`                                                                                                                      | Dark theme values (partial)                                                                          | Never applied                                                                                                                                                                                   |
+| 430-451 | `@layer base`                                                                                                                      | Border colour default, body font/colours, heading font                                               | Yes                                                                                                                                                                                             |
+| 453-481 | `@layer utilities`                                                                                                                 | `.text-balance`, `.font-display`, `.gradient-hero`, `.gradient-primary`, `.gradient-cta`, `.grid-bg` | Partly (§6)                                                                                                                                                                                     |
+| 483-554 | `@keyframes` + utilities                                                                                                           | `fade-in`, `slide-up`, `scale-in`, `login-button-shimmer`, `login-dot`                               | Login screens                                                                                                                                                                                   |
 
 ---
 
@@ -43,58 +43,60 @@ Last verified against code: 2026-09-16 (commit cd8f4fb); runtime-validated 2026-
 
 ### 2.1 Tailwind token → CSS variable mapping
 
-| Tailwind token family | Tokens |
-|---|---|
-| Colours | `background`, `foreground`, `card(-foreground)`, `popover(-foreground)`, `primary(-foreground)`, `secondary(-foreground)`, `muted(-foreground)`, `accent(-foreground)`, `destructive(-foreground)`, `border`, `input`, `ring`, **`success(-foreground)`**, **`warning(-foreground)`**, **`surface`**, **`ink(-foreground)`**, **`cta(-foreground)`**, `sidebar*` (8) |
-| Fonts | `--font-sans: "Inter", "Open Sans", ui-sans-serif, system-ui, sans-serif`; `--font-display: "Poppins", "Inter", ui-sans-serif, sans-serif` |
-| Radius | `--radius: 0.875rem` (14px); `sm` = radius − 4px (10px), `md` − 2px (12px), `lg` = 14px, `xl` + 4px (18px), `2xl` + 8px (22px) |
-| Shadows | `shadow-soft`, `shadow-card`, `shadow-elevated` (slate-tinted `rgb(15 23 42 / …)`) |
-| Chart colours | `--chart-1..5` in `:root` only; not mapped into `@theme` (only used by the unused `ui/chart.tsx`) |
-| Breakpoints | Not customised, so Tailwind defaults apply (§8) |
+| Tailwind token family | Tokens                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Colours               | `background`, `foreground`, `card(-foreground)`, `popover(-foreground)`, `primary(-foreground)`, `secondary(-foreground)`, `muted(-foreground)`, `accent(-foreground)`, `destructive(-foreground)`, `border`, `input`, `ring`, **`success(-foreground)`**, **`warning(-foreground)`**, **`surface`**, **`ink(-foreground)`**, **`cta(-foreground)`**, `sidebar*` (8) |
+| Fonts                 | `--font-sans: "Inter", "Open Sans", ui-sans-serif, system-ui, sans-serif`; `--font-display: "Poppins", "Inter", ui-sans-serif, sans-serif`                                                                                                                                                                                                                           |
+| Radius                | `--radius: 0.875rem` (14px); `sm` = radius − 4px (10px), `md` − 2px (12px), `lg` = 14px, `xl` + 4px (18px), `2xl` + 8px (22px)                                                                                                                                                                                                                                       |
+| Shadows               | `shadow-soft`, `shadow-card`, `shadow-elevated` (slate-tinted `rgb(15 23 42 / …)`)                                                                                                                                                                                                                                                                                   |
+| Chart colours         | `--chart-1..5` in `:root` only; not mapped into `@theme` (only used by the unused `ui/chart.tsx`)                                                                                                                                                                                                                                                                    |
+| Breakpoints           | Not customised, so Tailwind defaults apply (§8)                                                                                                                                                                                                                                                                                                                      |
 
 Bold entries are project-specific additions on top of shadcn.
 
 ### 2.2 Light palette (`:root`, `src/styles.css:344-407`)
 
-| Variable | Value | Intended role (comments in CSS + legacy doc) |
-|---|---|---|
-| `--background` | `oklch(0.985 0.003 247)` | Soft grey page background |
-| `--surface` / `--card` / `--popover` | `oklch(1 0 0)` | White surfaces |
-| `--foreground` | `oklch(0.21 0.05 264)` | Body text |
-| `--ink` / `--ink-foreground` | `oklch(0.27 0.1 263)` / `oklch(0.985 0.003 247)` | Deep blue dark sections |
-| `--primary` / `--primary-foreground` | `oklch(0.42 0.17 263)` / `oklch(0.99 0.005 247)` | Deep blue: trust, brand, links, focus |
-| `--secondary`, `--muted` | `oklch(0.965 0.008 247)` | Neutral fills |
-| `--muted-foreground` | `oklch(0.5 0.03 257)` | Secondary text |
-| `--accent` / `--accent-foreground` | `oklch(0.95 0.02 263)` / `oklch(0.27 0.1 263)` | Soft blue tint |
-| `--cta` / `--cta-foreground` | `oklch(0.72 0.19 51)` / `oklch(0.99 0.005 247)` | Orange primary-action colour |
-| `--destructive` | `oklch(0.62 0.23 27)` | Red |
-| `--success` | `oklch(0.66 0.17 150)` | Green: verified/completed |
-| `--warning` / `--warning-foreground` | `oklch(0.8 0.17 80)` / `oklch(0.2 0.05 80)` | Amber: pending, stars |
-| `--border`, `--input` | `oklch(0.92 0.01 255)` | Hairlines |
-| `--ring` | `oklch(0.42 0.17 263)` | Focus ring = primary |
-| `--sidebar*` | white / primary / muted equivalents | shadcn sidebar (unused component) |
+| Variable                             | Value                                            | Intended role (comments in CSS + legacy doc) |
+| ------------------------------------ | ------------------------------------------------ | -------------------------------------------- |
+| `--background`                       | `oklch(0.985 0.003 247)`                         | Soft grey page background                    |
+| `--surface` / `--card` / `--popover` | `oklch(1 0 0)`                                   | White surfaces                               |
+| `--foreground`                       | `oklch(0.21 0.05 264)`                           | Body text                                    |
+| `--ink` / `--ink-foreground`         | `oklch(0.27 0.1 263)` / `oklch(0.985 0.003 247)` | Deep blue dark sections                      |
+| `--primary` / `--primary-foreground` | `oklch(0.42 0.17 263)` / `oklch(0.99 0.005 247)` | Deep blue: trust, brand, links, focus        |
+| `--secondary`, `--muted`             | `oklch(0.965 0.008 247)`                         | Neutral fills                                |
+| `--muted-foreground`                 | `oklch(0.5 0.03 257)`                            | Secondary text                               |
+| `--accent` / `--accent-foreground`   | `oklch(0.95 0.02 263)` / `oklch(0.27 0.1 263)`   | Soft blue tint                               |
+| `--cta` / `--cta-foreground`         | `oklch(0.72 0.19 51)` / `oklch(0.99 0.005 247)`  | Orange primary-action colour                 |
+| `--destructive`                      | `oklch(0.62 0.23 27)`                            | Red                                          |
+| `--success`                          | `oklch(0.66 0.17 150)`                           | Green: verified/completed                    |
+| `--warning` / `--warning-foreground` | `oklch(0.8 0.17 80)` / `oklch(0.2 0.05 80)`      | Amber: pending, stars                        |
+| `--border`, `--input`                | `oklch(0.92 0.01 255)`                           | Hairlines                                    |
+| `--ring`                             | `oklch(0.42 0.17 263)`                           | Focus ring = primary                         |
+| `--sidebar*`                         | white / primary / muted equivalents              | shadcn sidebar (unused component)            |
 
 ---
 
 ## 3. Theming modes
 
 ### 3.1 Public and portal theme
+
 Token-based (`bg-background`, `bg-card`, `text-primary`, `bg-cta`, `shadow-soft`, `rounded-2xl`, `font-display`). `bg-primary`/`text-primary` appear 362 times in 58 files, `shadow-soft|card|elevated` 123 times, `rounded-2xl` 299 times, `rounded-3xl` 73 times.
 
 ### 3.2 Admin theme (separate, hard-coded)
+
 The admin console does **not** use the semantic tokens. It uses raw Tailwind `slate-*` / `indigo-*` / `emerald-*` utilities: 1,476 `slate|indigo` class occurrences in 26 files, led by `CmsEditor` (247), `admin/operations` (177), `AdminNotificationCenter` (145), `admin/finance` (128). Shell: `AdminPortal` uses `bg-slate-50/70 text-slate-900 selection:bg-indigo-100`, and `AdminSidebar` uses an indigo gradient brand tile, a "PRO" chip and "Enterprise Control Suite" (`src/components/AdminSidebar.tsx:132-148`).
 
 **Leakage:** the same admin palette is used by user-facing `NotificationInbox` (145 occurrences) and public `ServicesCatalog` (117), so those screens look different from the rest of the portal and the marketing site.
 
 ### 3.3 Dark mode status: defined, not implemented
 
-| Evidence | Finding |
-|---|---|
-| `@custom-variant dark (&:is(.dark *))` + `.dark {…}` | Class-based dark tokens exist |
-| Grep for `"dark"`, `classList`, `next-themes`, theme toggle | **No code adds the `dark` class.** No theme provider or toggle. |
-| `.dark` block | Overrides only background/surface/foreground/card/popover/primary/secondary/muted/accent/border/input/ring. **Missing:** `ink`, `cta`, `destructive`, `success`, `warning`, `sidebar*`, `chart*`. |
-| `dark:` utilities | 37 occurrences in 8 files (tracking page 18, `MessagesWorkspace` 7, `professional-profile` 6, …), all currently inert |
-| Legacy dark admin palette | `bg-[#0b1020]`-style classes remain in `MessagesWorkspace` (8) and `WebsitePagePreview` (1). The `[data-admin-theme="light"]` remap exists but is never triggered. |
+| Evidence                                                    | Finding                                                                                                                                                                                           |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@custom-variant dark (&:is(.dark *))` + `.dark {…}`        | Class-based dark tokens exist                                                                                                                                                                     |
+| Grep for `"dark"`, `classList`, `next-themes`, theme toggle | **No code adds the `dark` class.** No theme provider or toggle.                                                                                                                                   |
+| `.dark` block                                               | Overrides only background/surface/foreground/card/popover/primary/secondary/muted/accent/border/input/ring. **Missing:** `ink`, `cta`, `destructive`, `success`, `warning`, `sidebar*`, `chart*`. |
+| `dark:` utilities                                           | 37 occurrences in 8 files (tracking page 18, `MessagesWorkspace` 7, `professional-profile` 6, …), all currently inert                                                                             |
+| Legacy dark admin palette                                   | `bg-[#0b1020]`-style classes remain in `MessagesWorkspace` (8) and `WebsitePagePreview` (1). The `[data-admin-theme="light"]` remap exists but is never triggered.                                |
 
 **Status:** Dark mode is Planned/Unknown (tokens only). The UI ships light-only.
 
@@ -102,14 +104,14 @@ The admin console does **not** use the semantic tokens. It uses raw Tailwind `sl
 
 ## 4. Typography
 
-| Aspect | Implementation | Evidence |
-|---|---|---|
-| Body font | `Inter, Open Sans, ui-sans-serif, system-ui` on `html` and `body` (antialiased) | `src/styles.css:434-442` |
-| Heading font | `h1–h5` use `var(--font-display)` = Poppins, with `letter-spacing: -0.02em`. `.font-display` utility (117 uses in 41 files). | `src/styles.css:443-450, 457-460` |
-| **Font loading** | **None.** No `next/font`, no Google Fonts `<link>`, no `@font-face`, no font files in `public/`. CSP `font-src 'self' data:` (`next.config.ts:9`) would also block Google Fonts. | grep |
+| Aspect              | Implementation                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Evidence                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| Body font           | `Inter, Open Sans, ui-sans-serif, system-ui` on `html` and `body` (antialiased)                                                                                                                                                                                                                                                                                                                                                                                           | `src/styles.css:434-442`          |
+| Heading font        | `h1–h5` use `var(--font-display)` = Poppins, with `letter-spacing: -0.02em`. `.font-display` utility (117 uses in 41 files).                                                                                                                                                                                                                                                                                                                                              | `src/styles.css:443-450, 457-460` |
+| **Font loading**    | **None.** No `next/font`, no Google Fonts `<link>`, no `@font-face`, no font files in `public/`. CSP `font-src 'self' data:` (`next.config.ts:9`) would also block Google Fonts.                                                                                                                                                                                                                                                                                          | grep                              |
 | Effective rendering | Inter/Poppins render only if installed on the device. Otherwise the stack falls back to `ui-sans-serif`/`system-ui`. Browser check on `/pricing`: no Inter/Poppins `@font-face` in `document.fonts` (built CSS has 0 `@font-face`), and text measured identically with the Inter, Poppins and `system-ui` stacks → system fallback font is rendered [VALIDATED 2026-09-17 · [V-50](../validation/LOCAL_VALIDATION_LOG.md), [V-03](../validation/LOCAL_VALIDATION_LOG.md)] |
-| Scale | Tailwind default sizes. Common patterns: page H1 `font-display text-3xl font-bold tracking-tight` (`PortalShell.tsx:99`); marketing hero `text-4xl md:text-5xl` (`app/blog/page.tsx`); auth title `text-3xl font-semibold` (`AuthLayout.tsx:39`); micro-labels `text-[10px]`/`text-[11px]` uppercase in admin and nav | files cited |
-| Numerals/currency | `Intl.NumberFormat("en-IN", { currency: "INR" })` pattern (`en-IN|INR|₹` appear 314 times in 44 files) | e.g. `app/(portal)/professional-profile/page.tsx:27-35` |
+| Scale               | Tailwind default sizes. Common patterns: page H1 `font-display text-3xl font-bold tracking-tight` (`PortalShell.tsx:99`); marketing hero `text-4xl md:text-5xl` (`app/blog/page.tsx`); auth title `text-3xl font-semibold` (`AuthLayout.tsx:39`); micro-labels `text-[10px]`/`text-[11px]` uppercase in admin and nav                                                                                                                                                     | files cited                       |
+| Numerals/currency   | `Intl.NumberFormat("en-IN", { currency: "INR" })` pattern (`en-IN                                                                                                                                                                                                                                                                                                                                                                                                         | INR                               | ₹` appear 314 times in 44 files) | e.g. `app/(portal)/professional-profile/page.tsx:27-35` |
 
 ---
 
@@ -117,35 +119,35 @@ The admin console does **not** use the semantic tokens. It uses raw Tailwind `sl
 
 "Importers" counts files importing `@/components/ui/<name>`, from a grep over `app/` and `src/`.
 
-| Primitive | Importers | Status |
-|---|---|---|
-| `button` | 48 (incl. other primitives) | **Used** |
-| `input` | 18 | **Used** |
-| `label` | 12 | **Used** |
-| `dialog` | 10 | **Used** |
-| `avatar` | 4 (`AppNavigation`, `ClientAccountMenu`, `ClientMyInfoPage`, `ClientProfilePage`) | **Used** |
-| `badge` | 2 (`professional-profile` page, `professional/dashboard`) | **Used** |
-| `dropdown-menu` | 2 (`ClientAccountMenu`, `ExportMenu`) | **Used** |
-| `textarea` | 2 (`ProfessionalProfileSetup`, `pro.$proId`) | **Used** |
-| `alert-dialog` | 1 (`ClientProfilePage`) | **Used** |
-| `card` | 1 (`ClientMyInfoPage`) | **Used** |
-| `checkbox` | 1 (`SelectableReportTable`) | **Used** |
-| `select` | 1 (`pro.$proId`) | **Used** |
-| `sonner` | 1 (`providers.tsx`) | **Used** |
-| `table` | 1 (`SelectableReportTable`) | **Used** |
-| `tabs` | 1 (project tracking page) | **Used** |
-| `separator`, `sheet`, `skeleton`, `tooltip` | 1 each, only `ui/sidebar` | Effectively unused (parent unused) |
-| `toggle` | 1, only `ui/toggle-group` | Effectively unused |
-| `accordion`, `alert`, `aspect-ratio`, `breadcrumb`, `calendar`, `carousel`, `chart`, `collapsible`, `command`, `context-menu`, `drawer`, `form`, `hover-card`, `input-otp`, `menubar`, `navigation-menu`, `pagination`, `popover`, `progress`, `radio-group`, `resizable`, `scroll-area`, `sidebar`, `slider`, `switch`, `toggle-group` | 0 | **Unused (26)** |
+| Primitive                                                                                                                                                                                                                                                                                                                               | Importers                                                                         | Status                             |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------- |
+| `button`                                                                                                                                                                                                                                                                                                                                | 48 (incl. other primitives)                                                       | **Used**                           |
+| `input`                                                                                                                                                                                                                                                                                                                                 | 18                                                                                | **Used**                           |
+| `label`                                                                                                                                                                                                                                                                                                                                 | 12                                                                                | **Used**                           |
+| `dialog`                                                                                                                                                                                                                                                                                                                                | 10                                                                                | **Used**                           |
+| `avatar`                                                                                                                                                                                                                                                                                                                                | 4 (`AppNavigation`, `ClientAccountMenu`, `ClientMyInfoPage`, `ClientProfilePage`) | **Used**                           |
+| `badge`                                                                                                                                                                                                                                                                                                                                 | 2 (`professional-profile` page, `professional/dashboard`)                         | **Used**                           |
+| `dropdown-menu`                                                                                                                                                                                                                                                                                                                         | 2 (`ClientAccountMenu`, `ExportMenu`)                                             | **Used**                           |
+| `textarea`                                                                                                                                                                                                                                                                                                                              | 2 (`ProfessionalProfileSetup`, `pro.$proId`)                                      | **Used**                           |
+| `alert-dialog`                                                                                                                                                                                                                                                                                                                          | 1 (`ClientProfilePage`)                                                           | **Used**                           |
+| `card`                                                                                                                                                                                                                                                                                                                                  | 1 (`ClientMyInfoPage`)                                                            | **Used**                           |
+| `checkbox`                                                                                                                                                                                                                                                                                                                              | 1 (`SelectableReportTable`)                                                       | **Used**                           |
+| `select`                                                                                                                                                                                                                                                                                                                                | 1 (`pro.$proId`)                                                                  | **Used**                           |
+| `sonner`                                                                                                                                                                                                                                                                                                                                | 1 (`providers.tsx`)                                                               | **Used**                           |
+| `table`                                                                                                                                                                                                                                                                                                                                 | 1 (`SelectableReportTable`)                                                       | **Used**                           |
+| `tabs`                                                                                                                                                                                                                                                                                                                                  | 1 (project tracking page)                                                         | **Used**                           |
+| `separator`, `sheet`, `skeleton`, `tooltip`                                                                                                                                                                                                                                                                                             | 1 each, only `ui/sidebar`                                                         | Effectively unused (parent unused) |
+| `toggle`                                                                                                                                                                                                                                                                                                                                | 1, only `ui/toggle-group`                                                         | Effectively unused                 |
+| `accordion`, `alert`, `aspect-ratio`, `breadcrumb`, `calendar`, `carousel`, `chart`, `collapsible`, `command`, `context-menu`, `drawer`, `form`, `hover-card`, `input-otp`, `menubar`, `navigation-menu`, `pagination`, `popover`, `progress`, `radio-group`, `resizable`, `scroll-area`, `sidebar`, `slider`, `switch`, `toggle-group` | 0                                                                                 | **Unused (26)**                    |
 
 **Summary:** 15 primitives in real use, 31 unused or effectively unused. Dependencies installed only for unused primitives: `react-day-picker` (calendar), `embla-carousel-react` (carousel), `recharts` (chart), `cmdk` (command), `vaul` (drawer), `react-hook-form` + `@hookform/resolvers` (form), `input-otp`, `react-resizable-panels` (resizable), and Radix packages for accordion, aspect-ratio, collapsible, context-menu, hover-card, menubar, navigation-menu, popover, progress, radio-group, scroll-area, slider, switch, toggle(-group). `@tanstack/react-query` and `@ckeditor/*` are also unused.
 
 ### 5.1 Variant definitions (as shipped)
 
-| Primitive | Variants | Notes |
-|---|---|---|
+| Primitive                       | Variants                                                                                                                                 | Notes                                                                                                                                                                       |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Button` (`ui/button.tsx:7-34`) | `default` (bg-primary), `destructive`, `outline`, `secondary`, `ghost`, `link`; sizes `default h-9`, `sm h-8`, `lg h-10`, `icon h-9 w-9` | Base `rounded-md`; `focus-visible:ring-1 ring-ring`. **No `cta` variant**, so orange CTAs are hand-styled with `bg-cta`/`gradient-cta` (64 `cta` utility uses in 16 files). |
-| `Badge` (`ui/badge.tsx:6-22`) | `default`, `secondary`, `destructive`, `outline` | No `success`/`warning` variant, so verified/pending chips are hand-styled (e.g. `professional-profile/page.tsx` `getVerificationBadge`) |
+| `Badge` (`ui/badge.tsx:6-22`)   | `default`, `secondary`, `destructive`, `outline`                                                                                         | No `success`/`warning` variant, so verified/pending chips are hand-styled (e.g. `professional-profile/page.tsx` `getVerificationBadge`)                                     |
 
 Hand-rolled buttons and chips are common. Class strings with `rounded-xl`/`rounded-2xl` override the 14px-derived `rounded-md` from primitives.
 
@@ -153,16 +155,16 @@ Hand-rolled buttons and chips are common. Class strings with `rounded-xl`/`round
 
 ## 6. Utilities, elevation, motion
 
-| Utility | Definition | Usage |
-|---|---|---|
-| `.gradient-hero` | Orange + blue radial glows over a background→surface gradient | 8 files (marketing heroes, `AuthLayout` aside, `/blog`) |
-| `.gradient-primary` | primary → `oklch(0.55 0.2 263)` | **0 uses** |
-| `.gradient-cta` | cta → `oklch(0.78 0.18 38)` | counted within the 64 `cta` uses (§5.1) |
-| `.grid-bg` | 48px grid with radial mask | **0 uses** |
-| `.text-balance` | `text-wrap: balance` | not audited |
-| Card hover signature | `hover:-translate-y-1 hover:border-primary/30 hover:shadow-elevated` | `src/components/ProCard.tsx:24` |
-| Login animations | `animate-fade-in`, `animate-slide-up`, `animate-scale-in`, `animate-login-button-shimmer`, `animate-login-dot` | login screens |
-| `animate-pulse` placeholders | Tailwind built-in | 45 uses in 29 files |
+| Utility                      | Definition                                                                                                     | Usage                                                   |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `.gradient-hero`             | Orange + blue radial glows over a background→surface gradient                                                  | 8 files (marketing heroes, `AuthLayout` aside, `/blog`) |
+| `.gradient-primary`          | primary → `oklch(0.55 0.2 263)`                                                                                | **0 uses**                                              |
+| `.gradient-cta`              | cta → `oklch(0.78 0.18 38)`                                                                                    | counted within the 64 `cta` uses (§5.1)                 |
+| `.grid-bg`                   | 48px grid with radial mask                                                                                     | **0 uses**                                              |
+| `.text-balance`              | `text-wrap: balance`                                                                                           | not audited                                             |
+| Card hover signature         | `hover:-translate-y-1 hover:border-primary/30 hover:shadow-elevated`                                           | `src/components/ProCard.tsx:24`                         |
+| Login animations             | `animate-fade-in`, `animate-slide-up`, `animate-scale-in`, `animate-login-button-shimmer`, `animate-login-dot` | login screens                                           |
+| `animate-pulse` placeholders | Tailwind built-in                                                                                              | 45 uses in 29 files                                     |
 
 ---
 
@@ -170,22 +172,22 @@ Hand-rolled buttons and chips are common. Class strings with `rounded-xl`/`round
 
 ### 7.1 Toasts (sonner)
 
-| Aspect | Implementation | Evidence |
-|---|---|---|
-| Mount | `<Toaster position="top-right" offset="76px" duration={4500} closeButton richColors toastOptions.classNames.toast="w-[min(380px,calc(100vw-2rem))]">` | `src/components/providers.tsx:12-23` |
-| Styling | `ui/sonner.tsx` forces a dark card (`bg-slate-950 text-white border-slate-800 rounded-2xl shadow-2xl`) with transparent action/cancel buttons. This conflicts with `richColors` (coloured success/error variants). Observed: admin realtime notification toasts render as **white cards** (background rgb(255,255,255), text rgb(23,23,23), radius 8px), i.e. not the forced dark card; plain `toast.success/error` styling was not observed [PARTIALLY VALIDATED 2026-09-17 · [V-55](../validation/LOCAL_VALIDATION_LOG.md)]. | `src/components/ui/sonner.tsx:9-22` |
-| Convention | Notification toasts use an emerald `CircleCheck` icon, an action button labelled by context ("View Project", "Review Proposal", "Inspect KYC", …) and a "Dismiss all" cancel | `RealtimeNotifications.tsx:23-55`, `AdminRealtime.tsx:20-53` |
-| Adoption | `toast()` is called in only 3 files. Form and mutation feedback mostly uses inline text or `alert()`. | [ui-specification.md §11](./ui-specification.md) |
+| Aspect     | Implementation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Evidence                                                     |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| Mount      | `<Toaster position="top-right" offset="76px" duration={4500} closeButton richColors toastOptions.classNames.toast="w-[min(380px,calc(100vw-2rem))]">`                                                                                                                                                                                                                                                                                                                                                                          | `src/components/providers.tsx:12-23`                         |
+| Styling    | `ui/sonner.tsx` forces a dark card (`bg-slate-950 text-white border-slate-800 rounded-2xl shadow-2xl`) with transparent action/cancel buttons. This conflicts with `richColors` (coloured success/error variants). Observed: admin realtime notification toasts render as **white cards** (background rgb(255,255,255), text rgb(23,23,23), radius 8px), i.e. not the forced dark card; plain `toast.success/error` styling was not observed [PARTIALLY VALIDATED 2026-09-17 · [V-55](../validation/LOCAL_VALIDATION_LOG.md)]. | `src/components/ui/sonner.tsx:9-22`                          |
+| Convention | Notification toasts use an emerald `CircleCheck` icon, an action button labelled by context ("View Project", "Review Proposal", "Inspect KYC", …) and a "Dismiss all" cancel                                                                                                                                                                                                                                                                                                                                                   | `RealtimeNotifications.tsx:23-55`, `AdminRealtime.tsx:20-53` |
+| Adoption   | `toast()` is called in only 3 files. Form and mutation feedback mostly uses inline text or `alert()`.                                                                                                                                                                                                                                                                                                                                                                                                                          | [ui-specification.md §11](./ui-specification.md)             |
 
 ### 7.2 Skeleton conventions
 
-| Component | Shape | Where |
-|---|---|---|
-| `AppSkeleton` | `SkeletonTheme baseColor=var(--color-muted) highlightColor=var(--color-card)` | wrapper for all below |
-| `CardListSkeleton({count=3})` | Bordered `rounded-2xl` cards, 44px circle + two text lines + button stub | `/discover` loading, `SelectableReportTable` |
-| `DashboardSkeleton` | 4 KPI tiles (142px, radius 16) + 360px panel | `/dashboard`, `/professional/*`, `/project/*` loading |
-| `PageSkeleton` | Eyebrow + title + lede + 6-card grid | root, `/pro/[proId]` loading |
-| `AdminPageSkeleton` | Admin header lines + 4 tiles + panel | `/admin/*` loading |
+| Component                     | Shape                                                                         | Where                                                 |
+| ----------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `AppSkeleton`                 | `SkeletonTheme baseColor=var(--color-muted) highlightColor=var(--color-card)` | wrapper for all below                                 |
+| `CardListSkeleton({count=3})` | Bordered `rounded-2xl` cards, 44px circle + two text lines + button stub      | `/discover` loading, `SelectableReportTable`          |
+| `DashboardSkeleton`           | 4 KPI tiles (142px, radius 16) + 360px panel                                  | `/dashboard`, `/professional/*`, `/project/*` loading |
+| `PageSkeleton`                | Eyebrow + title + lede + 6-card grid                                          | root, `/pro/[proId]` loading                          |
+| `AdminPageSkeleton`           | Admin header lines + 4 tiles + panel                                          | `/admin/*` loading                                    |
 
 All skeleton containers set `role="status"` and a descriptive `aria-label` (`LoadingSkeleton.tsx:16,40,58,78`). `ui/skeleton.tsx` (shadcn) is not used directly. Spinners use lucide `Loader2` with `animate-spin` (30 uses in 10 files).
 
@@ -193,50 +195,50 @@ All skeleton containers set `role="status"` and a descriptive `aria-label` (`Loa
 
 ## 8. Responsive design
 
-| Aspect | Finding | Evidence |
-|---|---|---|
-| Breakpoints | Tailwind defaults: `sm` 640, `md` 768, `lg` 1024, `xl` 1280, `2xl` 1536 (no custom `--breakpoint-*`) | `src/styles.css` `@theme` |
-| Usage frequency | `sm:` 482, `lg:` 166, `md:` 57, `xl:` 17, `2xl:` 0 | grep over app/ + src/ |
+| Aspect                | Finding                                                                                                                                                              | Evidence                                                                                          |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Breakpoints           | Tailwind defaults: `sm` 640, `md` 768, `lg` 1024, `xl` 1280, `2xl` 1536 (no custom `--breakpoint-*`)                                                                 | `src/styles.css` `@theme`                                                                         |
+| Usage frequency       | `sm:` 482, `lg:` 166, `md:` 57, `xl:` 17, `2xl:` 0                                                                                                                   | grep over app/ + src/                                                                             |
 | Primary layout switch | **`lg` (1024px)**: portal/admin sidebars `hidden … lg:block` fixed `w-64`, content `lg:pl-64`; below `lg` a fixed bottom nav (`lg:hidden`) with `pb-16` page padding | `AppNavigation.tsx:96,157`, `PortalShell.tsx:83,85`, `AdminSidebar.tsx:132`, `AdminPortal.tsx:17` |
-| Admin on mobile | `AdminSidebar` is hidden below `lg`, and there is **no mobile admin navigation** (no menu button in `AdminHeader`) | `AdminSidebar.tsx:132`, `AdminHeader.tsx` |
-| Content widths | `max-w-7xl` + `px-4 sm:px-6 lg:px-8` standard. Admin finance widens to `max-w-[1720px]`. | `PortalShell.tsx:87`, `AdminPortal.tsx:23-25` |
-| JS breakpoint | `useIsMobile` (768px), used only by unused `ui/sidebar` | `src/hooks/use-mobile.tsx` |
-| Marketing header | Desktop links `hidden lg:flex`, mobile toggle (`Menu`/`X`) | `SiteHeader.tsx:62` |
-| Known issue | Professional bottom nav renders 8 items in `grid-cols-6` | `src/lib/portal-navigation.ts:50-59`, `AppNavigation.tsx:158` |
+| Admin on mobile       | `AdminSidebar` is hidden below `lg`, and there is **no mobile admin navigation** (no menu button in `AdminHeader`)                                                   | `AdminSidebar.tsx:132`, `AdminHeader.tsx`                                                         |
+| Content widths        | `max-w-7xl` + `px-4 sm:px-6 lg:px-8` standard. Admin finance widens to `max-w-[1720px]`.                                                                             | `PortalShell.tsx:87`, `AdminPortal.tsx:23-25`                                                     |
+| JS breakpoint         | `useIsMobile` (768px), used only by unused `ui/sidebar`                                                                                                              | `src/hooks/use-mobile.tsx`                                                                        |
+| Marketing header      | Desktop links `hidden lg:flex`, mobile toggle (`Menu`/`X`)                                                                                                           | `SiteHeader.tsx:62`                                                                               |
+| Known issue           | Professional bottom nav renders 8 items in `grid-cols-6`                                                                                                             | `src/lib/portal-navigation.ts:50-59`, `AppNavigation.tsx:158`                                     |
 
 ---
 
 ## 9. Accessibility observations (evidence-based; no audit tooling was run)
 
-| # | Observation | Type | Evidence |
-|---|---|---|---|
-| A1 | `<html lang="en">` set | Positive | `app/layout.tsx:13` |
-| A2 | Skeletons expose `role="status"` + `aria-label` | Positive | `LoadingSkeleton.tsx` |
-| A3 | Marketing nav sets `aria-current="page"` | Positive | `SiteHeader.tsx:72,127` |
-| A4 | Portal sidebar and bottom nav links do **not** set `aria-current`; active state is visual only | Gap | `AppNavigation.tsx:103-108,161-166` |
-| A5 | Unread badges are bare numbers inside links with no accessible label (e.g. "Messages 3") | Gap (minor) | `AppNavigation.tsx:112-121` |
-| A6 | Radix-based primitives (dialog, dropdown, alert-dialog, select, tabs, checkbox) provide focus management and ARIA | Positive | `src/components/ui/*` |
-| A7 | Many custom modals (admin operations/finance etc.) are hand-built fixed `div`s. Focus trap / `aria-modal` not verified. | Risk [NEEDS VALIDATION — not testable locally] | `app/admin/operations/page.tsx:859,1161` |
-| A8 | Native `alert()`/`confirm()` used 16 times. Accessible but inconsistent and blocking. | Inconsistency | [ui-specification.md §10](./ui-specification.md) |
-| A9 | `aria-label` 47 uses in 26 files; `htmlFor` 36 in 14 files; `sr-only` 13 in 10 files (several inside unused primitives); `role=` 41 in 19 files | Partial coverage | grep |
-| A10 | Images: 2 raw `<img>` in active components have `alt` (`ProCard` = pro name, `ProfessionalProfileSetup` = "Profile"). The `AuthLayout` testimonial avatar uses `alt=""` (decorative). `next/image` is not used. | Mostly fine | `ProCard.tsx:47`, `ProfessionalProfileSetup.tsx:318`, `AuthLayout.tsx:63-67` |
-| A11 | Focus styles: `Button`/`Input` use a 1px `focus-visible:ring-1` in primary colour (thin but present); many hand-rolled `<button>`s have no explicit focus style | Risk | `ui/button.tsx:8`, `ui/input.tsx:11` |
-| A12 | Contrast of white text (`--cta-foreground`) on `--cta` orange `oklch(0.72 0.19 51)` is **2.57:1** (computed colours in Chrome) — fails WCAG AA for normal (4.5:1) and large text (3:1) | Fail [VALIDATED 2026-09-17 · [V-54](../validation/LOCAL_VALIDATION_LOG.md)] | `src/styles.css:376-377` |
-| A13 | CMS `contentEditable` regions and `@dnd-kit` sorting are admin-only. Keyboard sorting sensors were not configured (only `PointerSensor` seen). | Gap (admin) | `src/routes/index.tsx:8`, `MarketingVisualPage.tsx:6` |
-| A14 | Only root `metadata`; no per-page titles (the `%s | Klick-Pro` template is never used), so every tab reads the same title | Gap (a11y + SEO) | `app/layout.tsx:6-9`; no other `metadata` exports |
+| #   | Observation                                                                                                                                                                                                     | Type                                                                        | Evidence                                                                     |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| A1  | `<html lang="en">` set                                                                                                                                                                                          | Positive                                                                    | `app/layout.tsx:13`                                                          |
+| A2  | Skeletons expose `role="status"` + `aria-label`                                                                                                                                                                 | Positive                                                                    | `LoadingSkeleton.tsx`                                                        |
+| A3  | Marketing nav sets `aria-current="page"`                                                                                                                                                                        | Positive                                                                    | `SiteHeader.tsx:72,127`                                                      |
+| A4  | Portal sidebar and bottom nav links do **not** set `aria-current`; active state is visual only                                                                                                                  | Gap                                                                         | `AppNavigation.tsx:103-108,161-166`                                          |
+| A5  | Unread badges are bare numbers inside links with no accessible label (e.g. "Messages 3")                                                                                                                        | Gap (minor)                                                                 | `AppNavigation.tsx:112-121`                                                  |
+| A6  | Radix-based primitives (dialog, dropdown, alert-dialog, select, tabs, checkbox) provide focus management and ARIA                                                                                               | Positive                                                                    | `src/components/ui/*`                                                        |
+| A7  | Many custom modals (admin operations/finance etc.) are hand-built fixed `div`s. Focus trap / `aria-modal` not verified.                                                                                         | Risk [NEEDS VALIDATION — not testable locally]                              | `app/admin/operations/page.tsx:859,1161`                                     |
+| A8  | Native `alert()`/`confirm()` used 16 times. Accessible but inconsistent and blocking.                                                                                                                           | Inconsistency                                                               | [ui-specification.md §10](./ui-specification.md)                             |
+| A9  | `aria-label` 47 uses in 26 files; `htmlFor` 36 in 14 files; `sr-only` 13 in 10 files (several inside unused primitives); `role=` 41 in 19 files                                                                 | Partial coverage                                                            | grep                                                                         |
+| A10 | Images: 2 raw `<img>` in active components have `alt` (`ProCard` = pro name, `ProfessionalProfileSetup` = "Profile"). The `AuthLayout` testimonial avatar uses `alt=""` (decorative). `next/image` is not used. | Mostly fine                                                                 | `ProCard.tsx:47`, `ProfessionalProfileSetup.tsx:318`, `AuthLayout.tsx:63-67` |
+| A11 | Focus styles: `Button`/`Input` use a 1px `focus-visible:ring-1` in primary colour (thin but present); many hand-rolled `<button>`s have no explicit focus style                                                 | Risk                                                                        | `ui/button.tsx:8`, `ui/input.tsx:11`                                         |
+| A12 | Contrast of white text (`--cta-foreground`) on `--cta` orange `oklch(0.72 0.19 51)` is **2.57:1** (computed colours in Chrome) — fails WCAG AA for normal (4.5:1) and large text (3:1)                          | Fail [VALIDATED 2026-09-17 · [V-54](../validation/LOCAL_VALIDATION_LOG.md)] | `src/styles.css:376-377`                                                     |
+| A13 | CMS `contentEditable` regions and `@dnd-kit` sorting are admin-only. Keyboard sorting sensors were not configured (only `PointerSensor` seen).                                                                  | Gap (admin)                                                                 | `src/routes/index.tsx:8`, `MarketingVisualPage.tsx:6`                        |
+| A14 | Only root `metadata`; no per-page titles (the `%s                                                                                                                                                               | Klick-Pro` template is never used), so every tab reads the same title       | Gap (a11y + SEO)                                                             | `app/layout.tsx:6-9`; no other `metadata` exports |
 
 ---
 
 ## 10. Brand assets
 
-| Asset | Finding | Evidence |
-|---|---|---|
-| Logo | No image file. `Logo` renders a `h-9 w-9 rounded-lg bg-primary` tile with the lucide `Briefcase` icon + "Klick-Pro" in `font-display`. | `src/components/Logo.tsx:26-35` |
-| Admin brand mark | Indigo gradient tile with lucide `BarChart3`, "Klick-Pro" + "PRO" chip | `AdminSidebar.tsx:134-147` |
-| Google mark | Inline SVG component | `src/components/GoogleMark.tsx` |
-| Favicon / app icons / OG image / manifest / robots / sitemap | **None**: no `app/icon*`, `app/favicon.ico`, `app/opengraph-image*`, `app/manifest*`, `app/robots*`, `app/sitemap*`, and nothing in `public/`. `proxy.ts` matcher excludes `favicon.ico`, but no file exists. | directory listing |
-| `public/` contents | Only `public/verification-uploads/77/*.jpg` (**2 files, tracked in git**). No code references this folder any more. | `git ls-files public` |
-| External placeholder | `https://i.pravatar.cc/100?u=olivia` testimonial avatar (allowed in CSP `img-src`) together with a fabricated testimonial ("Olivia Bennett, Founder, Lumen") | `AuthLayout.tsx:58-71`, `next.config.ts:8` |
+| Asset                                                        | Finding                                                                                                                                                                                                       | Evidence                                   |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Logo                                                         | No image file. `Logo` renders a `h-9 w-9 rounded-lg bg-primary` tile with the lucide `Briefcase` icon + "Klick-Pro" in `font-display`.                                                                        | `src/components/Logo.tsx:26-35`            |
+| Admin brand mark                                             | Indigo gradient tile with lucide `BarChart3`, "Klick-Pro" + "PRO" chip                                                                                                                                        | `AdminSidebar.tsx:134-147`                 |
+| Google mark                                                  | Inline SVG component                                                                                                                                                                                          | `src/components/GoogleMark.tsx`            |
+| Favicon / app icons / OG image / manifest / robots / sitemap | **None**: no `app/icon*`, `app/favicon.ico`, `app/opengraph-image*`, `app/manifest*`, `app/robots*`, `app/sitemap*`, and nothing in `public/`. `proxy.ts` matcher excludes `favicon.ico`, but no file exists. | directory listing                          |
+| `public/` contents                                           | Only `public/verification-uploads/77/*.jpg` (**2 files, tracked in git**). No code references this folder any more.                                                                                           | `git ls-files public`                      |
+| External placeholder                                         | `https://i.pravatar.cc/100?u=olivia` testimonial avatar (allowed in CSP `img-src`) together with a fabricated testimonial ("Olivia Bennett, Founder, Lumen")                                                  | `AuthLayout.tsx:58-71`, `next.config.ts:8` |
 
 **Security note (for [../08-operations/security.md](../08-operations/security.md)):** files in `public/` are served anonymously at `/verification-uploads/77/<uuid>.jpg`. The folder name suggests KYC/verification documents for user 77, committed to git. Contents were not opened. Severity: **High** if these are real identity documents.
 
@@ -256,26 +258,26 @@ All skeleton containers set `role="status"` and a descriptive `aria-label` (`Loa
 
 ## 12. Drift vs `project-docs/src/routes/docs/design-system.md` (legacy, 2026-08-09)
 
-| Legacy statement | Current code | Verdict |
-|---|---|---|
-| Framework is TanStack Start + TanStack Router | Next.js 16 App Router | **Obsolete** |
-| 49 shadcn primitives | 46 files in `src/components/ui/`; only 15 in real use | **Incorrect / drifted** |
-| Forms: react-hook-form + Zod | Manual `useState` forms; zod server-only; RHF unused | **Incorrect** |
-| Data: TanStack Query installed, unused | Still installed, still 0 imports | **Accurate** |
-| Charts: Recharts | Only in unused `ui/chart.tsx` | **Obsolete** |
-| Colour tokens table (primary, cta, success, warning, destructive, ink, background, surface, muted-foreground, border) | Values match `src/styles.css:344-407` exactly | **Accurate** |
-| "Dark mode fully defined in `.dark`; keep dark mode" | `.dark` is partial (no cta/success/warning/destructive/ink/sidebar) and never activated | **Incorrect** |
-| Typography Inter body / Poppins headings | Declared in CSS, but fonts are never loaded | **Partially accurate** |
-| Radius scale 10/12/14/18/22px; three blue-tinted shadows | Matches `@theme` | **Accurate** |
-| Gradient utilities carry marketing pages | `gradient-hero` used (8 files); `gradient-primary` and `grid-bg` unused | **Partially accurate** |
-| ProCard hover signature `hover:-translate-y-1 …` | Present at `ProCard.tsx:24`, but not replicated on most cards | **Partially accurate** |
-| "Green means verified"; ProCard tick `bg-success` | ProCard complies; `professional-profile` uses primary for Verified | **Partially accurate** |
-| Domain components still needed: JobCard, MapView, ChatThread, … | `JobCard` exists but is unused; maps (7 components), `MessagesWorkspace`, report/export and verification UIs built; admin has 11 routes instead of the proposed 7 screens | **Obsolete** |
-| `input-otp` matches OTP requirement | Primitive unused; OTP inputs are custom | **Incorrect** |
-| Mock data US-centric / launch Canada with CAD; Stripe Connect; Supabase Storage | Product is India-focused: INR `en-IN`, Razorpay, S3-compatible storage, `india-states-districts` | **Obsolete** |
-| `avatars()` points at `i.pravatar.cc` — replace | Still present in `AuthLayout.tsx:64` and allowed in CSP | **Still open** |
-| "No auth, no API layer, no route guards" | Custom auth, 66 API route files, `proxy.ts` + server layouts | **Obsolete** |
-| Flutter parity tokens | No Flutter app in this repo (git status shows `flutter_app/` deleted) | **Out of scope** |
+| Legacy statement                                                                                                      | Current code                                                                                                                                                              | Verdict                 |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Framework is TanStack Start + TanStack Router                                                                         | Next.js 16 App Router                                                                                                                                                     | **Obsolete**            |
+| 49 shadcn primitives                                                                                                  | 46 files in `src/components/ui/`; only 15 in real use                                                                                                                     | **Incorrect / drifted** |
+| Forms: react-hook-form + Zod                                                                                          | Manual `useState` forms; zod server-only; RHF unused                                                                                                                      | **Incorrect**           |
+| Data: TanStack Query installed, unused                                                                                | Still installed, still 0 imports                                                                                                                                          | **Accurate**            |
+| Charts: Recharts                                                                                                      | Only in unused `ui/chart.tsx`                                                                                                                                             | **Obsolete**            |
+| Colour tokens table (primary, cta, success, warning, destructive, ink, background, surface, muted-foreground, border) | Values match `src/styles.css:344-407` exactly                                                                                                                             | **Accurate**            |
+| "Dark mode fully defined in `.dark`; keep dark mode"                                                                  | `.dark` is partial (no cta/success/warning/destructive/ink/sidebar) and never activated                                                                                   | **Incorrect**           |
+| Typography Inter body / Poppins headings                                                                              | Declared in CSS, but fonts are never loaded                                                                                                                               | **Partially accurate**  |
+| Radius scale 10/12/14/18/22px; three blue-tinted shadows                                                              | Matches `@theme`                                                                                                                                                          | **Accurate**            |
+| Gradient utilities carry marketing pages                                                                              | `gradient-hero` used (8 files); `gradient-primary` and `grid-bg` unused                                                                                                   | **Partially accurate**  |
+| ProCard hover signature `hover:-translate-y-1 …`                                                                      | Present at `ProCard.tsx:24`, but not replicated on most cards                                                                                                             | **Partially accurate**  |
+| "Green means verified"; ProCard tick `bg-success`                                                                     | ProCard complies; `professional-profile` uses primary for Verified                                                                                                        | **Partially accurate**  |
+| Domain components still needed: JobCard, MapView, ChatThread, …                                                       | `JobCard` exists but is unused; maps (7 components), `MessagesWorkspace`, report/export and verification UIs built; admin has 11 routes instead of the proposed 7 screens | **Obsolete**            |
+| `input-otp` matches OTP requirement                                                                                   | Primitive unused; OTP inputs are custom                                                                                                                                   | **Incorrect**           |
+| Mock data US-centric / launch Canada with CAD; Stripe Connect; Supabase Storage                                       | Product is India-focused: INR `en-IN`, Razorpay, S3-compatible storage, `india-states-districts`                                                                          | **Obsolete**            |
+| `avatars()` points at `i.pravatar.cc` — replace                                                                       | Still present in `AuthLayout.tsx:64` and allowed in CSP                                                                                                                   | **Still open**          |
+| "No auth, no API layer, no route guards"                                                                              | Custom auth, 66 API route files, `proxy.ts` + server layouts                                                                                                              | **Obsolete**            |
+| Flutter parity tokens                                                                                                 | No Flutter app in this repo (git status shows `flutter_app/` deleted)                                                                                                     | **Out of scope**        |
 
 **Relationship to existing docs:** this file supersedes `project-docs/src/routes/docs/design-system.md` for everything except its colour-intent rationale, which is still consistent with the code and is reused in §11. It also supersedes the "UI and styling" section of `docs/_archive/2026-09-14-flat-docs/react-guide.md`, which wrongly states that recharts, `input-otp` and `react-day-picker` are in use and that custom CSS is limited to CKEditor overrides.
 
@@ -283,17 +285,17 @@ All skeleton containers set `role="status"` and a descriptive `aria-label` (`Loa
 
 ## 13. Design-system findings
 
-| ID | Severity | Title | Evidence | Impact |
-|---|---|---|---|---|
-| DS-1 | High (if real KYC) | Verification images committed in `public/` and publicly served | `public/verification-uploads/77/*.jpg`, `git ls-files public` | PII exposure; needs git history purge |
-| DS-2 | Medium [VALIDATED 2026-09-17 · [V-50](../validation/LOCAL_VALIDATION_LOG.md)] | Brand fonts (Inter/Poppins) never loaded (system fallback rendered); CSP blocks Google Fonts | `src/styles.css:297-298`, `next.config.ts:9` | Inconsistent typography across devices |
-| DS-3 | Low | Dark mode tokens partial and never activated; 37 inert `dark:` classes; dead `[data-admin-theme]` remap | `src/styles.css:157-239, 293, 409-428` | Dead CSS, misleading docs |
-| DS-4 | Low | 31 of 46 shadcn primitives unused, plus unused deps (recharts, cmdk, vaul, embla, react-day-picker, input-otp, react-resizable-panels, RHF, React Query, CKEditor) | §5 | Install/maintenance weight, false signals |
-| DS-5 | Low | Two visual languages: token-based portal vs hard-coded slate/indigo admin, which leaks into `NotificationInbox` and `ServicesCatalog` | §3.2 | Inconsistent UX, harder theming |
-| DS-6 | Low | Dead CKEditor/CMS CSS (~130 lines across `src/styles.css:5-156, 241-267`); `.cms-public-content` uses `hsl(var(--primary))` although variables are OKLCH (invalid colour) | `src/styles.css:5-86` | Dead or broken CSS |
-| DS-7 | Refuted [CORRECTED 2026-09-17 · [V-03](../validation/LOCAL_VALIDATION_LOG.md)] | `@import "tw-animate-css"` placed mid-file — but the build inlines it (`@keyframes enter`, `.animate-in` present); only a readability issue | `src/styles.css:291` | None observed |
-| DS-8 | Low | No favicon, app icons, OG image, robots or sitemap; only root metadata | §10, A14 | SEO/branding gaps |
-| DS-9 | Low | No admin navigation below 1024px | `AdminSidebar.tsx:132` | Admin console unusable on tablets/phones |
-| DS-10 | Low [PARTIALLY VALIDATED 2026-09-17 · [V-55](../validation/LOCAL_VALIDATION_LOG.md)] | Toaster `richColors` conflicts with forced dark classes in `ui/sonner.tsx` (realtime toasts render as white custom cards) | `providers.tsx:17`, `ui/sonner.tsx:9-22` | Unpredictable toast styling |
-| DS-11 | Low | External placeholder avatar + fabricated testimonial on auth screens | `AuthLayout.tsx:58-71` | Trust/legal risk, third-party request on every auth page |
-| DS-12 | Medium [VALIDATED 2026-09-17 · [V-54](../validation/LOCAL_VALIDATION_LOG.md)] | White-on-orange CTA contrast 2.57:1 | `src/styles.css:376-377` | Fails WCAG AA (normal and large text) |
+| ID    | Severity                                                                             | Title                                                                                                                                                                     | Evidence                                                      | Impact                                                   |
+| ----- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
+| DS-1  | High (if real KYC)                                                                   | Verification images committed in `public/` and publicly served                                                                                                            | `public/verification-uploads/77/*.jpg`, `git ls-files public` | PII exposure; needs git history purge                    |
+| DS-2  | Medium [VALIDATED 2026-09-17 · [V-50](../validation/LOCAL_VALIDATION_LOG.md)]        | Brand fonts (Inter/Poppins) never loaded (system fallback rendered); CSP blocks Google Fonts                                                                              | `src/styles.css:297-298`, `next.config.ts:9`                  | Inconsistent typography across devices                   |
+| DS-3  | Low                                                                                  | Dark mode tokens partial and never activated; 37 inert `dark:` classes; dead `[data-admin-theme]` remap                                                                   | `src/styles.css:157-239, 293, 409-428`                        | Dead CSS, misleading docs                                |
+| DS-4  | Low                                                                                  | 31 of 46 shadcn primitives unused, plus unused deps (recharts, cmdk, vaul, embla, react-day-picker, input-otp, react-resizable-panels, RHF, React Query, CKEditor)        | §5                                                            | Install/maintenance weight, false signals                |
+| DS-5  | Low                                                                                  | Two visual languages: token-based portal vs hard-coded slate/indigo admin, which leaks into `NotificationInbox` and `ServicesCatalog`                                     | §3.2                                                          | Inconsistent UX, harder theming                          |
+| DS-6  | Low                                                                                  | Dead CKEditor/CMS CSS (~130 lines across `src/styles.css:5-156, 241-267`); `.cms-public-content` uses `hsl(var(--primary))` although variables are OKLCH (invalid colour) | `src/styles.css:5-86`                                         | Dead or broken CSS                                       |
+| DS-7  | Refuted [CORRECTED 2026-09-17 · [V-03](../validation/LOCAL_VALIDATION_LOG.md)]       | `@import "tw-animate-css"` placed mid-file — but the build inlines it (`@keyframes enter`, `.animate-in` present); only a readability issue                               | `src/styles.css:291`                                          | None observed                                            |
+| DS-8  | Low                                                                                  | No favicon, app icons, OG image, robots or sitemap; only root metadata                                                                                                    | §10, A14                                                      | SEO/branding gaps                                        |
+| DS-9  | Low                                                                                  | No admin navigation below 1024px                                                                                                                                          | `AdminSidebar.tsx:132`                                        | Admin console unusable on tablets/phones                 |
+| DS-10 | Low [PARTIALLY VALIDATED 2026-09-17 · [V-55](../validation/LOCAL_VALIDATION_LOG.md)] | Toaster `richColors` conflicts with forced dark classes in `ui/sonner.tsx` (realtime toasts render as white custom cards)                                                 | `providers.tsx:17`, `ui/sonner.tsx:9-22`                      | Unpredictable toast styling                              |
+| DS-11 | Low                                                                                  | External placeholder avatar + fabricated testimonial on auth screens                                                                                                      | `AuthLayout.tsx:58-71`                                        | Trust/legal risk, third-party request on every auth page |
+| DS-12 | Medium [VALIDATED 2026-09-17 · [V-54](../validation/LOCAL_VALIDATION_LOG.md)]        | White-on-orange CTA contrast 2.57:1                                                                                                                                       | `src/styles.css:376-377`                                      | Fails WCAG AA (normal and large text)                    |

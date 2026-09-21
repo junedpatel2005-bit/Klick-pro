@@ -10,11 +10,13 @@ import {
   Clock3,
   Download,
   Landmark,
+  LockKeyhole,
   ReceiptText,
   WalletCards,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageActionLoading } from "@/components/PageActionLoading";
 type Transaction = {
   id: number;
   amount: number;
@@ -79,6 +81,7 @@ export default function Earnings() {
   const [selectedPayment, setSelectedPayment] = useState<PaymentDetail | null>(null);
   const [paymentDetailsError, setPaymentDetailsError] = useState("");
   const [selectedStat, setSelectedStat] = useState<StatKey | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
   const load = () => {
     void fetch("/api/v1/portal/earnings", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : []))
@@ -111,35 +114,45 @@ export default function Earnings() {
     [items],
   );
   async function withdraw() {
-    const r = await fetch("/api/v1/wallet", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ amount: Number(amount), destinationLabel: destination }),
-    });
-    const d = await r.json();
-    setMessage(
-      r.ok
-        ? "Withdrawal request submitted for review."
-        : (d.error ?? "Unable to request withdrawal."),
-    );
-    if (r.ok) {
-      setAmount("");
-      setDestination("");
-      load();
+    setActionBusy("withdraw");
+    try {
+      const r = await fetch("/api/v1/wallet", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ amount: Number(amount), destinationLabel: destination }),
+      });
+      const d = await r.json();
+      setMessage(
+        r.ok
+          ? "Withdrawal request submitted for review."
+          : (d.error ?? "Unable to request withdrawal."),
+      );
+      if (r.ok) {
+        setAmount("");
+        setDestination("");
+        load();
+      }
+    } finally {
+      setActionBusy(null);
     }
   }
   async function saveRazorpayAccount() {
-    const response = await fetch("/api/professional/razorpay-account", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ razorpayAccountId: razorpayAccountId.trim() || null }),
-    });
-    const result = await response.json();
-    setMessage(
-      response.ok
-        ? "Razorpay payout account saved."
-        : (result.error ?? "Unable to save payout account."),
-    );
+    setActionBusy("save-account");
+    try {
+      const response = await fetch("/api/professional/razorpay-account", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ razorpayAccountId: razorpayAccountId.trim() || null }),
+      });
+      const result = await response.json();
+      setMessage(
+        response.ok
+          ? "Razorpay payout account saved."
+          : (result.error ?? "Unable to save payout account."),
+      );
+    } finally {
+      setActionBusy(null);
+    }
   }
   async function openTransaction(transaction: Transaction) {
     setSelectedTransaction(transaction);
@@ -156,13 +169,44 @@ export default function Earnings() {
   return (
     <div className="space-y-6">
       <section className="rounded-3xl bg-[linear-gradient(120deg,var(--color-ink),var(--color-primary))] p-7 text-white shadow-card">
-        <p className="text-xs font-bold uppercase tracking-[.2em] text-white/65">
-          Professional earnings
-        </p>
-        <h1 className="mt-3 font-display text-3xl font-bold">Manage your work income.</h1>
-        <p className="mt-2 text-sm text-white/75">
-          Track approved milestone payments, requests, and available withdrawal balance.
-        </p>
+        <div className="relative overflow-hidden">
+          <div className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full bg-cyan-300/20 blur-3xl" />
+          <div className="relative flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
+            <div>
+              <p className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[.2em] text-white/65">
+                <WalletCards className="h-4 w-4" /> Professional earnings
+              </p>
+              <h1 className="mt-3 font-display text-3xl font-bold tracking-tight sm:text-4xl">
+                Manage your work income.
+              </h1>
+              <p className="mt-3 max-w-lg text-sm leading-6 text-white/75">
+                Track approved milestone payments, requests, and available withdrawal balance.
+              </p>
+            </div>
+            <div className="min-w-[260px] rounded-2xl border border-white/20 bg-white/10 p-5 backdrop-blur-md">
+              <div className="flex items-center justify-between gap-4 text-xs font-semibold text-white/65">
+                <span>Available balance</span>
+                <span className="inline-flex items-center gap-1.5 text-emerald-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" /> Secure wallet
+                </span>
+              </div>
+              {wallet ? (
+                <p className="mt-3 font-display text-4xl font-bold tracking-tight">
+                  ₹{wallet.available.toLocaleString("en-IN")}
+                </p>
+              ) : (
+                <div
+                  className="mt-3 h-10 w-44 animate-pulse rounded-lg bg-white/20"
+                  aria-label="Loading available balance"
+                  role="status"
+                />
+              )}
+              <div className="mt-4 flex items-center gap-2 text-xs text-white/60">
+                <LockKeyhole className="h-3.5 w-3.5" /> Protected by Razorpay payments
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
       {!wallet || !items || !completedJobs ? (
         <div className="h-72 animate-pulse rounded-2xl bg-muted" />
@@ -297,9 +341,12 @@ export default function Earnings() {
                       · {i.status}
                     </p>
                   </div>
-                  <p className="font-bold text-success">
-                    +₹{i.amount.toLocaleString()} <span className="text-xs">{i.currency}</span>
-                  </p>
+                  <div className="text-right">
+                    <p className="font-bold text-foreground">
+                      ₹{i.amount.toLocaleString()} <span className="text-xs">{i.currency}</span>
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">Client milestone payment</p>
+                  </div>
                 </div>
               ))}
               {!items.length && (
@@ -447,6 +494,20 @@ export default function Earnings() {
           onClose={() => setSelectedStat(null)}
         />
       ) : null}
+
+      <PageActionLoading
+        active={actionBusy !== null}
+        title={
+          actionBusy === "save-account"
+            ? "Saving payout account…"
+            : "Submitting withdrawal request…"
+        }
+        description={
+          actionBusy === "save-account"
+            ? "Updating your Razorpay account ID for payouts."
+            : "Sending your withdrawal request to admin review."
+        }
+      />
     </div>
   );
 }
@@ -455,9 +516,9 @@ function TransactionSummary({ transaction }: { transaction: Transaction }) {
   return (
     <div className="mt-6 space-y-4">
       <div className="rounded-2xl bg-primary/5 p-5">
-        <p className="text-sm text-muted-foreground">Amount credited</p>
+        <p className="text-sm text-muted-foreground">Client milestone payment</p>
         <p className="mt-1 font-display text-3xl font-bold">
-          +INR {transaction.amount.toLocaleString("en-IN")} {transaction.currency}
+          INR {transaction.amount.toLocaleString("en-IN")} {transaction.currency}
         </p>
         <p className="mt-2 text-sm font-semibold text-success">{transaction.status}</p>
       </div>
@@ -482,7 +543,7 @@ function PaymentDetails({ detail }: { detail: PaymentDetail }) {
         <p className="mt-2 text-sm font-semibold text-success">{detail.status}</p>
       </div>
       <div className="space-y-3 rounded-2xl border border-border p-5 text-sm">
-        <DetailRow label="Milestone value" value={money(detail.baseAmount)} />
+        <DetailRow label="Client milestone payment" value={money(detail.baseAmount)} />
         <DetailRow label="Platform commission" value={money(detail.commissionAmount)} />
         <DetailRow label="Net earnings" value={money(detail.professionalPayoutAmount)} />
         <DetailRow

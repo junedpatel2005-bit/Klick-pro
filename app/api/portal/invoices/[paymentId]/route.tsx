@@ -55,6 +55,40 @@ export async function GET(
       select: { firstName: true, lastName: true, email: true, phone: true, address: true },
     }),
   ]);
+  const isClientView = session.userId === payment.clientId;
+  const isProfessionalView = session.userId === payment.professionalId;
+  const visibleAmounts = isClientView
+    ? {
+        gross: payment.amount,
+        fee: payment.clientFeeAmount,
+        net: payment.baseAmount,
+        grossLabel: "Total charged",
+        feeLabel: "Client service fee",
+        netLabel: "Milestone amount",
+        lineDescription: "Milestone payment plus client service fee",
+        note: "This client receipt shows the agreed milestone amount and the service fee charged to the client wallet.",
+      }
+    : isProfessionalView
+      ? {
+          gross: payment.baseAmount,
+          fee: payment.commissionAmount,
+          net: payment.professionalPayoutAmount,
+          grossLabel: "Client milestone payment",
+          feeLabel: "Platform commission",
+          netLabel: "Net earnings",
+          lineDescription: "Agreed milestone amount paid by the client",
+          note: "This professional payout statement shows the agreed milestone amount, platform commission, and net earnings credited after admin approval.",
+        }
+      : {
+          gross: payment.amount,
+          fee: payment.adminNetAmount,
+          net: payment.professionalPayoutAmount,
+          grossLabel: "Client charge",
+          feeLabel: "Platform earnings",
+          netLabel: "Professional payout",
+          lineDescription: "Full platform settlement",
+          note: "This administrative settlement shows the client charge, retained platform earnings, and professional payout.",
+        };
   const buffer = await renderReportPdf(
     <InvoiceDocument
       invoiceNumber={invoice.invoiceNumber}
@@ -74,9 +108,14 @@ export async function GET(
         phone: professional?.phone,
         address: professional?.address,
       }}
-      grossAmount={invoice.amount}
-      commissionAmount={invoice.commissionAmount}
-      netAmount={invoice.netAmount}
+      grossAmount={visibleAmounts.gross}
+      commissionAmount={visibleAmounts.fee}
+      netAmount={visibleAmounts.net}
+      grossLabel={visibleAmounts.grossLabel}
+      feeLabel={visibleAmounts.feeLabel}
+      netLabel={visibleAmounts.netLabel}
+      lineDescription={visibleAmounts.lineDescription}
+      note={visibleAmounts.note}
       currency={invoice.currency}
       paymentReference={payment.razorpayPaymentId ?? payment.providerReference}
     />,

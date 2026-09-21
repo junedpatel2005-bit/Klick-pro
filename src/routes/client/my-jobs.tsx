@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { CardListSkeleton } from "@/components/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type Job = {
   id: number;
@@ -91,6 +92,8 @@ export default function MyJobs() {
   const [status, setStatus] = useState<Filter>("ALL");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [deletingJobId, setDeletingJobId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = () =>
     void fetch("/api/v1/client/jobs")
@@ -209,11 +212,27 @@ export default function MyJobs() {
     });
   }, [jobs, status]);
 
-  async function remove(id: number) {
-    if (!confirm("Delete this draft permanently?")) return;
-    const response = await fetch(`/api/v1/client/jobs/${id}`, { method: "DELETE" });
-    if (response.ok) load();
-    else setMessage("The draft could not be deleted.");
+  function remove(id: number) {
+    setDeletingJobId(id);
+  }
+
+  async function confirmRemove() {
+    if (!deletingJobId) return;
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/v1/client/jobs/${deletingJobId}`, { method: "DELETE" });
+      if (response.ok) {
+        toast.success("Draft deleted successfully.");
+        setDeletingJobId(null);
+        load();
+      } else {
+        toast.error("The draft could not be deleted.");
+      }
+    } catch {
+      toast.error("Failed to delete draft.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -451,6 +470,17 @@ export default function MyJobs() {
           ) : null}
         </div>
       </section>
+
+      <ConfirmDialog
+        open={deletingJobId !== null}
+        onOpenChange={(open) => !open && setDeletingJobId(null)}
+        title="Delete Draft Job?"
+        description="Are you sure you want to delete this draft? This will permanently remove it from your projects."
+        confirmLabel="Delete Draft"
+        variant="destructive"
+        loading={deleting}
+        onConfirm={confirmRemove}
+      />
     </>
   );
 }

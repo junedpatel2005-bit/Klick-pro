@@ -53,6 +53,7 @@ const docs = (item: Verification) => [
 export default function AdminVerificationsPage() {
   const [items, setItems] = useState<Verification[]>([]);
   const [personaItems, setPersonaItems] = useState<PersonaVerification[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Verification | null>(null);
   const [document, setDocument] = useState<{ label: string; value: string; owner: string } | null>(
     null,
@@ -64,7 +65,8 @@ export default function AdminVerificationsPage() {
     label: string;
     status: "APPROVED" | "REJECTED";
   } | null>(null);
-  const load = () =>
+  const load = () => {
+    setLoading(true);
     void fetch("/api/v1/admin/verifications", { cache: "no-store" })
       .then(async (response) => {
         const body = await response.text();
@@ -85,7 +87,11 @@ export default function AdminVerificationsPage() {
       .catch(() => {
         setItems([]);
         setMessage("Verification records are temporarily unavailable. Please refresh.");
+      })
+      .finally(() => {
+        setLoading(false);
       });
+  };
   useEffect(() => {
     load();
     window.addEventListener("servio:admin-verifications-update", load);
@@ -178,10 +184,14 @@ export default function AdminVerificationsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-2 rounded-xl bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 border border-amber-200 shadow-2xs">
-            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-            {items.length} Pending Review
-          </span>
+          {loading ? (
+            <div className="h-9 w-36 animate-pulse rounded-xl bg-slate-200" />
+          ) : (
+            <span className="inline-flex items-center gap-2 rounded-xl bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 border border-amber-200 shadow-2xs">
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+              {items.length} Pending Review
+            </span>
+          )}
         </div>
       </div>
 
@@ -193,70 +203,87 @@ export default function AdminVerificationsPage() {
 
       {/* Manual Verification Cards Grid */}
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {items.map((item) => {
-          const submitted = docs(item).filter((document) => document.value).length;
-          return (
-            <button
-              key={item.userId}
-              onClick={() => setSelected(item)}
-              className="group text-left rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md"
+        {loading &&
+          [1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs animate-pulse space-y-4"
             >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-700 font-extrabold text-base border border-indigo-100 group-hover:scale-105 transition">
-                    {item.user.firstName[0]}
-                    {item.user.lastName[0]}
-                  </div>
-                  <div>
-                    <h2 className="font-bold text-slate-900 text-base">
-                      {item.user.firstName} {item.user.lastName}
-                    </h2>
-                    <p className="text-xs font-medium text-slate-400 truncate max-w-[160px]">
-                      {item.user.email}
-                    </p>
-                  </div>
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-2xl bg-slate-200" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-slate-200 rounded w-2/3" />
+                  <div className="h-3 bg-slate-100 rounded w-1/2" />
                 </div>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-bold border uppercase tracking-wider ${
-                    item.status === "PENDING"
-                      ? "bg-amber-50 text-amber-700 border-amber-200"
-                      : "bg-rose-50 text-rose-700 border-rose-200"
-                  }`}
-                >
-                  {item.status}
-                </span>
               </div>
-
-              <div className="mt-4 flex items-center gap-2">
-                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                  {item.user.professionalCategory ?? "General Professional"}
-                </span>
-              </div>
-
-              {/* Progress Bar for Documents */}
-              <div className="mt-5 border-t border-slate-100 pt-4">
-                <div className="flex items-center justify-between text-xs font-semibold mb-1.5">
-                  <span className="text-slate-600 flex items-center gap-1.5">
-                    <FileText className="h-3.5 w-3.5 text-indigo-600" />
-                    Document Submissions
+              <div className="h-2 w-full rounded-full bg-slate-100" />
+            </div>
+          ))}
+        {!loading &&
+          items.map((item) => {
+            const submitted = docs(item).filter((document) => document.value).length;
+            return (
+              <button
+                key={item.userId}
+                onClick={() => setSelected(item)}
+                className="group text-left rounded-2xl border border-slate-200 bg-white p-6 shadow-xs transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-700 font-extrabold text-base border border-indigo-100 group-hover:scale-105 transition">
+                      {item.user.firstName[0]}
+                      {item.user.lastName[0]}
+                    </div>
+                    <div>
+                      <h2 className="font-bold text-slate-900 text-base">
+                        {item.user.firstName} {item.user.lastName}
+                      </h2>
+                      <p className="text-xs font-medium text-slate-400 truncate max-w-[160px]">
+                        {item.user.email}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-bold border uppercase tracking-wider ${
+                      item.status === "PENDING"
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-rose-50 text-rose-700 border-rose-200"
+                    }`}
+                  >
+                    {item.status}
                   </span>
-                  <span className="text-indigo-600 font-bold">{submitted} / 5</span>
                 </div>
-                <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all duration-300"
-                    style={{ width: `${(submitted / 5) * 100}%` }}
-                  />
-                </div>
-              </div>
 
-              <div className="mt-4 flex items-center justify-between pt-2 text-xs font-bold text-indigo-600 group-hover:text-indigo-700">
-                <span>Inspect application</span>
-                <ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" />
-              </div>
-            </button>
-          );
-        })}
+                <div className="mt-4 flex items-center gap-2">
+                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                    {item.user.professionalCategory ?? "General Professional"}
+                  </span>
+                </div>
+
+                {/* Progress Bar for Documents */}
+                <div className="mt-5 border-t border-slate-100 pt-4">
+                  <div className="flex items-center justify-between text-xs font-semibold mb-1.5">
+                    <span className="text-slate-600 flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5 text-indigo-600" />
+                      Document Submissions
+                    </span>
+                    <span className="text-indigo-600 font-bold">{submitted} / 5</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all duration-300"
+                      style={{ width: `${(submitted / 5) * 100}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between pt-2 text-xs font-bold text-indigo-600 group-hover:text-indigo-700">
+                  <span>Inspect application</span>
+                  <ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" />
+                </div>
+              </button>
+            );
+          })}
       </div>
       {personaItems.length > 0 && (
         <section className="mt-10">
@@ -322,7 +349,7 @@ export default function AdminVerificationsPage() {
           </div>
         </section>
       )}
-      {items.length === 0 && (
+      {!loading && items.length === 0 && (
         <div className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-2xs">
           <CheckCircle2 className="mx-auto h-9 w-9 text-emerald-600" />
           <p className="mt-4 font-semibold text-slate-900">No verification requests waiting</p>

@@ -90,6 +90,7 @@ function UserGroup({
   title,
   users,
   kind,
+  loading = false,
   onToggle,
   onOpen,
   onDelete,
@@ -97,6 +98,7 @@ function UserGroup({
   title: string;
   users: User[];
   kind: "client" | "professional";
+  loading?: boolean;
   onToggle: (user: User) => void;
   onOpen: (user: User) => void;
   onDelete: (user: User) => void;
@@ -117,88 +119,106 @@ function UserGroup({
           </span>
           <div>
             <h2 className="font-semibold text-slate-900">{title}</h2>
-            <p className="text-xs text-slate-500">{users.length} accounts</p>
+            {loading ? (
+              <div className="mt-1 h-3.5 w-16 animate-pulse rounded bg-slate-200" />
+            ) : (
+              <p className="text-xs text-slate-500">{users.length} accounts</p>
+            )}
           </div>
         </div>
       </header>
       <div className="divide-y divide-slate-100">
-        {users.map((user) => (
-          <article
-            key={user.id}
-            onClick={() => onOpen(user)}
-            className="flex cursor-pointer flex-wrap items-center gap-4 px-5 py-4 transition hover:bg-slate-50/80"
-          >
-            <span
-              className={`grid h-10 w-10 place-items-center rounded-full text-sm font-bold border ${
-                kind === "professional"
-                  ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                  : "bg-sky-50 text-sky-700 border-sky-200"
-              }`}
-            >{`${user.firstName?.[0] ?? "U"}${user.lastName?.[0] ?? ""}`}</span>
-            <div className="min-w-48 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="font-semibold text-slate-900">
-                  {user.firstName} {user.lastName}
-                </p>
-                {user.isVerified && (
-                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    Verified
-                  </span>
-                )}
-                <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold border ${
-                    user.emailVerifiedAt
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      : "bg-amber-50 text-amber-700 border-amber-200"
-                  }`}
-                >
-                  {user.emailVerifiedAt ? "Email verified" : "Email not verified"}
-                </span>
+        {loading ? (
+          <div className="p-5 space-y-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex items-center gap-4 py-2 animate-pulse">
+                <div className="h-10 w-10 rounded-full bg-slate-200 shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-slate-200 rounded w-1/4" />
+                  <div className="h-3 bg-slate-100 rounded w-1/2" />
+                </div>
               </div>
-              <p className="mt-0.5 text-sm text-slate-500">{user.email}</p>
-              <p className="mt-1 text-xs font-medium text-indigo-600">
-                Click to view full profile and activity
-              </p>
-            </div>
-            <span
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold border ${
-                user.isActive
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-rose-50 text-rose-700 border-rose-200"
-              }`}
+            ))}
+          </div>
+        ) : (
+          users.map((user) => (
+            <article
+              key={user.id}
+              onClick={() => onOpen(user)}
+              className="flex cursor-pointer flex-wrap items-center gap-4 px-5 py-4 transition hover:bg-slate-50/80"
             >
-              {user.isActive ? "Enabled" : "Disabled"}
-            </span>
-            <Button
-              onClick={(event) => {
-                event.stopPropagation();
-                onToggle(user);
-              }}
-              variant="outline"
-              className={
-                user.isActive
-                  ? "border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
-                  : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
-              }
-            >
-              <Power className="mr-2 h-4 w-4" />
-              {user.isActive ? "Disable" : "Enable"}
-            </Button>
-            <Button
-              onClick={(event) => {
-                event.stopPropagation();
-                onDelete(user);
-              }}
-              variant="outline"
-              className="border-slate-200 bg-white text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </Button>
-          </article>
-        ))}
-        {users.length === 0 && (
+              <span
+                className={`grid h-10 w-10 place-items-center rounded-full text-sm font-bold border ${
+                  kind === "professional"
+                    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                    : "bg-sky-50 text-sky-700 border-sky-200"
+                }`}
+              >{`${user.firstName?.[0] ?? "U"}${user.lastName?.[0] ?? ""}`}</span>
+              <div className="min-w-48 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-slate-900">
+                    {user.firstName} {user.lastName}
+                  </p>
+                  {user.isVerified && (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Verified
+                    </span>
+                  )}
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold border ${
+                      user.emailVerifiedAt
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-amber-50 text-amber-700 border-amber-200"
+                    }`}
+                  >
+                    {user.emailVerifiedAt ? "Email verified" : "Email not verified"}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-sm text-slate-500">{user.email}</p>
+                <p className="mt-1 text-xs font-medium text-indigo-600">
+                  Click to view full profile and activity
+                </p>
+              </div>
+              <span
+                className={`rounded-full px-2.5 py-1 text-xs font-semibold border ${
+                  user.isActive
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-rose-50 text-rose-700 border-rose-200"
+                }`}
+              >
+                {user.isActive ? "Enabled" : "Disabled"}
+              </span>
+              <Button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggle(user);
+                }}
+                variant="outline"
+                className={
+                  user.isActive
+                    ? "border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
+                    : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                }
+              >
+                <Power className="mr-2 h-4 w-4" />
+                {user.isActive ? "Disable" : "Enable"}
+              </Button>
+              <Button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete(user);
+                }}
+                variant="outline"
+                className="border-slate-200 bg-white text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            </article>
+          ))
+        )}
+        {!loading && users.length === 0 && (
           <p className="p-8 text-center text-sm text-slate-500">No {title.toLowerCase()} found.</p>
         )}
       </div>
@@ -209,6 +229,7 @@ export default function AdminUsersPage() {
   const searchParams = useSearchParams();
   const targetUserId = searchParams.get("id");
   const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [activeGroup, setActiveGroup] = useState<"clients" | "professionals">("professionals");
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -218,10 +239,12 @@ export default function AdminUsersPage() {
     kind: "toggle" | "delete";
   } | null>(null);
   const load = () => {
+    setLoading(true);
     void fetch("/api/v1/admin/data/users", { cache: "no-store" })
       .then((response) => response.json())
       .then((data) => setUsers(data.users ?? []))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -322,7 +345,11 @@ export default function AdminUsersPage() {
           }`}
         >
           <p className="text-xs font-semibold uppercase tracking-wider text-sky-700">Clients</p>
-          <p className="mt-2 text-3xl font-bold text-slate-900">{clients.length}</p>
+          {loading ? (
+            <div className="mt-2 h-9 w-16 animate-pulse rounded-md bg-slate-200" />
+          ) : (
+            <p className="mt-2 text-3xl font-bold text-slate-900">{clients.length}</p>
+          )}
           <p className="mt-2 text-xs font-medium text-sky-600">Click to view clients</p>
         </button>
         <button
@@ -336,7 +363,11 @@ export default function AdminUsersPage() {
           <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
             Professionals
           </p>
-          <p className="mt-2 text-3xl font-bold text-slate-900">{professionals.length}</p>
+          {loading ? (
+            <div className="mt-2 h-9 w-16 animate-pulse rounded-md bg-slate-200" />
+          ) : (
+            <p className="mt-2 text-3xl font-bold text-slate-900">{professionals.length}</p>
+          )}
           <p className="mt-2 text-xs font-medium text-indigo-600">Click to view professionals</p>
         </button>
       </div>
@@ -351,6 +382,7 @@ export default function AdminUsersPage() {
             title="Professionals"
             users={professionals}
             kind="professional"
+            loading={loading}
             onToggle={(user) => setConfirmAction({ user, kind: "toggle" })}
             onOpen={openUser}
             onDelete={(user) => setConfirmAction({ user, kind: "delete" })}
@@ -360,6 +392,7 @@ export default function AdminUsersPage() {
             title="Clients"
             users={clients}
             kind="client"
+            loading={loading}
             onToggle={(user) => setConfirmAction({ user, kind: "toggle" })}
             onOpen={openUser}
             onDelete={(user) => setConfirmAction({ user, kind: "delete" })}

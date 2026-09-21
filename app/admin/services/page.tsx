@@ -21,6 +21,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -122,6 +123,11 @@ export default function AdminServicesPage() {
   const [jobsService, setJobsService] = useState<Service | null>(null);
   const [categoryJobs, setCategoryJobs] = useState<Job[]>([]);
   const [jobsLoading, setJobsLoading] = useState(false);
+  const [deletingService, setDeletingService] = useState<{
+    service: Service;
+    levelLabel: string;
+  } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -332,10 +338,14 @@ export default function AdminServicesPage() {
     }
   };
 
-  const handleDelete = async (service: Service, levelLabel: string) => {
-    const promptMessage = `Delete ${levelLabel} "${service.name}"? This will permanently remove all nested services under it.`;
-    if (!window.confirm(promptMessage)) return;
+  const handleDelete = (service: Service, levelLabel: string) => {
+    setDeletingService({ service, levelLabel });
+  };
 
+  const confirmDeleteService = async () => {
+    if (!deletingService) return;
+    const { service } = deletingService;
+    setDeleting(true);
     try {
       const response = await fetch(`/api/v1/admin/services?id=${service.id}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Could not delete service.");
@@ -354,8 +364,11 @@ export default function AdminServicesPage() {
 
       setServices((prev) => prev.filter((item) => !toDelete.has(item.id)));
       toast.success(`"${service.name}" deleted.`);
+      setDeletingService(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Delete failed.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1075,6 +1088,21 @@ export default function AdminServicesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={deletingService !== null}
+        onOpenChange={(open) => !open && setDeletingService(null)}
+        title={
+          deletingService
+            ? `Delete ${deletingService.levelLabel} "${deletingService.service.name}"?`
+            : ""
+        }
+        description="This will permanently remove this service and all nested services under it."
+        confirmLabel="Delete"
+        variant="destructive"
+        loading={deleting}
+        onConfirm={confirmDeleteService}
+      />
     </div>
   );
 }

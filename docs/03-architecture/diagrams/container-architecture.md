@@ -65,19 +65,19 @@ flowchart TB
 
 ## Explanation
 
-| Container / component | Technology | Responsibility | Evidence |
-|---|---|---|---|
-| Browser screens | React 19 client components, Tailwind v4, shadcn/Radix | Rendering, forms, client-side data fetching (no React Query) | `src/routes/**`, `src/components/**` |
-| Node process | `server.mjs` (ESM) | Hosts both Next.js and Socket.IO on one port | `server.mjs:13-81` |
-| Socket.IO server | `socket.io` 4 | Authenticated push channel; no client→server event handlers | `server.mjs:32-77` |
-| `proxy.ts` | Next 16 proxy (Node runtime) | Cross-cutting request gate | `proxy.ts` |
-| `next.config.ts` | Config | Security headers on all paths; `/api/v1` alias | `next.config.ts` |
-| Pages/layouts | App Router Server Components | Auth redirects, a few direct DB reads, render client screens | `app/**/page.tsx`, `layout.tsx` |
-| Route handlers | App Router route handlers | Validation (zod), authn/authz, business logic, Prisma access | `app/api/**` |
-| Domain modules | TypeScript, `server-only` | Money ledger, notification fan-out, project request transitions, read models | `src/lib/wallet-ledger.ts`, `marketplace-notifications.ts`, `queries/*` |
-| Adapters | fetch / SDKs | External provider calls | `src/lib/razorpay.ts`, `persona.ts`, `phone-otp-provider.ts`, `email.ts`, `project-file-storage.ts` |
-| Cross-cutting | In-process | Realtime emit bridge, logging, audit, rate limit, background jobs, CMS file IO | `src/lib/realtime.ts`, `server-logger.ts`, … |
-| Data access | Prisma 7 + `@prisma/adapter-pg` | ORM over shared pool | `src/lib/db.ts` |
+| Container / component | Technology                                            | Responsibility                                                                 | Evidence                                                                                            |
+| --------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| Browser screens       | React 19 client components, Tailwind v4, shadcn/Radix | Rendering, forms, client-side data fetching (no React Query)                   | `src/routes/**`, `src/components/**`                                                                |
+| Node process          | `server.mjs` (ESM)                                    | Hosts both Next.js and Socket.IO on one port                                   | `server.mjs:13-81`                                                                                  |
+| Socket.IO server      | `socket.io` 4                                         | Authenticated push channel; no client→server event handlers                    | `server.mjs:32-77`                                                                                  |
+| `proxy.ts`            | Next 16 proxy (Node runtime)                          | Cross-cutting request gate                                                     | `proxy.ts`                                                                                          |
+| `next.config.ts`      | Config                                                | Security headers on all paths; `/api/v1` alias                                 | `next.config.ts`                                                                                    |
+| Pages/layouts         | App Router Server Components                          | Auth redirects, a few direct DB reads, render client screens                   | `app/**/page.tsx`, `layout.tsx`                                                                     |
+| Route handlers        | App Router route handlers                             | Validation (zod), authn/authz, business logic, Prisma access                   | `app/api/**`                                                                                        |
+| Domain modules        | TypeScript, `server-only`                             | Money ledger, notification fan-out, project request transitions, read models   | `src/lib/wallet-ledger.ts`, `marketplace-notifications.ts`, `queries/*`                             |
+| Adapters              | fetch / SDKs                                          | External provider calls                                                        | `src/lib/razorpay.ts`, `persona.ts`, `phone-otp-provider.ts`, `email.ts`, `project-file-storage.ts` |
+| Cross-cutting         | In-process                                            | Realtime emit bridge, logging, audit, rate limit, background jobs, CMS file IO | `src/lib/realtime.ts`, `server-logger.ts`, …                                                        |
+| Data access           | Prisma 7 + `@prisma/adapter-pg`                       | ORM over shared pool                                                           | `src/lib/db.ts`                                                                                     |
 
 ## Assumptions and Limitations
 

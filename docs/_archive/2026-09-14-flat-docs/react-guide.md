@@ -7,18 +7,18 @@ existing patterns will bite you.
 
 ## Shape of the codebase
 
-| Measure | Count |
-| --- | --- |
-| `.tsx` files across `app/` and `src/` | 210 |
-| Files marked `"use client"` | 89 |
-| Feature components (`src/components/*.tsx`) | 48 |
-| shadcn/ui primitives (`src/components/ui/`) | 46 |
-| Screen components (`src/routes/`) | ~40 files, 13,003 lines |
-| Largest single component | `src/routes/job.$jobId.tsx`, 1,797 lines |
-| `useState` calls | 465 |
-| `useEffect` calls | 146 |
-| `fetch(` calls in components | 156 |
-| `useMemo` / `useCallback` | 91 / 34 |
+| Measure                                     | Count                                    |
+| ------------------------------------------- | ---------------------------------------- |
+| `.tsx` files across `app/` and `src/`       | 210                                      |
+| Files marked `"use client"`                 | 89                                       |
+| Feature components (`src/components/*.tsx`) | 48                                       |
+| shadcn/ui primitives (`src/components/ui/`) | 46                                       |
+| Screen components (`src/routes/`)           | ~40 files, 13,003 lines                  |
+| Largest single component                    | `src/routes/job.$jobId.tsx`, 1,797 lines |
+| `useState` calls                            | 465                                      |
+| `useEffect` calls                           | 146                                      |
+| `fetch(` calls in components                | 156                                      |
+| `useMemo` / `useCallback`                   | 91 / 34                                  |
 
 ## The three component layers
 
@@ -51,7 +51,7 @@ export default async function JobPage({ params }: { params: Promise<{ jobId: str
 Two Next.js 16 details visible here: `params` is a **Promise** and must be awaited, and so is
 `cookies()`. Both are async in this version.
 
-Note what the server page does *not* do: it passes a role, not data. `JobDetails` fetches everything
+Note what the server page does _not_ do: it passes a role, not data. `JobDetails` fetches everything
 it needs from the browser after mount.
 
 ### 2. Screen component — `src/routes/**`
@@ -61,12 +61,12 @@ These are large — five files exceed 600 lines.
 
 Naming still follows the old React Router flat-route convention:
 
-| File | Serves |
-| --- | --- |
-| `src/routes/index.tsx` | `/` |
-| `src/routes/job.$jobId.tsx` | `/job/[jobId]` |
+| File                                     | Serves         |
+| ---------------------------------------- | -------------- |
+| `src/routes/index.tsx`                   | `/`            |
+| `src/routes/job.$jobId.tsx`              | `/job/[jobId]` |
 | `src/routes/professional/pro.$proId.tsx` | `/pro/[proId]` |
-| `src/routes/client/post-job.tsx` | `/post-job` |
+| `src/routes/client/post-job.tsx`         | `/post-job`    |
 
 The `$param` in the filename is inert — it names nothing. Route params arrive as props from the
 server page, or are read with `useParams()`.
@@ -96,17 +96,19 @@ useEffect(() => {
       if (!cancelled) setJobs(body.jobs ?? []);
     })
     .finally(() => setLoading(false));
-  return () => { cancelled = true; };
+  return () => {
+    cancelled = true;
+  };
 }, []);
 ```
 
 ### What is installed but unused
 
-| Package | Import count | Note |
-| --- | --- | --- |
-| `@tanstack/react-query` | **0** | Installed, never imported. No client, no provider. |
-| `react-hook-form` | **1** | Only `src/components/ui/form.tsx`, the shadcn wrapper. No screen uses it. |
-| `@hookform/resolvers` | 0 | Follows from the above. |
+| Package                 | Import count | Note                                                                      |
+| ----------------------- | ------------ | ------------------------------------------------------------------------- |
+| `@tanstack/react-query` | **0**        | Installed, never imported. No client, no provider.                        |
+| `react-hook-form`       | **1**        | Only `src/components/ui/form.tsx`, the shadcn wrapper. No screen uses it. |
+| `@hookform/resolvers`   | 0            | Follows from the above.                                                   |
 
 Every form in the application is built from manual `useState` handlers with manual validation.
 `zod` is used heavily — but on the server, inside route handlers, not in the browser.
@@ -120,11 +122,11 @@ each in one file.
 There is no Redux, Zustand, or Jotai. React Context appears in exactly seven files, and five of
 those are shadcn primitives managing their own internals:
 
-| Context | Purpose |
-| --- | --- |
-| `src/components/GoogleMapsProvider.tsx` | Loads the Maps JS SDK once for the whole tree |
-| `src/components/PortalShell.tsx` | `usePortalTitle()` — page title only |
-| `ui/carousel`, `ui/chart`, `ui/form`, `ui/sidebar`, `ui/toggle-group` | Primitive internals |
+| Context                                                               | Purpose                                       |
+| --------------------------------------------------------------------- | --------------------------------------------- |
+| `src/components/GoogleMapsProvider.tsx`                               | Loads the Maps JS SDK once for the whole tree |
+| `src/components/PortalShell.tsx`                                      | `usePortalTitle()` — page title only          |
+| `ui/carousel`, `ui/chart`, `ui/form`, `ui/sidebar`, `ui/toggle-group` | Primitive internals                           |
 
 Cross-screen state is not shared. Each screen re-fetches what it needs on mount. Session identity is
 re-fetched from `/api/auth/me` wherever it is needed rather than held in a provider.
@@ -175,10 +177,10 @@ Custom CSS in `src/styles.css` is limited to CKEditor overrides for the CMS admi
 
 Two client components hold Socket.IO connections:
 
-| Component | Connects | Listens for |
-| --- | --- | --- |
-| `RealtimeNotifications` | every page (via `Providers`) | `notification:new`, `message:new` |
-| `AdminRealtime` | admin console | `admin:notification`, `admin:overview-update`, `admin:verifications-update`, `admin:operations-update` |
+| Component               | Connects                     | Listens for                                                                                            |
+| ----------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `RealtimeNotifications` | every page (via `Providers`) | `notification:new`, `message:new`                                                                      |
+| `AdminRealtime`         | admin console                | `admin:notification`, `admin:overview-update`, `admin:verifications-update`, `admin:operations-update` |
 
 Connection is cookie-authenticated — the client passes no token, the server reads `servio_session`
 from the handshake headers. The path is `/api/realtime`.
@@ -204,11 +206,11 @@ in a client component.** Those fields must not leave the server.
 
 Only three, in `src/hooks/`:
 
-| Hook | Purpose |
-| --- | --- |
-| `use-mobile.tsx` | Viewport breakpoint match |
+| Hook                     | Purpose                                                 |
+| ------------------------ | ------------------------------------------------------- |
+| `use-mobile.tsx`         | Viewport breakpoint match                               |
 | `use-database-status.ts` | Polls `/api/admin/database-status` for the admin banner |
-| `use-row-selection.ts` | Multi-select state for admin tables |
+| `use-row-selection.ts`   | Multi-select state for admin tables                     |
 
 Data fetching is not abstracted into hooks. Each screen inlines its own `useEffect` + `fetch`.
 
@@ -227,11 +229,11 @@ Data fetching is not abstracted into hooks. Each screen inlines its own `useEffe
 
 ## Known frontend weaknesses
 
-| Issue | Detail |
-| --- | --- |
-| Screen components are very large | `job.$jobId.tsx` at 1,797 lines mixes fetching, state, layout and business rules. Hard to test, hard to review. |
-| Waterfall fetching | Server pages pass no data. Every screen fetches after mount, so the first paint is a skeleton even for data the server already had. |
-| No request de-duplication or caching | Navigating away and back re-fetches everything. React Query is installed and would solve this. |
-| No client-side validation | Users discover errors after a round trip. `react-hook-form` + `zod` are both available. |
-| 6 ESLint `react-hooks` warnings | Tracked as CODE-001 in `project-docs/CURRENT_PROJECT_STATUS.md`, unresolved. |
-| Providers load everywhere | Google Maps SDK and the Socket.IO listener mount on public marketing pages that need neither. |
+| Issue                                | Detail                                                                                                                              |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Screen components are very large     | `job.$jobId.tsx` at 1,797 lines mixes fetching, state, layout and business rules. Hard to test, hard to review.                     |
+| Waterfall fetching                   | Server pages pass no data. Every screen fetches after mount, so the first paint is a skeleton even for data the server already had. |
+| No request de-duplication or caching | Navigating away and back re-fetches everything. React Query is installed and would solve this.                                      |
+| No client-side validation            | Users discover errors after a round trip. `react-hook-form` + `zod` are both available.                                             |
+| 6 ESLint `react-hooks` warnings      | Tracked as CODE-001 in `project-docs/CURRENT_PROJECT_STATUS.md`, unresolved.                                                        |
+| Providers load everywhere            | Google Maps SDK and the Socket.IO listener mount on public marketing pages that need neither.                                       |

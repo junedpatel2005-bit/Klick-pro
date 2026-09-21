@@ -32,6 +32,8 @@ export async function GET(request: NextRequest) {
     _sum: { commissionAmount: true },
   });
   const canWithdraw = session.role === "PROFESSIONAL" || session.role === "CLIENT";
+  const totalEarned = earned._sum.amount ?? 0;
+  const totalCommission = commission?._sum.commissionAmount ?? 0;
   const withdrawals = canWithdraw ? wallet.pendingBalance : 0;
   const withdrawalHistory = canWithdraw
     ? await db.projectWithdrawal.findMany({
@@ -43,9 +45,9 @@ export async function GET(request: NextRequest) {
   const available = canWithdraw ? Math.max(0, wallet.balance - withdrawals) : wallet.balance;
   return NextResponse.json({
     wallet,
-    total: earned._sum.amount ?? 0,
-    grossTotal: earned._sum.amount ?? 0,
-    commission: commission?._sum.commissionAmount ?? 0,
+    total: totalEarned,
+    grossTotal: totalEarned + totalCommission,
+    commission: totalCommission,
     available,
     reserved: withdrawals,
     withdrawals: withdrawalHistory,

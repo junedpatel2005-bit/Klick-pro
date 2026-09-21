@@ -30,6 +30,7 @@ const bodySchema = z.object({
   budgetMin: z.coerce.number().int().min(0).max(10000000).nullable().optional(),
   budgetMax: z.coerce.number().int().min(0).max(10000000).nullable().optional(),
   hourlyRate: z.coerce.number().int().min(0).max(1000000).nullable().optional(),
+  totalJobHours: z.coerce.number().int().min(1).max(10000).nullable().optional(),
   timingType: z.enum(["FIXED", "HOURLY"]).optional(),
   paymentMethod: z.enum(["WALLET", "OFFLINE"]).optional(),
   urgency: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
@@ -62,13 +63,21 @@ function idOf(value: string) {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 function dataOf(d: z.infer<typeof bodySchema>) {
+  const isHourly = d.timingType === "HOURLY";
+  const calculatedProjectTotal =
+    isHourly && d.hourlyRate && d.totalJobHours ? d.hourlyRate * d.totalJobHours : null;
+  const projectTotal =
+    calculatedProjectTotal !== null && calculatedProjectTotal <= 10_000_000
+      ? calculatedProjectTotal
+      : null;
   const update: Record<string, unknown> = {
     title: d.title || null,
     category: d.category || null,
     description: d.description || null,
-    budgetMin: d.budgetMin ?? null,
-    budgetMax: d.budgetMax ?? null,
-    hourlyRate: d.hourlyRate ?? null,
+    budgetMin: isHourly ? projectTotal : (d.budgetMin ?? null),
+    budgetMax: isHourly ? projectTotal : (d.budgetMax ?? null),
+    hourlyRate: isHourly ? (d.hourlyRate ?? null) : null,
+    totalJobHours: isHourly ? (d.totalJobHours ?? null) : null,
     timingType: d.timingType ?? "FIXED",
     paymentMethod: d.paymentMethod ?? "WALLET",
     urgency: d.urgency ?? "MEDIUM",
@@ -98,6 +107,15 @@ async function errors(d: z.infer<typeof bodySchema>) {
         "Select the address from the search results or drop a pin on the map so professionals can find you nearby.";
   }
   if (d.timingType === "HOURLY" && !d.hourlyRate) fields.hourlyRate = "Enter an hourly rate.";
+  if (d.timingType === "HOURLY" && !d.totalJobHours)
+    fields.totalJobHours = "Enter the total job hours.";
+  if (
+    d.timingType === "HOURLY" &&
+    d.hourlyRate &&
+    d.totalJobHours &&
+    d.hourlyRate * d.totalJobHours > 10_000_000
+  )
+    fields.totalJobHours = "Project total cannot exceed ₹1,00,00,000.";
   if (d.timingType !== "HOURLY" && (d.budgetMin == null || d.budgetMax == null))
     fields.budgetMin = "Enter a budget range.";
   if (d.budgetMin != null && d.budgetMax != null && d.budgetMin > d.budgetMax)
@@ -297,12 +315,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         ];
       }
       const budgetRef =
-        (parsed.data.budgetMax !== undefined && parsed.data.budgetMax !== null
-          ? parsed.data.budgetMax
-          : current.budgetMax) ??
-        (parsed.data.budgetMin !== undefined && parsed.data.budgetMin !== null
-          ? parsed.data.budgetMin
-          : current.budgetMin) ??
+        (typeof updateData.budgetMax === "number" ? updateData.budgetMax : current.budgetMax) ??
+        (typeof updateData.budgetMin === "number" ? updateData.budgetMin : current.budgetMin) ??
         null;
 
       const preparedMilestones = rawMilestones.map((m, index) => ({

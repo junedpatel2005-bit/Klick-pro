@@ -6,15 +6,15 @@ Last verified against code: 2026-09-16 (commit cd8f4fb); runtime-validated 2026-
 
 ## Notation
 
-| Mermaid | Meaning in these diagrams |
-|---|---|
-| `\|\|--o{` solid line | Relation declared in Prisma **and** FK constraint created by a migration |
-| `\|\|..o{` dotted line | Relation declared in Prisma **only** (no FK in any migration, so not enforced in a migrations-built DB) |
-| `\|\|--o\|`, `\|o..o\|` | One-to-zero-or-one (FK column is unique) |
-| Label | Relation name or FK column, plus `onDelete` action (Cascade / Restrict / SetNull) |
-| `PK`, `FK`, `UK` | Primary key, foreign key column, unique |
+| Mermaid                 | Meaning in these diagrams                                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------------------------- |
+| `\|\|--o{` solid line   | Relation declared in Prisma **and** FK constraint created by a migration                                |
+| `\|\|..o{` dotted line  | Relation declared in Prisma **only** (no FK in any migration, so not enforced in a migrations-built DB) |
+| `\|\|--o\|`, `\|o..o\|` | One-to-zero-or-one (FK column is unique)                                                                |
+| Label                   | Relation name or FK column, plus `onDelete` action (Cascade / Restrict / SetNull)                       |
+| `PK`, `FK`, `UK`        | Primary key, foreign key column, unique                                                                 |
 
-Only relationships declared with `@relation` in `schema.prisma` are drawn. Columns that merely *hold* another model's id without a Prisma relation (e.g. `Wallet.userId`, `ProjectDispute.trackingId`, `Invoice.payment_id`) are listed under "Logical references (not drawn)" for each domain.
+Only relationships declared with `@relation` in `schema.prisma` are drawn. Columns that merely _hold_ another model's id without a Prisma relation (e.g. `Wallet.userId`, `ProjectDispute.trackingId`, `Invoice.payment_id`) are listed under "Logical references (not drawn)" for each domain.
 
 ---
 
@@ -442,4 +442,3 @@ Isolated tables with no relations: `CmsPage`, `CmsPageVersion` (`page_id` logica
 4. `User` appears twice in several relations (client and professional roles); Mermaid merges these into one entity box with multiple labelled edges.
 5. Legacy `Hire*`, `Legacy*` and `DirectHireNegotiation` use string user ids that cannot reference `User.id` (Int); they are not used by the application.
 6. Diagrams show keys and a few governing columns only; full column lists are in the data dictionary.
-

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle2, Info, MapPin, Plus, Trash2 } from "lucide-react";
 import { AddressMapPicker } from "@/components/AddressMapPicker";
+import { PageActionLoading } from "@/components/PageActionLoading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { MarketplaceCategory } from "@/lib/types/marketplace";
@@ -25,6 +26,7 @@ type Form = {
   budgetMin: string;
   budgetMax: string;
   hourlyRate: string;
+  totalJobHours: string;
   urgency: "LOW" | "MEDIUM" | "HIGH";
   jobDate: string;
   deadline: string;
@@ -48,6 +50,7 @@ const empty: Form = {
   budgetMin: "",
   budgetMax: "",
   hourlyRate: "",
+  totalJobHours: "",
   urgency: "MEDIUM",
   jobDate: "",
   deadline: "",
@@ -87,6 +90,7 @@ export default function PostJob() {
     [errors, setErrors] = useState<Record<string, string>>({}),
     [message, setMessage] = useState(""),
     [saving, setSaving] = useState(false),
+    [savingMode, setSavingMode] = useState<"draft" | "publish" | null>(null),
     [segment, setSegment] = useState(""),
     [hydrated, setHydrated] = useState(false),
     [postingTiming, setPostingTiming] = useState<PostingTiming>("TODAY");
@@ -181,6 +185,7 @@ export default function PostJob() {
             budgetMin: job.budgetMin?.toString() ?? "",
             budgetMax: job.budgetMax?.toString() ?? "",
             hourlyRate: job.hourlyRate?.toString() ?? "",
+            totalJobHours: job.totalJobHours?.toString() ?? "",
             urgency: job.urgency,
             jobDate: asDate(job.jobDate) || today,
             deadline: asDate(job.deadline),
@@ -413,12 +418,33 @@ export default function PostJob() {
   );
   const remainingMilestonePercentage = Math.max(0, 100 - totalMilestonePercentage);
   const isMilestoneExceeded = totalMilestonePercentage > 100;
+  const hourlyProjectTotal = useMemo(() => {
+    const hourlyRate = Number(form.hourlyRate);
+    const totalJobHours = Number(form.totalJobHours);
+    return Number.isFinite(hourlyRate) &&
+      Number.isFinite(totalJobHours) &&
+      hourlyRate > 0 &&
+      totalJobHours > 0
+      ? hourlyRate * totalJobHours
+      : null;
+  }, [form.hourlyRate, form.totalJobHours]);
 
   const payload = (mode: "draft" | "publish") => ({
     ...form,
-    budgetMin: form.budgetMin === "" ? null : Number(form.budgetMin),
-    budgetMax: form.budgetMax === "" ? null : Number(form.budgetMax),
+    budgetMin:
+      form.timingType === "HOURLY"
+        ? hourlyProjectTotal
+        : form.budgetMin === ""
+          ? null
+          : Number(form.budgetMin),
+    budgetMax:
+      form.timingType === "HOURLY"
+        ? hourlyProjectTotal
+        : form.budgetMax === ""
+          ? null
+          : Number(form.budgetMax),
     hourlyRate: form.hourlyRate === "" ? null : Number(form.hourlyRate),
+    totalJobHours: form.totalJobHours === "" ? null : Number(form.totalJobHours),
     jobDate: form.jobDate || null,
     deadline: form.deadline || null,
     locationLabel: form.locationLabel || null,
@@ -443,6 +469,8 @@ export default function PostJob() {
       if (postingTiming === "SCHEDULED" && (!form.jobDate || form.jobDate <= today))
         e.jobDate = "Choose a future date for a scheduled job.";
       if (form.timingType === "HOURLY" && !form.hourlyRate) e.hourlyRate = "Enter an hourly rate.";
+      if (form.timingType === "HOURLY" && !form.totalJobHours)
+        e.totalJobHours = "Enter the total job hours.";
       if (form.timingType === "FIXED" && (!form.budgetMin || !form.budgetMax))
         e.budgetMin = "Enter a budget range.";
       if (form.budgetMin && form.budgetMax && Number(form.budgetMin) > Number(form.budgetMax))
@@ -477,7 +505,9 @@ export default function PostJob() {
     return !Object.keys(e).length;
   };
   async function save(mode: "draft" | "publish") {
+    let keepLoadingUntilNavigation = false;
     setSaving(true);
+    setSavingMode(mode);
     setMessage("");
     try {
       const url = id ? `/api/v1/client/jobs/${id}` : "/api/v1/client/jobs";
@@ -499,7 +529,7 @@ export default function PostJob() {
         const focusStep =
           focus && ["title", "category", "description"].includes(focus)
             ? 0
-            : focus && ["budgetMin", "budgetMax", "hourlyRate", "deadline"].includes(focus)
+            : focus && ["budgetMin", "budgetMax", "hourlyRate", "totalJobHours", "deadline"].includes(focus)
               ? 1
               : focus && ["milestones"].includes(focus)
                 ? 2
@@ -524,12 +554,16 @@ export default function PostJob() {
         } catch {
           /* ignore storage error */
         }
+        keepLoadingUntilNavigation = true;
         router.push("/my-jobs?posted=1");
       } else setMessage("Draft saved.");
     } catch {
       setMessage("A network error occurred. Your form values are still here.");
     } finally {
-      setSaving(false);
+      if (!keepLoadingUntilNavigation) {
+        setSaving(false);
+        setSavingMode(null);
+      }
     }
   }
   const segmentCategory = useMemo(
@@ -643,6 +677,15 @@ export default function PostJob() {
   }
   return (
     <div className="max-w-3xl">
+      <PageActionLoading
+        active={saving}
+        title={savingMode === "publish" ? "Posting your job…" : "Saving your draft…"}
+        description={
+          savingMode === "publish"
+            ? "We’re publishing your job and preparing it for qualified professionals."
+            : "We’re safely saving your progress so you can continue later."
+        }
+      />
       <h1 className="text-3xl font-bold">Create a job</h1>
       <p className="mt-1 text-muted-foreground">Tell qualified professionals what you need.</p>
       <ol className="mt-7 grid grid-cols-6 gap-1" aria-label="Job posting steps">
@@ -785,15 +828,38 @@ export default function PostJob() {
                 </Field>
               </div>
             ) : (
-              <Field label="Hourly rate (INR)" error={errors.hourlyRate}>
-                <Input
-                  type="number"
-                  min="0"
-                  value={form.hourlyRate}
-                  onChange={(e) => update("hourlyRate", e.target.value)}
-                  placeholder="₹ 0 / hour"
-                />
-              </Field>
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Hourly rate (INR)" error={errors.hourlyRate}>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={form.hourlyRate}
+                      onChange={(e) => update("hourlyRate", e.target.value)}
+                      placeholder="₹ 0 / hour"
+                    />
+                  </Field>
+                  <Field label="Total job hours" error={errors.totalJobHours}>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="10000"
+                      step="1"
+                      value={form.totalJobHours}
+                      onChange={(e) => update("totalJobHours", e.target.value)}
+                      placeholder="e.g. 40"
+                    />
+                  </Field>
+                </div>
+                <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+                  <p className="text-sm text-muted-foreground">Project total amount</p>
+                  <p className="mt-1 text-lg font-semibold text-foreground">
+                    {hourlyProjectTotal === null
+                      ? "Enter hourly rate and total hours"
+                      : `${money(hourlyProjectTotal)} (${money(Number(form.hourlyRate))} × ${Number(form.totalJobHours).toLocaleString("en-IN")} hours)`}
+                  </p>
+                </div>
+              </div>
             )}
             <Field label="How urgent is this job?">
               <select
@@ -999,13 +1065,13 @@ export default function PostJob() {
             ) : (
               <div className="space-y-4">
                 {form.milestones.map((milestone, index) => {
-                  const estAmount =
-                    form.budgetMax || form.budgetMin
-                      ? Math.round(
-                          (Number(form.budgetMax || form.budgetMin) * (milestone.percentage || 0)) /
-                            100,
-                        )
-                      : null;
+                  const projectTotal =
+                    form.timingType === "HOURLY"
+                      ? hourlyProjectTotal
+                      : Number(form.budgetMax || form.budgetMin) || null;
+                  const estAmount = projectTotal
+                    ? Math.round((projectTotal * (milestone.percentage || 0)) / 100)
+                    : null;
                   return (
                     <div
                       key={index}
@@ -1313,7 +1379,7 @@ export default function PostJob() {
               label="Budget"
               value={
                 form.timingType === "HOURLY"
-                  ? `${money(form.hourlyRate === "" ? null : Number(form.hourlyRate))} / hour`
+                  ? `${money(form.hourlyRate === "" ? null : Number(form.hourlyRate))} / hour × ${form.totalJobHours || "0"} hours = ${money(hourlyProjectTotal)}`
                   : `${money(form.budgetMin === "" ? null : Number(form.budgetMin))} – ${money(form.budgetMax === "" ? null : Number(form.budgetMax))}`
               }
               onEdit={() => setStep(1)}
@@ -1346,8 +1412,8 @@ export default function PostJob() {
                       .map((m, idx) => {
                         const milestonePercent = Number(m.percentage) || 0;
                         return `${idx + 1}. ${m.title} (${m.percentage}%${
-                          form.budgetMax
-                            ? ` • ₹${Math.round((Number(form.budgetMax) * milestonePercent) / 100).toLocaleString("en-IN")}`
+                          (form.timingType === "HOURLY" ? hourlyProjectTotal : Number(form.budgetMax))
+                            ? ` • ₹${Math.round(((form.timingType === "HOURLY" ? hourlyProjectTotal : Number(form.budgetMax))! * milestonePercent) / 100).toLocaleString("en-IN")}`
                             : ""
                         })${m.description ? `\n   ${m.description}` : ""}`;
                       })

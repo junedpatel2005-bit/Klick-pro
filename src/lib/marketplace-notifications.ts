@@ -144,20 +144,6 @@ async function notifyRole(
   }
 }
 
-export function notifyClientsOfNewProfessional(professional: {
-  id: number;
-  firstName: string;
-  lastName: string;
-}) {
-  const name = `${professional.firstName} ${professional.lastName}`.trim() || "A new professional";
-  return notifyRole("CLIENT", {
-    type: "NEW_PROFESSIONAL",
-    title: "New professional joined Klick-Pro",
-    description: `${name} has joined the marketplace. View their profile and see if they are a fit for your next project.`,
-    href: `/pro/${professional.id}`,
-  });
-}
-
 export function notifyAdminsOfNewAccount(user: {
   id: number;
   firstName: string;
@@ -171,108 +157,6 @@ export function notifyAdminsOfNewAccount(user: {
     title: `New ${roleLabel} registration`,
     description: `${name} registered as a ${roleLabel}.`,
     href: `/admin/users?id=${user.id}`,
-  });
-}
-
-function newJobEmailDetails(job: {
-  title: string | null;
-  category: string | null;
-  description: string | null;
-  budgetMin: number | null;
-  budgetMax: number | null;
-  hourlyRate: number | null;
-  timingType: string;
-  workMode: string;
-  jobDate: Date | null;
-  deadline: Date | null;
-  locationLabel: string | null;
-  locationAddress: string | null;
-}) {
-  const title = job.title?.trim() || "A new client job";
-  const formatDate = (date: Date | null) => date?.toLocaleDateString("en-IN") ?? "Not specified";
-  const budget =
-    job.timingType === "HOURLY"
-      ? job.hourlyRate == null
-        ? "Not specified"
-        : `₹${job.hourlyRate.toLocaleString("en-IN")} per hour`
-      : job.budgetMin != null && job.budgetMax != null
-        ? `₹${job.budgetMin.toLocaleString("en-IN")} – ₹${job.budgetMax.toLocaleString("en-IN")}`
-        : "Not specified";
-  const location =
-    job.workMode === "REMOTE"
-      ? "Remote"
-      : [job.locationLabel, job.locationAddress].filter(Boolean).join(" · ") || "Not specified";
-  return [
-    { label: "Job title", value: title },
-    { label: "Category", value: job.category?.trim() || "Not specified" },
-    { label: "Description", value: job.description?.trim() || "No description provided." },
-    { label: "Budget", value: budget },
-    { label: "Work mode", value: job.workMode.replaceAll("_", " ") },
-    { label: "Preferred job date", value: formatDate(job.jobDate) },
-    { label: "Deadline", value: formatDate(job.deadline) },
-    { label: "Location", value: location },
-  ];
-}
-
-export function notifyProfessionalsOfNewJob(job: {
-  id: number;
-  title: string | null;
-  category: string | null;
-  description: string | null;
-  budgetMin: number | null;
-  budgetMax: number | null;
-  hourlyRate: number | null;
-  timingType: string;
-  workMode: string;
-  jobDate: Date | null;
-  deadline: Date | null;
-  locationLabel: string | null;
-  locationAddress: string | null;
-}) {
-  const title = job.title?.trim() || "A new client job";
-  return notifyRole("PROFESSIONAL", {
-    type: "NEW_JOB",
-    title: "New job posted",
-    description: `${title}${job.category ? ` · ${job.category}` : ""} is now open for proposals.`,
-    href: `/job/${job.id}`,
-    emailDetails: newJobEmailDetails(job),
-  });
-}
-
-export function notifyAdminsOfNewJob(job: {
-  id: number;
-  title: string | null;
-  category: string | null;
-  description: string | null;
-  budgetMin: number | null;
-  budgetMax: number | null;
-  hourlyRate: number | null;
-  timingType: string;
-  workMode: string;
-  jobDate: Date | null;
-  deadline: Date | null;
-  locationLabel: string | null;
-  locationAddress: string | null;
-}) {
-  return notifyRole("ADMIN", {
-    type: "NEW_JOB",
-    title: "New job posted",
-    description: `${job.title?.trim() || "A client"}${job.category ? ` · ${job.category}` : ""} is now open.`,
-    href: `/admin/operations?job=${job.id}`,
-    emailDetails: newJobEmailDetails(job),
-  });
-}
-
-export function notifyAdminsOfNewProposal(input: {
-  jobId: number;
-  jobTitle: string | null;
-  professionalName: string;
-}) {
-  return notifyRole("ADMIN", {
-    type: "NEW_PROPOSAL",
-    title: "New professional proposal",
-    description: `${input.professionalName} sent a proposal for ${input.jobTitle?.trim() || `job #${input.jobId}`}.`,
-    href: `/admin/operations?job=${input.jobId}`,
   });
 }
 
@@ -361,6 +245,77 @@ export async function notifyDisputeResolved(input: {
   });
 }
 
+export async function notifyDisputeAccepted(input: {
+  disputeId: number;
+  trackingId: number;
+  jobTitle: string | null;
+  complainantId: number;
+  respondentName: string;
+}) {
+  const jobLabel = input.jobTitle?.trim() || "your project";
+  await notifyUsers([input.complainantId], {
+    type: "DISPUTE_UPDATED",
+    title: "Dispute accepted by other party",
+    description: `${input.respondentName} accepted your dispute claim on ${jobLabel}. The dispute has been mutually settled.`,
+    href: `/project/${input.trackingId}/tracking`,
+  });
+  await notifyRole("ADMIN", {
+    type: "DISPUTE_UPDATED",
+    title: `Dispute #${input.disputeId} mutually accepted`,
+    description: `${input.respondentName} accepted the dispute claim on ${jobLabel}. Mutually settled.`,
+    href: `/admin/operations?dispute=${input.disputeId}&project=${input.trackingId}`,
+  });
+}
+
+export async function notifyDisputeContested(input: {
+  disputeId: number;
+  trackingId: number;
+  jobTitle: string | null;
+  complainantId: number;
+  respondentName: string;
+}) {
+  const jobLabel = input.jobTitle?.trim() || "your project";
+  await notifyUsers([input.complainantId], {
+    type: "DISPUTE_UPDATED",
+    title: "Dispute contested - Escalated to Admin Review",
+    description: `${input.respondentName} submitted counter-evidence for the dispute on ${jobLabel}. An admin is now reviewing the case.`,
+    href: `/project/${input.trackingId}/tracking`,
+  });
+  await notifyRole("ADMIN", {
+    type: "DISPUTE_UPDATED",
+    title: `Action Required: Dispute #${input.disputeId} contested`,
+    description: `${input.respondentName} rejected the dispute on ${jobLabel} and submitted counter-evidence. Requires Admin Review.`,
+    href: `/admin/operations?dispute=${input.disputeId}&project=${input.trackingId}`,
+  });
+}
+
+export async function notifyDisputeDecided(input: {
+  disputeId: number;
+  trackingId: number;
+  jobTitle: string | null;
+  clientId: number;
+  professionalId: number;
+  decision: "CLIENT_WINS" | "PROFESSIONAL_WINS" | "PARTIAL_SETTLEMENT";
+  refundAmount?: number;
+  payoutAmount?: number;
+  reason?: string;
+}) {
+  const jobLabel = input.jobTitle?.trim() || "your project";
+  const decisionLabel =
+    input.decision === "CLIENT_WINS"
+      ? "Client Wins (Refund processed)"
+      : input.decision === "PROFESSIONAL_WINS"
+        ? "Freelancer Wins (Payment released)"
+        : `Partial Settlement (Split: ₹${(input.refundAmount ?? 0).toLocaleString()} refund / ₹${(input.payoutAmount ?? 0).toLocaleString()} payout)`;
+
+  await notifyUsers([input.clientId, input.professionalId], {
+    type: "DISPUTE_UPDATED",
+    title: `Dispute #${input.disputeId} Decided: ${decisionLabel}`,
+    description: `Admin has reviewed and resolved the dispute on ${jobLabel}. ${input.reason ? `Notes: "${input.reason}".` : ""}`,
+    href: `/project/${input.trackingId}/tracking`,
+  });
+}
+
 export function notifyDisputeMessage(input: {
   disputeId: number;
   trackingId: number;
@@ -412,11 +367,12 @@ export async function notifyMilestonePayoutApproved(input: {
   const href = `/project/${input.projectId}/tracking`;
   const payout = `₹${input.payoutAmount.toLocaleString("en-IN")}`;
   const jobTitle = input.jobTitle?.trim() || `Project #${input.projectId}`;
-  // Only notify the professional and admin. The client performed the approval and does not receive a self-notification.
+  // The client already sees the funded payment in project activity. Notify the professional
+  // when the separate admin payout approval credits their wallet.
   await notifyUsers([input.professionalId], {
     type: "MILESTONE_PAYOUT_APPROVED",
-    title: `${jobTitle} · Milestone approved & payment released`,
-    description: `The client approved ${input.milestoneTitle}. ${payout} has been added to your wallet.`,
+    title: `${jobTitle} · Milestone payout released`,
+    description: `Admin approved the payout for ${input.milestoneTitle}. ${payout} has been added to your wallet.`,
     href: "/professional/earnings",
   });
   await notifyRole("ADMIN", {

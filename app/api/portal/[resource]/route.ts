@@ -38,13 +38,29 @@ export async function GET(
   const { resource } = await params;
   try {
     if (resource === "notifications") {
+      // Historical role-wide marketplace alerts must not appear in anyone's
+      // personal inbox. Notifications now only go to the account involved in
+      // an event; admin inboxes retain operational account, verification,
+      // dispute, and finance notifications.
+      const hiddenNotificationTypes =
+        session.role === "ADMIN"
+          ? ["NEW_JOB", "NEW_PROPOSAL", "JOB_POSTED", "PROFESSIONAL_HIRED"]
+          : session.role === "CLIENT"
+            ? ["NEW_PROFESSIONAL"]
+            : ["NEW_JOB"];
       const notifications = await db.userNotification.findMany({
         where: {
           userId: session.userId,
           clearedAt: null,
           type: {
-            notIn: ["PROPOSAL_SENT", "PROPOSAL_UPDATE_SENT", "HIRE_REQUEST_SENT"],
+            notIn: [
+              "PROPOSAL_SENT",
+              "PROPOSAL_UPDATE_SENT",
+              "HIRE_REQUEST_SENT",
+              ...hiddenNotificationTypes,
+            ],
           },
+          ...(session.role === "ADMIN" ? { NOT: [{ type: { startsWith: "HIRE_" } }] } : {}),
         },
         orderBy: { createdAt: "desc" },
         take: 100,
@@ -301,7 +317,7 @@ export async function GET(
       const transactions = await db.projectTransaction.findMany({
         where:
           session.role === "PROFESSIONAL"
-            ? { professionalId: session.userId }
+            ? { professionalId: session.userId, status: "COMPLETED" }
             : { clientId: session.userId },
         orderBy: { createdAt: "desc" },
         take: 50,
@@ -313,7 +329,7 @@ export async function GET(
               .map((transaction) => transaction.milestoneId)
               .filter((id): id is number => id !== null),
           },
-          status: "COMPLETED",
+          status: { in: ["FUNDED", "COMPLETED"] },
         },
         select: { id: true, milestoneId: true },
       });
@@ -872,7 +888,7 @@ export async function GET(
         timeline,
         projectRequest,
         review,
-        dispute,
+        disputes,
       ] = await Promise.all([
         db.clientJob.findUnique({
           where: { id: project.jobId },
@@ -919,14 +935,16 @@ export async function GET(
           select: { bidAmount: true },
         }),
         db.projectReview.findUnique({ where: { trackingId: project.id } }),
-        db.projectDispute.findFirst({
-          where: {
-            trackingId: project.id,
-            OR: [{ reporterId: project.clientId }, { reporterId: project.professionalId }],
-          },
+        db.projectDispute.findMany({
+          where: { trackingId: project.id },
           orderBy: { createdAt: "desc" },
         }),
       ]);
+      const activeDispute = disputes.find((d) => d.status !== "RESOLVED") ?? null;
+      const dispute = activeDispute ?? disputes[0] ?? null;
+      const disputeCount = disputes.length;
+      const canRaiseDispute = disputeCount < 3 && !activeDispute;
+
       return NextResponse.json({
         project,
         milestones,
@@ -940,6 +958,10 @@ export async function GET(
         agreedAmount: projectRequest?.bidAmount ?? null,
         review,
         dispute,
+        disputes,
+        disputeCount,
+        disputeLimit: 3,
+        canRaiseDispute,
       });
     }
     return NextResponse.json({ error: "Not found." }, { status: 404 });

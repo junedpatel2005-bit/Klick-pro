@@ -7,6 +7,8 @@ import { logServerError } from "@/lib/server-logger";
 const bodySchema = z.object({
   action: z.enum(["accept", "reject", "counter"]),
   bidAmount: z.coerce.number().int().positive().optional(),
+  hourlyRate: z.coerce.number().int().positive().max(1_000_000).optional(),
+  totalJobHours: z.coerce.number().int().positive().max(10_000).optional(),
   duration: z.string().trim().min(1).max(100).optional(),
   message: z.string().trim().max(5000).optional(),
 });
@@ -42,6 +44,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       input.data.action === "counter"
         ? {
             bidAmount: input.data.bidAmount!,
+            hourlyRate: input.data.hourlyRate,
+            totalJobHours: input.data.totalJobHours,
             duration: input.data.duration!,
             message: input.data.message!,
           }

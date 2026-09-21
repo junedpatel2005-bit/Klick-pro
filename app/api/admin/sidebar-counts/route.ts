@@ -27,11 +27,26 @@ export async function GET(request: NextRequest) {
       }),
       db.projectDispute.count({
         where: {
-          status: "OPEN",
+          status: { in: ["OPEN", "WAITING_RESPONSE", "UNDER_ADMIN_REVIEW"] },
           ...(operationsDate ? { updatedAt: { gt: operationsDate } } : {}),
         },
       }),
-      db.userNotification.count({ where: { userId: session.userId, readAt: null } }),
+      db.userNotification.count({
+        where: {
+          userId: session.userId,
+          readAt: null,
+          type: {
+            notIn: [
+              "NEW_JOB",
+              "NEW_PROPOSAL",
+              "JOB_POSTED",
+              "PROFESSIONAL_HIRED",
+              "HIRE_REQUEST_SENT",
+            ],
+          },
+          NOT: [{ type: { startsWith: "HIRE_" } }],
+        },
+      }),
       db.socketMessage.count({ where: { receiverId: session.userId, readAt: null } }),
     ]);
     return NextResponse.json({ newUsers, verification, jobs, notifications, messages });
@@ -77,7 +92,7 @@ export async function PATCH(request: NextRequest) {
       await db.userNotification.updateMany({
         where: {
           userId: session.userId,
-          type: { in: ["NEW_JOB", "DISPUTE_RAISED", "DISPUTE_UPDATED"] },
+          type: { in: ["DISPUTE_RAISED", "DISPUTE_UPDATED"] },
           readAt: null,
         },
         data: { readAt: new Date() },

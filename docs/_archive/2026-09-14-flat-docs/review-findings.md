@@ -10,10 +10,10 @@ items see `project-docs/CURRENT_PROJECT_STATUS.md`.
 
 ### 1. Shared API helpers exist, are tested, and are used by nothing
 
-| Helper | Call sites |
-| --- | --- |
-| `apiSuccess` / `apiError` ([`src/lib/api-response.ts`](../src/lib/api-response.ts)) | **0** |
-| `parsePagination` / `paginationSchema` ([`src/lib/pagination.ts`](../src/lib/pagination.ts)) | **0** |
+| Helper                                                                                       | Call sites |
+| -------------------------------------------------------------------------------------------- | ---------- |
+| `apiSuccess` / `apiError` ([`src/lib/api-response.ts`](../src/lib/api-response.ts))          | **0**      |
+| `parsePagination` / `paginationSchema` ([`src/lib/pagination.ts`](../src/lib/pagination.ts)) | **0**      |
 
 `api-response.ts` even has a passing unit test. Meanwhile all 65 route files call
 `NextResponse.json` directly and produce at least five different response shapes. Clients cannot
@@ -37,11 +37,11 @@ either a session or a ready-made 401/403 response. Replace the local copies.
 
 ### 3. Two handlers carry most of the domain logic
 
-| File | Lines |
-| --- | --- |
-| `app/api/portal/[resource]/route.ts` | 1,010 |
-| `app/api/portal/project-actions/route.ts` | 786 |
-| `app/api/auth/[action]/route.ts` | 882 |
+| File                                      | Lines |
+| ----------------------------------------- | ----- |
+| `app/api/portal/[resource]/route.ts`      | 1,010 |
+| `app/api/portal/project-actions/route.ts` | 786   |
+| `app/api/auth/[action]/route.ts`          | 882   |
 
 `project-actions` implements the entire project state machine as a chain of `if (input.action === ...)`
 blocks in one `POST`. Every state transition, every notification and every payment trigger is in

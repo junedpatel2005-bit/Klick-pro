@@ -17,11 +17,14 @@ export async function POST(request: NextRequest) {
     const token = request.cookies.get(sessionCookie)?.value;
     if (!token) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
     const session = await verifySession(token);
-    if (session.role !== "PROFESSIONAL")
-      return NextResponse.json({ error: "Professional access required." }, { status: 403 });
-
     const form = await request.formData();
     const projectId = Number(form.get("projectId"));
+    const purposeType = form.get("purpose")?.toString() || "work";
+    const isDispute = purposeType === "dispute";
+
+    if (!isDispute && session.role !== "PROFESSIONAL")
+      return NextResponse.json({ error: "Professional access required." }, { status: 403 });
+
     const files = form.getAll("files").filter((value): value is File => value instanceof File);
     if (
       !Number.isSafeInteger(projectId) ||
@@ -38,14 +41,17 @@ export async function POST(request: NextRequest) {
       if (error) return NextResponse.json({ error: `${file.name}: ${error}` }, { status: 400 });
     }
     const project = await db.projectTracking.findFirst({
-      where: { id: projectId, professionalId: session.userId },
+      where: isDispute
+        ? {
+            id: projectId,
+            OR: [{ clientId: session.userId }, { professionalId: session.userId }],
+          }
+        : { id: projectId, professionalId: session.userId },
       select: { id: true, status: true },
     });
     if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
-    // A milestone can already be active while the parent project still has its
-    // initial READY_TO_START status. The upload action will transition the project
-    // to IN_PROGRESS after the files are stored.
-    if (!["READY_TO_START", "IN_PROGRESS", "REVISION_REQUESTED"].includes(project.status))
+    // For normal work uploads, work or revision must be active
+    if (!isDispute && !["READY_TO_START", "IN_PROGRESS", "REVISION_REQUESTED"].includes(project.status))
       return NextResponse.json(
         { error: "Files can only be uploaded while work or a revision is in progress." },
         { status: 409 },
@@ -62,7 +68,7 @@ export async function POST(request: NextRequest) {
         const record = await db.storedFile.create({
           data: {
             ownerId: session.userId,
-            purpose: `project-work:${project.id}`,
+            purpose: isDispute ? `project-dispute:${project.id}` : `project-work:${project.id}`,
             fileName: file.name,
             mimeType: file.type || "application/octet-stream",
             sizeBytes: file.size,

@@ -18,9 +18,12 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { PageActionLoading } from "@/components/PageActionLoading";
 import { usePortalTitle } from "@/components/PortalShell";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -62,6 +65,7 @@ type OwnerJob = {
   deadline: string | null;
   timingType: "FIXED" | "HOURLY";
   hourlyRate: number | null;
+  totalJobHours: number | null;
   projectId: number | null;
   status: "DRAFT" | "OPEN" | "CLOSED";
   createdAt: string;
@@ -93,6 +97,7 @@ type ViewJob = {
   deadline: string | null;
   timingType: "FIXED" | "HOURLY";
   hourlyRate: number | null;
+  totalJobHours: number | null;
   projectId?: number | null;
   createdAt: string;
   status?: "DRAFT" | "OPEN" | "CLOSED";
@@ -127,6 +132,8 @@ type JobProposal = {
   id: number;
   professionalId: number;
   bidAmount: number;
+  hourlyRate?: number | null;
+  totalJobHours?: number | null;
   duration: string;
   coverLetter: string;
   status: string;
@@ -203,6 +210,7 @@ function fromOwner(job: OwnerJob): ViewJob {
     deadline: job.deadline,
     timingType: job.timingType,
     hourlyRate: job.hourlyRate,
+    totalJobHours: job.totalJobHours,
     projectId: job.projectId,
     createdAt: job.createdAt,
     status: job.status,
@@ -213,7 +221,9 @@ function fromOwner(job: OwnerJob): ViewJob {
 
 function formatBudget(job: ViewJob) {
   if (job.timingType === "HOURLY" && job.hourlyRate !== null) {
-    return `₹${job.hourlyRate.toLocaleString()}/hr`;
+    return job.totalJobHours
+      ? `₹${job.hourlyRate.toLocaleString()}/hr × ${job.totalJobHours} hours = ₹${(job.hourlyRate * job.totalJobHours).toLocaleString()}`
+      : `₹${job.hourlyRate.toLocaleString()}/hr`;
   }
   return job.budgetMin === null && job.budgetMax === null
     ? "Budget on request"
@@ -272,6 +282,8 @@ export default function JobDetails({
     id: number;
     status: string;
     bidAmount: number;
+    hourlyRate?: number | null;
+    totalJobHours?: number | null;
     duration: string;
     coverLetter: string;
     lastActorRole: "CLIENT" | "PROFESSIONAL";
@@ -283,6 +295,8 @@ export default function JobDetails({
   const [sentHireRequests, setSentHireRequests] = useState<JobHireRequest[]>([]);
   const [showProposalForm, setShowProposalForm] = useState(false);
   const [proposalPrice, setProposalPrice] = useState("");
+  const [proposalHourlyRate, setProposalHourlyRate] = useState("");
+  const [proposalTotalJobHours, setProposalTotalJobHours] = useState("");
   const [proposalDuration, setProposalDuration] = useState("");
   const [proposalMessage, setProposalMessage] = useState("");
   const [proposalBusy, setProposalBusy] = useState(false);
@@ -294,13 +308,68 @@ export default function JobDetails({
     kind: NegotiationKind;
     id: number;
     lastBidAmount?: number;
+    lastHourlyRate?: number | null;
+    lastTotalJobHours?: number | null;
     lastDuration?: string;
   } | null>(null);
   const [negotiatePrice, setNegotiatePrice] = useState("");
+  const [negotiateHourlyRate, setNegotiateHourlyRate] = useState("");
+  const [negotiateTotalJobHours, setNegotiateTotalJobHours] = useState("");
   const [negotiateDuration, setNegotiateDuration] = useState("");
   const [negotiateMessage, setNegotiateMessage] = useState("");
   const [negotiateBusy, setNegotiateBusy] = useState(false);
   const [negotiateError, setNegotiateError] = useState<string | null>(null);
+  const [closeJobConfirmOpen, setCloseJobConfirmOpen] = useState(false);
+  const [reopenJobConfirmOpen, setReopenJobConfirmOpen] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
+
+  async function handleCloseJob() {
+    setStatusBusy(true);
+    try {
+      const response = await fetch(`/api/v1/client/jobs/${jobId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "CLOSED" }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        toast.error(data?.error || "Unable to close job.");
+        return;
+      }
+      const { job: updatedJob } = await response.json();
+      setJob(fromOwner(updatedJob));
+      setCloseJobConfirmOpen(false);
+      toast.success("Job closed successfully.");
+    } catch {
+      toast.error("Unable to close job.");
+    } finally {
+      setStatusBusy(false);
+    }
+  }
+
+  async function handleReopenJob() {
+    setStatusBusy(true);
+    try {
+      const response = await fetch(`/api/v1/client/jobs/${jobId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "OPEN" }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        toast.error(data?.error || "Unable to reopen job.");
+        return;
+      }
+      const { job: updatedJob } = await response.json();
+      setJob(fromOwner(updatedJob));
+      setReopenJobConfirmOpen(false);
+      toast.success("Job reopened successfully.");
+    } catch {
+      toast.error("Unable to reopen job.");
+    } finally {
+      setStatusBusy(false);
+    }
+  }
   const refresh = useCallback(async () => {
     try {
       const authResponse = await fetch("/api/v1/auth/me");
@@ -354,6 +423,8 @@ export default function JobDetails({
               id: number;
               status: string;
               bidAmount: number;
+              hourlyRate?: number | null;
+              totalJobHours?: number | null;
               duration: string;
               coverLetter: string;
               lastActorRole: "CLIENT" | "PROFESSIONAL";
@@ -503,19 +574,26 @@ export default function JobDetails({
     }
   }
   async function sendProposal() {
-    const bidAmount = Number(proposalPrice);
+    const hourlyRate = Number(proposalHourlyRate);
+    const totalJobHours = Number(proposalTotalJobHours);
+    const isHourlyJob = job?.timingType === "HOURLY";
+    const bidAmount = isHourlyJob ? hourlyRate * totalJobHours : Number(proposalPrice);
     const duration = proposalDuration.trim();
     const message = proposalMessage.trim();
     if (
       !Number.isFinite(bidAmount) ||
       !Number.isInteger(bidAmount) ||
       bidAmount < 1 ||
+      (isHourlyJob &&
+        (!Number.isSafeInteger(hourlyRate) || hourlyRate < 1 || !Number.isSafeInteger(totalJobHours) || totalJobHours < 1)) ||
       !duration ||
       message.length < 10
     ) {
       setProposalError(
         !Number.isFinite(bidAmount) || !Number.isInteger(bidAmount) || bidAmount < 1
-          ? "Enter a valid price."
+          ? isHourlyJob
+            ? "Enter a valid hourly rate and total job hours."
+            : "Enter a valid price."
           : !duration
             ? "Enter a delivery estimate."
             : "Your message must be at least 10 characters.",
@@ -531,6 +609,8 @@ export default function JobDetails({
         body: JSON.stringify({
           jobId: Number(jobId),
           bidAmount,
+          hourlyRate: isHourlyJob ? hourlyRate : undefined,
+          totalJobHours: isHourlyJob ? totalJobHours : undefined,
           duration,
           coverLetter: message,
         }),
@@ -541,6 +621,8 @@ export default function JobDetails({
         id: payload.proposal.id,
         status: payload.proposal.status,
         bidAmount: payload.proposal.bidAmount,
+        hourlyRate: payload.proposal.hourlyRate,
+        totalJobHours: payload.proposal.totalJobHours,
         duration: payload.proposal.duration,
         coverLetter: payload.proposal.coverLetter,
         lastActorRole: "PROFESSIONAL",
@@ -577,7 +659,8 @@ export default function JobDetails({
           return;
         }
       }
-      return alert(payload?.error || "Unable to update this request.");
+      toast.error(payload?.error || "Unable to update this request.");
+      return;
     }
     if (action === "accept" && payload.project?.id) {
       setAcceptedProjectId(payload.project.id);
@@ -587,34 +670,64 @@ export default function JobDetails({
   }
   function openNegotiate(
     kind: NegotiationKind,
-    item: { id: number; bidAmount: number; duration: string },
+    item: {
+      id: number;
+      bidAmount: number;
+      duration: string;
+      hourlyRate?: number | null;
+      totalJobHours?: number | null;
+    },
   ) {
     setNegotiateTarget({
       kind,
       id: item.id,
       lastBidAmount: item.bidAmount,
+      lastHourlyRate: item.hourlyRate,
+      lastTotalJobHours: item.totalJobHours,
       lastDuration: item.duration,
     });
     setNegotiatePrice("");
+    setNegotiateHourlyRate(
+      item.hourlyRate != null ? String(item.hourlyRate) : String(job?.hourlyRate ?? ""),
+    );
+    setNegotiateTotalJobHours(
+      item.totalJobHours != null ? String(item.totalJobHours) : String(job?.totalJobHours ?? ""),
+    );
     setNegotiateDuration(item.duration);
     setNegotiateMessage("");
     setNegotiateError(null);
   }
   async function submitNegotiation() {
     if (!negotiateTarget) return;
-    const bidAmount = Number(negotiatePrice);
+    const isHourlyJob = job?.timingType === "HOURLY";
+    const hourlyRate = Number(negotiateHourlyRate);
+    const totalJobHours = Number(negotiateTotalJobHours);
+    const bidAmount = isHourlyJob ? hourlyRate * totalJobHours : Number(negotiatePrice);
     if (
       !Number.isSafeInteger(bidAmount) ||
       bidAmount < 1 ||
+      (isHourlyJob &&
+        (!Number.isSafeInteger(hourlyRate) || hourlyRate < 1 || !Number.isSafeInteger(totalJobHours) || totalJobHours < 1)) ||
       !negotiateDuration.trim() ||
       !negotiateMessage.trim()
     ) {
-      setNegotiateError("Enter a valid price, timeline, and message.");
+      setNegotiateError(
+        isHourlyJob
+          ? "Enter a valid hourly rate, total job hours, timeline, and message."
+          : "Enter a valid price, timeline, and message.",
+      );
       return;
     }
-    if (negotiateTarget.lastBidAmount != null && bidAmount === negotiateTarget.lastBidAmount) {
+    if (
+      isHourlyJob
+        ? hourlyRate === negotiateTarget.lastHourlyRate &&
+          totalJobHours === negotiateTarget.lastTotalJobHours
+        : negotiateTarget.lastBidAmount != null && bidAmount === negotiateTarget.lastBidAmount
+    ) {
       setNegotiateError(
-        `Counter-offer amount cannot be the same as the current bid amount (₹${negotiateTarget.lastBidAmount.toLocaleString("en-IN")}). Please propose a different amount.`,
+        isHourlyJob
+          ? "Change the hourly rate or total job hours before sending your counter-offer."
+          : `Counter-offer amount cannot be the same as the current bid amount (₹${(negotiateTarget.lastBidAmount ?? 0).toLocaleString("en-IN")}). Please propose a different amount.`,
       );
       return;
     }
@@ -627,6 +740,8 @@ export default function JobDetails({
         body: JSON.stringify({
           action: "counter",
           bidAmount,
+          hourlyRate: isHourlyJob ? hourlyRate : undefined,
+          totalJobHours: isHourlyJob ? totalJobHours : undefined,
           duration: negotiateDuration,
           message: negotiateMessage,
         }),
@@ -1401,6 +1516,8 @@ export default function JobDetails({
                           ? Math.round((job.budgetMin + job.budgetMax) / 2)
                           : (job.budgetMax ?? job.budgetMin);
                     setProposalPrice(String(defaultPrice ?? ""));
+                    setProposalHourlyRate(String(job.hourlyRate ?? ""));
+                    setProposalTotalJobHours(String(job.totalJobHours ?? ""));
                     const daysLeft = daysUntilDeadline(job.deadline);
                     setProposalDuration(
                       daysLeft !== null ? `${daysLeft} day${daysLeft === 1 ? "" : "s"}` : "",
@@ -1456,24 +1573,7 @@ export default function JobDetails({
                     <Button
                       variant="destructive"
                       className="w-full sm:w-auto"
-                      onClick={async () => {
-                        if (
-                          !confirm("Close this job? It will no longer appear in the marketplace.")
-                        )
-                          return;
-                        const response = await fetch(`/api/v1/client/jobs/${jobId}`, {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ status: "CLOSED" }),
-                        });
-                        if (!response.ok) {
-                          const data = await response.json().catch(() => null);
-                          alert(data?.error || "Unable to close job.");
-                          return;
-                        }
-                        const { job: updatedJob } = await response.json();
-                        setJob(fromOwner(updatedJob));
-                      }}
+                      onClick={() => setCloseJobConfirmOpen(true)}
                     >
                       Close Job
                     </Button>
@@ -1484,22 +1584,7 @@ export default function JobDetails({
                 <Button
                   variant="outline"
                   className="w-full sm:w-auto"
-                  onClick={async () => {
-                    if (!confirm("Reopen this job? It will appear again in the marketplace."))
-                      return;
-                    const response = await fetch(`/api/v1/client/jobs/${jobId}`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ status: "OPEN" }),
-                    });
-                    if (!response.ok) {
-                      const data = await response.json().catch(() => null);
-                      alert(data?.error || "Unable to reopen job.");
-                      return;
-                    }
-                    const { job: updatedJob } = await response.json();
-                    setJob(fromOwner(updatedJob));
-                  }}
+                  onClick={() => setReopenJobConfirmOpen(true)}
                 >
                   Reopen Job
                 </Button>
@@ -1534,17 +1619,55 @@ export default function JobDetails({
               void sendProposal();
             }}
           >
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={proposalPrice}
-              onChange={(event) => {
-                setProposalPrice(event.target.value);
-                setProposalError(null);
-              }}
-              placeholder="Your price"
-            />
+            {job.timingType === "HOURLY" ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={proposalHourlyRate}
+                    onChange={(event) => {
+                      setProposalHourlyRate(event.target.value);
+                      setProposalError(null);
+                    }}
+                    placeholder="Your hourly rate (₹)"
+                  />
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={proposalTotalJobHours}
+                    onChange={(event) => {
+                      setProposalTotalJobHours(event.target.value);
+                      setProposalError(null);
+                    }}
+                    placeholder="Total job hours"
+                  />
+                </div>
+                <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm font-semibold">
+                  Project total: ₹
+                  {Number.isSafeInteger(Number(proposalHourlyRate)) &&
+                  Number.isSafeInteger(Number(proposalTotalJobHours)) &&
+                  Number(proposalHourlyRate) > 0 &&
+                  Number(proposalTotalJobHours) > 0
+                    ? (Number(proposalHourlyRate) * Number(proposalTotalJobHours)).toLocaleString("en-IN")
+                    : "—"}
+                </p>
+              </>
+            ) : (
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={proposalPrice}
+                onChange={(event) => {
+                  setProposalPrice(event.target.value);
+                  setProposalError(null);
+                }}
+                placeholder="Your price"
+              />
+            )}
             <div>
               <input
                 value={proposalDuration}
@@ -1710,10 +1833,16 @@ export default function JobDetails({
             <div className="rounded-xl border border-border bg-muted/40 p-3.5 space-y-1.5 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground font-medium">
-                  Current / Last Bid Amount:
+                  {job.timingType === "HOURLY"
+                    ? "Current hourly terms:"
+                    : "Current / Last Bid Amount:"}
                 </span>
                 <span className="text-sm font-bold text-foreground">
-                  ₹{negotiateTarget.lastBidAmount.toLocaleString("en-IN")}
+                  {job.timingType === "HOURLY" &&
+                  negotiateTarget.lastHourlyRate != null &&
+                  negotiateTarget.lastTotalJobHours != null
+                    ? `₹${negotiateTarget.lastHourlyRate.toLocaleString("en-IN")}/hr × ${negotiateTarget.lastTotalJobHours} hours = ₹${negotiateTarget.lastBidAmount.toLocaleString("en-IN")}`
+                    : `₹${negotiateTarget.lastBidAmount.toLocaleString("en-IN")}`}
                 </span>
               </div>
               {negotiateTarget.lastDuration && (
@@ -1727,32 +1856,68 @@ export default function JobDetails({
             </div>
           )}
 
-          <div className="mt-1 grid gap-3 [&_input]:rounded-md [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
-            <div>
-              <label className="text-xs font-semibold text-foreground block mb-1">
-                Your Counter-Offer Price (₹) <span className="text-destructive">*</span>
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={negotiatePrice}
-                onChange={(event) => {
-                  setNegotiatePrice(event.target.value);
-                  setNegotiateError(null);
-                }}
-                placeholder="Enter counter price (must differ from current bid)"
-              />
-              {negotiateTarget?.lastBidAmount != null &&
-                negotiatePrice.trim() !== "" &&
-                Number(negotiatePrice) === negotiateTarget.lastBidAmount && (
-                  <p className="mt-1.5 text-xs font-semibold text-destructive flex items-center gap-1.5">
-                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                    Amount cannot be the same as the current bid (₹
-                    {negotiateTarget.lastBidAmount.toLocaleString("en-IN")}). Please propose a
-                    different amount.
-                  </p>
-                )}
-            </div>
+          <div className="mt-1 grid gap-3 [&_input]:w-full [&_input]:min-w-0 [&_input]:rounded-md [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_textarea]:w-full [&_textarea]:min-w-0 [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
+            {job.timingType === "HOURLY" ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-semibold text-foreground block mb-1">
+                      Your hourly rate (₹) <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={negotiateHourlyRate}
+                      onChange={(event) => {
+                        setNegotiateHourlyRate(event.target.value);
+                        setNegotiateError(null);
+                      }}
+                      placeholder="Hourly rate"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-foreground block mb-1">
+                      Total job hours <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={negotiateTotalJobHours}
+                      onChange={(event) => {
+                        setNegotiateTotalJobHours(event.target.value);
+                        setNegotiateError(null);
+                      }}
+                      placeholder="Total hours"
+                    />
+                  </div>
+                </div>
+                <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm font-semibold">
+                  Project total: ₹
+                  {Number.isSafeInteger(Number(negotiateHourlyRate)) &&
+                  Number.isSafeInteger(Number(negotiateTotalJobHours)) &&
+                  Number(negotiateHourlyRate) > 0 &&
+                  Number(negotiateTotalJobHours) > 0
+                    ? (Number(negotiateHourlyRate) * Number(negotiateTotalJobHours)).toLocaleString("en-IN")
+                    : "—"}
+                </p>
+              </>
+            ) : (
+              <div>
+                <label className="text-xs font-semibold text-foreground block mb-1">
+                  Your Counter-Offer Price (₹) <span className="text-destructive">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={negotiatePrice}
+                  onChange={(event) => {
+                    setNegotiatePrice(event.target.value);
+                    setNegotiateError(null);
+                  }}
+                  placeholder="Enter counter price (must differ from current bid)"
+                />
+              </div>
+            )}
             <div>
               <label className="text-xs font-semibold text-foreground block mb-1">
                 Proposed Timeline <span className="text-destructive">*</span>
@@ -1784,9 +1949,9 @@ export default function JobDetails({
               className="bg-cta text-cta-foreground hover:bg-cta/90"
               disabled={
                 negotiateBusy ||
-                (negotiateTarget?.lastBidAmount != null &&
-                  Number(negotiatePrice) === negotiateTarget.lastBidAmount) ||
-                !negotiatePrice.trim() ||
+                (job.timingType === "HOURLY"
+                  ? !negotiateHourlyRate.trim() || !negotiateTotalJobHours.trim()
+                  : !negotiatePrice.trim()) ||
                 !negotiateDuration.trim() ||
                 !negotiateMessage.trim()
               }
@@ -1967,6 +2132,49 @@ export default function JobDetails({
           </div>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={closeJobConfirmOpen}
+        onOpenChange={setCloseJobConfirmOpen}
+        title="Close this job?"
+        description="This job will no longer appear in the marketplace and professionals will not be able to send new proposals."
+        confirmLabel="Close Job"
+        variant="destructive"
+        loading={statusBusy}
+        onConfirm={handleCloseJob}
+      />
+
+      <ConfirmDialog
+        open={reopenJobConfirmOpen}
+        onOpenChange={setReopenJobConfirmOpen}
+        title="Reopen this job?"
+        description="This job will be published again to the marketplace so professionals can discover and send proposals."
+        confirmLabel="Reopen Job"
+        loading={statusBusy}
+        onConfirm={handleReopenJob}
+      />
+
+      <PageActionLoading
+        active={proposalBusy || hireBusy || negotiateBusy || statusBusy}
+        title={
+          proposalBusy
+            ? "Submitting your proposal…"
+            : hireBusy
+              ? "Creating contract & hiring…"
+              : negotiateBusy
+                ? "Sending counter-offer…"
+                : "Updating job listing…"
+        }
+        description={
+          proposalBusy
+            ? "Sending your proposal, rate, and duration estimate to the client."
+            : hireBusy
+              ? "Setting up the project contract and sending your hire offer."
+              : negotiateBusy
+                ? "Delivering your updated terms to the professional."
+                : "Applying changes to the marketplace status."
+        }
+      />
     </JobShell>
   );
 }

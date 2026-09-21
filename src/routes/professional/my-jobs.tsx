@@ -25,6 +25,7 @@ import {
   Heart,
 } from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { MarketplaceCategory } from "@/lib/types/marketplace";
 import { getAllStates, getDistrictsByState } from "@/lib/india-locations";
 
@@ -189,7 +190,7 @@ function ProfessionalJobsContent() {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        alert(payload?.error || "Unable to update this request.");
+        toast.error(payload?.error || "Unable to update this request.");
         return;
       }
       if (action === "accept" && payload.project?.id) {
@@ -1307,7 +1308,7 @@ function ProfessionalJobsContent() {
             </div>
           )}
 
-          <div className="mt-1 grid gap-3 [&_input]:rounded-md [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
+          <div className="mt-1 grid gap-3 [&_input]:w-full [&_input]:min-w-0 [&_input]:rounded-md [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_textarea]:w-full [&_textarea]:min-w-0 [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
             <div>
               <label className="text-xs font-semibold text-foreground block mb-1">
                 Your Counter-Offer Price (₹) <span className="text-destructive">*</span>

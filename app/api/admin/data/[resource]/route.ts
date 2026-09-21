@@ -34,7 +34,7 @@ export async function GET(
       db.user.count({ where: { role: "PROFESSIONAL" } }),
       db.professionalVerification.count({ where: { status: "PENDING" } }),
       db.clientJob.count(),
-      db.projectDispute.count({ where: { status: "OPEN" } }),
+      db.projectDispute.count({ where: { status: { in: ["OPEN", "WAITING_RESPONSE", "UNDER_ADMIN_REVIEW"] } } }),
       db.projectTransaction.aggregate({ where: { status: "COMPLETED" }, _sum: { amount: true } }),
       db.user.findMany({
         where: { role: { in: ["CLIENT", "PROFESSIONAL"] } },

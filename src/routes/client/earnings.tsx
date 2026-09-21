@@ -16,6 +16,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { CardListSkeleton } from "@/components/LoadingSkeleton";
+import { PageActionLoading } from "@/components/PageActionLoading";
 type Payment = {
   id: number;
   amount: number;
@@ -84,6 +85,7 @@ export default function ClientEarnings() {
   const [withdrawDestination, setWithdrawDestination] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawMessage, setWithdrawMessage] = useState("");
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
   function loadWallet() {
     void fetch("/api/v1/wallet", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
@@ -115,105 +117,120 @@ export default function ClientEarnings() {
     loadWallet();
   }, []);
   async function requestWithdrawal() {
-    const response = await fetch("/api/v1/wallet", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        amount: Number(withdrawAmount),
-        destinationType: withdrawMethod,
-        destinationLabel: withdrawDestination.trim(),
-      }),
-    });
-    const result = await response.json().catch(() => null);
-    setWithdrawMessage(
-      response.ok
-        ? "Withdrawal request submitted for review."
-        : (result?.error ?? "Unable to request withdrawal."),
-    );
-    if (response.ok) {
-      setWithdrawAmount("");
-      setWithdrawDestination("");
-      loadWallet();
+    setActionBusy("withdraw");
+    try {
+      const response = await fetch("/api/v1/wallet", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          amount: Number(withdrawAmount),
+          destinationType: withdrawMethod,
+          destinationLabel: withdrawDestination.trim(),
+        }),
+      });
+      const result = await response.json().catch(() => null);
+      setWithdrawMessage(
+        response.ok
+          ? "Withdrawal request submitted for review."
+          : (result?.error ?? "Unable to request withdrawal."),
+      );
+      if (response.ok) {
+        setWithdrawAmount("");
+        setWithdrawDestination("");
+        loadWallet();
+      }
+    } finally {
+      setActionBusy(null);
     }
   }
   async function startTopUp() {
-    const response = await fetch("/api/v1/wallet/deposit/order", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ amount: Number(topUpAmount) }),
-    });
-    const result = await response.json().catch(() => null);
-    if (!response.ok) return setWalletMessage(result?.error ?? "Unable to start wallet top-up.");
-    const openCheckout = () => {
-      const Razorpay = (
-        window as Window & {
-          Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
-        }
-      ).Razorpay;
-      if (!Razorpay) return setWalletMessage("Payment checkout could not be loaded.");
-      new Razorpay({
-        key: result.keyId,
-        amount: result.amount,
-        currency: result.currency,
-        name: "Klick-Pro",
-        description: "Wallet top-up",
-        order_id: result.orderId,
-        handler: async (payment: {
-          razorpay_payment_id: string;
-          razorpay_order_id: string;
-          razorpay_signature: string;
-        }) => {
-          const verified = await fetch("/api/v1/wallet/deposit/verify", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              razorpayOrderId: payment.razorpay_order_id,
-              razorpayPaymentId: payment.razorpay_payment_id,
-              razorpaySignature: payment.razorpay_signature,
-            }),
-          });
-          setWalletMessage(
-            verified.ok ? "Wallet funded successfully." : "Wallet funding verification failed.",
-          );
-          if (verified.ok) window.location.reload();
-        },
-        modal: {
-          ondismiss: () => {
-            void fetch("/api/v1/wallet/deposit/fail", {
+    setActionBusy("topup");
+    try {
+      const response = await fetch("/api/v1/wallet/deposit/order", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ amount: Number(topUpAmount) }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        setActionBusy(null);
+        return setWalletMessage(result?.error ?? "Unable to start wallet top-up.");
+      }
+      const openCheckout = () => {
+        setActionBusy(null);
+        const Razorpay = (
+          window as Window & {
+            Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+          }
+        ).Razorpay;
+        if (!Razorpay) return setWalletMessage("Payment checkout could not be loaded.");
+        new Razorpay({
+          key: result.keyId,
+          amount: result.amount,
+          currency: result.currency,
+          name: "Klick-Pro",
+          description: "Wallet top-up",
+          order_id: result.orderId,
+          handler: async (payment: {
+            razorpay_payment_id: string;
+            razorpay_order_id: string;
+            razorpay_signature: string;
+          }) => {
+            const verified = await fetch("/api/v1/wallet/deposit/verify", {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ orderId: result.orderId, reason: "Checkout cancelled." }),
+              body: JSON.stringify({
+                razorpayOrderId: payment.razorpay_order_id,
+                razorpayPaymentId: payment.razorpay_payment_id,
+                razorpaySignature: payment.razorpay_signature,
+              }),
             });
-            setWalletMessage("Payment was cancelled. No money was added to your wallet.");
+            setWalletMessage(
+              verified.ok ? "Wallet funded successfully." : "Wallet funding verification failed.",
+            );
+            if (verified.ok) window.location.reload();
           },
-        },
-      }).open();
-    };
-    const existingScript = document.querySelector<HTMLScriptElement>(
-      'script[src="https://checkout.razorpay.com/v1/checkout.js"]',
-    );
-    if ((window as Window & { Razorpay?: unknown }).Razorpay) return openCheckout();
-    const script = existingScript ?? document.createElement("script");
-    void new Promise<void>((resolve, reject) => {
-      script.addEventListener("load", () => resolve(), { once: true });
-      script.addEventListener(
-        "error",
-        () => reject(new Error("Unable to load payment checkout.")),
-        {
-          once: true,
-        },
+          modal: {
+            ondismiss: () => {
+              void fetch("/api/v1/wallet/deposit/fail", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ orderId: result.orderId, reason: "Checkout cancelled." }),
+              });
+              setWalletMessage("Payment was cancelled. No money was added to your wallet.");
+            },
+          },
+        }).open();
+      };
+      const existingScript = document.querySelector<HTMLScriptElement>(
+        'script[src="https://checkout.razorpay.com/v1/checkout.js"]',
       );
-      if (!existingScript) {
-        script.src = "https://checkout.razorpay.com/v1/checkout.js";
-        document.body.appendChild(script);
-      }
-    })
-      .then(openCheckout)
-      .catch((error: unknown) =>
-        setWalletMessage(
-          error instanceof Error ? error.message : "Unable to load payment checkout.",
-        ),
-      );
+      if ((window as Window & { Razorpay?: unknown }).Razorpay) return openCheckout();
+      const script = existingScript ?? document.createElement("script");
+      void new Promise<void>((resolve, reject) => {
+        script.addEventListener("load", () => resolve(), { once: true });
+        script.addEventListener(
+          "error",
+          () => reject(new Error("Unable to load payment checkout.")),
+          {
+            once: true,
+          },
+        );
+        if (!existingScript) {
+          script.src = "https://checkout.razorpay.com/v1/checkout.js";
+          document.body.appendChild(script);
+        }
+      })
+        .then(openCheckout)
+        .catch((error: unknown) => {
+          setActionBusy(null);
+          setWalletMessage(
+            error instanceof Error ? error.message : "Unable to load payment checkout.",
+          );
+        });
+    } catch {
+      setActionBusy(null);
+    }
   }
   async function openPaymentDetails(payment: Payment) {
     if (!payment.invoicePaymentId) {
@@ -252,21 +269,24 @@ export default function ClientEarnings() {
         detail && "error" in detail ? String(detail.error) : "Payment details could not be loaded.",
       );
   }
-  const completed = useMemo(
-    () => payments?.filter((payment) => payment.status === "COMPLETED") ?? [],
+  const paidPayments = useMemo(
+    () =>
+      payments?.filter(
+        (payment) => payment.status === "FUNDED" || payment.status === "COMPLETED",
+      ) ?? [],
     [payments],
   );
-  const total = completed.reduce((sum, p) => sum + p.amount, 0);
+  const total = paidPayments.reduce((sum, p) => sum + p.amount, 0);
   const thisMonth = useMemo(
     () =>
-      completed
+      paidPayments
         .filter((p) => {
           const d = new Date(p.createdAt),
             now = new Date();
           return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
         })
         .reduce((sum, p) => sum + p.amount, 0),
-    [completed],
+    [paidPayments],
   );
   const historyItems = useMemo(
     () =>
@@ -323,9 +343,17 @@ export default function ClientEarnings() {
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" /> Secure wallet
                 </span>
               </div>
-              <p className="mt-3 font-display text-4xl font-bold tracking-tight">
-                ₹{(wallet?.available ?? 0).toLocaleString()}
-              </p>
+              {wallet ? (
+                <p className="mt-3 font-display text-4xl font-bold tracking-tight">
+                  ₹{wallet.available.toLocaleString("en-IN")}
+                </p>
+              ) : (
+                <div
+                  className="mt-3 h-10 w-44 animate-pulse rounded-lg bg-white/20"
+                  aria-label="Loading available balance"
+                  role="status"
+                />
+              )}
               <div className="mt-4 flex items-center gap-2 text-xs text-white/60">
                 <LockKeyhole className="h-3.5 w-3.5" /> Protected by Razorpay payments
               </div>
@@ -349,7 +377,11 @@ export default function ClientEarnings() {
               value={`₹${thisMonth.toLocaleString()}`}
               label="Paid this month"
             />
-            <Stat icon={ReceiptText} value={String(completed.length)} label="Approved milestones" />
+            <Stat
+              icon={ReceiptText}
+              value={String(paidPayments.length)}
+              label="Funded milestones"
+            />
           </div>
           <section className="relative overflow-hidden rounded-2xl border border-primary/15 bg-card p-6 shadow-soft">
             <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-primary/10 blur-2xl" />
@@ -519,7 +551,7 @@ export default function ClientEarnings() {
                 <div>
                   <h2 className="font-display text-xl font-semibold">Payment history</h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Payments are released after milestone approval.
+                    Client-funded milestones are released after admin payout approval.
                   </p>
                 </div>
                 <ReceiptText className="h-5 w-5 text-primary" />
@@ -569,9 +601,15 @@ export default function ClientEarnings() {
                       <p className="font-bold">
                         ₹{item.payment.amount.toLocaleString()} {item.payment.currency}
                       </p>
-                      <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-success">
+                      <p
+                        className={`mt-1 inline-flex items-center gap-1 text-xs font-semibold ${item.payment.status === "COMPLETED" ? "text-success" : "text-warning"}`}
+                      >
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        {item.payment.status === "COMPLETED" ? "Paid" : item.payment.status}
+                        {item.payment.status === "COMPLETED"
+                          ? "Payout completed"
+                          : item.payment.status === "FUNDED"
+                            ? "Awaiting admin payout"
+                            : item.payment.status}
                       </p>
                     </div>
                   </div>
@@ -636,8 +674,12 @@ export default function ClientEarnings() {
                   the milestone.
                 </li>
                 <li>
-                  <span className="mr-2 font-semibold text-primary">3.</span>The approved amount is
-                  recorded and released to the professional.
+                  <span className="mr-2 font-semibold text-primary">3.</span>The milestone payment
+                  moves to the secure platform wallet for admin review.
+                </li>
+                <li>
+                  <span className="mr-2 font-semibold text-primary">4.</span>After admin approval,
+                  the professional payout is credited to their wallet.
                 </li>
               </ol>
               <p className="mt-6 rounded-xl bg-primary/5 p-4 text-sm text-muted-foreground">
@@ -694,6 +736,20 @@ export default function ClientEarnings() {
           </section>
         </div>
       ) : null}
+
+      <PageActionLoading
+        active={actionBusy !== null}
+        title={
+          actionBusy === "topup"
+            ? "Connecting to payment gateway…"
+            : "Submitting withdrawal request…"
+        }
+        description={
+          actionBusy === "topup"
+            ? "Preparing secure checkout with Razorpay."
+            : "Sending your withdrawal request to admin review."
+        }
+      />
     </div>
   );
 }
@@ -704,13 +760,19 @@ function PaymentDetails({ detail }: { detail: PaymentDetail }) {
       <div className="rounded-2xl bg-primary/5 p-5">
         <p className="text-sm text-muted-foreground">Amount charged</p>
         <p className="mt-1 font-display text-3xl font-bold">{money(detail.amount)}</p>
-        <p className="mt-2 text-sm font-semibold text-success">{detail.status}</p>
+        <p
+          className={`mt-2 text-sm font-semibold ${detail.status === "COMPLETED" ? "text-success" : "text-warning"}`}
+        >
+          {detail.status === "FUNDED" ? "AWAITING ADMIN PAYOUT" : detail.status}
+        </p>
       </div>
       <div className="space-y-3 rounded-2xl border border-border p-5 text-sm">
         <DetailRow label="Milestone value" value={money(detail.baseAmount)} />
         <DetailRow label="Client service fee" value={money(detail.clientFeeAmount)} />
-        <DetailRow label="Professional receives" value={money(detail.professionalPayoutAmount)} />
-        <DetailRow label="Platform amount" value={money(detail.adminNetAmount)} />
+        <DetailRow
+          label="Professional milestone amount"
+          value={money(detail.professionalPayoutAmount)}
+        />
         <DetailRow
           label="Payment method"
           value={detail.provider === "wallet" ? "Wallet balance" : detail.provider}

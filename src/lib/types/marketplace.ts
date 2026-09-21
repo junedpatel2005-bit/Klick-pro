@@ -126,6 +126,7 @@ export type MarketplaceJob = {
   deadline: string | null;
   timingType: "FIXED" | "HOURLY";
   hourlyRate: number | null;
+  totalJobHours: number | null;
   createdAt: string;
   status: "OPEN" | "CLOSED" | "DRAFT";
   proposalCount: number;

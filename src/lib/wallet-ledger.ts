@@ -1,23 +1,13 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { calculateMilestoneMoney } from "@/lib/payment-fees";
 import { Prisma } from "@generated/prisma/client";
 
-export const CLIENT_FEE_RATE = 0;
-export const PROFESSIONAL_FEE_RATE = 0;
-
-export function calculateMilestoneMoney(baseAmount: number) {
-  const clientFeeAmount = 0;
-  const professionalFeeAmount = 0;
-  const clientChargeAmount = baseAmount;
-  const professionalPayoutAmount = baseAmount;
-  return {
-    baseAmount,
-    clientFeeAmount,
-    clientChargeAmount,
-    professionalPayoutAmount,
-    adminNetAmount: 0,
-  };
-}
+export {
+  CLIENT_FEE_RATE,
+  PROFESSIONAL_FEE_RATE,
+  calculateMilestoneMoney,
+} from "@/lib/payment-fees";
 
 type LedgerClient = Prisma.TransactionClient;
 
@@ -55,6 +45,14 @@ async function recordTransaction(
 ) {
   const wallet = await walletForUser(tx, input.userId);
   if (input.amount < 0) {
+    const user = await tx.user.findUnique({ where: { id: input.userId }, select: { role: true } });
+    if (user?.role === "ADMIN" && wallet.balance < Math.abs(input.amount)) {
+      const topUp = Math.abs(input.amount) - wallet.balance;
+      await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { balance: { increment: topUp } },
+      });
+    }
     const result = await tx.wallet.updateMany({
       where: { id: wallet.id, balance: { gte: Math.abs(input.amount) } },
       data: { balance: { decrement: Math.abs(input.amount) } },
@@ -185,6 +183,107 @@ export async function settleMilestoneFromWallet(
   const money = await fundMilestoneFromWallet(tx, input);
   await releaseMilestoneToProfessional(tx, input);
   return money;
+}
+
+export async function refundDisputeToClient(
+  tx: LedgerClient,
+  input: {
+    disputeId: number;
+    paymentId?: number;
+    clientId: number;
+    amount: number;
+    reason: string;
+  },
+) {
+  if (input.amount <= 0) return { refundAmount: 0 };
+  const admin = await tx.user.findFirst({ where: { role: "ADMIN" }, select: { id: true } });
+  if (!admin) throw new Error("No admin account is configured for settlement.");
+  await recordTransaction(tx, {
+    userId: admin.id,
+    amount: -input.amount,
+    type: "DISPUTE_REFUND_DEBIT",
+    description: `Dispute refund debit: ₹${input.amount} (${input.reason})`,
+    idempotencyKey: `dispute-${input.disputeId}-admin-refund-debit`,
+    paymentId: input.paymentId,
+    metadata: { disputeId: input.disputeId, amount: input.amount },
+  });
+  await recordTransaction(tx, {
+    userId: input.clientId,
+    amount: input.amount,
+    type: "DISPUTE_REFUND",
+    description: `Dispute refund credited: ₹${input.amount}`,
+    idempotencyKey: `dispute-${input.disputeId}-client-refund-credit`,
+    paymentId: input.paymentId,
+    metadata: { disputeId: input.disputeId, amount: input.amount },
+  });
+  return { refundAmount: input.amount };
+}
+
+export async function releaseDisputeToProfessional(
+  tx: LedgerClient,
+  input: {
+    disputeId: number;
+    paymentId?: number;
+    professionalId: number;
+    amount: number;
+    reason: string;
+  },
+) {
+  if (input.amount <= 0) return { payoutAmount: 0 };
+  const admin = await tx.user.findFirst({ where: { role: "ADMIN" }, select: { id: true } });
+  if (!admin) throw new Error("No admin account is configured for settlement.");
+  await recordTransaction(tx, {
+    userId: admin.id,
+    amount: -input.amount,
+    type: "DISPUTE_PAYOUT_DEBIT",
+    description: `Dispute payout debit: ₹${input.amount} (${input.reason})`,
+    idempotencyKey: `dispute-${input.disputeId}-admin-payout-debit`,
+    paymentId: input.paymentId,
+    metadata: { disputeId: input.disputeId, amount: input.amount },
+  });
+  await recordTransaction(tx, {
+    userId: input.professionalId,
+    amount: input.amount,
+    type: "DISPUTE_PAYOUT",
+    description: `Dispute payout credited: ₹${input.amount}`,
+    idempotencyKey: `dispute-${input.disputeId}-professional-payout-credit`,
+    paymentId: input.paymentId,
+    metadata: { disputeId: input.disputeId, amount: input.amount },
+  });
+  return { payoutAmount: input.amount };
+}
+
+export async function settlePartialDispute(
+  tx: LedgerClient,
+  input: {
+    disputeId: number;
+    paymentId?: number;
+    clientId: number;
+    professionalId: number;
+    refundAmount: number;
+    payoutAmount: number;
+    reason: string;
+  },
+) {
+  if (input.refundAmount > 0) {
+    await refundDisputeToClient(tx, {
+      disputeId: input.disputeId,
+      paymentId: input.paymentId,
+      clientId: input.clientId,
+      amount: input.refundAmount,
+      reason: input.reason,
+    });
+  }
+  if (input.payoutAmount > 0) {
+    await releaseDisputeToProfessional(tx, {
+      disputeId: input.disputeId,
+      paymentId: input.paymentId,
+      professionalId: input.professionalId,
+      amount: input.payoutAmount,
+      reason: input.reason,
+    });
+  }
+  return { refundAmount: input.refundAmount, payoutAmount: input.payoutAmount };
 }
 
 export { db };

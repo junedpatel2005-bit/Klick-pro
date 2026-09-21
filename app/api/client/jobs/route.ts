@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import { notifyAdminsOfNewJob, notifyProfessionalsOfNewJob } from "@/lib/marketplace-notifications";
 
 const milestoneInput = z.object({
   title: z.string().trim().min(1, "Enter a milestone title.").max(160),
@@ -30,6 +29,7 @@ const jobInput = z.object({
   budgetMin: z.coerce.number().int().min(0).max(10000000).nullable().optional(),
   budgetMax: z.coerce.number().int().min(0).max(10000000).nullable().optional(),
   hourlyRate: z.coerce.number().int().min(0).max(1000000).nullable().optional(),
+  totalJobHours: z.coerce.number().int().min(1).max(10000).nullable().optional(),
   timingType: z.enum(["FIXED", "HOURLY"]).optional(),
   paymentMethod: z.enum(["WALLET", "OFFLINE"]).optional(),
   urgency: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
@@ -65,13 +65,23 @@ async function getClient(request: NextRequest) {
 }
 
 function normalized(data: z.infer<typeof jobInput>) {
+  const isHourly = data.timingType === "HOURLY";
+  const calculatedProjectTotal =
+    isHourly && data.hourlyRate && data.totalJobHours
+      ? data.hourlyRate * data.totalJobHours
+      : null;
+  const projectTotal =
+    calculatedProjectTotal !== null && calculatedProjectTotal <= 10_000_000
+      ? calculatedProjectTotal
+      : null;
   return {
     title: data.title || null,
     category: data.category || null,
     description: data.description || null,
-    budgetMin: data.budgetMin ?? null,
-    budgetMax: data.budgetMax ?? null,
-    hourlyRate: data.hourlyRate ?? null,
+    budgetMin: isHourly ? projectTotal : (data.budgetMin ?? null),
+    budgetMax: isHourly ? projectTotal : (data.budgetMax ?? null),
+    hourlyRate: isHourly ? (data.hourlyRate ?? null) : null,
+    totalJobHours: isHourly ? (data.totalJobHours ?? null) : null,
     timingType: data.timingType ?? "FIXED",
     paymentMethod: data.paymentMethod ?? "WALLET",
     urgency: data.urgency ?? "MEDIUM",
@@ -100,6 +110,15 @@ async function publishErrors(data: z.infer<typeof jobInput>) {
         "Select the address from the search results or drop a pin on the map so professionals can find you nearby.";
   }
   if (data.timingType === "HOURLY" && !data.hourlyRate) fields.hourlyRate = "Enter an hourly rate.";
+  if (data.timingType === "HOURLY" && !data.totalJobHours)
+    fields.totalJobHours = "Enter the total job hours.";
+  if (
+    data.timingType === "HOURLY" &&
+    data.hourlyRate &&
+    data.totalJobHours &&
+    data.hourlyRate * data.totalJobHours > 10_000_000
+  )
+    fields.totalJobHours = "Project total cannot exceed ₹1,00,00,000.";
   if (data.timingType !== "HOURLY" && (data.budgetMin == null || data.budgetMax == null))
     fields.budgetMin = "Enter a budget range.";
   if (data.budgetMin != null && data.budgetMax != null && data.budgetMin > data.budgetMax)
@@ -212,7 +231,8 @@ export async function POST(request: NextRequest) {
         },
       ];
     }
-    const budgetRef = parsed.data.budgetMax ?? parsed.data.budgetMin ?? null;
+    const normalizedJob = normalized(parsed.data);
+    const budgetRef = normalizedJob.budgetMax;
     const preparedMilestones = rawMilestones.map((m, index) => ({
       title: m.title.trim(),
       description: m.description?.trim() || null,
@@ -224,7 +244,7 @@ export async function POST(request: NextRequest) {
     const job = await db.clientJob.create({
       data: {
         userId: user.id,
-        ...normalized(parsed.data),
+        ...normalizedJob,
         status: parsed.data.mode === "publish" ? "OPEN" : "DRAFT",
         milestones: {
           create: preparedMilestones,
@@ -236,13 +256,6 @@ export async function POST(request: NextRequest) {
         },
       },
     });
-    if (job.status === "OPEN" && (!job.jobDate || job.jobDate <= new Date())) {
-      try {
-        await Promise.all([notifyProfessionalsOfNewJob(job), notifyAdminsOfNewJob(job)]);
-      } catch (notifyErr) {
-        console.error("Job notification error:", notifyErr);
-      }
-    }
     return NextResponse.json({ job }, { status: 201 });
   } catch (error) {
     console.error("Failed to create job:", error);

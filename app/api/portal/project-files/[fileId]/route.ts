@@ -18,14 +18,20 @@ export async function GET(
     if (!Number.isSafeInteger(fileId) || fileId < 1)
       return NextResponse.json({ error: "File not found." }, { status: 404 });
     const file = await db.storedFile.findUnique({ where: { id: fileId } });
-    if (!file || !file.purpose.startsWith("project-work:"))
+    const isProjectWork = file?.purpose.startsWith("project-work:");
+    const isProjectDispute = file?.purpose.startsWith("project-dispute:");
+    if (!file || (!isProjectWork && !isProjectDispute))
       return NextResponse.json({ error: "File not found." }, { status: 404 });
-    const projectId = Number(file.purpose.slice("project-work:".length));
+
+    const prefix = isProjectWork ? "project-work:" : "project-dispute:";
+    const projectId = Number(file.purpose.slice(prefix.length));
     const project = await db.projectTracking.findFirst({
-      where: {
-        id: projectId,
-        OR: [{ clientId: session.userId }, { professionalId: session.userId }],
-      },
+      where: session.role === "ADMIN"
+        ? { id: projectId }
+        : {
+            id: projectId,
+            OR: [{ clientId: session.userId }, { professionalId: session.userId }],
+          },
       select: { id: true },
     });
     if (!project) return NextResponse.json({ error: "File not found." }, { status: 404 });

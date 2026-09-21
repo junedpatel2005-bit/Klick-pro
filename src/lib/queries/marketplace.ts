@@ -331,6 +331,7 @@ export async function listOpenJobs(): Promise<MarketplaceJob[]> {
       deadline: true,
       timingType: true,
       hourlyRate: true,
+      totalJobHours: true,
       createdAt: true,
       user: { select: { firstName: true, lastName: true, avatarUrl: true, averageRating: true } },
       _count: { select: { favoriteJobs: true } },
@@ -367,6 +368,7 @@ export async function listOpenJobs(): Promise<MarketplaceJob[]> {
         deadline: job.deadline?.toISOString() ?? null,
         timingType: job.timingType as "FIXED" | "HOURLY",
         hourlyRate: job.hourlyRate,
+        totalJobHours: job.totalJobHours,
         createdAt: job.createdAt.toISOString(),
         status: "OPEN" as const,
         proposalCount: job._count.favoriteJobs,
@@ -586,6 +588,7 @@ export async function getOpenJob(id: number): Promise<MarketplaceJob | null> {
       deadline: true,
       timingType: true,
       hourlyRate: true,
+      totalJobHours: true,
       createdAt: true,
       user: {
         select: {
@@ -693,6 +696,7 @@ export async function getOpenJob(id: number): Promise<MarketplaceJob | null> {
     deadline: job.deadline?.toISOString() ?? null,
     timingType: job.timingType as "FIXED" | "HOURLY",
     hourlyRate: job.hourlyRate,
+    totalJobHours: job.totalJobHours,
     createdAt: job.createdAt.toISOString(),
     status: "OPEN",
     proposalCount: job._count.favoriteJobs,

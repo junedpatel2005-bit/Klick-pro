@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import { notifyDisputeRaised, notifyUsers } from "@/lib/marketplace-notifications";
+import {
+  notifyDisputeAccepted,
+  notifyDisputeContested,
+  notifyDisputeRaised,
+  notifyUsers,
+} from "@/lib/marketplace-notifications";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
-import { emitRealtimeProjectUpdate } from "@/lib/realtime";
+import { emitAdminEvent, emitRealtimeProjectUpdate } from "@/lib/realtime";
 
 const attachmentIds = z.array(z.number().int().positive()).min(1).max(10);
 
@@ -113,6 +118,36 @@ const bodySchema = z.discriminatedUnion("action", [
     issueType: z.string().trim().min(2).max(80),
     priority: z.enum(["LOW", "MEDIUM", "HIGH"]).default("MEDIUM").optional(),
     message: z.string().trim().min(10).max(4000),
+    evidence: z
+      .array(
+        z.object({
+          id: z.number().optional(),
+          name: z.string(),
+          url: z.string(),
+          mimeType: z.string().optional(),
+          sizeBytes: z.number().optional(),
+        }),
+      )
+      .optional(),
+    milestoneId: z.number().int().positive().optional(),
+  }),
+  z.object({
+    action: z.literal("respond-dispute"),
+    projectId: z.number().int().positive(),
+    disputeId: z.number().int().positive(),
+    responseAction: z.enum(["ACCEPT", "REJECT"]),
+    message: z.string().trim().max(4000).optional(),
+    evidence: z
+      .array(
+        z.object({
+          id: z.number().optional(),
+          name: z.string(),
+          url: z.string(),
+          mimeType: z.string().optional(),
+          sizeBytes: z.number().optional(),
+        }),
+      )
+      .optional(),
   }),
 ]);
 
@@ -126,7 +161,7 @@ const clientActions = new Set([
   "approve-milestone",
   "complete-project",
 ]);
-const sharedActions = new Set(["submit-review", "submit-dispute"]);
+const sharedActions = new Set(["submit-review", "submit-dispute", "respond-dispute"]);
 
 export async function POST(request: NextRequest) {
   try {
@@ -1043,14 +1078,28 @@ export async function POST(request: NextRequest) {
           { error: "A dispute can only be raised while the project is active or closed." },
           { status: 409 },
         );
-      const existingOpenDispute = await db.projectDispute.findFirst({
-        where: { trackingId: project.id, status: "OPEN" },
+
+      const disputeCount = await db.projectDispute.count({
+        where: { trackingId: project.id },
       });
-      if (existingOpenDispute)
+      if (disputeCount >= 3) {
         return NextResponse.json(
-          { error: "This project already has an open dispute." },
+          { error: "Maximum limit of 3 disputes reached for this contract." },
           { status: 409 },
         );
+      }
+
+      const existingActiveDispute = await db.projectDispute.findFirst({
+        where: { trackingId: project.id, status: { not: "RESOLVED" } },
+      });
+      if (existingActiveDispute)
+        return NextResponse.json(
+          { error: "This project already has an active dispute awaiting resolution." },
+          { status: 409 },
+        );
+
+      const attachmentsJson = input.evidence?.length ? JSON.stringify(input.evidence) : "[]";
+      const disputeRound = disputeCount + 1;
       const dispute = await db.projectDispute.create({
         data: {
           trackingId: project.id,
@@ -1061,12 +1110,15 @@ export async function POST(request: NextRequest) {
           issueType: input.issueType,
           priority: input.priority ?? "MEDIUM",
           message: input.message,
-          status: "OPEN",
+          attachmentsJson,
+          status: "WAITING_RESPONSE",
+          disputeRound,
+          milestoneId: input.milestoneId ?? null,
         },
       });
       await event(
         "DISPUTE_RAISED",
-        "Dispute raised",
+        `Dispute raised (Round ${disputeRound} of 3)`,
         `Issue type: ${input.issueType}. ${input.message}`,
       );
       const [job, reporter] = await Promise.all([
@@ -1095,7 +1147,125 @@ export async function POST(request: NextRequest) {
           }),
         { disputeId: dispute.id, trackingId: project.id },
       );
-      return NextResponse.json({ ok: true, disputeId: dispute.id });
+      emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
+        projectId: project.id,
+      });
+      emitAdminEvent("dispute:new", { disputeId: dispute.id, projectId: project.id });
+      return NextResponse.json({ ok: true, disputeId: dispute.id, disputeRound });
+    }
+    if (input.action === "respond-dispute") {
+      const dispute = await db.projectDispute.findUnique({
+        where: { id: input.disputeId },
+      });
+      if (!dispute || dispute.trackingId !== project.id) {
+        return NextResponse.json({ error: "Dispute not found." }, { status: 404 });
+      }
+      if (dispute.status === "RESOLVED") {
+        return NextResponse.json(
+          { error: "This dispute has already been resolved." },
+          { status: 409 },
+        );
+      }
+      if (dispute.reporterId === session.userId) {
+        return NextResponse.json(
+          { error: "You cannot respond to your own dispute report." },
+          { status: 403 },
+        );
+      }
+
+      const respondent = await db.user.findUnique({
+        where: { id: session.userId },
+        select: { firstName: true, lastName: true },
+      });
+      const respondentName = respondent
+        ? `${respondent.firstName} ${respondent.lastName}`.trim()
+        : session.role === "CLIENT"
+          ? "The client"
+          : "The professional";
+
+      if (input.responseAction === "ACCEPT") {
+        await db.projectDispute.update({
+          where: { id: dispute.id },
+          data: {
+            status: "RESOLVED",
+            respondentAction: "ACCEPTED",
+            decision: "MUTUAL_SETTLEMENT",
+            decisionReason:
+              input.message?.trim() || "Respondent accepted the dispute claim. Mutually settled.",
+            respondedAt: new Date(),
+            decisionAt: new Date(),
+            decidedBy: session.userId,
+          },
+        });
+        await event(
+          "DISPUTE_ACCEPTED",
+          `Dispute #${dispute.id} mutually settled`,
+          `${respondentName} accepted the dispute claim.`,
+        );
+        const job = await db.clientJob.findUnique({
+          where: { id: project.jobId },
+          select: { title: true },
+        });
+        enqueueBackgroundJob(
+          "dispute.accepted.notifications",
+          () =>
+            notifyDisputeAccepted({
+              disputeId: dispute.id,
+              trackingId: project.id,
+              jobTitle: job?.title ?? null,
+              complainantId: dispute.reporterId,
+              respondentName,
+            }),
+          { disputeId: dispute.id, trackingId: project.id },
+        );
+        emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
+          projectId: project.id,
+        });
+        emitAdminEvent("dispute:update", { disputeId: dispute.id, projectId: project.id });
+        return NextResponse.json({ ok: true, resolved: true });
+      } else {
+        const responseAttachmentsJson = input.evidence?.length
+          ? JSON.stringify(input.evidence)
+          : "[]";
+        await db.projectDispute.update({
+          where: { id: dispute.id },
+          data: {
+            status: "UNDER_ADMIN_REVIEW",
+            respondentAction: "REJECTED",
+            responseMessage:
+              input.message?.trim() ||
+              "Respondent rejected the dispute claim and requested admin review.",
+            responseAttachmentsJson,
+            respondedAt: new Date(),
+          },
+        });
+        await event(
+          "DISPUTE_CONTESTED",
+          `Dispute #${dispute.id} contested - Escalated to Admin Review`,
+          `${respondentName} rejected the dispute claim and submitted counter-response. Case is now under Admin Review.`,
+        );
+        const job = await db.clientJob.findUnique({
+          where: { id: project.jobId },
+          select: { title: true },
+        });
+        enqueueBackgroundJob(
+          "dispute.contested.notifications",
+          () =>
+            notifyDisputeContested({
+              disputeId: dispute.id,
+              trackingId: project.id,
+              jobTitle: job?.title ?? null,
+              complainantId: dispute.reporterId,
+              respondentName,
+            }),
+          { disputeId: dispute.id, trackingId: project.id },
+        );
+        emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
+          projectId: project.id,
+        });
+        emitAdminEvent("dispute:update", { disputeId: dispute.id, projectId: project.id });
+        return NextResponse.json({ ok: true, escalated: true });
+      }
     }
     return NextResponse.json({ ok: true });
   } catch (error) {

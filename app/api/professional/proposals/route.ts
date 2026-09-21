@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import { notifyAdminsOfNewProposal, notifyUsers } from "@/lib/marketplace-notifications";
-import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { notifyUsers } from "@/lib/marketplace-notifications";
 import { attachLastActorRole } from "@/lib/project-request-actions";
 import { emitRealtimeProposalNew } from "@/lib/realtime";
 
 const proposalSchema = z.object({
   jobId: z.number().int().positive(),
   bidAmount: z.number().int().positive().max(10_000_000),
+  hourlyRate: z.number().int().positive().max(1_000_000).optional(),
+  totalJobHours: z.number().int().positive().max(10_000).optional(),
   duration: z.string().trim().min(2).max(100),
   coverLetter: z.string().trim().min(10).max(5000),
 });
@@ -82,6 +83,18 @@ export async function POST(request: NextRequest) {
         { error: "You cannot send a proposal to your own job." },
         { status: 403 },
       );
+    const hourlyProjectTotal =
+      job.timingType === "HOURLY" && parsed.data.hourlyRate && parsed.data.totalJobHours
+        ? parsed.data.hourlyRate * parsed.data.totalJobHours
+        : null;
+    if (job.timingType === "HOURLY" && hourlyProjectTotal === null)
+      return NextResponse.json(
+        { error: "Enter both an hourly rate and total job hours." },
+        { status: 400 },
+      );
+    if (hourlyProjectTotal !== null && hourlyProjectTotal > 10_000_000)
+      return NextResponse.json({ error: "Project total is too high." }, { status: 400 });
+    const bidAmount = hourlyProjectTotal ?? parsed.data.bidAmount;
     const existing = await db.projectRequest.findFirst({
       where: {
         jobId: job.id,
@@ -96,7 +109,9 @@ export async function POST(request: NextRequest) {
       const updated = await db.projectRequest.update({
         where: { id: existing.id },
         data: {
-          bidAmount: parsed.data.bidAmount,
+          bidAmount,
+          hourlyRate: job.timingType === "HOURLY" ? parsed.data.hourlyRate : null,
+          totalJobHours: job.timingType === "HOURLY" ? parsed.data.totalJobHours : null,
           duration: parsed.data.duration,
           coverLetter: parsed.data.coverLetter,
         },
@@ -108,7 +123,7 @@ export async function POST(request: NextRequest) {
         href: `/job/${job.id}`,
         emailDetails: [
           { label: "Project", value: job.title ?? `Project #${job.id}` },
-          { label: "Proposed amount", value: `₹${parsed.data.bidAmount.toLocaleString("en-IN")}` },
+          { label: "Proposed amount", value: `₹${bidAmount.toLocaleString("en-IN")}` },
           { label: "Delivery time", value: parsed.data.duration },
           { label: "Proposal message", value: parsed.data.coverLetter },
         ],
@@ -122,7 +137,9 @@ export async function POST(request: NextRequest) {
         jobId: job.id,
         clientId: job.userId,
         professionalId: session.userId,
-        bidAmount: parsed.data.bidAmount,
+        bidAmount,
+        hourlyRate: job.timingType === "HOURLY" ? parsed.data.hourlyRate : null,
+        totalJobHours: job.timingType === "HOURLY" ? parsed.data.totalJobHours : null,
         duration: parsed.data.duration,
         coverLetter: parsed.data.coverLetter,
         status: "PENDING",
@@ -146,24 +163,12 @@ export async function POST(request: NextRequest) {
             : "A professional",
         },
         { label: "Project", value: job.title ?? `Project #${job.id}` },
-        { label: "Proposed amount", value: `₹${parsed.data.bidAmount.toLocaleString("en-IN")}` },
+        { label: "Proposed amount", value: `₹${bidAmount.toLocaleString("en-IN")}` },
         { label: "Delivery time", value: parsed.data.duration },
         { label: "Proposal message", value: parsed.data.coverLetter },
       ],
     });
     emitRealtimeProposalNew([job.userId], { jobId: job.id });
-    enqueueBackgroundJob(
-      "proposal.created.notifications",
-      () =>
-        notifyAdminsOfNewProposal({
-          jobId: job.id,
-          jobTitle: job.title,
-          professionalName: professional
-            ? `${professional.firstName} ${professional.lastName}`.trim()
-            : "A professional",
-        }),
-      { jobId: job.id, professionalId: session.userId },
-    );
     return NextResponse.json({ proposal }, { status: 201 });
   } catch (error) {
     console.error("professional.proposal.failed", error);

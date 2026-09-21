@@ -35,10 +35,10 @@ decide the target first, since it is wasted work if the answer is EC2 with a che
 
 Two pools open per app process:
 
-| Pool | Size | Purpose |
-|---|---|---|
-| `src/lib/db.ts` | `max: 5` | every request through Prisma |
-| `server.mjs` | `max: 1` | one session lookup per Socket.IO handshake |
+| Pool            | Size     | Purpose                                    |
+| --------------- | -------- | ------------------------------------------ |
+| `src/lib/db.ts` | `max: 5` | every request through Prisma               |
+| `server.mjs`    | `max: 1` | one session lookup per Socket.IO handshake |
 
 So each process consumes up to **6** connections. Size `max_connections` against
 `6 × processes × instances`, and remember RDS caps connections by instance class. RDS Proxy is worth
