@@ -26,12 +26,13 @@ export async function GET(
     const prefix = isProjectWork ? "project-work:" : "project-dispute:";
     const projectId = Number(file.purpose.slice(prefix.length));
     const project = await db.projectTracking.findFirst({
-      where: session.role === "ADMIN"
-        ? { id: projectId }
-        : {
-            id: projectId,
-            OR: [{ clientId: session.userId }, { professionalId: session.userId }],
-          },
+      where:
+        session.role === "ADMIN"
+          ? { id: projectId }
+          : {
+              id: projectId,
+              OR: [{ clientId: session.userId }, { professionalId: session.userId }],
+            },
       select: { id: true },
     });
     if (!project) return NextResponse.json({ error: "File not found." }, { status: 404 });

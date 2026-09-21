@@ -170,16 +170,32 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const project = await db.projectTracking.findFirst({
       where: { jobId: id, clientId: userId },
-      select: { id: true },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        status: true,
+        professional: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            professionalCategory: true,
+          },
+        },
+      },
     });
     const proposalSelect = {
       id: true,
       professionalId: true,
       bidAmount: true,
+      hourlyRate: true,
+      totalJobHours: true,
       duration: true,
       coverLetter: true,
       status: true,
       origin: true,
+      attachmentsJson: true,
       createdAt: true,
     } as const;
     const [proposals, hireRequests] = await Promise.all([
@@ -202,6 +218,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         id: true,
         firstName: true,
         lastName: true,
+        avatarUrl: true,
         professionalCategory: true,
         professionalCity: true,
         averageRating: true,
@@ -217,11 +234,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       attachLastActorRole(hireRequests),
     ]);
     const negotiations = await db.projectNegotiation.findMany({
-      where: { requestId: { in: proposals.map((proposal) => proposal.id) } },
+      where: {
+        requestId: {
+          in: [...proposals.map((p) => p.id), ...hireRequests.map((h) => h.id)],
+        },
+      },
       orderBy: { createdAt: "desc" },
       select: {
         requestId: true,
         previousBidAmount: true,
+        previousHourlyRate: true,
+        previousTotalJobHours: true,
         previousDuration: true,
         previousMessage: true,
       },
@@ -235,6 +258,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       job: {
         ...job,
         projectId: project?.id ?? null,
+        projectStatus: project?.status ?? null,
+        previousProfessional: project?.professional ?? null,
         mainCategory: category?.parent?.name ?? null,
         categorySegment: category?.segment ?? null,
       },
@@ -243,6 +268,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         previous: latestNegotiationByRequest.get(proposal.id)
           ? {
               bidAmount: latestNegotiationByRequest.get(proposal.id)!.previousBidAmount,
+              hourlyRate: latestNegotiationByRequest.get(proposal.id)!.previousHourlyRate,
+              totalJobHours: latestNegotiationByRequest.get(proposal.id)!.previousTotalJobHours,
               duration: latestNegotiationByRequest.get(proposal.id)!.previousDuration,
               message: latestNegotiationByRequest.get(proposal.id)!.previousMessage,
             }
@@ -251,6 +278,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       })),
       hireRequests: hireRequestsWithActor.map((hireRequest) => ({
         ...hireRequest,
+        previous: latestNegotiationByRequest.get(hireRequest.id)
+          ? {
+              bidAmount: latestNegotiationByRequest.get(hireRequest.id)!.previousBidAmount,
+              hourlyRate: latestNegotiationByRequest.get(hireRequest.id)!.previousHourlyRate,
+              totalJobHours: latestNegotiationByRequest.get(hireRequest.id)!.previousTotalJobHours,
+              duration: latestNegotiationByRequest.get(hireRequest.id)!.previousDuration,
+              message: latestNegotiationByRequest.get(hireRequest.id)!.previousMessage,
+            }
+          : null,
         professional: professionalById.get(hireRequest.professionalId) ?? null,
       })),
     });
@@ -287,6 +323,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         where: { id },
         data: { status: parsed.data.status },
       });
+      if (parsed.data.status === "CLOSED") {
+        await db.projectTracking.updateMany({
+          where: { jobId: id, status: { not: "COMPLETED" } },
+          data: { status: "CLOSED" },
+        });
+      }
       return NextResponse.json({ job });
     }
 

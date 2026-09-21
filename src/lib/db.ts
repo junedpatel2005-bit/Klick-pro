@@ -10,10 +10,20 @@ const globalForPrisma = global as unknown as {
 };
 
 // Identifies the schema the cached dev client was generated from. Derived from
-// the generated model list, so adding or removing a model invalidates the
-// hot-reload client automatically — the previous version was a hand-maintained
-// string plus four hardcoded model names, which went stale on every schema change.
-const modelFingerprint = Object.keys(Prisma.ModelName).sort().join(",");
+// the generated model list and scalar field enums, so adding or removing fields
+// invalidates the hot-reload client automatically.
+const modelFingerprint = [
+  Object.keys(Prisma.ModelName).sort().join(","),
+  Object.keys(Prisma.ClientJobScalarFieldEnum || {})
+    .sort()
+    .join(","),
+  Object.keys(Prisma.ProjectDisputeScalarFieldEnum || {})
+    .sort()
+    .join(","),
+  Object.keys(Prisma.ProjectRequestScalarFieldEnum || {})
+    .sort()
+    .join(","),
+].join(";");
 
 const connectionString =
   process.env.NODE_ENV === "test" ? process.env.TEST_DATABASE_URL : process.env.DATABASE_URL;

@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     if (!jobId.success)
       return NextResponse.json({ error: "A valid job is required." }, { status: 400 });
     const proposal = await db.projectRequest.findFirst({
-      where: { jobId: jobId.data, professionalId: session.userId, origin: "PROFESSIONAL_PROPOSAL" },
+      where: { jobId: jobId.data, professionalId: session.userId },
       orderBy: { createdAt: "desc" },
     });
     const [proposalWithActor] = proposal ? await attachLastActorRole([proposal]) : [null];
@@ -42,12 +42,22 @@ export async function GET(request: NextRequest) {
           select: {
             senderRole: true,
             previousBidAmount: true,
+            previousHourlyRate: true,
+            previousTotalJobHours: true,
             previousDuration: true,
             previousMessage: true,
           },
         })
       : null;
-    return NextResponse.json({ proposal: proposalWithActor ?? null, negotiation });
+    const project = await db.projectTracking.findFirst({
+      where: { jobId: jobId.data, professionalId: session.userId },
+      select: { id: true },
+    });
+    return NextResponse.json({
+      proposal: proposalWithActor ?? null,
+      negotiation,
+      projectId: project?.id ?? null,
+    });
   } catch {
     return NextResponse.json({ error: "Unable to load your proposal." }, { status: 500 });
   }

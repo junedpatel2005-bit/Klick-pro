@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   Briefcase,
@@ -16,6 +16,20 @@ import {
   Search,
   Star,
   CheckCircle2,
+  ArrowUpDown,
+  Check,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Send,
+  Inbox,
+  RotateCcw,
+  Wrench,
+  PlusCircle,
+  ShieldAlert,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { PageActionLoading } from "@/components/PageActionLoading";
@@ -29,6 +43,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -67,6 +82,14 @@ type OwnerJob = {
   hourlyRate: number | null;
   totalJobHours: number | null;
   projectId: number | null;
+  projectStatus?: string | null;
+  previousProfessional?: {
+    id: number;
+    firstName: string | null;
+    lastName: string | null;
+    avatarUrl?: string | null;
+    professionalCategory?: string | null;
+  } | null;
   status: "DRAFT" | "OPEN" | "CLOSED";
   createdAt: string;
   attachments: {
@@ -99,6 +122,14 @@ type ViewJob = {
   hourlyRate: number | null;
   totalJobHours: number | null;
   projectId?: number | null;
+  projectStatus?: string | null;
+  previousProfessional?: {
+    id: number;
+    firstName: string | null;
+    lastName: string | null;
+    avatarUrl?: string | null;
+    professionalCategory?: string | null;
+  } | null;
   createdAt: string;
   status?: "DRAFT" | "OPEN" | "CLOSED";
   proposalCount?: number;
@@ -141,6 +172,8 @@ type JobProposal = {
   createdAt: string;
   previous?: {
     bidAmount: number | null;
+    hourlyRate?: number | null;
+    totalJobHours?: number | null;
     duration: string | null;
     message: string | null;
   } | null;
@@ -153,7 +186,9 @@ type JobProposal = {
     averageRating: number;
     reviewCount: number;
     isVerified: boolean;
+    avatarUrl?: string | null;
   } | null;
+  projectId?: number | null;
 };
 type JobHireRequest = JobProposal;
 
@@ -212,6 +247,8 @@ function fromOwner(job: OwnerJob): ViewJob {
     hourlyRate: job.hourlyRate,
     totalJobHours: job.totalJobHours,
     projectId: job.projectId,
+    projectStatus: job.projectStatus,
+    previousProfessional: job.previousProfessional,
     createdAt: job.createdAt,
     status: job.status,
     attachments: job.attachments,
@@ -287,12 +324,26 @@ export default function JobDetails({
     duration: string;
     coverLetter: string;
     lastActorRole: "CLIENT" | "PROFESSIONAL";
+    origin?: string;
     previousBidAmount?: number | null;
+    previousHourlyRate?: number | null;
+    previousTotalJobHours?: number | null;
     previousDuration?: string | null;
     previousMessage?: string | null;
   } | null>(null);
+  const [ownProposalProjectId, setOwnProposalProjectId] = useState<number | null>(null);
   const [clientProposals, setClientProposals] = useState<JobProposal[]>([]);
   const [sentHireRequests, setSentHireRequests] = useState<JobHireRequest[]>([]);
+  const [proposalsTab, setProposalsTab] = useState<"PROPOSALS" | "HIRE_REQUESTS">("PROPOSALS");
+  const [proposalSearchQuery, setProposalSearchQuery] = useState("");
+  const [proposalStatusFilter, setProposalStatusFilter] = useState<
+    "ALL" | "PENDING" | "ACCEPTED" | "REJECTED"
+  >("ALL");
+  const [proposalSortBy, setProposalSortBy] = useState<
+    "NEWEST" | "PRICE_ASC" | "PRICE_DESC" | "RATING_DESC"
+  >("NEWEST");
+  const [proposalPage, setProposalPage] = useState(1);
+  const [expandedProposalIds, setExpandedProposalIds] = useState<Set<number>>(new Set());
   const [showProposalForm, setShowProposalForm] = useState(false);
   const [proposalPrice, setProposalPrice] = useState("");
   const [proposalHourlyRate, setProposalHourlyRate] = useState("");
@@ -321,6 +372,12 @@ export default function JobDetails({
   const [negotiateError, setNegotiateError] = useState<string | null>(null);
   const [closeJobConfirmOpen, setCloseJobConfirmOpen] = useState(false);
   const [reopenJobConfirmOpen, setReopenJobConfirmOpen] = useState(false);
+  const [reopenWorkDescription, setReopenWorkDescription] = useState("");
+  const [reopenAmount, setReopenAmount] = useState("");
+  const [reopenReason, setReopenReason] = useState<"ISSUE" | "ADDITIONAL_WORK">("ADDITIONAL_WORK");
+  const [reopenAssignPreviousPro, setReopenAssignPreviousPro] = useState(true);
+  const [reopenDuration, setReopenDuration] = useState("1-3 days");
+  const [reopenError, setReopenError] = useState<string | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
 
   async function handleCloseJob() {
@@ -348,24 +405,41 @@ export default function JobDetails({
   }
 
   async function handleReopenJob() {
+    if (!reopenWorkDescription.trim()) {
+      setReopenError("Please describe the work needed.");
+      return;
+    }
+    const numAmount = Number(reopenAmount);
+    if (isNaN(numAmount) || numAmount < 0) {
+      setReopenError("Enter a valid amount (₹0 allowed for warranty/rework).");
+      return;
+    }
     setStatusBusy(true);
+    setReopenError(null);
     try {
-      const response = await fetch(`/api/v1/client/jobs/${jobId}`, {
-        method: "PATCH",
+      const response = await fetch(`/api/v1/client/jobs/${jobId}/reopen`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "OPEN" }),
+        body: JSON.stringify({
+          workDescription: reopenWorkDescription.trim(),
+          amount: numAmount,
+          reason: reopenReason,
+          assignPreviousPro: reopenAssignPreviousPro,
+          duration: reopenDuration || "1-3 days",
+        }),
       });
+      const data = await response.json().catch(() => null);
       if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        toast.error(data?.error || "Unable to reopen job.");
+        setReopenError(data?.error || "Unable to reopen job.");
         return;
       }
-      const { job: updatedJob } = await response.json();
-      setJob(fromOwner(updatedJob));
+      toast.success(data?.message || "Job reopened successfully with new work allocated.");
       setReopenJobConfirmOpen(false);
-      toast.success("Job reopened successfully.");
+      setReopenWorkDescription("");
+      setReopenAmount("");
+      await refresh();
     } catch {
-      toast.error("Unable to reopen job.");
+      setReopenError("Unable to reopen job.");
     } finally {
       setStatusBusy(false);
     }
@@ -383,8 +457,7 @@ export default function JobDetails({
       if (projectResponse.ok) {
         const projectData = (await projectResponse.json()) as { project?: { id?: number } };
         if (projectData.project?.id) {
-          router.replace(`/project/${projectData.project.id}/tracking`);
-          return;
+          setAcceptedProjectId(projectData.project.id);
         }
       }
       const ownerResponse = await fetch(`/api/v1/client/jobs/${encodeURIComponent(jobId)}`);
@@ -428,29 +501,42 @@ export default function JobDetails({
               duration: string;
               coverLetter: string;
               lastActorRole: "CLIENT" | "PROFESSIONAL";
+              origin?: string;
               previousBidAmount?: number | null;
+              previousHourlyRate?: number | null;
+              previousTotalJobHours?: number | null;
               previousDuration?: string | null;
               previousMessage?: string | null;
             } | null;
             negotiation?: {
               senderRole: string;
               previousBidAmount: number | null;
+              previousHourlyRate?: number | null;
+              previousTotalJobHours?: number | null;
               previousDuration: string | null;
               previousMessage: string | null;
             } | null;
+            projectId?: number | null;
           };
           setOwnProposal(
             proposalData.proposal
               ? {
                   ...proposalData.proposal,
                   previousBidAmount: proposalData.negotiation?.previousBidAmount,
+                  previousHourlyRate: proposalData.negotiation?.previousHourlyRate,
+                  previousTotalJobHours: proposalData.negotiation?.previousTotalJobHours,
                   previousDuration: proposalData.negotiation?.previousDuration,
                   previousMessage: proposalData.negotiation?.previousMessage,
                 }
               : null,
           );
+          if (proposalData.projectId) {
+            setOwnProposalProjectId(proposalData.projectId);
+          }
           if (proposalData.proposal) {
             setProposalPrice(String(proposalData.proposal.bidAmount));
+            setProposalHourlyRate(String(proposalData.proposal.hourlyRate ?? ""));
+            setProposalTotalJobHours(String(proposalData.proposal.totalJobHours ?? ""));
             setProposalDuration(proposalData.proposal.duration);
             setProposalMessage(proposalData.proposal.coverLetter);
           }
@@ -461,17 +547,97 @@ export default function JobDetails({
     } catch {
       setStatus("error");
     }
-  }, [jobId, router]);
+  }, [jobId]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  useEffect(() => {
-    if (job?.projectId && job.status === "CLOSED") {
-      router.replace(`/project/${job.projectId}/tracking`);
+  function toggleProposalExpanded(id: number) {
+    setExpandedProposalIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const effectiveProjectId = job?.projectId ?? acceptedProjectId ?? ownProposalProjectId ?? null;
+  const activeList = proposalsTab === "PROPOSALS" ? clientProposals : sentHireRequests;
+
+  const proposalCounts = useMemo(() => {
+    const total = activeList.length;
+    const pending = activeList.filter((p) => p.status === "PENDING").length;
+    const accepted = activeList.filter((p) => p.status === "ACCEPTED").length;
+    const rejected = activeList.filter((p) => p.status === "REJECTED").length;
+    return { total, pending, accepted, rejected };
+  }, [activeList]);
+
+  const filteredAndSortedProposals = useMemo(() => {
+    let result = [...activeList];
+
+    if (proposalStatusFilter !== "ALL") {
+      result = result.filter((p) => p.status === proposalStatusFilter);
     }
-  }, [job, router]);
+
+    const q = proposalSearchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter((p) => {
+        const name =
+          `${p.professional?.firstName ?? ""} ${p.professional?.lastName ?? ""}`.toLowerCase();
+        const category = (p.professional?.professionalCategory ?? "").toLowerCase();
+        const city = (p.professional?.professionalCity ?? "").toLowerCase();
+        const letter = (p.coverLetter ?? "").toLowerCase();
+        return name.includes(q) || category.includes(q) || city.includes(q) || letter.includes(q);
+      });
+    }
+
+    result.sort((a, b) => {
+      if (proposalSortBy === "PRICE_ASC") {
+        return a.bidAmount - b.bidAmount;
+      }
+      if (proposalSortBy === "PRICE_DESC") {
+        return b.bidAmount - a.bidAmount;
+      }
+      if (proposalSortBy === "RATING_DESC") {
+        const rA = a.professional?.averageRating ?? 0;
+        const rB = b.professional?.averageRating ?? 0;
+        return rB - rA;
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    return result;
+  }, [activeList, proposalStatusFilter, proposalSearchQuery, proposalSortBy]);
+
+  const PROPOSALS_PER_PAGE = 8;
+  const totalPages = Math.max(1, Math.ceil(filteredAndSortedProposals.length / PROPOSALS_PER_PAGE));
+  const currentPage = Math.min(proposalPage, totalPages);
+
+  const paginatedProposals = useMemo(() => {
+    const startIndex = (currentPage - 1) * PROPOSALS_PER_PAGE;
+    return filteredAndSortedProposals.slice(startIndex, startIndex + PROPOSALS_PER_PAGE);
+  }, [filteredAndSortedProposals, currentPage]);
+
+  function handleTabChange(tab: "PROPOSALS" | "HIRE_REQUESTS") {
+    setProposalsTab(tab);
+    setProposalPage(1);
+  }
+
+  function handleStatusFilterChange(filter: "ALL" | "PENDING" | "ACCEPTED" | "REJECTED") {
+    setProposalStatusFilter(filter);
+    setProposalPage(1);
+  }
+
+  function handleSearchChange(query: string) {
+    setProposalSearchQuery(query);
+    setProposalPage(1);
+  }
+
+  function handleSortChange(sort: "NEWEST" | "PRICE_ASC" | "PRICE_DESC" | "RATING_DESC") {
+    setProposalSortBy(sort);
+    setProposalPage(1);
+  }
 
   async function searchProfessionals(query = finderQuery) {
     setFinderStatus("loading");
@@ -585,7 +751,10 @@ export default function JobDetails({
       !Number.isInteger(bidAmount) ||
       bidAmount < 1 ||
       (isHourlyJob &&
-        (!Number.isSafeInteger(hourlyRate) || hourlyRate < 1 || !Number.isSafeInteger(totalJobHours) || totalJobHours < 1)) ||
+        (!Number.isSafeInteger(hourlyRate) ||
+          hourlyRate < 1 ||
+          !Number.isSafeInteger(totalJobHours) ||
+          totalJobHours < 1)) ||
       !duration ||
       message.length < 10
     ) {
@@ -707,7 +876,10 @@ export default function JobDetails({
       !Number.isSafeInteger(bidAmount) ||
       bidAmount < 1 ||
       (isHourlyJob &&
-        (!Number.isSafeInteger(hourlyRate) || hourlyRate < 1 || !Number.isSafeInteger(totalJobHours) || totalJobHours < 1)) ||
+        (!Number.isSafeInteger(hourlyRate) ||
+          hourlyRate < 1 ||
+          !Number.isSafeInteger(totalJobHours) ||
+          totalJobHours < 1)) ||
       !negotiateDuration.trim() ||
       !negotiateMessage.trim()
     ) {
@@ -778,18 +950,6 @@ export default function JobDetails({
         <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-destructive">
           The job could not be loaded. Please try again.
         </p>
-      </JobShell>
-    );
-
-  if (job.projectId && job.status === "CLOSED")
-    return (
-      <JobShell viewerRole={viewerRole} embedded={embedded}>
-        <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-soft">
-          <h1 className="text-2xl font-semibold">Opening your completed project…</h1>
-          <p className="mt-2 text-muted-foreground">
-            Project tracking, reviews, and dispute options are available there.
-          </p>
-        </div>
       </JobShell>
     );
 
@@ -911,7 +1071,7 @@ export default function JobDetails({
         </dl>
 
         {(job.locationAddress || (job.locationLat !== null && job.locationLng !== null)) && (
-          <section className="mt-6 max-w-2xl">
+          <section className="mt-6 w-full">
             <div className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-primary" />
               <div>
@@ -921,7 +1081,7 @@ export default function JobDetails({
             </div>
             <iframe
               title={`Map for ${job.title}`}
-              className="mt-3 aspect-square w-full max-w-md rounded-2xl border border-border"
+              className="mt-3 h-[240px] w-full rounded-2xl border border-border sm:h-[260px]"
               loading="lazy"
               src={
                 job.locationLat !== null && job.locationLng !== null
@@ -1119,388 +1279,884 @@ export default function JobDetails({
 
         {isOwner && (
           <section className="mt-8 border-t border-border pt-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Briefcase className="h-5 w-5 text-primary" />
-              <div>
-                <h2 className="text-xl font-semibold">Proposals & Bidding</h2>
-                <p className="text-sm text-muted-foreground">
-                  Review and manage proposals from professionals
-                </p>
+            {/* Header */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Briefcase className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">
+                    Proposals &amp; Direct Hires
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Review candidate bids, negotiate terms, accept offers, and manage project
+                    workrooms
+                  </p>
+                </div>
               </div>
             </div>
+
+            {/* 2 Tabs: Proposals vs Direct Hire Requests */}
+            <div className="flex border-b border-border mb-4">
+              <button
+                type="button"
+                onClick={() => handleTabChange("PROPOSALS")}
+                className={`relative flex items-center gap-2 py-3 px-4 font-semibold text-sm transition-colors ${
+                  proposalsTab === "PROPOSALS"
+                    ? "text-primary border-b-2 border-primary -mb-px"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Inbox className="h-4 w-4" />
+                <span>Proposals from Professionals</span>
+                <span
+                  className={`ml-1 rounded-full px-2 py-0.5 text-xs font-bold ${
+                    proposalsTab === "PROPOSALS"
+                      ? "bg-primary/15 text-primary"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {clientProposals.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleTabChange("HIRE_REQUESTS")}
+                className={`relative flex items-center gap-2 py-3 px-4 font-semibold text-sm transition-colors ${
+                  proposalsTab === "HIRE_REQUESTS"
+                    ? "text-primary border-b-2 border-primary -mb-px"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Send className="h-4 w-4" />
+                <span>Direct Hire Requests (Client Sent)</span>
+                <span
+                  className={`ml-1 rounded-full px-2 py-0.5 text-xs font-bold ${
+                    proposalsTab === "HIRE_REQUESTS"
+                      ? "bg-primary/15 text-primary"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {sentHireRequests.length}
+                </span>
+              </button>
+            </div>
+
+            {/* Controls Toolbar: Search, Filter, Sort (optimized for 1,000+ items) */}
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              {/* Left: Search Bar */}
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  value={proposalSearchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  placeholder="Search candidates, skills, or notes..."
+                  className="pl-9 h-9 text-xs sm:text-sm rounded-lg"
+                />
+                {proposalSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => handleSearchChange("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Right: Status Filters & Sort Dropdown */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Status Pills */}
+                <div className="inline-flex rounded-lg border border-border bg-muted/40 p-1 text-xs font-medium">
+                  {(
+                    [
+                      { id: "ALL", label: "All", count: proposalCounts.total },
+                      { id: "PENDING", label: "Pending", count: proposalCounts.pending },
+                      { id: "ACCEPTED", label: "Accepted", count: proposalCounts.accepted },
+                      { id: "REJECTED", label: "Declined", count: proposalCounts.rejected },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => handleStatusFilterChange(tab.id)}
+                      className={`rounded-md px-2.5 py-1 transition-colors ${
+                        proposalStatusFilter === tab.id
+                          ? "bg-background text-foreground shadow-sm font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {tab.label} {tab.count > 0 && `(${tab.count})`}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Sorter */}
+                <select
+                  value={proposalSortBy}
+                  onChange={(e) =>
+                    handleSortChange(
+                      e.target.value as "NEWEST" | "PRICE_ASC" | "PRICE_DESC" | "RATING_DESC",
+                    )
+                  }
+                  className="h-8 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="NEWEST">Newest First</option>
+                  <option value="PRICE_ASC">Price: Low to High</option>
+                  <option value="PRICE_DESC">Price: High to Low</option>
+                  <option value="RATING_DESC">Top Rated First</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Proposals List (Paginated, High Density) */}
             <div className="space-y-3">
-              {clientProposals.length > 0 && (
-                <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
-                  <p className="font-semibold text-sm text-primary">
-                    {clientProposals.length} proposal{clientProposals.length !== 1 ? "s" : ""}{" "}
-                    received
+              {paginatedProposals.map((item) => {
+                const isItemAccepted = item.status === "ACCEPTED";
+                const isItemRejected = item.status === "REJECTED";
+                const isItemPending = item.status === "PENDING";
+                const canClientAct =
+                  isItemPending && job.status === "OPEN" && item.lastActorRole === "PROFESSIONAL";
+
+                return (
+                  <article
+                    key={item.id}
+                    className="rounded-xl border border-border bg-card p-4 sm:p-5 transition-all hover:border-primary/40 hover:shadow-sm"
+                  >
+                    <div className="flex flex-col gap-3">
+                      {/* Row 1: Candidate Bio & Financials */}
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        {/* Bio */}
+                        <div className="flex items-start gap-3">
+                          {item.professional?.avatarUrl ? (
+                            <img
+                              src={item.professional.avatarUrl}
+                              alt={item.professional.firstName}
+                              className="h-11 w-11 shrink-0 rounded-full object-cover border border-border"
+                            />
+                          ) : (
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 font-bold text-primary text-sm">
+                              {item.professional
+                                ? `${item.professional.firstName[0]}${item.professional.lastName[0]}`
+                                : "PR"}
+                            </div>
+                          )}
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-semibold text-base text-foreground leading-snug">
+                                {item.professional
+                                  ? `${item.professional.firstName} ${item.professional.lastName}`
+                                  : "Professional"}
+                              </h3>
+                              {item.professional?.isVerified && (
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                  <Check className="h-3 w-3" /> Verified
+                                </span>
+                              )}
+                              {item.professional && (
+                                <Link
+                                  href={`/pro/${item.professional.id}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs text-primary hover:underline inline-flex items-center gap-0.5 font-medium ml-1"
+                                >
+                                  Profile <ExternalLink className="h-2.5 w-2.5" />
+                                </Link>
+                              )}
+                            </div>
+
+                            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                              <span>
+                                {item.professional?.professionalCategory ?? "Professional"}
+                              </span>
+                              {item.professional?.professionalCity && (
+                                <>
+                                  <span>•</span>
+                                  <span className="inline-flex items-center gap-0.5">
+                                    <MapPin className="h-3 w-3" />{" "}
+                                    {item.professional.professionalCity}
+                                  </span>
+                                </>
+                              )}
+                              {item.professional && (
+                                <>
+                                  <span>•</span>
+                                  <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                                    {item.professional.averageRating.toFixed(1)}
+                                    <span className="text-muted-foreground font-normal">
+                                      ({item.professional.reviewCount})
+                                    </span>
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Financial Quote & Status */}
+                        <div className="flex flex-wrap sm:flex-col items-end justify-between sm:justify-start gap-1.5 shrink-0">
+                          <div className="text-left sm:text-right">
+                            {item.hourlyRate && item.totalJobHours ? (
+                              <div>
+                                <p className="text-xs text-muted-foreground">
+                                  ₹{item.hourlyRate.toLocaleString("en-IN")}/hr ×{" "}
+                                  {item.totalJobHours} hrs
+                                </p>
+                                <p className="text-lg font-bold text-foreground leading-tight">
+                                  ₹{item.bidAmount.toLocaleString("en-IN")}
+                                </p>
+                              </div>
+                            ) : (
+                              <div>
+                                <p className="text-xs text-muted-foreground">Total Quote</p>
+                                <p className="text-lg font-bold text-foreground leading-tight">
+                                  ₹{item.bidAmount.toLocaleString("en-IN")}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                              <Clock className="h-3 w-3" /> {item.duration}
+                            </span>
+                            <span
+                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                isItemPending
+                                  ? item.lastActorRole === "PROFESSIONAL"
+                                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                                    : "bg-blue-500/15 text-blue-700 dark:text-blue-400"
+                                  : isItemAccepted
+                                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                                    : "bg-rose-500/15 text-rose-700 dark:text-rose-400"
+                              }`}
+                            >
+                              {isItemPending
+                                ? item.lastActorRole === "PROFESSIONAL"
+                                  ? proposalsTab === "HIRE_REQUESTS"
+                                    ? "Professional Countered"
+                                    : "Pending Review"
+                                  : "Awaiting Professional"
+                                : isItemAccepted
+                                  ? "Accepted"
+                                  : "Declined"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Previous Offer Banner (if countered) */}
+                      {item.previous?.bidAmount != null && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50/70 dark:border-amber-900/50 dark:bg-amber-950/20 px-3 py-2 text-xs text-amber-900 dark:text-amber-300">
+                          <span className="font-semibold">Previous offer:</span> ₹
+                          {item.previous.bidAmount.toLocaleString("en-IN")}
+                          {item.previous.duration ? ` · ${item.previous.duration}` : ""}
+                          {item.previous.message && (
+                            <span className="italic"> — &quot;{item.previous.message}&quot;</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Description / Cover Letter */}
+                      {item.coverLetter && (
+                        <div className="rounded-lg bg-muted/40 p-3 text-xs leading-relaxed text-foreground">
+                          <p
+                            className={
+                              expandedProposalIds.has(item.id)
+                                ? "whitespace-pre-wrap"
+                                : "line-clamp-2"
+                            }
+                          >
+                            {item.coverLetter}
+                          </p>
+                          {item.coverLetter.length > 120 && (
+                            <button
+                              type="button"
+                              onClick={() => toggleProposalExpanded(item.id)}
+                              className="mt-1 text-xs font-semibold text-primary hover:underline inline-flex items-center gap-0.5"
+                            >
+                              {expandedProposalIds.has(item.id) ? (
+                                <>
+                                  Show less <ChevronUp className="h-3 w-3" />
+                                </>
+                              ) : (
+                                <>
+                                  Show more <ChevronDown className="h-3 w-3" />
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Row 3: The 4 Action Buttons Bar */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+                        <div className="text-xs text-muted-foreground">
+                          Submitted {new Date(item.createdAt).toLocaleDateString()}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Button 1: Accept */}
+                          {canClientAct ? (
+                            <Button
+                              size="sm"
+                              className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1 shadow-sm"
+                              onClick={() => {
+                                if (proposalsTab === "PROPOSALS") {
+                                  setPendingAcceptProposal(item);
+                                } else {
+                                  void respondToRequest("sentHireRequest", item.id, "accept");
+                                }
+                              }}
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              {proposalsTab === "PROPOSALS" ? "Accept & Hire" : "Accept Terms"}
+                            </Button>
+                          ) : isItemAccepted ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled
+                              className="h-8 text-xs gap-1 border-emerald-500/30 text-emerald-600 bg-emerald-50/50 opacity-90 cursor-default"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              Accepted
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled
+                              className="h-8 text-xs gap-1 opacity-40 cursor-not-allowed"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              Accept
+                            </Button>
+                          )}
+
+                          {/* Button 2: Reject / Decline */}
+                          {canClientAct ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive gap-1"
+                              onClick={() =>
+                                void respondToRequest(
+                                  proposalsTab === "PROPOSALS"
+                                    ? "clientProposal"
+                                    : "sentHireRequest",
+                                  item.id,
+                                  "reject",
+                                )
+                              }
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              Decline
+                            </Button>
+                          ) : isItemRejected ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled
+                              className="h-8 text-xs gap-1 text-destructive/70 border-destructive/20 opacity-90 cursor-default"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              Declined
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled
+                              className="h-8 text-xs gap-1 opacity-40 cursor-not-allowed"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              Decline
+                            </Button>
+                          )}
+
+                          {/* Button 3: Negotiate */}
+                          {isItemPending && job.status === "OPEN" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-xs gap-1 hover:border-primary/50"
+                              onClick={() =>
+                                openNegotiate(
+                                  proposalsTab === "PROPOSALS"
+                                    ? "clientProposal"
+                                    : "sentHireRequest",
+                                  item,
+                                )
+                              }
+                            >
+                              <ArrowUpDown className="h-3.5 w-3.5" />
+                              Negotiate
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled
+                              className="h-8 text-xs gap-1 opacity-40 cursor-not-allowed"
+                            >
+                              <ArrowUpDown className="h-3.5 w-3.5" />
+                              Negotiate
+                            </Button>
+                          )}
+
+                          {/* Button 4: Work / Go to Project Tracking */}
+                          {isItemAccepted && effectiveProjectId ? (
+                            <Button
+                              size="sm"
+                              className="h-8 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs gap-1 shadow-sm"
+                              asChild
+                            >
+                              <Link href={`/project/${effectiveProjectId}/tracking`}>
+                                <Briefcase className="h-3.5 w-3.5" />
+                                Workroom
+                              </Link>
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled
+                              className="h-8 text-xs gap-1 opacity-40 cursor-not-allowed"
+                              title="Workroom opens once proposal is accepted"
+                            >
+                              <Briefcase className="h-3.5 w-3.5" />
+                              Work
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+
+              {/* Empty state: No proposals in this tab at all */}
+              {!activeList.length && (
+                <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+                  <Briefcase className="h-8 w-8 mx-auto mb-2 opacity-50 text-muted-foreground" />
+                  <p className="font-semibold text-foreground">
+                    {proposalsTab === "PROPOSALS"
+                      ? "No proposals received yet"
+                      : "No direct hire requests sent yet"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {proposalsTab === "PROPOSALS"
+                      ? "Share this job or invite verified professionals to get competitive bids."
+                      : "Use 'Find a professional' above to invite experts directly to this job."}
                   </p>
                 </div>
               )}
-              {clientProposals.map((proposal) => (
-                <article
-                  key={proposal.id}
-                  className="rounded-xl border border-border p-5 hover:border-primary/30 transition-colors"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-lg">
-                          {proposal.professional
-                            ? `${proposal.professional.firstName} ${proposal.professional.lastName}`
-                            : "Professional"}
-                        </h3>
-                        {proposal.professional?.isVerified && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs text-success">
-                            ✓ Verified
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {proposal.professional?.professionalCategory ?? "Professional"}
-                        {proposal.professional?.professionalCity
-                          ? ` · ${proposal.professional.professionalCity}`
-                          : ""}
-                      </p>
-                      {proposal.professional && (
-                        <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
-                          <Star className="h-3 w-3 fill-warning text-warning" />
-                          {proposal.professional.averageRating.toFixed(1)} (
-                          {proposal.professional.reviewCount} reviews)
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                          proposal.status === "PENDING"
-                            ? "bg-warning/10 text-warning"
-                            : proposal.status === "ACCEPTED"
-                              ? "bg-success/10 text-success"
-                              : "bg-destructive/10 text-destructive"
-                        }`}
-                      >
-                        {proposal.status === "PENDING" ? "Pending Review" : proposal.status}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {proposal.previous?.bidAmount != null && (
-                      <div className="rounded-lg border border-border bg-background p-3 sm:col-span-2">
-                        <p className="text-xs text-muted-foreground">Previous proposal</p>
-                        <p className="mt-1 font-semibold">
-                          ₹{proposal.previous.bidAmount.toLocaleString()}
-                          {proposal.previous.duration ? ` · ${proposal.previous.duration}` : ""}
-                        </p>
-                        {proposal.previous.message && (
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {proposal.previous.message}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    <div className="rounded-lg bg-muted p-3">
-                      <p className="text-xs text-muted-foreground">Proposed Price</p>
-                      <p className="mt-1 text-lg font-semibold">
-                        ₹{proposal.bidAmount.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="rounded-lg bg-muted p-3">
-                      <p className="text-xs text-muted-foreground">Delivery Time</p>
-                      <p className="mt-1 text-lg font-semibold">{proposal.duration}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 p-4 rounded-lg bg-muted/50 border border-border">
-                    <p className="text-xs text-muted-foreground mb-2">Proposal Message</p>
-                    <p className="text-sm whitespace-pre-wrap text-foreground">
-                      {proposal.coverLetter}
-                    </p>
-                  </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    {proposal.professional && (
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/pro/${proposal.professional.id}`}>View Profile</Link>
-                      </Button>
-                    )}
-                    {proposal.status === "PENDING" &&
-                      job.status === "OPEN" &&
-                      (proposal.lastActorRole === "PROFESSIONAL" ? (
-                        <>
-                          <Button
-                            size="sm"
-                            className="bg-success text-success-foreground hover:bg-success/90"
-                            onClick={() => setPendingAcceptProposal(proposal)}
-                          >
-                            Accept & Hire
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openNegotiate("clientProposal", proposal)}
-                          >
-                            Negotiate
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() =>
-                              void respondToRequest("clientProposal", proposal.id, "reject")
-                            }
-                          >
-                            Decline
-                          </Button>
-                        </>
-                      ) : (
-                        <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
-                          Waiting for professional's response
-                        </span>
-                      ))}
-                  </div>
-                </article>
-              ))}
-              {!clientProposals.length && (
-                <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-                  <Briefcase className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  No proposals yet. Share this job to attract professionals.
-                </p>
+
+              {/* Empty state: Filters produced no matches */}
+              {activeList.length > 0 && !filteredAndSortedProposals.length && (
+                <div className="rounded-xl border border-border bg-muted/20 p-8 text-center text-sm text-muted-foreground">
+                  <Search className="h-7 w-7 mx-auto mb-2 opacity-40 text-muted-foreground" />
+                  <p className="font-semibold text-foreground">No matching proposals found</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    No proposals match your current filter or search criteria.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-3 text-xs"
+                    onClick={() => {
+                      setProposalSearchQuery("");
+                      setProposalStatusFilter("ALL");
+                      setProposalPage(1);
+                    }}
+                  >
+                    Reset Filters
+                  </Button>
+                </div>
               )}
             </div>
-          </section>
-        )}
-        {isOwner && sentHireRequests.length > 0 && (
-          <section className="mt-8 border-t border-border pt-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Briefcase className="h-5 w-5 text-primary" />
-              <div>
-                <h2 className="text-xl font-semibold">Your Hire Requests</h2>
-                <p className="text-sm text-muted-foreground">
-                  Professionals you've directly invited to work on this job
-                </p>
+
+            {/* Pagination Controls (Essential for 1,000+ proposals) */}
+            {filteredAndSortedProposals.length > 0 && (
+              <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border pt-4 text-xs text-muted-foreground">
+                <div>
+                  Showing{" "}
+                  <span className="font-semibold text-foreground">
+                    {(currentPage - 1) * PROPOSALS_PER_PAGE + 1}
+                  </span>
+                  –
+                  <span className="font-semibold text-foreground">
+                    {Math.min(currentPage * PROPOSALS_PER_PAGE, filteredAndSortedProposals.length)}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-semibold text-foreground">
+                    {filteredAndSortedProposals.length}
+                  </span>{" "}
+                  proposals
+                  {filteredAndSortedProposals.length !== activeList.length && (
+                    <span> (filtered from {activeList.length} total)</span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={currentPage <= 1}
+                    onClick={() => setProposalPage((p) => Math.max(1, p - 1))}
+                    className="h-8 px-2.5 text-xs"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Prev
+                  </Button>
+
+                  <span className="px-2 font-medium">
+                    Page {currentPage} of {totalPages}
+                  </span>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setProposalPage((p) => Math.min(totalPages, p + 1))}
+                    className="h-8 px-2.5 text-xs"
+                  >
+                    Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                  </Button>
+                </div>
               </div>
-            </div>
-            <div className="space-y-3">
-              {sentHireRequests.map((hireRequest) => (
-                <article
-                  key={hireRequest.id}
-                  className="rounded-xl border border-border p-5 hover:border-primary/30 transition-colors"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-lg">
-                          {hireRequest.professional
-                            ? `${hireRequest.professional.firstName} ${hireRequest.professional.lastName}`
-                            : "Professional"}
-                        </h3>
-                        {hireRequest.professional?.isVerified && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs text-success">
-                            ✓ Verified
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {hireRequest.professional?.professionalCategory ?? "Professional"}
-                        {hireRequest.professional?.professionalCity
-                          ? ` · ${hireRequest.professional.professionalCity}`
-                          : ""}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                          hireRequest.status === "PENDING"
-                            ? "bg-warning/10 text-warning"
-                            : hireRequest.status === "ACCEPTED"
-                              ? "bg-success/10 text-success"
-                              : "bg-destructive/10 text-destructive"
-                        }`}
-                      >
-                        {hireRequest.status === "PENDING"
-                          ? hireRequest.lastActorRole === "PROFESSIONAL"
-                            ? "Professional Countered"
-                            : "Awaiting Professional"
-                          : hireRequest.status}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <div className="rounded-lg bg-muted p-3">
-                      <p className="text-xs text-muted-foreground">
-                        {hireRequest.lastActorRole === "PROFESSIONAL"
-                          ? "Their Offer"
-                          : "Your Offer"}
-                      </p>
-                      <p className="mt-1 text-lg font-semibold">
-                        ₹{hireRequest.bidAmount.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="rounded-lg bg-muted p-3">
-                      <p className="text-xs text-muted-foreground">Timeline</p>
-                      <p className="mt-1 text-lg font-semibold">{hireRequest.duration}</p>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    {hireRequest.professional && (
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/pro/${hireRequest.professional.id}`}>View Profile</Link>
-                      </Button>
-                    )}
-                    {hireRequest.status === "PENDING" &&
-                      hireRequest.lastActorRole === "PROFESSIONAL" && (
-                        <>
-                          <Button
-                            size="sm"
-                            className="bg-success text-success-foreground hover:bg-success/90"
-                            onClick={() =>
-                              void respondToRequest("sentHireRequest", hireRequest.id, "accept")
-                            }
-                          >
-                            Accept Terms
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openNegotiate("sentHireRequest", hireRequest)}
-                          >
-                            Negotiate
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() =>
-                              void respondToRequest("sentHireRequest", hireRequest.id, "reject")
-                            }
-                          >
-                            Decline
-                          </Button>
-                        </>
-                      )}
-                  </div>
-                </article>
-              ))}
-            </div>
+            )}
           </section>
         )}
         {!isOwner && job.client && viewerRole === "PROFESSIONAL" && (
           <section className="mt-8 border-t border-border pt-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Briefcase className="h-5 w-5 text-primary" />
-              <div>
-                <h2 className="text-xl font-semibold">Send Your Proposal</h2>
-                <p className="text-sm text-muted-foreground">
-                  Submit your bid and let the client review your offer
-                </p>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Briefcase className="h-5 w-5 text-primary" />
+                <div>
+                  <h2 className="text-xl font-semibold">
+                    {ownProposal
+                      ? ownProposal.origin === "CLIENT_HIRE"
+                        ? "Direct Hire Request from Client"
+                        : "Your Proposal"
+                      : "Send Your Proposal"}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {ownProposal
+                      ? "Review terms, negotiate, or access your project workroom"
+                      : "Submit your bid and let the client review your offer"}
+                  </p>
+                </div>
               </div>
             </div>
+
             {ownProposal ? (
               <div
-                className={`rounded-xl border p-5 ${
+                className={`rounded-2xl border bg-card p-5 shadow-soft transition-all ${
                   ownProposal.status === "ACCEPTED"
-                    ? "border-success/30 bg-success/5"
+                    ? "border-emerald-500/40 bg-emerald-50/15 dark:bg-emerald-950/10"
                     : ownProposal.status === "REJECTED"
                       ? "border-destructive/30 bg-destructive/5"
-                      : "border-warning/30 bg-warning/5"
+                      : ownProposal.lastActorRole === "CLIENT"
+                        ? "border-amber-500/40 bg-amber-50/20 dark:bg-amber-950/10"
+                        : "border-border"
                 }`}
               >
-                <p
-                  className={`font-semibold text-sm ${
-                    ownProposal.status === "ACCEPTED"
-                      ? "text-success"
-                      : ownProposal.status === "REJECTED"
-                        ? "text-destructive"
-                        : "text-warning"
-                  }`}
-                >
-                  {ownProposal.status === "PENDING"
-                    ? ownProposal.lastActorRole === "CLIENT"
-                      ? "Client countered your proposal — respond below"
-                      : "✓ Proposal Submitted — Awaiting Client Response"
-                    : ownProposal.status === "REJECTED"
-                      ? "✗ Proposal Declined — Client selected another professional"
-                      : "✓ Proposal Accepted — Project Started"}
-                </p>
+                {/* Status bar */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-3.5">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                        ownProposal.status === "ACCEPTED"
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                          : ownProposal.status === "REJECTED"
+                            ? "bg-destructive/10 text-destructive"
+                            : ownProposal.lastActorRole === "CLIENT"
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+                              : "bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300"
+                      }`}
+                    >
+                      {ownProposal.status === "ACCEPTED" ? (
+                        <>
+                          <Check className="h-3.5 w-3.5" /> Proposal Accepted · Active Contract
+                        </>
+                      ) : ownProposal.status === "REJECTED" ? (
+                        <>
+                          <X className="h-3.5 w-3.5" /> Proposal Declined
+                        </>
+                      ) : ownProposal.lastActorRole === "CLIENT" ? (
+                        <>
+                          <ArrowUpDown className="h-3.5 w-3.5" /> Action Required · Client Countered
+                          Your Offer
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-3.5 w-3.5" /> Submitted · Awaiting Client Decision
+                        </>
+                      )}
+                    </span>
+                    {ownProposal.origin === "CLIENT_HIRE" && (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                        Direct Hire Request
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-xs text-muted-foreground">Job #{jobId}</span>
+                </div>
+
+                {/* Previous terms if countered */}
                 {ownProposal.status === "PENDING" &&
                   ownProposal.lastActorRole === "CLIENT" &&
                   ownProposal.previousBidAmount != null && (
-                    <div className="mt-3 rounded-lg border border-border bg-background p-3">
-                      <p className="text-xs text-muted-foreground">Your previous proposal</p>
-                      <p className="mt-1 font-semibold">
-                        ₹{ownProposal.previousBidAmount.toLocaleString()} ·{" "}
-                        {ownProposal.previousDuration}
+                    <div className="mt-3.5 rounded-xl border border-border/80 bg-muted/30 p-3 text-xs">
+                      <p className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">
+                        Your previous proposal terms
+                      </p>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {ownProposal.previousHourlyRate && ownProposal.previousTotalJobHours
+                          ? `₹${ownProposal.previousHourlyRate.toLocaleString("en-IN")}/hr × ${ownProposal.previousTotalJobHours} hrs = ₹${ownProposal.previousBidAmount.toLocaleString("en-IN")}`
+                          : `₹${ownProposal.previousBidAmount.toLocaleString("en-IN")}`}{" "}
+                        · Timeline: {ownProposal.previousDuration ?? "Not specified"}
                       </p>
                       {ownProposal.previousMessage && (
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {ownProposal.previousMessage}
+                        <p className="mt-1 text-muted-foreground italic">
+                          &ldquo;{ownProposal.previousMessage}&rdquo;
                         </p>
                       )}
                     </div>
                   )}
-                {ownProposal.status === "PENDING" && (
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <div className="rounded-lg bg-background p-3">
-                      <p className="text-xs text-muted-foreground">
-                        {ownProposal.lastActorRole === "CLIENT" ? "Their Offer" : "Your Offer"}
-                      </p>
-                      <p className="mt-1 text-lg font-semibold">
-                        ₹{ownProposal.bidAmount.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="rounded-lg bg-background p-3">
-                      <p className="text-xs text-muted-foreground">Timeline</p>
-                      <p className="mt-1 text-lg font-semibold">{ownProposal.duration}</p>
+
+                {/* Rate & Pricing Breakdown Grid */}
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-border/80 bg-background/80 p-3.5">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                      {ownProposal.lastActorRole === "CLIENT" && ownProposal.status === "PENDING"
+                        ? "Client's Proposed Rate & Price"
+                        : "Your Rate & Bid Price"}
+                    </p>
+                    <div className="mt-1.5">
+                      {ownProposal.hourlyRate && ownProposal.totalJobHours ? (
+                        <div>
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-lg font-bold text-foreground">
+                              ₹{ownProposal.hourlyRate.toLocaleString("en-IN")}
+                            </span>
+                            <span className="text-xs text-muted-foreground">/hr</span>
+                            <span className="text-xs text-muted-foreground">
+                              × {ownProposal.totalJobHours} hrs
+                            </span>
+                          </div>
+                          <p className="text-xs font-semibold text-primary mt-0.5">
+                            Total: ₹{ownProposal.bidAmount.toLocaleString("en-IN")}
+                          </p>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="text-lg font-bold text-foreground">
+                            ₹{ownProposal.bidAmount.toLocaleString("en-IN")}
+                          </span>
+                          <span className="ml-2 text-xs text-muted-foreground">(Fixed Price)</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
+
+                  <div className="rounded-xl border border-border/80 bg-background/80 p-3.5">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                      Delivery Timeline
+                    </p>
+                    <p className="mt-1.5 text-lg font-bold text-foreground">
+                      {ownProposal.duration || "Not specified"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Client's note if countered */}
                 {ownProposal.status === "PENDING" &&
                   ownProposal.lastActorRole === "CLIENT" &&
                   ownProposal.coverLetter && (
-                    <div className="mt-3 rounded-lg border border-border bg-background p-3">
-                      <p className="text-xs text-muted-foreground">Client&apos;s note</p>
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                    <div className="mt-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5">
+                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                        Client&apos;s Note
+                      </p>
+                      <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">
                         {ownProposal.coverLetter}
                       </p>
                     </div>
                   )}
-                {ownProposal.status === "PENDING" && ownProposal.lastActorRole === "CLIENT" ? (
-                  <div className="mt-4 flex flex-wrap gap-2">
+
+                {/* Professional's cover letter / pitch */}
+                {ownProposal.coverLetter &&
+                  (ownProposal.lastActorRole !== "CLIENT" || ownProposal.status !== "PENDING") && (
+                    <div className="mt-3.5 rounded-xl border border-border/80 bg-background/60 p-3.5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">
+                          Your Proposal Pitch & Scope
+                        </p>
+                        {ownProposal.coverLetter.length > 150 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExpandedProposalIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(ownProposal.id)) {
+                                  next.delete(ownProposal.id);
+                                } else {
+                                  next.add(ownProposal.id);
+                                }
+                                return next;
+                              });
+                            }}
+                            className="text-[11px] font-medium text-primary hover:underline flex items-center gap-1"
+                          >
+                            {expandedProposalIds.has(ownProposal.id) ? (
+                              <>
+                                Show less <ChevronUp className="h-3 w-3" />
+                              </>
+                            ) : (
+                              <>
+                                Read more <ChevronDown className="h-3 w-3" />
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                      <p
+                        className={`mt-1.5 text-sm leading-relaxed text-foreground whitespace-pre-wrap ${
+                          !expandedProposalIds.has(ownProposal.id) &&
+                          ownProposal.coverLetter.length > 150
+                            ? "line-clamp-2"
+                            : ""
+                        }`}
+                      >
+                        {ownProposal.coverLetter}
+                      </p>
+                    </div>
+                  )}
+
+                {/* The 4 Standard Action Buttons: Accept | Reject | Negotiate | Work */}
+                <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-border/70 pt-4">
+                  {/* Button 1: Accept */}
+                  {ownProposal.status === "PENDING" && ownProposal.lastActorRole === "CLIENT" ? (
                     <Button
                       size="sm"
-                      className="bg-success text-success-foreground hover:bg-success/90"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm h-8 px-3 text-xs"
                       onClick={() => void respondToRequest("ownProposal", ownProposal.id, "accept")}
                     >
-                      Accept Terms
+                      <Check className="h-3.5 w-3.5 mr-1" /> Accept Terms
                     </Button>
+                  ) : ownProposal.status === "ACCEPTED" ? (
                     <Button
-                      variant="outline"
                       size="sm"
-                      onClick={() => openNegotiate("ownProposal", ownProposal)}
+                      disabled
+                      variant="outline"
+                      className="border-emerald-500/30 text-emerald-600 bg-emerald-500/10 h-8 px-3 text-xs"
                     >
-                      Negotiate
+                      <Check className="h-3.5 w-3.5 mr-1" /> Terms Accepted
                     </Button>
+                  ) : (
                     <Button
-                      variant="outline"
                       size="sm"
-                      className="text-destructive hover:text-destructive"
+                      disabled
+                      variant="outline"
+                      className="text-muted-foreground opacity-50 h-8 px-3 text-xs"
+                    >
+                      <Check className="h-3.5 w-3.5 mr-1" /> Accept
+                    </Button>
+                  )}
+
+                  {/* Button 2: Reject / Decline */}
+                  {ownProposal.status === "PENDING" && ownProposal.lastActorRole === "CLIENT" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive border-destructive/30 hover:bg-destructive/10 h-8 px-3 text-xs"
                       onClick={() => void respondToRequest("ownProposal", ownProposal.id, "reject")}
                     >
-                      Decline
+                      <X className="h-3.5 w-3.5 mr-1" /> Decline
                     </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-3"
-                    onClick={() => setShowProposalForm(true)}
-                  >
-                    Modify Proposal
-                  </Button>
-                )}
+                  ) : ownProposal.status === "REJECTED" ? (
+                    <Button
+                      size="sm"
+                      disabled
+                      variant="outline"
+                      className="text-destructive/60 border-destructive/20 h-8 px-3 text-xs"
+                    >
+                      <X className="h-3.5 w-3.5 mr-1" /> Declined
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      disabled
+                      variant="outline"
+                      className="text-muted-foreground opacity-50 h-8 px-3 text-xs"
+                    >
+                      <X className="h-3.5 w-3.5 mr-1" /> Decline
+                    </Button>
+                  )}
+
+                  {/* Button 3: Negotiate */}
+                  {ownProposal.status === "PENDING" && ownProposal.lastActorRole === "CLIENT" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="hover:bg-muted font-medium h-8 px-3 text-xs"
+                      onClick={() => openNegotiate("ownProposal", ownProposal)}
+                    >
+                      <ArrowUpDown className="h-3.5 w-3.5 mr-1" /> Counter-Offer
+                    </Button>
+                  ) : ownProposal.status === "PENDING" &&
+                    ownProposal.lastActorRole === "PROFESSIONAL" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="hover:bg-muted font-medium h-8 px-3 text-xs"
+                      onClick={() => setShowProposalForm(true)}
+                    >
+                      <ArrowUpDown className="h-3.5 w-3.5 mr-1" /> Modify Proposal
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      disabled
+                      variant="outline"
+                      className="text-muted-foreground opacity-50 h-8 px-3 text-xs"
+                    >
+                      <ArrowUpDown className="h-3.5 w-3.5 mr-1" /> Negotiate
+                    </Button>
+                  )}
+
+                  {/* Button 4: Work / Go to Project Tracking */}
+                  {effectiveProjectId && ownProposal.status === "ACCEPTED" ? (
+                    <Button
+                      size="sm"
+                      asChild
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-sm h-8 px-3 text-xs ml-auto"
+                    >
+                      <Link href={`/project/${effectiveProjectId}/tracking`}>
+                        <Briefcase className="h-3.5 w-3.5 mr-1" /> Go to Project Workroom{" "}
+                        <ExternalLink className="h-3 w-3 ml-1 opacity-70" />
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      disabled
+                      variant="outline"
+                      className="text-muted-foreground opacity-50 cursor-not-allowed h-8 px-3 text-xs ml-auto"
+                      title="Available after proposal is accepted and project begins"
+                    >
+                      <Briefcase className="h-3.5 w-3.5 mr-1" /> Work
+                    </Button>
+                  )}
+                </div>
               </div>
             ) : (
-              <div className="rounded-xl border border-border p-6 bg-card">
+              <div className="rounded-2xl border border-border p-6 bg-card">
                 <p className="text-sm text-muted-foreground mb-4">
                   Submit a proposal for this job. Include your price, delivery estimate, and a
                   message for the client.
@@ -1545,19 +2201,22 @@ export default function JobDetails({
                     <Link href={`/project/${job.projectId}/tracking`}>Track Project</Link>
                   </Button>
                   {job.status === "CLOSED" && (
-                    <>
-                      <Button variant="outline" className="w-full sm:w-auto" asChild>
-                        <Link href={`/project/${job.projectId}/tracking#project-feedback`}>
-                          Write Review
-                        </Link>
-                      </Button>
-                      <Button variant="outline" className="w-full sm:w-auto" asChild>
-                        <Link href={`/project/${job.projectId}/tracking#project-dispute`}>
-                          Raise Dispute
-                        </Link>
-                      </Button>
-                    </>
+                    <Button variant="outline" className="w-full sm:w-auto" asChild>
+                      <Link href={`/project/${job.projectId}/tracking#project-feedback`}>
+                        Write Review
+                      </Link>
+                    </Button>
                   )}
+                  <Button
+                    variant="outline"
+                    className="w-full sm:w-auto text-destructive border-destructive/30 hover:bg-destructive/10"
+                    asChild
+                  >
+                    <Link href={`/project/${job.projectId}/tracking#project-dispute-center`}>
+                      <ShieldAlert className="h-4 w-4 mr-1.5" />
+                      Raise Dispute
+                    </Link>
+                  </Button>
                 </div>
               ) : (
                 job.status === "OPEN" && (
@@ -1582,10 +2241,15 @@ export default function JobDetails({
               )}
               {job.status === "CLOSED" && (
                 <Button
-                  variant="outline"
-                  className="w-full sm:w-auto"
-                  onClick={() => setReopenJobConfirmOpen(true)}
+                  className="w-full sm:w-auto gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+                  onClick={() => {
+                    setReopenError(null);
+                    setReopenWorkDescription("");
+                    setReopenAmount("");
+                    setReopenJobConfirmOpen(true);
+                  }}
                 >
+                  <RotateCcw className="h-4 w-4" />
                   Reopen Job
                 </Button>
               )}
@@ -1651,7 +2315,9 @@ export default function JobDetails({
                   Number.isSafeInteger(Number(proposalTotalJobHours)) &&
                   Number(proposalHourlyRate) > 0 &&
                   Number(proposalTotalJobHours) > 0
-                    ? (Number(proposalHourlyRate) * Number(proposalTotalJobHours)).toLocaleString("en-IN")
+                    ? (Number(proposalHourlyRate) * Number(proposalTotalJobHours)).toLocaleString(
+                        "en-IN",
+                      )
                     : "—"}
                 </p>
               </>
@@ -1897,7 +2563,9 @@ export default function JobDetails({
                   Number.isSafeInteger(Number(negotiateTotalJobHours)) &&
                   Number(negotiateHourlyRate) > 0 &&
                   Number(negotiateTotalJobHours) > 0
-                    ? (Number(negotiateHourlyRate) * Number(negotiateTotalJobHours)).toLocaleString("en-IN")
+                    ? (Number(negotiateHourlyRate) * Number(negotiateTotalJobHours)).toLocaleString(
+                        "en-IN",
+                      )
                     : "—"}
                 </p>
               </>
@@ -2144,15 +2812,188 @@ export default function JobDetails({
         onConfirm={handleCloseJob}
       />
 
-      <ConfirmDialog
+      <Dialog
         open={reopenJobConfirmOpen}
-        onOpenChange={setReopenJobConfirmOpen}
-        title="Reopen this job?"
-        description="This job will be published again to the marketplace so professionals can discover and send proposals."
-        confirmLabel="Reopen Job"
-        loading={statusBusy}
-        onConfirm={handleReopenJob}
-      />
+        onOpenChange={(open) => {
+          setReopenJobConfirmOpen(open);
+          if (!open) setReopenError(null);
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <RotateCcw className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl">Reopen Job for Work</DialogTitle>
+                <DialogDescription>
+                  Specify the work needed and offered payment. No milestone setup needed.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {reopenError && (
+              <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{reopenError}</span>
+              </div>
+            )}
+
+            {/* Reason Selection */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setReopenReason("ISSUE");
+                  if (!reopenAmount || reopenAmount === "0") setReopenAmount("0");
+                }}
+                className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all ${
+                  reopenReason === "ISSUE"
+                    ? "border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 ring-1 ring-amber-500"
+                    : "border-border hover:bg-muted/40"
+                }`}
+              >
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                  <Wrench className="h-4 w-4" /> Issue / Warranty Rework
+                </span>
+                <span className="text-xs text-muted-foreground mt-1">
+                  Completed work stopped working or needs fixing (e.g. AC cooling issue).
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setReopenReason("ADDITIONAL_WORK");
+                  if (reopenAmount === "0") setReopenAmount("");
+                }}
+                className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all ${
+                  reopenReason === "ADDITIONAL_WORK"
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-border hover:bg-muted/40"
+                }`}
+              >
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                  <PlusCircle className="h-4 w-4" /> Additional Work / New Task
+                </span>
+                <span className="text-xs text-muted-foreground mt-1">
+                  Request extra work or a new task (e.g. Fit washing machine, install parts).
+                </span>
+              </button>
+            </div>
+
+            {/* Work Description */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-foreground flex items-center justify-between">
+                <span>Work Description</span>
+                <span className="text-xs font-normal text-muted-foreground">What needs to be done?</span>
+              </label>
+              <textarea
+                value={reopenWorkDescription}
+                onChange={(e) => setReopenWorkDescription(e.target.value)}
+                placeholder={
+                  reopenReason === "ISSUE"
+                    ? "E.g., The AC stopped cooling after 2 days and is making a strange sound. Please inspect and fix."
+                    : "E.g., Please also install the washing machine in the utility room and connect the inlet piping."
+                }
+                rows={3}
+                className="w-full rounded-xl border border-input bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            {/* Money / Amount */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-foreground flex items-center justify-between">
+                <span>Offered Amount (₹)</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  {reopenReason === "ISSUE"
+                    ? "Enter ₹0 if covered under warranty, or offer a fee"
+                    : "Proposed budget for this work"}
+                </span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-semibold">
+                  ₹
+                </span>
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={reopenAmount}
+                  onChange={(e) => setReopenAmount(e.target.value)}
+                  placeholder={reopenReason === "ISSUE" ? "0" : "500"}
+                  className="pl-8"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                You and the professional can still negotiate this amount before work begins.
+              </p>
+            </div>
+
+            {/* Target Professional Checkbox */}
+            {job.previousProfessional && (
+              <div className="rounded-xl border border-border bg-muted/40 p-3.5 flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="assignPreviousPro"
+                  checked={reopenAssignPreviousPro}
+                  onChange={(e) => setReopenAssignPreviousPro(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <label htmlFor="assignPreviousPro" className="text-xs text-foreground cursor-pointer select-none">
+                  <span className="font-semibold block text-sm">
+                    Directly request {job.previousProfessional.firstName} {job.previousProfessional.lastName}
+                  </span>
+                  Send this work request directly to your previous professional so they can accept or negotiate right away.
+                </label>
+              </div>
+            )}
+
+            {/* Dispute Escalation Notice */}
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-3 text-xs text-muted-foreground flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-destructive shrink-0" />
+                <span>
+                  Having a dispute or unresolved conflict with the professional?
+                </span>
+              </div>
+              {job.projectId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
+                  asChild
+                >
+                  <Link href={`/project/${job.projectId}/tracking#project-dispute-center`}>
+                    Raise Dispute
+                  </Link>
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setReopenJobConfirmOpen(false)}
+              disabled={statusBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleReopenJob}
+              disabled={statusBusy || !reopenWorkDescription.trim()}
+              className="gap-1.5"
+            >
+              <RotateCcw className="h-4 w-4" />
+              {statusBusy ? "Reopening…" : "Reopen & Propose Work"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <PageActionLoading
         active={proposalBusy || hireBusy || negotiateBusy || statusBusy}

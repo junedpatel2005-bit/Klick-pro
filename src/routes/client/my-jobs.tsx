@@ -6,9 +6,11 @@ import { useEffect, useMemo, useState } from "react";
 import { io } from "socket.io-client";
 import { toast } from "sonner";
 import {
+  Archive,
   ArrowRight,
   BriefcaseBusiness,
   CalendarDays,
+  CheckCircle2,
   CircleDollarSign,
   ClipboardList,
   MapPin,
@@ -23,7 +25,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 type Job = {
   id: number;
   title: string | null;
-  status: "DRAFT" | "OPEN" | "RUNNING" | "CLOSED";
+  status: "DRAFT" | "OPEN" | "RUNNING" | "COMPLETED" | "CLOSED";
   projectId: number | null;
   proposalCount: number;
   budgetMin: number | null;
@@ -45,11 +47,12 @@ const filters: { value: Filter; label: string }[] = [
   { value: "SCHEDULED", label: "Scheduled jobs" },
   { value: "RUNNING", label: "In progress" },
   { value: "DRAFT", label: "Drafts" },
-  { value: "CLOSED", label: "Completed" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "CLOSED", label: "Closed" },
 ];
 
 function jobStatus(job: Job) {
-  return job.projectId ? "RUNNING" : job.status;
+  return job.status;
 }
 
 function isScheduled(job: Job) {
@@ -62,7 +65,10 @@ function isScheduled(job: Job) {
 }
 
 function readableStatus(status: Job["status"]) {
-  return status === "RUNNING" ? "In progress" : status[0] + status.slice(1).toLowerCase();
+  if (status === "RUNNING") return "In progress";
+  if (status === "COMPLETED") return "Completed";
+  if (status === "CLOSED") return "Closed";
+  return status[0] + status.slice(1).toLowerCase();
 }
 
 function jobBudget(job: Job) {
@@ -80,10 +86,15 @@ function jobBudget(job: Job) {
 }
 
 function statusStyle(status: Job["status"]) {
-  if (status === "OPEN") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (status === "RUNNING") return "border-blue-200 bg-blue-50 text-blue-700";
-  if (status === "DRAFT") return "border-amber-200 bg-amber-50 text-amber-700";
-  return "border-slate-200 bg-slate-100 text-slate-600";
+  if (status === "OPEN")
+    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300";
+  if (status === "RUNNING")
+    return "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300";
+  if (status === "COMPLETED")
+    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300";
+  if (status === "DRAFT")
+    return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300";
+  return "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400";
 }
 
 export default function MyJobs() {
@@ -167,19 +178,14 @@ export default function MyJobs() {
     () => ({
       total: jobs.length,
       open: jobs.filter((job) => jobStatus(job) === "OPEN" && !isScheduled(job)).length,
+      scheduled: jobs.filter(isScheduled).length,
       running: jobs.filter((job) => jobStatus(job) === "RUNNING").length,
       drafts: jobs.filter((job) => jobStatus(job) === "DRAFT").length,
+      completed: jobs.filter((job) => jobStatus(job) === "COMPLETED").length,
+      closed: jobs.filter((job) => jobStatus(job) === "CLOSED").length,
     }),
     [jobs],
   );
-  const filterCounts: Record<Filter, number> = {
-    ALL: jobs.length,
-    OPEN: summary.open,
-    SCHEDULED: jobs.filter(isScheduled).length,
-    RUNNING: summary.running,
-    DRAFT: summary.drafts,
-    CLOSED: jobs.filter((job) => jobStatus(job) === "CLOSED").length,
-  };
   const visible = useMemo(() => {
     const filtered =
       status === "ALL"
@@ -192,9 +198,10 @@ export default function MyJobs() {
     return [...filtered].sort((a, b) => {
       const statusRank: Record<Job["status"], number> = {
         OPEN: 0,
-        DRAFT: 1,
-        CLOSED: 2,
-        RUNNING: 3,
+        RUNNING: 1,
+        DRAFT: 2,
+        COMPLETED: 3,
+        CLOSED: 4,
       };
 
       const aStatus = jobStatus(a);
@@ -263,7 +270,7 @@ export default function MyJobs() {
         </div>
       </section>
 
-      <section className="relative z-10 -mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="relative z-10 -mt-2 grid gap-3 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-7">
         {[
           {
             label: "Total projects",
@@ -280,14 +287,35 @@ export default function MyJobs() {
             filter: "OPEN" as const,
           },
           {
-            label: "Currently active",
+            label: "Scheduled",
+            value: summary.scheduled,
+            icon: CalendarDays,
+            tint: "bg-violet-500/10 text-violet-600",
+            filter: "SCHEDULED" as const,
+          },
+          {
+            label: "Currently working",
             value: summary.running,
             icon: CircleDollarSign,
             tint: "bg-blue-500/10 text-blue-600",
             filter: "RUNNING" as const,
           },
           {
-            label: "Saved drafts",
+            label: "Completed",
+            value: summary.completed,
+            icon: CheckCircle2,
+            tint: "bg-emerald-500/10 text-emerald-600",
+            filter: "COMPLETED" as const,
+          },
+          {
+            label: "Closed",
+            value: summary.closed,
+            icon: Archive,
+            tint: "bg-slate-500/10 text-slate-600",
+            filter: "CLOSED" as const,
+          },
+          {
+            label: "Drafts",
             value: summary.drafts,
             icon: Pencil,
             tint: "bg-amber-500/10 text-amber-600",
@@ -305,7 +333,11 @@ export default function MyJobs() {
               <div className={`grid h-10 w-10 place-items-center rounded-xl ${item.tint}`}>
                 <item.icon className="h-5 w-5" />
               </div>
-              <span className="text-2xl font-bold tracking-tight">{item.value}</span>
+              {loading ? (
+                <span className="h-7 w-10 animate-pulse rounded-md bg-muted/80" />
+              ) : (
+                <span className="text-2xl font-bold tracking-tight">{item.value}</span>
+              )}
             </div>
             <p
               className={`mt-3 text-sm font-medium ${status === item.filter ? "text-primary" : "text-muted-foreground"}`}
@@ -321,7 +353,9 @@ export default function MyJobs() {
           <div>
             <h2 className="font-display text-xl font-semibold">Manage projects</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {visible.length} {visible.length === 1 ? "project" : "projects"} shown
+              {loading
+                ? "Loading projects…"
+                : `${visible.length} ${visible.length === 1 ? "project" : "projects"} shown`}
             </p>
           </div>
           <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-muted/50 p-1">
@@ -329,15 +363,10 @@ export default function MyJobs() {
               <button
                 key={filter.value}
                 onClick={() => setStatus(filter.value)}
-                aria-label={`${filter.label}: ${filterCounts[filter.value]} projects`}
+                aria-label={filter.label}
                 className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:text-sm ${status === filter.value ? "bg-card text-primary shadow-soft" : "text-muted-foreground hover:text-foreground"}`}
               >
                 {filter.label}
-                <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] leading-none ${status === filter.value ? "bg-primary/10 text-primary" : "bg-foreground/5 text-muted-foreground"}`}
-                >
-                  {filterCounts[filter.value]}
-                </span>
               </button>
             ))}
           </div>
@@ -366,7 +395,7 @@ export default function MyJobs() {
                   key={job.id}
                   onClick={() => router.push(href)}
                   className={`group cursor-pointer rounded-2xl border bg-card p-5 shadow-soft transition-all duration-200 hover:border-primary/25 hover:shadow-card sm:p-6 ${
-                    job.proposalCount > 0 && currentStatus !== "RUNNING"
+                    job.proposalCount > 0 && currentStatus === "OPEN"
                       ? "border-primary/30 shadow-[0_0_0_1px_rgba(59,130,246,0.12)]"
                       : "border-border"
                   }`}
@@ -386,7 +415,7 @@ export default function MyJobs() {
                           >
                             {isScheduled(job) ? "Scheduled" : readableStatus(currentStatus)}
                           </span>
-                          {currentStatus !== "RUNNING" && job.proposalCount > 0 && (
+                          {currentStatus === "OPEN" && job.proposalCount > 0 && (
                             <span className="animate-pulse rounded-full bg-primary/10 px-2 py-1 text-[11px] font-semibold text-primary ring-1 ring-primary/20">
                               {job.proposalCount}{" "}
                               {job.proposalCount === 1 ? "proposal" : "proposals"}
@@ -434,7 +463,17 @@ export default function MyJobs() {
                         ) : null}
                         <Button asChild className="group/button">
                           <Link href={href} onClick={(event) => event.stopPropagation()}>
-                            {isDraft ? "Continue" : job.projectId ? "Track project" : "View job"}
+                            {isDraft
+                              ? "Continue"
+                              : currentStatus === "COMPLETED"
+                                ? "View completed project"
+                                : currentStatus === "CLOSED"
+                                  ? job.projectId
+                                    ? "View closed project"
+                                    : "View closed job"
+                                  : job.projectId
+                                    ? "Track project"
+                                    : "View job"}
                             <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover/button:translate-x-0.5" />
                           </Link>
                         </Button>

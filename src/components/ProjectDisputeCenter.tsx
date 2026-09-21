@@ -174,10 +174,7 @@ export function ProjectDisputeCenter({
     }
   }, [dispute?.responseAttachmentsJson]);
 
-  const handleFileUpload = async (
-    files: FileList | null,
-    target: "create" | "reject",
-  ) => {
+  const handleFileUpload = async (files: FileList | null, target: "create" | "reject") => {
     if (!files || files.length === 0) return;
     const isCreate = target === "create";
     if (isCreate) setUploadingEvidence(true);
@@ -251,7 +248,9 @@ export function ProjectDisputeCenter({
   const handleRejectDispute = async () => {
     if (!dispute) return;
     if (!rejectMessage.trim() || rejectMessage.trim().length < 10) {
-      setRejectError("Please provide an explanation of why you are contesting this dispute (min 10 characters).");
+      setRejectError(
+        "Please provide an explanation of why you are contesting this dispute (min 10 characters).",
+      );
       return;
     }
     setRejectError("");
@@ -295,7 +294,10 @@ export function ProjectDisputeCenter({
               <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
                 Contract Dispute Resolution
                 {dispute && (
-                  <Badge variant="outline" className="text-xs font-semibold uppercase tracking-wider">
+                  <Badge
+                    variant="outline"
+                    className="text-xs font-semibold uppercase tracking-wider"
+                  >
                     Round {dispute.disputeRound} of {disputeLimit}
                   </Badge>
                 )}
@@ -340,12 +342,10 @@ export function ProjectDisputeCenter({
       {!dispute && totalUsed >= disputeLimit && (
         <div className="mt-5 rounded-2xl border border-border/80 bg-muted/40 p-5 text-center">
           <ShieldAlert className="mx-auto h-8 w-8 text-muted-foreground" />
-          <h3 className="mt-2 text-sm font-semibold text-foreground">
-            Dispute Limit Reached
-          </h3>
+          <h3 className="mt-2 text-sm font-semibold text-foreground">Dispute Limit Reached</h3>
           <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
-            The maximum allowance of {disputeLimit} disputes has been reached for this project contract.
-            Please reach out directly to customer support if you need further help.
+            The maximum allowance of {disputeLimit} disputes has been reached for this project
+            contract. Please reach out directly to customer support if you need further help.
           </p>
         </div>
       )}
@@ -354,12 +354,11 @@ export function ProjectDisputeCenter({
       {!dispute && totalUsed < disputeLimit && (
         <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 rounded-2xl border border-dashed border-border bg-muted/20 p-5">
           <div className="space-y-1">
-            <p className="text-sm font-semibold text-foreground">
-              Contract in good standing
-            </p>
+            <p className="text-sm font-semibold text-foreground">Contract in good standing</p>
             <p className="text-xs text-muted-foreground">
-              If an issue regarding quality, missed deadlines, scope disagreement, or milestone payments arises,
-              you can initiate a structured dispute. You have {remainingAllowance} dispute claim(s) remaining.
+              If an issue regarding quality, missed deadlines, scope disagreement, or milestone
+              payments arises, you can initiate a structured dispute. You have {remainingAllowance}{" "}
+              dispute claim(s) remaining.
             </p>
           </div>
           <Button
@@ -446,9 +445,7 @@ export function ProjectDisputeCenter({
           <div className="rounded-2xl border bg-card p-5 space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs border-b pb-4">
               <div>
-                <p className="font-semibold text-muted-foreground uppercase text-[10px]">
-                  Reason
-                </p>
+                <p className="font-semibold text-muted-foreground uppercase text-[10px]">Reason</p>
                 <p className="font-bold text-foreground mt-0.5">
                   {dispute.issueType.replaceAll("_", " ")}
                 </p>
@@ -530,8 +527,8 @@ export function ProjectDisputeCenter({
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Explain your position clearly. Upon submission, this dispute will be escalated directly to
-                the Klick-Pro Admin Review Team for official arbitration.
+                Explain your position clearly. Upon submission, this dispute will be escalated
+                directly to the Klick-Pro Admin Review Team for official arbitration.
               </p>
 
               <div>
@@ -596,9 +593,7 @@ export function ProjectDisputeCenter({
                 )}
               </div>
 
-              {rejectError && (
-                <p className="text-xs font-medium text-rose-600">{rejectError}</p>
-              )}
+              {rejectError && <p className="text-xs font-medium text-rose-600">{rejectError}</p>}
 
               <div className="flex items-center justify-end gap-2 pt-2">
                 <Button
@@ -642,8 +637,8 @@ export function ProjectDisputeCenter({
             </h3>
             <p className="mt-1 text-xs text-muted-foreground max-w-2xl leading-relaxed">
               This dispute was contested and escalated. A Klick-Pro Trust & Safety Dispute Officer
-              is reviewing project logs, milestones, and submitted evidence from both parties to deliver a binding
-              ruling (Client Refund, Freelancer Payout, or Partial Settlement).
+              is reviewing project logs, milestones, and submitted evidence from both parties to
+              deliver a binding ruling (Client Refund, Freelancer Payout, or Partial Settlement).
             </p>
 
             {/* Stepper */}
@@ -835,7 +830,8 @@ export function ProjectDisputeCenter({
           {canRaiseDispute && (
             <div className="flex items-center justify-between rounded-xl border bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
               <span>
-                {remainingAllowance} dispute(s) remaining for this contract if a separate issue occurs.
+                {remainingAllowance} dispute(s) remaining for this contract if a separate issue
+                occurs.
               </span>
               <Button
                 variant="outline"
@@ -899,7 +895,9 @@ export function ProjectDisputeCenter({
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <Icon className={`h-4 w-4 ${isSelected ? "text-amber-600" : "text-muted-foreground"}`} />
+                          <Icon
+                            className={`h-4 w-4 ${isSelected ? "text-amber-600" : "text-muted-foreground"}`}
+                          />
                           <span className="text-xs font-bold text-foreground">{opt.label}</span>
                         </div>
                         <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">
@@ -1021,11 +1019,7 @@ export function ProjectDisputeCenter({
 
             {/* Footer buttons */}
             <div className="flex items-center justify-end gap-2 border-t pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowCreateModal(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
                 Cancel
               </Button>
               <Button
@@ -1057,15 +1051,14 @@ export function ProjectDisputeCenter({
                 <h3 className="text-base font-bold text-foreground">
                   Accept Dispute & Mutually Settle?
                 </h3>
-                <p className="text-xs text-muted-foreground">
-                  Mutual Settlement Confirmation
-                </p>
+                <p className="text-xs text-muted-foreground">Mutual Settlement Confirmation</p>
               </div>
             </div>
 
             <p className="text-xs text-muted-foreground leading-relaxed">
-              By accepting this dispute, you agree to mutually settle the claim with the other party.
-              The dispute will be closed as resolved without requiring an administrative penalty or formal hearing.
+              By accepting this dispute, you agree to mutually settle the claim with the other
+              party. The dispute will be closed as resolved without requiring an administrative
+              penalty or formal hearing.
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2">

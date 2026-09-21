@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, Info, MapPin, Plus, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Info, MapPin, Plus, Trash2 } from "lucide-react";
 import { AddressMapPicker } from "@/components/AddressMapPicker";
 import { PageActionLoading } from "@/components/PageActionLoading";
 import { Button } from "@/components/ui/button";
@@ -75,6 +75,33 @@ const asDate = (value: string | Date | null) =>
 const money = (value: number | null | undefined) =>
   value == null ? "Not set" : `₹${value.toLocaleString("en-US")}`;
 
+export const HOURS_PER_WORK_DAY = 8;
+
+export function calculateDaysFromHours(hours: number, pace: number = HOURS_PER_WORK_DAY): number {
+  if (!Number.isFinite(hours) || hours <= 0 || pace <= 0) return 0;
+  return Math.max(1, Math.ceil(hours / pace));
+}
+
+export function computeDeadlineDate(
+  startDateStr: string,
+  hours: number,
+  pace: number = HOURS_PER_WORK_DAY,
+): string {
+  const days = calculateDaysFromHours(hours, pace);
+  if (days <= 0 || !startDateStr) return "";
+  const parts = startDateStr.split("-").map(Number);
+  const year = parts[0];
+  const month = parts[1];
+  const day = parts[2];
+  if (!year || !month || !day) return "";
+  const d = new Date(year, month - 1, day);
+  d.setDate(d.getDate() + days);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export default function PostJob() {
   const router = useRouter();
   const editJobId =
@@ -115,6 +142,141 @@ export default function PostJob() {
       delete next.workMode;
       return next;
     });
+  };
+  const [workPaceHours, setWorkPaceHours] = useState<number>(8);
+  const calculatedDays = useMemo(
+    () => calculateDaysFromHours(Number(form.totalJobHours), workPaceHours),
+    [form.totalJobHours, workPaceHours],
+  );
+
+  const handleHoursChange = (rawHours: string, pace = workPaceHours) => {
+    const hours = Number(rawHours);
+    const activeStartDate =
+      postingTiming === "SCHEDULED" ? form.jobDate || tomorrow : form.jobDate || today;
+
+    if (Number.isFinite(hours) && hours > 0) {
+      const autoDeadline = computeDeadlineDate(activeStartDate, hours, pace);
+      setForm((old) => ({
+        ...old,
+        totalJobHours: rawHours,
+        deadline: autoDeadline || old.deadline,
+      }));
+      setErrors((old) => {
+        const next = { ...old };
+        delete next.totalJobHours;
+        delete next.deadline;
+        return next;
+      });
+    } else {
+      update("totalJobHours", rawHours);
+    }
+  };
+
+  const handleStartDateChange = (newStartDate: string) => {
+    setPostingTiming("SCHEDULED");
+    const hours = Number(form.totalJobHours);
+    if (form.timingType === "HOURLY" && Number.isFinite(hours) && hours > 0) {
+      const autoDeadline = computeDeadlineDate(newStartDate, hours, workPaceHours);
+      setForm((old) => ({
+        ...old,
+        jobDate: newStartDate,
+        deadline: autoDeadline || old.deadline,
+      }));
+      setErrors((old) => {
+        const next = { ...old };
+        delete next.jobDate;
+        delete next.deadline;
+        return next;
+      });
+    } else {
+      update("jobDate", newStartDate);
+    }
+  };
+
+  const handleSelectPostToday = () => {
+    setPostingTiming("TODAY");
+    const hours = Number(form.totalJobHours);
+    if (form.timingType === "HOURLY" && Number.isFinite(hours) && hours > 0) {
+      const autoDeadline = computeDeadlineDate(today, hours, workPaceHours);
+      setForm((old) => ({
+        ...old,
+        jobDate: today,
+        deadline: autoDeadline || old.deadline,
+      }));
+      setErrors((old) => {
+        const next = { ...old };
+        delete next.jobDate;
+        delete next.deadline;
+        return next;
+      });
+    } else {
+      update("jobDate", today);
+    }
+  };
+
+  const handleSelectScheduleLater = () => {
+    setPostingTiming("SCHEDULED");
+    const nextDate = !form.jobDate || form.jobDate <= today ? tomorrow : form.jobDate;
+    const hours = Number(form.totalJobHours);
+    if (form.timingType === "HOURLY" && Number.isFinite(hours) && hours > 0) {
+      const autoDeadline = computeDeadlineDate(nextDate, hours, workPaceHours);
+      setForm((old) => ({
+        ...old,
+        jobDate: nextDate,
+        deadline: autoDeadline || old.deadline,
+      }));
+      setErrors((old) => {
+        const next = { ...old };
+        delete next.jobDate;
+        delete next.deadline;
+        return next;
+      });
+    } else {
+      update("jobDate", nextDate);
+    }
+  };
+
+  const handleWorkPaceChange = (newPace: number) => {
+    setWorkPaceHours(newPace);
+    const hours = Number(form.totalJobHours);
+    if (form.timingType === "HOURLY" && Number.isFinite(hours) && hours > 0) {
+      const activeStartDate =
+        postingTiming === "SCHEDULED" ? form.jobDate || tomorrow : form.jobDate || today;
+      const autoDeadline = computeDeadlineDate(activeStartDate, hours, newPace);
+      if (autoDeadline) {
+        setForm((old) => ({
+          ...old,
+          deadline: autoDeadline,
+        }));
+        setErrors((old) => {
+          const next = { ...old };
+          delete next.deadline;
+          return next;
+        });
+      }
+    }
+  };
+
+  const handleSelectHourlyTiming = () => {
+    update("timingType", "HOURLY");
+    const hours = Number(form.totalJobHours);
+    if (Number.isFinite(hours) && hours > 0) {
+      const activeStartDate =
+        postingTiming === "SCHEDULED" ? form.jobDate || tomorrow : form.jobDate || today;
+      const autoDeadline = computeDeadlineDate(activeStartDate, hours, workPaceHours);
+      if (autoDeadline) {
+        setForm((old) => ({
+          ...old,
+          timingType: "HOURLY",
+          deadline: autoDeadline,
+        }));
+        setErrors((old) => {
+          const next = { ...old };
+          delete next.deadline;
+          return next;
+        });
+      }
+    }
   };
   useEffect(() => {
     void fetch("/api/v1/marketplace/categories")
@@ -529,7 +691,10 @@ export default function PostJob() {
         const focusStep =
           focus && ["title", "category", "description"].includes(focus)
             ? 0
-            : focus && ["budgetMin", "budgetMax", "hourlyRate", "totalJobHours", "deadline"].includes(focus)
+            : focus &&
+                ["budgetMin", "budgetMax", "hourlyRate", "totalJobHours", "deadline"].includes(
+                  focus,
+                )
               ? 1
               : focus && ["milestones"].includes(focus)
                 ? 2
@@ -802,7 +967,7 @@ export default function PostJob() {
               />
               <Choice
                 checked={form.timingType === "HOURLY"}
-                onClick={() => update("timingType", "HOURLY")}
+                onClick={handleSelectHourlyTiming}
                 label="Hourly rate"
               />
             </div>
@@ -846,18 +1011,58 @@ export default function PostJob() {
                       max="10000"
                       step="1"
                       value={form.totalJobHours}
-                      onChange={(e) => update("totalJobHours", e.target.value)}
-                      placeholder="e.g. 40"
+                      onChange={(e) => handleHoursChange(e.target.value)}
+                      placeholder="e.g. 100"
                     />
+                    {Number(form.totalJobHours) > 0 && (
+                      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-1 font-medium text-primary">
+                          <Clock className="h-3.5 w-3.5" />
+                          {Number(form.totalJobHours).toLocaleString("en-IN")} hours ={" "}
+                          <strong className="text-foreground">
+                            {calculatedDays} {calculatedDays === 1 ? "day" : "days"}
+                          </strong>{" "}
+                          (at {workPaceHours}h/day)
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px]">Pace:</span>
+                          <select
+                            value={workPaceHours}
+                            onChange={(e) => handleWorkPaceChange(Number(e.target.value))}
+                            className="h-6 rounded border border-border bg-background px-1.5 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                          >
+                            <option value={8}>8 hrs/day (Full-time)</option>
+                            <option value={6}>6 hrs/day (Standard)</option>
+                            <option value={4}>4 hrs/day (Part-time)</option>
+                            <option value={24}>24 hrs/day (Continuous)</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
                   </Field>
                 </div>
                 <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
-                  <p className="text-sm text-muted-foreground">Project total amount</p>
-                  <p className="mt-1 text-lg font-semibold text-foreground">
-                    {hourlyProjectTotal === null
-                      ? "Enter hourly rate and total hours"
-                      : `${money(hourlyProjectTotal)} (${money(Number(form.hourlyRate))} × ${Number(form.totalJobHours).toLocaleString("en-IN")} hours)`}
-                  </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Project total amount</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">
+                        {hourlyProjectTotal === null
+                          ? "Enter hourly rate and total hours"
+                          : `${money(hourlyProjectTotal)} (${money(Number(form.hourlyRate))} × ${Number(form.totalJobHours).toLocaleString("en-IN")} hours)`}
+                      </p>
+                    </div>
+                    {Number(form.totalJobHours) > 0 && calculatedDays > 0 && (
+                      <div className="sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-primary/10">
+                        <p className="text-xs text-muted-foreground">Estimated duration</p>
+                        <p className="mt-0.5 text-sm font-semibold text-primary">
+                          {calculatedDays} {calculatedDays === 1 ? "working day" : "working days"}{" "}
+                          <span className="text-xs font-normal text-muted-foreground">
+                            ({Number(form.totalJobHours)}h ÷ {workPaceHours}h/day)
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -892,19 +1097,13 @@ export default function PostJob() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <Mode
                   checked={postingTiming === "TODAY"}
-                  onClick={() => {
-                    setPostingTiming("TODAY");
-                    update("jobDate", today);
-                  }}
+                  onClick={handleSelectPostToday}
                   title="Post today"
                   text="Show this job to professionals today."
                 />
                 <Mode
                   checked={postingTiming === "SCHEDULED"}
-                  onClick={() => {
-                    setPostingTiming("SCHEDULED");
-                    if (!form.jobDate || form.jobDate <= today) update("jobDate", tomorrow);
-                  }}
+                  onClick={handleSelectScheduleLater}
                   title="Schedule for later"
                   text="Choose when professionals can see it."
                 />
@@ -917,10 +1116,7 @@ export default function PostJob() {
                   min={postingTiming === "SCHEDULED" ? tomorrow : today}
                   value={form.jobDate}
                   disabled={postingTiming === "TODAY"}
-                  onChange={(e) => {
-                    setPostingTiming("SCHEDULED");
-                    update("jobDate", e.target.value);
-                  }}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
                 />
               </Field>
               <Field label="Project end date" error={errors.deadline}>
@@ -930,6 +1126,17 @@ export default function PostJob() {
                   value={form.deadline}
                   onChange={(e) => update("deadline", e.target.value)}
                 />
+                {form.timingType === "HOURLY" &&
+                  Number(form.totalJobHours) > 0 &&
+                  calculatedDays > 0 &&
+                  form.deadline && (
+                    <p className="mt-1.5 flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                      <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+                      Auto-calculated: {calculatedDays} {calculatedDays === 1 ? "day" : "days"} (
+                      {Number(form.totalJobHours)}h ÷ {workPaceHours}h/day) from{" "}
+                      {postingTiming === "SCHEDULED" ? "scheduled start date" : "today"}
+                    </p>
+                  )}
               </Field>
             </div>
           </div>
@@ -1396,7 +1603,15 @@ export default function PostJob() {
             />
             <Review
               label="Project end date"
-              value={form.deadline || "Not set"}
+              value={
+                form.deadline
+                  ? form.timingType === "HOURLY" &&
+                    Number(form.totalJobHours) > 0 &&
+                    calculatedDays > 0
+                    ? `${form.deadline} (${calculatedDays} ${calculatedDays === 1 ? "day" : "days"} at ${workPaceHours}h/day)`
+                    : form.deadline
+                  : "Not set"
+              }
               onEdit={() => setStep(1)}
             />
             <Review
@@ -1412,7 +1627,11 @@ export default function PostJob() {
                       .map((m, idx) => {
                         const milestonePercent = Number(m.percentage) || 0;
                         return `${idx + 1}. ${m.title} (${m.percentage}%${
-                          (form.timingType === "HOURLY" ? hourlyProjectTotal : Number(form.budgetMax))
+                          (
+                            form.timingType === "HOURLY"
+                              ? hourlyProjectTotal
+                              : Number(form.budgetMax)
+                          )
                             ? ` • ₹${Math.round(((form.timingType === "HOURLY" ? hourlyProjectTotal : Number(form.budgetMax))! * milestonePercent) / 100).toLocaleString("en-IN")}`
                             : ""
                         })${m.description ? `\n   ${m.description}` : ""}`;

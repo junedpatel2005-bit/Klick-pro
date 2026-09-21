@@ -47,6 +47,13 @@ type CompletedProject = {
   currency: string;
 };
 
+type ClosedProject = {
+  id: number;
+  jobTitle: string | null;
+  clientName: string | null;
+  closedAt: string;
+};
+
 function displayStatus(status: string) {
   return status
     .replaceAll("_", " ")
@@ -84,12 +91,13 @@ export default function RunningProjectsPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<RunningProject[]>([]);
   const [completedProjects, setCompletedProjects] = useState<CompletedProject[]>([]);
+  const [closedProjects, setClosedProjects] = useState<ClosedProject[]>([]);
   const [savedJobsCount, setSavedJobsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
-  const [view, setView] = useState<"active" | "completed">("active");
+  const [view, setView] = useState<"active" | "completed" | "closed">("active");
 
   const loadProjects = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -99,10 +107,12 @@ export default function RunningProjectsPage() {
       const data = (await response.json()) as {
         activeProjects?: RunningProject[];
         completedProjects?: CompletedProject[];
+        closedProjects?: ClosedProject[];
         savedJobs?: { id: number }[];
       };
       setProjects(data.activeProjects ?? []);
       setCompletedProjects(data.completedProjects ?? []);
+      setClosedProjects(data.closedProjects ?? []);
       setSavedJobsCount(data.savedJobs?.length ?? 0);
       setError("");
     } catch {
@@ -168,6 +178,17 @@ export default function RunningProjectsPage() {
     );
   }, [completedProjects, search]);
 
+  const visibleClosedProjects = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return closedProjects.filter(
+      (project) =>
+        !term ||
+        [project.jobTitle, project.clientName, "closed"].some((value) =>
+          value?.toLowerCase().includes(term),
+        ),
+    );
+  }, [closedProjects, search]);
+
   const inProgress = projects.filter((project) => project.status === "IN_PROGRESS").length;
   const totalValue = projects.reduce(
     (sum, project) => sum + (project.timingType === "HOURLY" ? 0 : (project.budget ?? 0)),
@@ -210,18 +231,21 @@ export default function RunningProjectsPage() {
           label="Active projects"
           value={projects.length}
           tint="bg-primary/10 text-primary"
+          loading={loading}
         />
         <Metric
           icon={Clock3}
           label="In progress"
           value={inProgress}
           tint="bg-amber-500/10 text-amber-600"
+          loading={loading}
         />
         <Metric
           icon={CircleDollarSign}
           label="Active value"
           value={`₹${totalValue.toLocaleString()}`}
           tint="bg-emerald-500/10 text-emerald-600"
+          loading={loading}
         />
         <Metric
           icon={Heart}
@@ -229,6 +253,7 @@ export default function RunningProjectsPage() {
           value={savedJobsCount}
           tint="bg-rose-500/10 text-rose-600"
           href="/professional/my-jobs?view=saved"
+          loading={loading}
         />
       </section>
 
@@ -237,23 +262,63 @@ export default function RunningProjectsPage() {
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="font-display text-xl font-semibold">
-                {view === "active" ? "Active projects" : "Completed projects"}
+                {view === "active"
+                  ? "Active projects"
+                  : view === "completed"
+                    ? "Completed projects"
+                    : "Closed projects"}
               </h2>
-              <Button
-                variant={view === "completed" ? "default" : "outline"}
-                size="sm"
-                onClick={() => {
-                  setView(view === "active" ? "completed" : "active");
-                  setStatusFilter("ALL");
-                }}
-              >
-                {view === "active" ? "Completed projects" : "Back to active projects"}
-              </Button>
+              <div className="inline-flex rounded-xl border border-border bg-muted/50 p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("active");
+                    setStatusFilter("ALL");
+                  }}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                    view === "active"
+                      ? "bg-card text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Active ({projects.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("completed");
+                    setStatusFilter("ALL");
+                  }}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                    view === "completed"
+                      ? "bg-card text-emerald-600 dark:text-emerald-400 shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Completed ({completedProjects.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("closed");
+                    setStatusFilter("ALL");
+                  }}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                    view === "closed"
+                      ? "bg-card text-slate-700 dark:text-slate-300 shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Closed ({closedProjects.length})
+                </button>
+              </div>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {view === "active"
                 ? `${visibleProjects.length} active ${visibleProjects.length === 1 ? "project" : "projects"}`
-                : `${visibleCompletedProjects.length} completed ${visibleCompletedProjects.length === 1 ? "project" : "projects"}`}
+                : view === "completed"
+                  ? `${visibleCompletedProjects.length} completed ${visibleCompletedProjects.length === 1 ? "project" : "projects"}`
+                  : `${visibleClosedProjects.length} closed ${visibleClosedProjects.length === 1 ? "project" : "projects"}`}
             </p>
           </div>
           <div className="relative w-full sm:max-w-sm">
@@ -464,7 +529,7 @@ export default function RunningProjectsPage() {
                 </div>
               </article>
             ))
-          ) : (
+          ) : view === "completed" ? (
             visibleCompletedProjects.map((project) => (
               <article
                 key={project.id}
@@ -502,10 +567,52 @@ export default function RunningProjectsPage() {
                 </div>
               </article>
             ))
+          ) : (
+            visibleClosedProjects.map((project) => (
+              <article
+                key={project.id}
+                onClick={() => router.push(`/project/${project.id}/tracking`)}
+                className="group cursor-pointer overflow-hidden rounded-2xl border border-border bg-card shadow-soft transition-all hover:border-muted-foreground/40 hover:shadow-card"
+              >
+                <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                  <div className="flex min-w-0 gap-4">
+                    <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-muted text-muted-foreground">
+                      <BriefcaseBusiness className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="truncate text-lg font-semibold text-muted-foreground">
+                          {project.jobTitle ?? `Project #${project.id}`}
+                        </h3>
+                        <span className="rounded-full bg-slate-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.13em] text-slate-600 dark:text-slate-400">
+                          Closed
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {project.clientName ?? "Client"} · Closed{" "}
+                        {new Date(project.closedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <Button variant="outline" asChild>
+                    <Link
+                      href={`/project/${project.id}/tracking`}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      View details <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </article>
+            ))
           )}
           {!loading &&
           !error &&
-          (view === "active" ? !visibleProjects.length : !visibleCompletedProjects.length) ? (
+          (view === "active"
+            ? !visibleProjects.length
+            : view === "completed"
+              ? !visibleCompletedProjects.length
+              : !visibleClosedProjects.length) ? (
             <div className="rounded-2xl border border-dashed border-primary/25 bg-primary/[0.025] px-6 py-14 text-center">
               <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
                 <BriefcaseBusiness className="h-6 w-6" />
@@ -513,18 +620,22 @@ export default function RunningProjectsPage() {
               <h3 className="mt-4 text-lg font-semibold">
                 {view === "completed"
                   ? "No completed projects yet"
-                  : search || statusFilter !== "ALL"
-                    ? "No matching projects"
-                    : "No active projects yet"}
+                  : view === "closed"
+                    ? "No closed projects yet"
+                    : search || statusFilter !== "ALL"
+                      ? "No matching projects"
+                      : "No active projects yet"}
               </h3>
               <p className="mt-2 text-sm text-muted-foreground">
                 {view === "completed"
                   ? "Completed projects will appear here after a project is confirmed."
-                  : search
-                    ? "Try another project or client name."
-                    : statusFilter !== "ALL"
-                      ? "No projects have this status right now."
-                      : "Accepted client work will appear here when it starts."}
+                  : view === "closed"
+                    ? "Closed or cancelled projects will appear here."
+                    : search
+                      ? "Try another project or client name."
+                      : statusFilter !== "ALL"
+                        ? "No projects have this status right now."
+                        : "Accepted client work will appear here when it starts."}
               </p>
               {!search && statusFilter === "ALL" && (
                 <Button asChild className="mt-6">
@@ -545,12 +656,14 @@ function Metric({
   value,
   tint,
   href,
+  loading,
 }: {
   icon: typeof BriefcaseBusiness;
   label: string;
   value: string | number;
   tint: string;
   href?: string;
+  loading?: boolean;
 }) {
   const content = (
     <>
@@ -558,7 +671,11 @@ function Metric({
         <div className={`grid h-10 w-10 place-items-center rounded-xl ${tint}`}>
           <Icon className="h-5 w-5" />
         </div>
-        <p className="text-2xl font-bold tracking-tight">{value}</p>
+        {loading ? (
+          <span className="h-7 w-12 animate-pulse rounded-md bg-muted/80" />
+        ) : (
+          <p className="text-2xl font-bold tracking-tight">{value}</p>
+        )}
       </div>
       <p className="mt-3 text-sm font-medium text-muted-foreground">{label}</p>
     </>

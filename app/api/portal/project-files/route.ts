@@ -51,7 +51,10 @@ export async function POST(request: NextRequest) {
     });
     if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
     // For normal work uploads, work or revision must be active
-    if (!isDispute && !["READY_TO_START", "IN_PROGRESS", "REVISION_REQUESTED"].includes(project.status))
+    if (
+      !isDispute &&
+      !["READY_TO_START", "IN_PROGRESS", "REVISION_REQUESTED"].includes(project.status)
+    )
       return NextResponse.json(
         { error: "Files can only be uploaded while work or a revision is in progress." },
         { status: 409 },

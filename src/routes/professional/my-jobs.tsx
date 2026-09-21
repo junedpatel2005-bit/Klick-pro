@@ -23,6 +23,13 @@ import {
   Star,
   ShieldCheck,
   Heart,
+  Check,
+  X,
+  ArrowUpDown,
+  Briefcase,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -106,10 +113,13 @@ type RequestItem = {
   jobTitle: string;
   clientName: string;
   bidAmount: number;
+  hourlyRate?: number | null;
+  totalJobHours?: number | null;
   duration: string;
   coverLetter: string;
   status: string;
   lastActorRole: "CLIENT" | "PROFESSIONAL";
+  projectId?: number | null;
   createdAt: string;
 };
 
@@ -154,6 +164,7 @@ function ProfessionalJobsContent() {
   const [savedJobs, setSavedJobs] = useState<JobListItem[]>([]);
   const [proposals, setProposals] = useState<RequestItem[]>([]);
   const [offers, setOffers] = useState<RequestItem[]>([]);
+  const [expandedRequestIds, setExpandedRequestIds] = useState<Set<number>>(new Set());
   const [view, setView] = useState<"all" | "saved" | "proposals" | "offers">("all");
   const jobs = view === "saved" ? savedJobs : openJobs;
   const savedIds = useMemo(() => new Set(savedJobs.map((job) => job.id)), [savedJobs]);
@@ -672,69 +683,269 @@ function ProfessionalJobsContent() {
 
         {view === "proposals" || view === "offers" ? (
           <div className="space-y-3">
-            {(view === "proposals" ? proposals : offers).map((item) => (
-              <article
-                key={item.id}
-                className="rounded-2xl border border-border bg-card p-4 shadow-soft"
-              >
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="truncate text-base font-semibold">{item.jobTitle}</h3>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${requestStatusStyle(item.status)}`}
-                      >
-                        {item.status === "PENDING"
-                          ? item.lastActorRole === "CLIENT"
-                            ? "Your turn to respond"
-                            : "Awaiting client"
-                          : item.status}
-                      </span>
+            {(view === "proposals" ? proposals : offers).map((item) => {
+              const isExpanded = expandedRequestIds.has(item.id);
+              return (
+                <article
+                  key={item.id}
+                  className={`rounded-2xl border bg-card p-4 shadow-soft transition-all ${
+                    item.status === "ACCEPTED"
+                      ? "border-emerald-500/40 bg-emerald-50/10 dark:bg-emerald-950/10"
+                      : item.status === "REJECTED"
+                        ? "border-destructive/30 bg-destructive/5"
+                        : item.lastActorRole === "CLIENT"
+                          ? "border-amber-500/40 bg-amber-50/20 dark:bg-amber-950/10"
+                          : "border-border"
+                  }`}
+                >
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="truncate text-base font-semibold text-foreground">
+                            {item.jobTitle}
+                          </h3>
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                              item.status === "ACCEPTED"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                                : item.status === "REJECTED"
+                                  ? "bg-destructive/10 text-destructive"
+                                  : item.lastActorRole === "CLIENT"
+                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+                                    : "bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300"
+                            }`}
+                          >
+                            {item.status === "ACCEPTED" ? (
+                              <>
+                                <Check className="h-3 w-3" /> Accepted · Active Project
+                              </>
+                            ) : item.status === "REJECTED" ? (
+                              <>
+                                <X className="h-3 w-3" /> Declined
+                              </>
+                            ) : item.lastActorRole === "CLIENT" ? (
+                              <>
+                                <ArrowUpDown className="h-3 w-3" /> Action Required · Client
+                                Response
+                              </>
+                            ) : (
+                              "Awaiting Client Decision"
+                            )}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {view === "proposals"
+                            ? `Submitted to ${item.clientName}`
+                            : `Direct Hire from ${item.clientName}`}
+                        </p>
+                      </div>
+
+                      {/* Pricing badge */}
+                      <div className="text-right">
+                        {item.hourlyRate && item.totalJobHours ? (
+                          <div>
+                            <div className="text-xs font-semibold text-foreground">
+                              ₹{item.hourlyRate.toLocaleString("en-IN")}/hr × {item.totalJobHours}{" "}
+                              hrs
+                            </div>
+                            <div className="text-xs font-bold text-primary">
+                              Total: ₹{item.bidAmount.toLocaleString("en-IN")}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-sm font-bold text-foreground">
+                            ₹{item.bidAmount.toLocaleString("en-IN")}{" "}
+                            <span className="text-[10px] font-normal text-muted-foreground">
+                              (Fixed)
+                            </span>
+                          </div>
+                        )}
+                        <div className="text-[11px] text-muted-foreground">
+                          Timeline: {item.duration || "Standard"}
+                        </div>
+                      </div>
                     </div>
-                    <p className="mt-1 truncate text-sm text-muted-foreground">
-                      {view === "proposals"
-                        ? `To ${item.clientName}`
-                        : `Invited by ${item.clientName}`}{" "}
-                      · ₹{item.bidAmount.toLocaleString()} · {item.duration}
-                      {item.coverLetter ? ` · "${item.coverLetter}"` : ""}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Button asChild variant="outline" size="sm">
-                      <Link href={`/professional/job/${item.jobId}`}>View Job</Link>
-                    </Button>
-                    {item.status === "PENDING" && item.lastActorRole === "CLIENT" && (
-                      <>
+
+                    {/* Pitch / Cover Letter */}
+                    {item.coverLetter && (
+                      <div className="rounded-xl border border-border/70 bg-background/60 p-3 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold uppercase tracking-wider text-[10px] text-muted-foreground">
+                            {item.lastActorRole === "CLIENT" && item.status === "PENDING"
+                              ? "Client Note"
+                              : "Proposal Pitch"}
+                          </span>
+                          {item.coverLetter.length > 120 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExpandedRequestIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(item.id)) next.delete(item.id);
+                                  else next.add(item.id);
+                                  return next;
+                                });
+                              }}
+                              className="text-[11px] font-medium text-primary hover:underline flex items-center gap-0.5"
+                            >
+                              {isExpanded ? (
+                                <>
+                                  Less <ChevronUp className="h-3 w-3" />
+                                </>
+                              ) : (
+                                <>
+                                  More <ChevronDown className="h-3 w-3" />
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                        <p
+                          className={`mt-1 text-xs text-foreground whitespace-pre-wrap ${
+                            !isExpanded && item.coverLetter.length > 120 ? "line-clamp-2" : ""
+                          }`}
+                        >
+                          {item.coverLetter}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* The 4 Action Buttons + View Job */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      {/* Button 1: Accept */}
+                      {item.status === "PENDING" && item.lastActorRole === "CLIENT" ? (
                         <Button
                           size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm h-8 px-3 text-xs"
                           disabled={offerBusyId === item.id}
                           onClick={() => void respondToOffer(item, "accept")}
                         >
+                          <Check className="h-3.5 w-3.5 mr-1" />
                           {offerBusyId === item.id ? "Working…" : "Accept"}
                         </Button>
+                      ) : item.status === "ACCEPTED" ? (
                         <Button
-                          variant="outline"
                           size="sm"
-                          disabled={offerBusyId === item.id}
-                          onClick={() => openNegotiate(item)}
+                          disabled
+                          variant="outline"
+                          className="border-emerald-500/30 text-emerald-600 bg-emerald-500/10 h-8 px-3 text-xs"
                         >
-                          Negotiate
+                          <Check className="h-3.5 w-3.5 mr-1" /> Accepted
                         </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled
+                          variant="outline"
+                          className="text-muted-foreground opacity-50 h-8 px-3 text-xs"
+                        >
+                          <Check className="h-3.5 w-3.5 mr-1" /> Accept
+                        </Button>
+                      )}
+
+                      {/* Button 2: Reject / Decline */}
+                      {item.status === "PENDING" && item.lastActorRole === "CLIENT" ? (
                         <Button
                           variant="outline"
                           size="sm"
-                          className="text-destructive hover:text-destructive"
+                          className="text-destructive border-destructive/30 hover:bg-destructive/10 h-8 px-3 text-xs"
                           disabled={offerBusyId === item.id}
                           onClick={() => void respondToOffer(item, "reject")}
                         >
-                          Decline
+                          <X className="h-3.5 w-3.5 mr-1" /> Decline
                         </Button>
-                      </>
-                    )}
+                      ) : item.status === "REJECTED" ? (
+                        <Button
+                          size="sm"
+                          disabled
+                          variant="outline"
+                          className="text-destructive/60 border-destructive/20 h-8 px-3 text-xs"
+                        >
+                          <X className="h-3.5 w-3.5 mr-1" /> Declined
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled
+                          variant="outline"
+                          className="text-muted-foreground opacity-50 h-8 px-3 text-xs"
+                        >
+                          <X className="h-3.5 w-3.5 mr-1" /> Decline
+                        </Button>
+                      )}
+
+                      {/* Button 3: Negotiate */}
+                      {item.status === "PENDING" && item.lastActorRole === "CLIENT" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="hover:bg-muted font-medium h-8 px-3 text-xs"
+                          disabled={offerBusyId === item.id}
+                          onClick={() => openNegotiate(item)}
+                        >
+                          <ArrowUpDown className="h-3.5 w-3.5 mr-1" /> Counter
+                        </Button>
+                      ) : item.status === "PENDING" && item.lastActorRole === "PROFESSIONAL" ? (
+                        <Button
+                          asChild
+                          variant="outline"
+                          size="sm"
+                          className="hover:bg-muted font-medium h-8 px-3 text-xs"
+                        >
+                          <Link href={`/professional/job/${item.jobId}`}>
+                            <ArrowUpDown className="h-3.5 w-3.5 mr-1" /> Modify
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled
+                          variant="outline"
+                          className="text-muted-foreground opacity-50 h-8 px-3 text-xs"
+                        >
+                          <ArrowUpDown className="h-3.5 w-3.5 mr-1" /> Negotiate
+                        </Button>
+                      )}
+
+                      {/* Button 4: Work */}
+                      {item.status === "ACCEPTED" && item.projectId ? (
+                        <Button
+                          size="sm"
+                          asChild
+                          className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-sm h-8 px-3 text-xs"
+                        >
+                          <Link href={`/project/${item.projectId}/tracking`}>
+                            <Briefcase className="h-3.5 w-3.5 mr-1" /> Work{" "}
+                            <ExternalLink className="h-3 w-3 ml-1 opacity-70" />
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled
+                          variant="outline"
+                          className="text-muted-foreground opacity-50 cursor-not-allowed h-8 px-3 text-xs"
+                          title="Work begins after acceptance"
+                        >
+                          <Briefcase className="h-3.5 w-3.5 mr-1" /> Work
+                        </Button>
+                      )}
+
+                      {/* View Job Link */}
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="ml-auto h-8 px-2.5 text-xs"
+                      >
+                        <Link href={`/professional/job/${item.jobId}`}>View Job</Link>
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
             {(view === "proposals" ? proposals : offers).length === 0 && (
               <div className="rounded-2xl border border-dashed border-border bg-background px-6 py-10 text-center text-sm text-muted-foreground">
                 {view === "proposals"

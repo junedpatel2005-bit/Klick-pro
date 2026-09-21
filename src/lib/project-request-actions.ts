@@ -162,9 +162,10 @@ export async function respondToProjectRequest(
           ? Math.round((hireRequest.bidAmount * milestonePct) / totalPercentage)
           : Math.round(hireRequest.bidAmount / job.milestones.length);
 
+      const minFloor = hireRequest.bidAmount === 0 ? 0 : 1;
       const amount = isLast
-        ? Math.max(1, hireRequest.bidAmount - allocatedAmount)
-        : Math.max(1, computedAmount);
+        ? Math.max(minFloor, hireRequest.bidAmount - allocatedAmount)
+        : Math.max(minFloor, computedAmount);
 
       allocatedAmount += amount;
 

@@ -469,85 +469,99 @@ export async function GET(
           }
         : {};
 
-      const [openJobs, savedJobs, proposals, offers, activeProjects, completedProjects] =
-        await Promise.all([
-          db.clientJob.findMany({
-            where: {
+      const [
+        openJobs,
+        savedJobs,
+        proposals,
+        offers,
+        activeProjects,
+        completedProjects,
+        closedProjects,
+      ] = await Promise.all([
+        db.clientJob.findMany({
+          where: {
+            status: "OPEN",
+            id: { notIn: [...blockedJobs] },
+            AND: [
+              { OR: [{ jobDate: null }, { jobDate: { lte: new Date() } }] },
+              { OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
+              availabilityFilter,
+            ],
+          },
+          orderBy: { createdAt: "desc" },
+          include: {
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+                averageRating: true,
+                isVerified: true,
+              },
+            },
+          },
+        }),
+        db.favoriteJob.findMany({
+          where: {
+            userId: session.userId,
+            job: {
               status: "OPEN",
-              id: { notIn: [...blockedJobs] },
               AND: [
                 { OR: [{ jobDate: null }, { jobDate: { lte: new Date() } }] },
                 { OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
-                availabilityFilter,
               ],
             },
-            orderBy: { createdAt: "desc" },
-            include: {
-              user: {
-                select: {
-                  firstName: true,
-                  lastName: true,
-                  averageRating: true,
-                  isVerified: true,
-                },
-              },
-            },
-          }),
-          db.favoriteJob.findMany({
-            where: {
-              userId: session.userId,
-              job: {
-                status: "OPEN",
-                AND: [
-                  { OR: [{ jobDate: null }, { jobDate: { lte: new Date() } }] },
-                  { OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
-                ],
-              },
-            },
-            take: 20,
-            include: {
-              job: {
-                include: {
-                  user: {
-                    select: {
-                      firstName: true,
-                      lastName: true,
-                      averageRating: true,
-                      isVerified: true,
-                    },
+          },
+          take: 20,
+          include: {
+            job: {
+              include: {
+                user: {
+                  select: {
+                    firstName: true,
+                    lastName: true,
+                    averageRating: true,
+                    isVerified: true,
                   },
                 },
               },
             },
-          }),
-          db.projectRequest.findMany({
-            where: { professionalId: session.userId, origin: "PROFESSIONAL_PROPOSAL" },
-            orderBy: { createdAt: "desc" },
-            take: 20,
-          }),
-          db.projectRequest.findMany({
-            where: { professionalId: session.userId, origin: "CLIENT_HIRE" },
-            orderBy: { createdAt: "desc" },
-            take: 20,
-          }),
-          db.projectTracking.findMany({
-            where: { professionalId: session.userId, status: { not: "COMPLETED" } },
-            orderBy: { acceptedAt: "desc" },
-            take: 20,
-            include: {
-              milestones: {
-                orderBy: { createdAt: "asc" },
-                include: { payment: { select: { status: true } } },
-              },
-              request: { select: { bidAmount: true } },
+          },
+        }),
+        db.projectRequest.findMany({
+          where: { professionalId: session.userId, origin: "PROFESSIONAL_PROPOSAL" },
+          orderBy: { createdAt: "desc" },
+          include: { tracking: { select: { id: true } } },
+          take: 20,
+        }),
+        db.projectRequest.findMany({
+          where: { professionalId: session.userId, origin: "CLIENT_HIRE" },
+          orderBy: { createdAt: "desc" },
+          include: { tracking: { select: { id: true } } },
+          take: 20,
+        }),
+        db.projectTracking.findMany({
+          where: { professionalId: session.userId, status: { notIn: ["COMPLETED", "CLOSED"] } },
+          orderBy: { acceptedAt: "desc" },
+          take: 20,
+          include: {
+            milestones: {
+              orderBy: { createdAt: "asc" },
+              include: { payment: { select: { status: true } } },
             },
-          }),
-          db.projectTracking.findMany({
-            where: { professionalId: session.userId, status: "COMPLETED" },
-            orderBy: { completedAt: "desc" },
-            take: 20,
-          }),
-        ]);
+            request: { select: { bidAmount: true } },
+          },
+        }),
+        db.projectTracking.findMany({
+          where: { professionalId: session.userId, status: "COMPLETED" },
+          orderBy: { completedAt: "desc" },
+          take: 20,
+        }),
+        db.projectTracking.findMany({
+          where: { professionalId: session.userId, status: "CLOSED" },
+          orderBy: { updatedAt: "desc" },
+          take: 20,
+        }),
+      ]);
 
       // Revision requests are actionable for professionals. Keep them first so the dashboard
       // preview does not hide a project that needs the professional's response.
@@ -603,6 +617,7 @@ export async function GET(
           ...proposals.map((request) => request.clientId),
           ...activeProjects.map((project) => project.clientId),
           ...completedProjects.map((project) => project.clientId),
+          ...closedProjects.map((project) => project.clientId),
           ...offers.map((request) => request.clientId),
         ]),
       ];
@@ -621,6 +636,7 @@ export async function GET(
           ...proposals.map((request) => request.jobId),
           ...activeProjects.map((project) => project.jobId),
           ...completedProjects.map((project) => project.jobId),
+          ...closedProjects.map((project) => project.jobId),
           ...offers.map((request) => request.jobId),
         ]),
       ];
@@ -756,10 +772,13 @@ export async function GET(
             jobTitle: job?.title ?? `Job #${request.jobId}`,
             clientName: clientMap.get(request.clientId) ?? "Client",
             bidAmount: request.bidAmount,
+            hourlyRate: request.hourlyRate,
+            totalJobHours: request.totalJobHours,
             duration: request.duration,
             coverLetter: request.coverLetter,
             status: request.status,
             lastActorRole: request.lastActorRole,
+            projectId: request.tracking?.id ?? null,
             createdAt: request.createdAt.toISOString(),
           };
         }),
@@ -771,10 +790,13 @@ export async function GET(
             jobTitle: job?.title ?? `Job #${request.jobId}`,
             clientName: clientMap.get(request.clientId) ?? "Client",
             bidAmount: request.bidAmount,
+            hourlyRate: request.hourlyRate,
+            totalJobHours: request.totalJobHours,
             duration: request.duration,
             coverLetter: request.coverLetter,
             status: request.status,
             lastActorRole: request.lastActorRole,
+            projectId: request.tracking?.id ?? null,
             createdAt: request.createdAt.toISOString(),
           };
         }),
@@ -827,6 +849,14 @@ export async function GET(
           completedAt: project.completedAt?.toISOString() ?? project.updatedAt.toISOString(),
           amount: earningsByProject.get(project.id) ?? 0,
           currency: "INR",
+        })),
+        closedProjects: closedProjects.map((project) => ({
+          id: project.id,
+          jobId: project.jobId,
+          jobTitle: jobMap.get(project.jobId)?.title ?? `Job #${project.jobId}`,
+          clientName: clientMap.get(project.clientId) ?? "Client",
+          closedAt: project.updatedAt.toISOString(),
+          status: project.status,
         })),
       });
     }
@@ -887,6 +917,7 @@ export async function GET(
         revisions,
         timeline,
         projectRequest,
+        negotiations,
         review,
         disputes,
       ] = await Promise.all([
@@ -932,7 +963,28 @@ export async function GET(
         }),
         db.projectRequest.findUnique({
           where: { id: project.requestId },
-          select: { bidAmount: true },
+          select: {
+            id: true,
+            clientId: true,
+            professionalId: true,
+            bidAmount: true,
+            createdAt: true,
+            origin: true,
+            coverLetter: true,
+          },
+        }),
+        db.projectNegotiation.findMany({
+          where: { requestId: project.requestId },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            senderId: true,
+            senderRole: true,
+            bidAmount: true,
+            duration: true,
+            message: true,
+            createdAt: true,
+          },
         }),
         db.projectReview.findUnique({ where: { trackingId: project.id } }),
         db.projectDispute.findMany({
@@ -940,6 +992,44 @@ export async function GET(
           orderBy: { createdAt: "desc" },
         }),
       ]);
+      const proposalTimeline = projectRequest
+        ? [
+            {
+              id: -projectRequest.id,
+              trackingId: project.id,
+              milestoneId: null,
+              actorId:
+                projectRequest.origin === "CLIENT_HIRE"
+                  ? projectRequest.clientId
+                  : projectRequest.professionalId,
+              actorRole: projectRequest.origin === "CLIENT_HIRE" ? "CLIENT" : "PROFESSIONAL",
+              type: projectRequest.origin === "CLIENT_HIRE" ? "HIRE_REQUEST_SENT" : "PROPOSAL_SENT",
+              title: projectRequest.origin === "CLIENT_HIRE" ? "Hire request sent" : "Proposal sent",
+              description: `Initial terms: ₹${projectRequest.bidAmount.toLocaleString("en-IN")} · ${projectRequest.coverLetter}`,
+              progress: null,
+              stage: null,
+              attachmentJson: null,
+              createdAt: projectRequest.createdAt,
+            },
+            ...negotiations.map((negotiation) => ({
+              id: -1_000_000 - negotiation.id,
+              trackingId: project.id,
+              milestoneId: null,
+              actorId: negotiation.senderId,
+              actorRole: negotiation.senderRole,
+              type: "COUNTER_OFFER_SENT",
+              title: `${negotiation.senderRole === "CLIENT" ? "Client" : "Professional"} counter-offer sent`,
+              description: `Proposed terms: ₹${(negotiation.bidAmount ?? 0).toLocaleString("en-IN")} · ${negotiation.duration} · ${negotiation.message}`,
+              progress: null,
+              stage: null,
+              attachmentJson: null,
+              createdAt: negotiation.createdAt,
+            })),
+          ]
+        : [];
+      const timelineWithMarketplace = [...timeline, ...proposalTimeline].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
       const activeDispute = disputes.find((d) => d.status !== "RESOLVED") ?? null;
       const dispute = activeDispute ?? disputes[0] ?? null;
       const disputeCount = disputes.length;
@@ -954,8 +1044,10 @@ export async function GET(
         viewerRole,
         uploads,
         revisions,
-        timeline,
+        timeline: timelineWithMarketplace,
         agreedAmount: projectRequest?.bidAmount ?? null,
+        negotiations,
+        latestNegotiation: negotiations[negotiations.length - 1] ?? null,
         review,
         dispute,
         disputes,

@@ -27,6 +27,12 @@ import {
   Trash2,
   Upload,
   Wallet,
+  RotateCcw,
+  ShieldAlert,
+  Wrench,
+  PlusCircle,
+  ArrowUpDown,
+  X,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { CelebrationConfetti } from "@/components/CelebrationConfetti";
@@ -101,6 +107,7 @@ type Upload = {
 type Data = {
   project: {
     id: number;
+    jobId?: number;
     clientId?: number;
     professionalId?: number;
     status: string;
@@ -129,6 +136,24 @@ type Data = {
   revisions: { note: string | null; createdAt: string }[];
   timeline: Event[];
   agreedAmount: number | null;
+  latestNegotiation?: {
+    id: number;
+    senderId: number;
+    senderRole: string;
+    bidAmount?: number | null;
+    duration?: string | null;
+    message?: string | null;
+    createdAt: string;
+  } | null;
+  negotiations?: Array<{
+    id: number;
+    senderId: number;
+    senderRole: string;
+    bidAmount?: number | null;
+    duration?: string | null;
+    message?: string | null;
+    createdAt: string;
+  }>;
   review: {
     id: number;
     rating: number | null;
@@ -158,6 +183,7 @@ const label = (status: string) =>
     REVISION_REQUESTED: "Revision Requested",
     FINAL_WORK_SUBMITTED: "Final Work Submitted",
     AWAITING_PROFESSIONAL_CONFIRMATION: "Awaiting Professional Confirmation",
+    REOPEN_REQUESTED: "Reopen Requested",
     COMPLETED: "Completed",
   })[status] ?? status.replaceAll("_", " ");
 const date = (value?: string | null) =>
@@ -203,7 +229,8 @@ const needsAction = (status: string) =>
   status === "REVISION_REQUESTED" ||
   status === "AWAITING_CLIENT_REVIEW" ||
   status === "FINAL_WORK_SUBMITTED" ||
-  status === "AWAITING_PROFESSIONAL_CONFIRMATION";
+  status === "AWAITING_PROFESSIONAL_CONFIRMATION" ||
+  status === "REOPEN_REQUESTED";
 const disputeEligibleStatuses = [
   "READY_TO_START",
   "IN_PROGRESS",
@@ -212,10 +239,16 @@ const disputeEligibleStatuses = [
   "FINAL_WORK_SUBMITTED",
   "COMPLETED",
   "CLOSED",
+  "REOPEN_REQUESTED",
 ];
 
 function getTrackingLoadingMeta(busy: string | null): { title: string; description: string } {
   switch (busy) {
+    case "respond-reopen":
+      return {
+        title: "Submitting reopen response…",
+        description: "Updating contract terms and notifying the other party.",
+      };
     case "approve-milestone":
       return {
         title: "Approving milestone payment…",
@@ -251,6 +284,11 @@ function getTrackingLoadingMeta(busy: string | null): { title: string; descripti
       return {
         title: "Completing project…",
         description: "Finalizing contract terms and closing escrow.",
+      };
+    case "reopen-project":
+      return {
+        title: "Reopening project…",
+        description: "Allocating work and notifying the professional.",
       };
     case "request-revision":
       return {
@@ -334,6 +372,17 @@ export default function SharedProjectTrackingPage() {
   const [showProgress, setShowProgress] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [showReopenModal, setShowReopenModal] = useState(false);
+  const [reopenReason, setReopenReason] = useState<"ISSUE" | "ADDITIONAL_WORK">("ADDITIONAL_WORK");
+  const [reopenWorkDescription, setReopenWorkDescription] = useState("");
+  const [reopenAmount, setReopenAmount] = useState("");
+  const [reopenDuration, setReopenDuration] = useState("1-3 days");
+  const [reopenModalError, setReopenModalError] = useState<string | null>(null);
+  const [showNegotiateReopenModal, setShowNegotiateReopenModal] = useState(false);
+  const [counterReopenAmount, setCounterReopenAmount] = useState("");
+  const [counterReopenMessage, setCounterReopenMessage] = useState("");
+  const [counterReopenDuration, setCounterReopenDuration] = useState("1-3 days");
+  const [counterReopenError, setCounterReopenError] = useState<string | null>(null);
   const [requestTitle, setRequestTitle] = useState("");
   const [requestMessage, setRequestMessage] = useState("");
   const [showReviewForm, setShowReviewForm] = useState(false);
@@ -424,6 +473,17 @@ export default function SharedProjectTrackingPage() {
       )
       .catch(() => setApprovalWalletBalance(null));
   }, [approvalMilestone, data]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash) {
+      const hash = window.location.hash;
+      if (hash === "#project-dispute" || hash === "#project-dispute-center") {
+        setTimeout(() => {
+          document.getElementById("project-dispute-center")?.scrollIntoView({ behavior: "smooth" });
+        }, 300);
+      }
+    }
+  }, []);
 
   const action = async (
     key: string,
@@ -1209,7 +1269,7 @@ export default function SharedProjectTrackingPage() {
                       className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-semibold shadow-xs"
                     >
                       <CheckCircle2 className="h-4 w-4" />
-                      Close & Complete Project
+                      Complete Project
                     </Button>
                   </div>
                 ) : (
@@ -1218,7 +1278,7 @@ export default function SharedProjectTrackingPage() {
                       <p className="font-semibold text-foreground">Project in Progress</p>
                       <p className="mt-1 text-sm text-muted-foreground">
                         {completed} of {data.milestones.length} milestone deliverables approved.
-                        Once all milestones are completed, you can close and complete this project.
+                        Once all milestones are completed, you can complete this project.
                       </p>
                     </div>
                     <Button
@@ -1252,6 +1312,230 @@ export default function SharedProjectTrackingPage() {
                     The professional has been notified and must confirm before the project is
                     completed.
                   </p>
+                </div>
+              ) : data.project.status === "REOPEN_REQUESTED" ? (
+                isProfessional ? (
+                  <div className="rounded-2xl border border-amber-500/30 bg-amber-50/70 dark:bg-amber-950/25 p-5 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-base text-amber-950 dark:text-amber-200 flex items-center gap-2">
+                          <RotateCcw className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                          Client Requested to Reopen This Project
+                        </p>
+                        <p className="text-sm text-amber-900/90 dark:text-amber-300/90 mt-1">
+                          The client has proposed to reopen this project for additional work or rework. Review the details below to Accept, Negotiate, or Decline.
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-xs font-bold text-amber-800 dark:text-amber-300 shrink-0">
+                        Awaiting Your Decision
+                      </span>
+                    </div>
+
+                    {data.milestones.find((m) => m.status === "PENDING_CONFIRMATION") && (
+                      <div className="rounded-xl border border-amber-500/20 bg-background/80 p-4 space-y-2 text-sm">
+                        <div className="flex justify-between items-center text-xs text-muted-foreground">
+                          <span className="font-semibold text-foreground uppercase tracking-wide">
+                            {data.milestones.find((m) => m.status === "PENDING_CONFIRMATION")?.title}
+                          </span>
+                          <span className="font-bold text-base text-primary">
+                            ₹{data.milestones.find((m) => m.status === "PENDING_CONFIRMATION")?.amount.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                        <p className="text-muted-foreground">
+                          {data.milestones.find((m) => m.status === "PENDING_CONFIRMATION")?.description}
+                        </p>
+                      </div>
+                    )}
+
+                    {data.latestNegotiation && data.latestNegotiation.senderRole === "CLIENT" && data.latestNegotiation.message && (
+                      <p className="text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-lg border">
+                        <span className="font-semibold text-foreground">Client Note: </span>
+                        {data.latestNegotiation.message}
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                      <Button
+                        disabled={busy === "respond-reopen"}
+                        onClick={() => void action("respond-reopen", { decision: "ACCEPT" })}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5 shadow-xs"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        {busy === "respond-reopen" ? "Accepting…" : "Accept & Start Work"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        disabled={busy === "respond-reopen"}
+                        onClick={() => {
+                          const pending = data.milestones.find((m) => m.status === "PENDING_CONFIRMATION");
+                          setCounterReopenAmount(pending ? String(pending.amount) : "");
+                          setCounterReopenMessage("");
+                          setCounterReopenError(null);
+                          setShowNegotiateReopenModal(true);
+                        }}
+                        className="gap-1.5"
+                      >
+                        <ArrowUpDown className="h-4 w-4" />
+                        Negotiate Terms
+                      </Button>
+                      <Button
+                        variant="outline"
+                        disabled={busy === "respond-reopen"}
+                        onClick={() => void action("respond-reopen", { decision: "REJECT" })}
+                        className="text-destructive border-destructive/30 hover:bg-destructive/10 gap-1.5"
+                      >
+                        <X className="h-4 w-4" />
+                        Decline
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-amber-500/30 bg-amber-50/70 dark:bg-amber-950/25 p-5 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-base text-amber-950 dark:text-amber-200 flex items-center gap-2">
+                          <RotateCcw className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                          Reopen Request Pending Professional Approval
+                        </p>
+                        <p className="text-sm text-amber-900/90 dark:text-amber-300/90 mt-1">
+                          {data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL"
+                            ? "The professional proposed counter terms for your reopen request. Please review below."
+                            : "You requested to reopen this project. Waiting for the professional to accept, decline, or negotiate terms."}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-xs font-bold text-amber-800 dark:text-amber-300 shrink-0">
+                        {data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL"
+                          ? "Counter Terms Received"
+                          : "Pending Professional Response"}
+                      </span>
+                    </div>
+
+                    {data.milestones.find((m) => m.status === "PENDING_CONFIRMATION") && (
+                      <div className="rounded-xl border border-amber-500/20 bg-background/80 p-4 space-y-2 text-sm">
+                        <div className="flex justify-between items-center text-xs text-muted-foreground">
+                          <span className="font-semibold text-foreground uppercase tracking-wide">
+                            {data.milestones.find((m) => m.status === "PENDING_CONFIRMATION")?.title}
+                          </span>
+                          <span className="font-bold text-base text-primary">
+                            ₹{data.milestones.find((m) => m.status === "PENDING_CONFIRMATION")?.amount.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                        <p className="text-muted-foreground">
+                          {data.milestones.find((m) => m.status === "PENDING_CONFIRMATION")?.description}
+                        </p>
+                      </div>
+                    )}
+
+                    {data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL" && (
+                      <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-1.5 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-primary flex items-center gap-1.5 text-xs">
+                            <ArrowUpDown className="h-4 w-4" /> Professional Counter-Offer: ₹{(data.latestNegotiation.bidAmount ?? 0).toLocaleString("en-IN")}
+                          </span>
+                          {data.latestNegotiation.duration && (
+                            <span className="text-xs text-muted-foreground font-medium">
+                              Estimated timeline: {data.latestNegotiation.duration}
+                            </span>
+                          )}
+                        </div>
+                        {data.latestNegotiation.message && (
+                          <p className="text-xs text-foreground mt-1">
+                            "{data.latestNegotiation.message}"
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                      {data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL" ? (
+                        <>
+                          <Button
+                            disabled={busy === "respond-reopen"}
+                            onClick={() => void action("respond-reopen", { decision: "ACCEPT" })}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5 shadow-xs"
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                            {busy === "respond-reopen" ? "Accepting…" : "Accept Counter & Start Work"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            disabled={busy === "respond-reopen"}
+                            onClick={() => {
+                              setCounterReopenAmount(String(data.latestNegotiation?.bidAmount ?? ""));
+                              setCounterReopenMessage("");
+                              setCounterReopenError(null);
+                              setShowNegotiateReopenModal(true);
+                            }}
+                            className="gap-1.5"
+                          >
+                            <ArrowUpDown className="h-4 w-4" />
+                            Counter Back
+                          </Button>
+                          <Button
+                            variant="outline"
+                            disabled={busy === "respond-reopen"}
+                            onClick={() => void action("respond-reopen", { decision: "REJECT" })}
+                            className="text-destructive border-destructive/30 hover:bg-destructive/10 gap-1.5"
+                          >
+                            <X className="h-4 w-4" />
+                            Decline
+                          </Button>
+                        </>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Waiting for the professional to respond. You can also raise a dispute below if there is no response or an issue.
+                        </p>
+                      )}
+                      <Button
+                        variant="outline"
+                        className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 ml-auto"
+                        onClick={() => {
+                          document.getElementById("project-dispute-center")?.scrollIntoView({ behavior: "smooth" });
+                        }}
+                      >
+                        <ShieldAlert className="h-4 w-4" />
+                        Raise Dispute
+                      </Button>
+                    </div>
+                  </div>
+                )
+              ) : data.project.status === "COMPLETED" ? (
+                <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-4">
+                  <div>
+                    <p className="font-bold text-emerald-950 dark:text-emerald-300 flex items-center gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                      Project Completed
+                    </p>
+                    <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-400/90">
+                      All deliverables were completed. Need follow-up rework, a warranty fix, or additional work?
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isClient && (
+                      <Button
+                        className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+                        onClick={() => {
+                          setReopenModalError(null);
+                          setReopenWorkDescription("");
+                          setReopenAmount("");
+                          setShowReopenModal(true);
+                        }}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        Reopen Project for Work
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+                      onClick={() => {
+                        document.getElementById("project-dispute-center")?.scrollIntoView({ behavior: "smooth" });
+                      }}
+                    >
+                      <ShieldAlert className="h-4 w-4" />
+                      Raise Dispute
+                    </Button>
+                  </div>
                 </div>
               ) : null}
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -2246,13 +2530,28 @@ export default function SharedProjectTrackingPage() {
 
           {/* Timeline Tab */}
           <TabsContent value="timeline">
-            <section className="rounded-2xl border bg-card p-6 shadow-soft">
-              <h2 className="text-xl font-semibold">Project timeline</h2>
-              <ol className="mt-5 space-y-5 border-l border-primary/30 pl-6">
+            <section className="overflow-hidden rounded-2xl border border-primary/10 bg-card shadow-soft">
+              <div className="border-b border-border bg-[linear-gradient(120deg,var(--color-ink),var(--color-primary))] px-6 py-5 text-white">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/60">
+                      Project activity
+                    </p>
+                    <h2 className="mt-1 text-xl font-semibold">Every step, in order</h2>
+                  </div>
+                  <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-white/80">
+                    {data.timeline.length} events
+                  </span>
+                </div>
+                <p className="mt-2 max-w-2xl text-sm text-white/70">
+                  Negotiation, approvals, work updates, milestones, and disputes are recorded here.
+                </p>
+              </div>
+              <ol className="relative space-y-4 px-5 py-6 sm:px-8">
                 {data.timeline.map((event) => (
-                  <li key={event.id} className="relative">
+                  <li key={event.id} className="relative pl-8 sm:pl-10">
                     <span
-                      className={`absolute -left-[1.95rem] top-1 size-3 rounded-full ring-4 ring-card ${
+                      className={`absolute left-0 top-5 size-3 -translate-x-1/2 rounded-full ring-4 ring-card ${
                         event.actorRole === "CLIENT"
                           ? "bg-cta"
                           : event.actorRole === "ADMIN"
@@ -2260,47 +2559,64 @@ export default function SharedProjectTrackingPage() {
                             : "bg-primary"
                       }`}
                     />
-                    <p className="font-semibold">
-                      {event.title}
-                      {event.progress != null ? ` — ${event.progress}%` : ""}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">{event.description}</p>
-                    {event.stage && <p className="mt-1 text-sm">Stage: {event.stage}</p>}
-                    {attachments(event).length > 0 && (
-                      <ul className="mt-2 space-y-1 text-sm">
-                        {attachments(event).map((file) => (
-                          <li key={file.id} className="flex flex-wrap items-center gap-2">
-                            <span>{file.name}</span>
-                            <a
-                              href={file.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="font-medium text-primary hover:underline"
-                            >
-                              View
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {event.actorRole === "CLIENT"
-                        ? client
-                        : event.actorRole === "ADMIN"
-                          ? "System / Admin"
-                          : professional}{" "}
-                      ·{" "}
-                      {event.actorRole === "CLIENT"
-                        ? "Client"
-                        : event.actorRole === "ADMIN"
-                          ? "Admin Audit"
-                          : "Professional"}{" "}
-                      · {date(event.createdAt)}
-                    </p>
+                    <div className="rounded-2xl border border-border/80 bg-background/70 p-4 shadow-sm transition-colors hover:border-primary/25 hover:bg-primary/[0.02]">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="font-semibold text-foreground">
+                            {event.title}
+                            {event.progress != null ? ` — ${event.progress}%` : ""}
+                          </p>
+                          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                            {event.description || "Activity recorded for this project."}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {event.type?.replaceAll("_", " ") ?? "Activity"}
+                        </span>
+                      </div>
+                      {event.stage && (
+                        <p className="mt-3 inline-flex rounded-lg bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary">
+                          Stage: {event.stage}
+                        </p>
+                      )}
+                      {attachments(event).length > 0 && (
+                        <ul className="mt-3 space-y-1 text-sm">
+                          {attachments(event).map((file) => (
+                            <li key={file.id} className="flex flex-wrap items-center gap-2">
+                              <span>{file.name}</span>
+                              <a
+                                href={file.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-medium text-primary hover:underline"
+                              >
+                                View
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="mt-3 border-t border-border/70 pt-3 text-xs text-muted-foreground">
+                        {event.actorRole === "CLIENT"
+                          ? client
+                          : event.actorRole === "ADMIN"
+                            ? "System / Admin"
+                            : professional}{" "}
+                        ·{" "}
+                        {event.actorRole === "CLIENT"
+                          ? "Client"
+                          : event.actorRole === "ADMIN"
+                            ? "Admin Audit"
+                            : "Professional"}{" "}
+                        · {date(event.createdAt)}
+                      </p>
+                    </div>
                   </li>
                 ))}
                 {data.timeline.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No activity yet.</p>
+                  <p className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+                    No activity yet.
+                  </p>
                 )}
               </ol>
             </section>
@@ -2358,9 +2674,9 @@ export default function SharedProjectTrackingPage() {
       <Dialog open={showCompleteModal} onOpenChange={setShowCompleteModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Close & Complete Project</DialogTitle>
+            <DialogTitle>Complete Project</DialogTitle>
             <DialogDescription>
-              All milestones have been reviewed and approved. Confirming will close this project,
+              All milestones have been reviewed and approved. Confirming will complete this project,
               finalize records, and invite both parties to exchange ratings and reviews.
             </DialogDescription>
           </DialogHeader>
@@ -2413,7 +2729,304 @@ export default function SharedProjectTrackingPage() {
               }}
               className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
             >
-              {busy === "complete-project" ? "Closing project…" : "Close & Complete Project"}
+              {busy === "complete-project" ? "Completing project…" : "Complete Project"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={showReopenModal}
+        onOpenChange={(open) => {
+          setShowReopenModal(open);
+          if (!open) setReopenModalError(null);
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <RotateCcw className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl">Reopen Project for Work</DialogTitle>
+                <DialogDescription>
+                  Specify the work needed and offered payment. No complex milestone setup needed.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {reopenModalError && (
+              <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{reopenModalError}</span>
+              </div>
+            )}
+
+            {/* Reason Selection Cards (dispute-like option cards) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setReopenReason("ISSUE");
+                  if (!reopenAmount || reopenAmount === "0") setReopenAmount("0");
+                }}
+                className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all ${
+                  reopenReason === "ISSUE"
+                    ? "border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 ring-1 ring-amber-500"
+                    : "border-border hover:bg-muted/40"
+                }`}
+              >
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                  <Wrench className="h-4 w-4" /> Issue / Warranty Rework
+                </span>
+                <span className="text-xs text-muted-foreground mt-1">
+                  Completed work stopped working or needs fixing (e.g. AC cooling problem, leaks).
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setReopenReason("ADDITIONAL_WORK");
+                  if (reopenAmount === "0") setReopenAmount("");
+                }}
+                className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all ${
+                  reopenReason === "ADDITIONAL_WORK"
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "border-border hover:bg-muted/40"
+                }`}
+              >
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                  <PlusCircle className="h-4 w-4" /> Additional Work / New Task
+                </span>
+                <span className="text-xs text-muted-foreground mt-1">
+                  Request extra work or a new task (e.g. Fit washing machine, install parts).
+                </span>
+              </button>
+            </div>
+
+            {/* Work Description */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-foreground flex items-center justify-between">
+                <span>Work Description</span>
+                <span className="text-xs font-normal text-muted-foreground">What needs to be done?</span>
+              </label>
+              <textarea
+                value={reopenWorkDescription}
+                onChange={(e) => setReopenWorkDescription(e.target.value)}
+                placeholder={
+                  reopenReason === "ISSUE"
+                    ? "E.g., The AC stopped cooling after 2 days and is making a strange sound. Please inspect and fix."
+                    : "E.g., Please also install the washing machine in the utility room and connect the inlet piping."
+                }
+                rows={3}
+                className="w-full rounded-xl border border-input bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            {/* Money / Amount */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-foreground flex items-center justify-between">
+                <span>Offered Amount (₹)</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  {reopenReason === "ISSUE"
+                    ? "Enter ₹0 if covered under warranty, or offer a fee"
+                    : "Proposed budget for this work"}
+                </span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-semibold">
+                  ₹
+                </span>
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={reopenAmount}
+                  onChange={(e) => setReopenAmount(e.target.value)}
+                  placeholder={reopenReason === "ISSUE" ? "0" : "500"}
+                  className="pl-8"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                You and the professional can still negotiate this amount before work begins.
+              </p>
+            </div>
+
+            {/* Dispute Escalation Notice */}
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-3 text-xs text-muted-foreground flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-destructive shrink-0" />
+                <span>
+                  Having a dispute or unresolved conflict with the professional?
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  setShowReopenModal(false);
+                  document.getElementById("project-dispute-center")?.scrollIntoView({ behavior: "smooth" });
+                }}
+              >
+                Raise Dispute
+              </Button>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setShowReopenModal(false)}
+              disabled={busy === "reopen-project"}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={busy === "reopen-project" || !reopenWorkDescription.trim()}
+              onClick={async () => {
+                if (!reopenWorkDescription.trim()) {
+                  setReopenModalError("Please describe the work needed.");
+                  return;
+                }
+                const numAmount = Number(reopenAmount);
+                if (isNaN(numAmount) || numAmount < 0) {
+                  setReopenModalError("Enter a valid amount (₹0 allowed for warranty/rework).");
+                  return;
+                }
+                setReopenModalError(null);
+                try {
+                  await action("reopen-project", {
+                    projectId: Number(projectId),
+                    reason: reopenReason,
+                    workDescription: reopenWorkDescription.trim(),
+                    amount: numAmount,
+                    duration: reopenDuration || "1-3 days",
+                  });
+                  setShowReopenModal(false);
+                  setReopenWorkDescription("");
+                  setReopenAmount("");
+                } catch {
+                  setReopenModalError("Unable to reopen project.");
+                }
+              }}
+              className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <RotateCcw className="h-4 w-4" />
+              {busy === "reopen-project" ? "Reopening…" : "Reopen & Propose Work"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Negotiate / Counter-Offer Reopen Modal */}
+      <Dialog
+        open={showNegotiateReopenModal}
+        onOpenChange={(open) => {
+          setShowNegotiateReopenModal(open);
+          if (!open) setCounterReopenError(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <ArrowUpDown className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg">Negotiate Reopen Terms</DialogTitle>
+                <DialogDescription>
+                  Propose your revised amount and message for the reopened work.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {counterReopenError && (
+              <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{counterReopenError}</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-foreground">Proposed Amount (₹)</label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-semibold">
+                  ₹
+                </span>
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={counterReopenAmount}
+                  onChange={(e) => setCounterReopenAmount(e.target.value)}
+                  placeholder="e.g. 800"
+                  className="pl-8"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-foreground">Estimated Timeline</label>
+              <Input
+                type="text"
+                value={counterReopenDuration}
+                onChange={(e) => setCounterReopenDuration(e.target.value)}
+                placeholder="e.g. 1-2 days"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-foreground">Message / Explanation</label>
+              <textarea
+                value={counterReopenMessage}
+                onChange={(e) => setCounterReopenMessage(e.target.value)}
+                placeholder="Explain why you are proposing these terms (e.g., requires additional parts, gas refill, or travel)."
+                rows={3}
+                className="w-full rounded-xl border border-input bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setShowNegotiateReopenModal(false)}
+              disabled={busy === "respond-reopen"}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={busy === "respond-reopen" || !counterReopenAmount.trim()}
+              onClick={async () => {
+                const num = Number(counterReopenAmount);
+                if (isNaN(num) || num < 0) {
+                  setCounterReopenError("Enter a valid amount.");
+                  return;
+                }
+                setCounterReopenError(null);
+                try {
+                  await action("respond-reopen", {
+                    projectId: Number(projectId),
+                    decision: "COUNTER",
+                    counterAmount: num,
+                    message: counterReopenMessage.trim(),
+                    duration: counterReopenDuration || "1-3 days",
+                  });
+                  setShowNegotiateReopenModal(false);
+                } catch {
+                  setCounterReopenError("Unable to send counter-offer.");
+                }
+              }}
+              className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <ArrowUpDown className="h-4 w-4" />
+              {busy === "respond-reopen" ? "Sending…" : "Send Counter-Offer"}
             </Button>
           </DialogFooter>
         </DialogContent>

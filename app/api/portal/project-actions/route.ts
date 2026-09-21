@@ -149,6 +149,22 @@ const bodySchema = z.discriminatedUnion("action", [
       )
       .optional(),
   }),
+  z.object({
+    action: z.literal("reopen-project"),
+    projectId: z.number().int().positive(),
+    reason: z.enum(["ISSUE", "ADDITIONAL_WORK"]).default("ADDITIONAL_WORK"),
+    workDescription: z.string().trim().min(3).max(3000),
+    amount: z.number().int().min(0).max(10_000_000),
+    duration: z.string().trim().max(100).optional().default("1-3 days"),
+  }),
+  z.object({
+    action: z.literal("respond-reopen"),
+    projectId: z.number().int().positive(),
+    decision: z.enum(["ACCEPT", "REJECT", "COUNTER"]),
+    counterAmount: z.number().int().min(0).max(10_000_000).optional(),
+    message: z.string().trim().max(2000).optional(),
+    duration: z.string().trim().max(100).optional(),
+  }),
 ]);
 
 const clientActions = new Set([
@@ -160,8 +176,14 @@ const clientActions = new Set([
   "request-revision",
   "approve-milestone",
   "complete-project",
+  "reopen-project",
 ]);
-const sharedActions = new Set(["submit-review", "submit-dispute", "respond-dispute"]);
+const sharedActions = new Set([
+  "submit-review",
+  "submit-dispute",
+  "respond-dispute",
+  "respond-reopen",
+]);
 
 export async function POST(request: NextRequest) {
   try {
@@ -954,6 +976,216 @@ export async function POST(request: NextRequest) {
         description: "The professional confirmed that your project is complete.",
         href: `/project/${project.id}/tracking`,
       });
+    }
+    if (input.action === "reopen-project") {
+      if (project.status !== "COMPLETED" && project.status !== "CLOSED") {
+        return NextResponse.json(
+          { error: "Only completed or closed projects can be reopened." },
+          { status: 409 },
+        );
+      }
+      const reasonLabel = input.reason === "ISSUE" ? "Warranty Fix / Rework" : "Additional Work";
+      const timestamp = new Date().toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+      const appendNote = `\n\n--- [REOPEN REQUESTED: ${reasonLabel} (${timestamp})] ---\nWork Needed: ${input.workDescription}\nOffered Amount: ₹${input.amount.toLocaleString("en-IN")}`;
+
+      // Update ProjectTracking to REOPEN_REQUESTED (awaits professional acceptance)
+      await db.projectTracking.update({
+        where: { id: project.id },
+        data: {
+          status: "REOPEN_REQUESTED",
+          progress: 0,
+          currentStage: `Reopen Requested (${reasonLabel})`,
+          completedAt: null,
+        },
+      });
+
+      // Update ClientJob
+      const currentJob = await db.clientJob.findUnique({ where: { id: project.jobId } });
+      const updatedDescription =
+        (currentJob?.description ? currentJob.description.trim() : "") + appendNote;
+      await db.clientJob.update({
+        where: { id: project.jobId },
+        data: {
+          status: "OPEN",
+          budgetMin: input.amount,
+          budgetMax: input.amount,
+          description: updatedDescription,
+        },
+      });
+
+      // Add single deliverable milestone for the reopened work in PENDING_CONFIRMATION status
+      const milestoneTitle =
+        input.reason === "ISSUE"
+          ? `Warranty Fix: ${input.workDescription.slice(0, 50)}`
+          : `Additional Work: ${input.workDescription.slice(0, 50)}`;
+
+      await db.projectMilestone.create({
+        data: {
+          trackingId: project.id,
+          clientId: project.clientId,
+          professionalId: project.professionalId,
+          title: milestoneTitle,
+          description: input.workDescription,
+          amount: input.amount,
+          status: "PENDING_CONFIRMATION",
+        },
+      });
+
+      // Create a negotiation entry so terms are recorded and professional can accept or counter
+      if (project.requestId) {
+        await db.projectNegotiation.create({
+          data: {
+            requestId: project.requestId,
+            jobId: project.jobId,
+            clientId: project.clientId,
+            professionalId: project.professionalId,
+            senderId: session.userId,
+            senderRole: "CLIENT",
+            bidAmount: input.amount,
+            duration: input.duration || "1-3 days",
+            message: `[${reasonLabel}] ${input.workDescription}`,
+          },
+        });
+      }
+
+      await event(
+        "REOPEN_REQUESTED",
+        `Reopen requested: ${reasonLabel}`,
+        `Client proposed to reopen project: "${input.workDescription}" (Offered: ₹${input.amount.toLocaleString("en-IN")}). Awaiting professional confirmation or negotiation.`,
+        { progress: 0, stage: `Reopen Requested (${reasonLabel})` },
+      );
+
+      const jobTitle = project.job?.title?.trim() || `Project #${project.id}`;
+      await notifyUsers([project.professionalId], {
+        type: "PROJECT_REOPEN_REQUESTED",
+        title: `${jobTitle} · Reopen Request from Client`,
+        description: `Client requested ${reasonLabel.toLowerCase()} (₹${input.amount.toLocaleString("en-IN")}): "${input.workDescription.slice(0, 100)}". Review to Accept, Reject, or Negotiate.`,
+        href: `/project/${project.id}/tracking`,
+      });
+    }
+    if (input.action === "respond-reopen") {
+      if (project.status !== "REOPEN_REQUESTED") {
+        return NextResponse.json(
+          { error: "This project is not currently waiting for a reopen response." },
+          { status: 409 },
+        );
+      }
+      const isProfessional = session.userId === project.professionalId;
+      const isClient = session.userId === project.clientId;
+      if (!isProfessional && !isClient) {
+        return NextResponse.json({ error: "Unauthorized." }, { status: 403 });
+      }
+
+      const pendingMilestone = await db.projectMilestone.findFirst({
+        where: { trackingId: project.id, status: "PENDING_CONFIRMATION" },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const jobTitle = project.job?.title?.trim() || `Project #${project.id}`;
+
+      if (input.decision === "ACCEPT") {
+        await db.projectTracking.update({
+          where: { id: project.id },
+          data: {
+            status: "IN_PROGRESS",
+            currentStage: "Reopened Work In Progress",
+            progress: 0,
+            completedAt: null,
+          },
+        });
+        await db.clientJob.update({
+          where: { id: project.jobId },
+          data: { status: "CLOSED" },
+        });
+        if (pendingMilestone) {
+          await db.projectMilestone.update({
+            where: { id: pendingMilestone.id },
+            data: { status: "UPCOMING" },
+          });
+        }
+        await event(
+          "REOPEN_ACCEPTED",
+          "Reopen request accepted",
+          `${session.role === "PROFESSIONAL" ? "Professional" : "Client"} accepted reopen terms. Work has officially resumed.`,
+          { progress: 0, stage: "Reopened Work In Progress" },
+        );
+        const notifyTarget = isProfessional ? project.clientId : project.professionalId;
+        await notifyUsers([notifyTarget], {
+          type: "PROJECT_REOPENED",
+          title: `${jobTitle} · Reopen Accepted! Work in Progress`,
+          description: `The reopen request was accepted. Deliverables and work are active.`,
+          href: `/project/${project.id}/tracking`,
+        });
+      } else if (input.decision === "REJECT") {
+        await db.projectTracking.update({
+          where: { id: project.id },
+          data: {
+            status: "COMPLETED",
+            currentStage: "Completed",
+            progress: 100,
+          },
+        });
+        if (pendingMilestone) {
+          await db.projectMilestone.delete({
+            where: { id: pendingMilestone.id },
+          });
+        }
+        await event(
+          "REOPEN_DECLINED",
+          "Reopen request declined",
+          `${session.role === "PROFESSIONAL" ? "Professional" : "Client"} declined the reopen request.`,
+          { progress: 100, stage: "Completed" },
+        );
+        const notifyTarget = isProfessional ? project.clientId : project.professionalId;
+        await notifyUsers([notifyTarget], {
+          type: "PROJECT_REOPEN_DECLINED",
+          title: `${jobTitle} · Reopen Request Declined`,
+          description: `The request to reopen was declined. You can discuss further or raise a dispute if needed.`,
+          href: `/project/${project.id}/tracking`,
+        });
+      } else if (input.decision === "COUNTER") {
+        if (input.counterAmount === undefined) {
+          return NextResponse.json({ error: "Counter amount is required." }, { status: 400 });
+        }
+        if (pendingMilestone) {
+          await db.projectMilestone.update({
+            where: { id: pendingMilestone.id },
+            data: { amount: input.counterAmount },
+          });
+        }
+        if (project.requestId) {
+          await db.projectNegotiation.create({
+            data: {
+              requestId: project.requestId,
+              jobId: project.jobId,
+              clientId: project.clientId,
+              professionalId: project.professionalId,
+              senderId: session.userId,
+              senderRole: session.role,
+              bidAmount: input.counterAmount,
+              duration: input.duration || "1-3 days",
+              message: input.message || "Counter-offer proposed for reopened work.",
+            },
+          });
+        }
+        await event(
+          "REOPEN_COUNTERED",
+          `Counter-offer: ₹${input.counterAmount.toLocaleString("en-IN")}`,
+          `${session.role === "PROFESSIONAL" ? "Professional" : "Client"} proposed: ₹${input.counterAmount.toLocaleString("en-IN")}${input.message ? ` · "${input.message}"` : ""}.`,
+          { stage: "Reopen Terms Under Negotiation" },
+        );
+        const notifyTarget = isProfessional ? project.clientId : project.professionalId;
+        await notifyUsers([notifyTarget], {
+          type: "REQUEST_COUNTERED",
+          title: `${jobTitle} · Counter-offer on Reopen Request`,
+          description: `New terms proposed: ₹${input.counterAmount.toLocaleString("en-IN")}. Review in project tracking.`,
+          href: `/project/${project.id}/tracking`,
+        });
+      }
     }
     if (input.action === "submit-review") {
       if (!["CLIENT", "PROFESSIONAL"].includes(session.role))

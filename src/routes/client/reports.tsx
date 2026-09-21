@@ -9,7 +9,7 @@ import { useRowSelection } from "@/hooks/use-row-selection";
 type Job = {
   id: number;
   title: string | null;
-  status: "DRAFT" | "OPEN" | "RUNNING" | "CLOSED";
+  status: "DRAFT" | "OPEN" | "RUNNING" | "COMPLETED" | "CLOSED";
   projectId: number | null;
   budgetMin: number | null;
   budgetMax: number | null;
@@ -30,11 +30,14 @@ type Payment = {
 };
 
 function jobStatus(job: Job) {
-  return job.projectId ? "RUNNING" : job.status;
+  return job.status;
 }
 
 function readableStatus(status: string) {
-  return status === "RUNNING" ? "In progress" : status[0] + status.slice(1).toLowerCase();
+  if (status === "RUNNING") return "In progress";
+  if (status === "COMPLETED") return "Completed";
+  if (status === "CLOSED") return "Closed";
+  return status[0] + status.slice(1).toLowerCase();
 }
 
 function jobBudget(job: Job) {

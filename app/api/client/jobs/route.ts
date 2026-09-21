@@ -67,9 +67,7 @@ async function getClient(request: NextRequest) {
 function normalized(data: z.infer<typeof jobInput>) {
   const isHourly = data.timingType === "HOURLY";
   const calculatedProjectTotal =
-    isHourly && data.hourlyRate && data.totalJobHours
-      ? data.hourlyRate * data.totalJobHours
-      : null;
+    isHourly && data.hourlyRate && data.totalJobHours ? data.hourlyRate * data.totalJobHours : null;
   const projectTotal =
     calculatedProjectTotal !== null && calculatedProjectTotal <= 10_000_000
       ? calculatedProjectTotal
@@ -169,13 +167,26 @@ export async function GET(request: NextRequest) {
         status: true,
         request: { select: { bidAmount: true } },
       },
+      orderBy: { id: "desc" },
     });
     const proposalCounts = await db.projectRequest.groupBy({
       by: ["jobId"],
       where: { clientId: user.id, origin: "PROFESSIONAL_PROPOSAL" },
       _count: { id: true },
     });
-    const trackingByJob = new Map(tracking.map((project) => [project.jobId, project]));
+    // If multiple tracking rows exist, prioritize active projects over completed/closed, then latest id
+    const trackingByJob = new Map<number, (typeof tracking)[0]>();
+    const sortedTracking = [...tracking].sort((a, b) => {
+      const aActive = a.status !== "COMPLETED" && a.status !== "CLOSED";
+      const bActive = b.status !== "COMPLETED" && b.status !== "CLOSED";
+      if (aActive !== bActive) return aActive ? -1 : 1;
+      return b.id - a.id;
+    });
+    for (const item of sortedTracking) {
+      if (!trackingByJob.has(item.jobId)) {
+        trackingByJob.set(item.jobId, item);
+      }
+    }
     const proposalCountByJob = new Map(proposalCounts.map((item) => [item.jobId, item._count.id]));
 
     return NextResponse.json({
@@ -183,15 +194,19 @@ export async function GET(request: NextRequest) {
         const project = trackingByJob.get(job.id);
         const status = project
           ? project.status === "COMPLETED"
-            ? "CLOSED"
-            : "RUNNING"
+            ? "COMPLETED"
+            : project.status === "CLOSED"
+              ? "CLOSED"
+              : "RUNNING"
           : job.status;
         return {
           ...job,
           status,
           projectId: project?.id ?? null,
           agreedAmount: project?.request?.bidAmount ?? null,
-          proposalCount: status === "RUNNING" ? 0 : (proposalCountByJob.get(job.id) ?? 0),
+          proposalCount: ["RUNNING", "COMPLETED", "CLOSED"].includes(status)
+            ? 0
+            : (proposalCountByJob.get(job.id) ?? 0),
         };
       }),
     });

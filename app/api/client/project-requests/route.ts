@@ -9,7 +9,7 @@ import { emitRealtimeProposalNew } from "@/lib/realtime";
 const bodySchema = z.object({
   jobId: z.coerce.number().int().positive(),
   professionalId: z.coerce.number().int().positive(),
-  bidAmount: z.coerce.number().int().positive(),
+  bidAmount: z.coerce.number().int().min(0),
   hourlyRate: z.coerce.number().int().positive().max(1_000_000).optional(),
   totalJobHours: z.coerce.number().int().positive().max(10_000).optional(),
   duration: z.string().trim().max(100),
@@ -55,13 +55,13 @@ export async function POST(request: NextRequest) {
       { status: 409 },
     );
   }
-  const existingProject = await db.projectTracking.findFirst({
-    where: { jobId },
+  const existingActiveProject = await db.projectTracking.findFirst({
+    where: { jobId, status: { notIn: ["COMPLETED", "CLOSED"] } },
     select: { id: true },
   });
-  if (existingProject) {
+  if (existingActiveProject) {
     return NextResponse.json(
-      { error: "A project has already been started for this job." },
+      { error: "An active project is currently in progress for this job." },
       { status: 409 },
     );
   }
