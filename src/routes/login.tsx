@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { countryCodes } from "@/lib/country-codes";
 import { isValidPhoneNumber, phoneValidationMessage } from "@/lib/phone-validation";
+import { FullPageLogoLoader } from "@/components/FullPageLogoLoader";
 
 const DEMO_ACCOUNTS = {
   client: {
@@ -208,7 +209,18 @@ export default function Login() {
   }
 
   return (
-    <AuthLayout
+    <>
+      <FullPageLogoLoader
+        active={pending || googleLoading}
+        title={googleLoading ? "Connecting with Google…" : "Signing in to Klick-Pro…"}
+        subtitle={
+          googleLoading
+            ? "Authenticating with your Google profile…"
+            : "Verifying credentials and loading your workspace…"
+        }
+        overlay
+      />
+      <AuthLayout
       title="Welcome back"
       subtitle="Log in to continue to your dashboard."
       hideAside
@@ -471,5 +483,6 @@ export default function Login() {
         </form>
       )}
     </AuthLayout>
+    </>
   );
 }

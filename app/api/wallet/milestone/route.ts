@@ -3,8 +3,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { calculateMilestoneMoney, fundMilestoneFromWallet } from "@/lib/wallet-ledger";
-import { notifyMilestoneFunded } from "@/lib/marketplace-notifications";
-import { emitRealtimeProjectUpdate } from "@/lib/realtime";
+import { notifyDisputeResolved, notifyMilestoneFunded } from "@/lib/marketplace-notifications";
+import { emitAdminEvent, emitRealtimeProjectUpdate } from "@/lib/realtime";
 
 const schema = z.object({
   projectId: z.number().int().positive(),
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
         where: {
           id: parsed.data.milestoneId,
           trackingId: project.id,
-          status: "AWAITING_CLIENT_REVIEW",
+          status: { in: ["AWAITING_CLIENT_REVIEW", "REVISION_REQUESTED", "IN_PROGRESS"] },
         },
       })
     : null;
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
           where: {
             id: milestone.id,
             trackingId: project.id,
-            status: "AWAITING_CLIENT_REVIEW",
+            status: { in: ["AWAITING_CLIENT_REVIEW", "REVISION_REQUESTED", "IN_PROGRESS"] },
           },
           data: { status: "PAYMENT_PROCESSING" },
         });
@@ -111,8 +111,25 @@ export async function POST(request: NextRequest) {
         });
         await tx.projectMilestone.update({
           where: { id: milestone.id },
-          data: { status: "AWAITING_ADMIN_APPROVAL" },
+          data: { status: "APPROVED", approvedAt: new Date() },
         });
+
+        // Automatically start the next upcoming milestone so work can continue seamlessly
+        const nextMilestone = await tx.projectMilestone.findFirst({
+          where: { trackingId: project.id, status: "UPCOMING" },
+          orderBy: { id: "asc" },
+        });
+        if (nextMilestone) {
+          await tx.projectMilestone.update({
+            where: { id: nextMilestone.id },
+            data: { status: "IN_PROGRESS" },
+          });
+          await tx.projectTracking.update({
+            where: { id: project.id },
+            data: { status: "IN_PROGRESS", currentStage: nextMilestone.title },
+          });
+        }
+
         await tx.projectTransaction.create({
           data: {
             trackingId: project.id,
@@ -123,17 +140,76 @@ export async function POST(request: NextRequest) {
             currency: "INR",
             type: "WALLET_MILESTONE_FUNDED",
             status: "FUNDED",
-            description: `Milestone funded and awaiting payout approval: ${milestone.title}`,
+            description: `Milestone funded and completed: ${milestone.title}`,
           },
         });
+
+        // Automatically resolve any active disputes for this contract upon client milestone payment
+        const activeDisputes = await tx.projectDispute.findMany({
+          where: {
+            trackingId: project.id,
+            status: { not: "RESOLVED" },
+          },
+        });
+
+        for (const activeDispute of activeDisputes) {
+          await tx.projectDispute.update({
+            where: { id: activeDispute.id },
+            data: {
+              status: "RESOLVED",
+              respondentAction: "ACCEPTED",
+              decision: "MUTUAL_SETTLEMENT",
+              decisionReason: `Client completed payment of ₹${milestone.amount.toLocaleString("en-IN")} for milestone "${milestone.title}". Dispute automatically resolved and closed.`,
+              decisionAt: new Date(),
+              decidedBy: session.userId,
+              payoutAmount: milestone.amount,
+              refundAmount: 0,
+            },
+          });
+
+          await tx.projectTimelineEvent.create({
+            data: {
+              trackingId: project.id,
+              actorId: session.userId,
+              actorRole: "CLIENT",
+              milestoneId: milestone.id,
+              type: "DISPUTE_RESOLVED",
+              title: "Dispute closed · Payment received",
+              description: `Dispute #${activeDispute.id} was automatically closed after client completed payment of ₹${milestone.amount.toLocaleString("en-IN")} for milestone "${milestone.title}".`,
+            },
+          });
+        }
+
         const clientWallet = await tx.wallet.findUnique({
           where: { userId: project.clientId },
           select: { balance: true },
         });
-        return { remainingBalance: clientWallet?.balance ?? 0 };
+        return {
+          remainingBalance: clientWallet?.balance ?? 0,
+          resolvedDisputes: activeDisputes.map((d) => ({ id: d.id })),
+        };
       },
       { maxWait: 10000, timeout: 30000 },
     );
+
+    if (result.resolvedDisputes.length > 0) {
+      void notifyDisputeResolved({
+        trackingId: project.id,
+        jobTitle: project.job?.title ?? null,
+        status: "RESOLVED",
+        clientId: project.clientId,
+        professionalId: project.professionalId,
+      }).catch(() => undefined);
+
+      for (const d of result.resolvedDisputes) {
+        emitAdminEvent("dispute:update", {
+          disputeId: d.id,
+          projectId: project.id,
+          status: "RESOLVED",
+        });
+      }
+    }
+
     void notifyMilestoneFunded({
       projectId: project.id,
       milestoneId: milestone.id,
@@ -151,8 +227,12 @@ export async function POST(request: NextRequest) {
       milestoneAmount: money.baseAmount,
       professionalReceives: money.baseAmount,
       remainingBalance: result.remainingBalance,
-      status: "FUNDED",
-      message: `Milestone funded with ₹${money.baseAmount.toLocaleString("en-IN")}. The professional payout is waiting for admin approval.`,
+      status: "APPROVED",
+      disputeResolved: result.resolvedDisputes.length > 0,
+      message:
+        result.resolvedDisputes.length > 0
+          ? `Milestone paid with ₹${money.baseAmount.toLocaleString("en-IN")}. Dispute was automatically resolved and next stage started.`
+          : `Milestone paid with ₹${money.baseAmount.toLocaleString("en-IN")}. Milestone completed and next stage started.`,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "Insufficient wallet balance.")

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
+import { FullPageLogoLoader } from "@/components/FullPageLogoLoader";
 
 function SignupContent() {
   const router = useRouter();
@@ -131,8 +132,19 @@ function SignupContent() {
   }
 
   return (
-    <AuthLayout
-      title="Create your account"
+    <>
+      <FullPageLogoLoader
+        active={pending || googleLoading}
+        title={googleLoading ? "Connecting with Google…" : "Creating your Klick-Pro account…"}
+        subtitle={
+          googleLoading
+            ? "Registering with your Google profile…"
+            : "Setting up your profile, workspace, and secure wallet…"
+        }
+        overlay
+      />
+      <AuthLayout
+        title="Create your account"
       subtitle="Join 50,000+ clients and pros on Klick-Pro."
       hideAside
       footer={
@@ -293,6 +305,7 @@ function SignupContent() {
         </Button>
       </form>
     </AuthLayout>
+    </>
   );
 }
 

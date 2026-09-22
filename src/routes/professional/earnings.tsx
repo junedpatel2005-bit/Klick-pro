@@ -21,6 +21,7 @@ type Transaction = {
   id: number;
   amount: number;
   currency: string;
+  type: string;
   status: string;
   description: string;
   createdAt: string;
@@ -345,7 +346,11 @@ export default function Earnings() {
                     <p className="font-bold text-foreground">
                       ₹{i.amount.toLocaleString()} <span className="text-xs">{i.currency}</span>
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">Client milestone payment</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {i.type === "DISPUTE_PAYOUT"
+                        ? "Dispute settlement payment"
+                        : "Client milestone payment"}
+                    </p>
                   </div>
                 </div>
               ))}

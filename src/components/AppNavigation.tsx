@@ -104,29 +104,47 @@ export function AppSidebar({
       }`}
     >
       <div className="flex h-16 items-center px-4 border-b border-border/40 overflow-hidden">
-        <div
-          className={`flex items-center shrink-0 transition-opacity duration-150 ${
-            collapsed ? "opacity-0 pointer-events-none hidden" : "opacity-100"
-          }`}
-        >
-          <Logo collapsed={false} />
-        </div>
-        {onToggleCollapse && (
+        {collapsed ? (
           <button
             type="button"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              onToggleCollapse();
+              onToggleCollapse?.();
             }}
-            className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer ${
-              collapsed ? "mx-auto text-foreground" : "ml-auto"
-            }`}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="mx-auto cursor-pointer"
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
           >
-            <Menu className="h-5 w-5" />
+            <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl overflow-hidden bg-white shadow-soft border border-slate-200/80">
+              <img
+                src="/logo-icon.png"
+                alt="Klick-Pro"
+                className="h-full w-full object-contain p-0.5"
+              />
+            </span>
           </button>
+        ) : (
+          <>
+            <div className="flex items-center shrink-0">
+              <Logo collapsed={false} />
+            </div>
+            {onToggleCollapse && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onToggleCollapse();
+                }}
+                className="ml-auto grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground cursor-pointer"
+                title="Collapse sidebar"
+                aria-label="Collapse sidebar"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+            )}
+          </>
         )}
       </div>
 

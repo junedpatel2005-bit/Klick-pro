@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import {
   AlertCircle,
@@ -33,6 +33,7 @@ import {
   PlusCircle,
   ArrowUpDown,
   X,
+  ChevronUp,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { CelebrationConfetti } from "@/components/CelebrationConfetti";
@@ -179,7 +180,7 @@ const label = (status: string) =>
     READY_TO_START: "Ready to Start",
     IN_PROGRESS: "In Progress",
     AWAITING_CLIENT_REVIEW: "Awaiting Client Review",
-    AWAITING_ADMIN_APPROVAL: "Awaiting Admin Payout Approval",
+    AWAITING_ADMIN_APPROVAL: "Done · Approved",
     REVISION_REQUESTED: "Revision Requested",
     FINAL_WORK_SUBMITTED: "Final Work Submitted",
     AWAITING_PROFESSIONAL_CONFIRMATION: "Awaiting Professional Confirmation",
@@ -199,16 +200,14 @@ function formatFileSize(bytes: number | null | undefined) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 function milestoneStatusStyle(status: string) {
-  if (status === "APPROVED") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (status === "AWAITING_ADMIN_APPROVAL") return "border-indigo-200 bg-indigo-50 text-indigo-700";
+  if (status === "APPROVED" || status === "AWAITING_ADMIN_APPROVAL") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (status === "AWAITING_CLIENT_REVIEW") return "border-purple-200 bg-purple-50 text-purple-700";
   if (status === "REVISION_REQUESTED") return "border-red-200 bg-red-50 text-red-700";
   if (status === "IN_PROGRESS") return "border-amber-200 bg-amber-50 text-amber-700";
   return "border-border bg-muted text-muted-foreground";
 }
 function milestoneAccent(status: string) {
-  if (status === "APPROVED") return "border-l-emerald-500";
-  if (status === "AWAITING_ADMIN_APPROVAL") return "border-l-indigo-500";
+  if (status === "APPROVED" || status === "AWAITING_ADMIN_APPROVAL") return "border-l-emerald-500";
   if (status === "AWAITING_CLIENT_REVIEW") return "border-l-purple-500";
   if (status === "REVISION_REQUESTED") return "border-l-red-500";
   if (status === "IN_PROGRESS") return "border-l-amber-500";
@@ -383,6 +382,7 @@ export default function SharedProjectTrackingPage() {
   const [counterReopenMessage, setCounterReopenMessage] = useState("");
   const [counterReopenDuration, setCounterReopenDuration] = useState("1-3 days");
   const [counterReopenError, setCounterReopenError] = useState<string | null>(null);
+  const [bidViewMode, setBidViewMode] = useState<"last" | "all">("last");
   const [requestTitle, setRequestTitle] = useState("");
   const [requestMessage, setRequestMessage] = useState("");
   const [showReviewForm, setShowReviewForm] = useState(false);
@@ -510,8 +510,11 @@ export default function SharedProjectTrackingPage() {
       setWorkMilestoneId("auto");
       setShowProgress(false);
       await refresh();
+      return { ok: true, error: null };
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to update project.");
+      const errText = error instanceof Error ? error.message : "Unable to update project.";
+      setMessage(errText);
+      return { ok: false, error: errText };
     } finally {
       setBusy(null);
       if (!alreadyLocked) actionInFlight.current = false;
@@ -599,6 +602,30 @@ export default function SharedProjectTrackingPage() {
     }
   }
 
+  const allNegotiations = useMemo(() => {
+    if (data?.negotiations && data.negotiations.length > 0) {
+      return data.negotiations;
+    }
+    if (data?.latestNegotiation) {
+      return [data.latestNegotiation];
+    }
+    const pending = data?.milestones?.find((m) => m.status === "PENDING_CONFIRMATION");
+    if (pending) {
+      return [
+        {
+          id: -pending.id,
+          senderId: data?.project?.clientId ?? 0,
+          senderRole: "CLIENT",
+          bidAmount: pending.amount,
+          duration: "1-3 days",
+          message: pending.description,
+          createdAt: data?.project?.acceptedAt || new Date().toISOString(),
+        },
+      ];
+    }
+    return [];
+  }, [data?.negotiations, data?.latestNegotiation, data?.milestones, data?.project]);
+
   if (!data)
     return (
       <AppShell>
@@ -631,7 +658,12 @@ export default function SharedProjectTrackingPage() {
     ["IN_PROGRESS", "REVISION_REQUESTED", "AWAITING_CLIENT_REVIEW"].includes(m.status),
   );
   const completed = data.milestones.filter(
-    (m) => m.status === "APPROVED" || m.status === "COMPLETED" || m.payment?.status === "COMPLETED",
+    (m) =>
+      m.status === "APPROVED" ||
+      m.status === "COMPLETED" ||
+      m.payment?.status === "COMPLETED" ||
+      m.payment?.status === "FUNDED" ||
+      m.status === "AWAITING_ADMIN_APPROVAL",
   ).length;
   const remaining = data.job?.deadline
     ? Math.ceil((new Date(data.job.deadline).getTime() - Date.now()) / 86400000)
@@ -640,7 +672,11 @@ export default function SharedProjectTrackingPage() {
     data.milestones.length > 0 &&
     data.milestones.every(
       (m) =>
-        m.status === "APPROVED" || m.status === "COMPLETED" || m.payment?.status === "COMPLETED",
+        m.status === "APPROVED" ||
+        m.status === "COMPLETED" ||
+        m.payment?.status === "COMPLETED" ||
+        m.payment?.status === "FUNDED" ||
+        m.status === "AWAITING_ADMIN_APPROVAL",
     );
   const totalMilestoneValue = data.milestones.reduce(
     (total, milestone) => total + milestone.amount,
@@ -650,6 +686,234 @@ export default function SharedProjectTrackingPage() {
     data.agreedAmount && data.agreedAmount > 0 ? data.agreedAmount : totalMilestoneValue;
   const unassignedMilestoneAmount = Math.max(0, totalAgreed - totalMilestoneValue);
   const remainingMilestoneAmount = unassignedMilestoneAmount;
+
+  const pendingMilestone = data.milestones.find((m) => m.status === "PENDING_CONFIRMATION");
+  const latestNegotiationBid =
+    allNegotiations[allNegotiations.length - 1] ?? data.latestNegotiation ?? null;
+
+  const renderNegotiationBidsCard = () => {
+    const latestBid = latestNegotiationBid;
+    const isLatestFromMe =
+      latestBid?.senderRole === (isClient ? "CLIENT" : "PROFESSIONAL");
+    const activeAmount = latestBid?.bidAmount ?? pendingMilestone?.amount ?? 0;
+    const activeDuration = latestBid?.duration || "1-3 days";
+
+    return (
+      <div className="rounded-xl border border-primary/20 bg-background/80 p-4 space-y-3 text-sm">
+        {/* Toggle Bar: Last Bid vs All Bids */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <ArrowUpDown className="h-3.5 w-3.5" />
+            </div>
+            <span className="font-bold text-xs uppercase tracking-wider text-foreground">
+              {bidViewMode === "last"
+                ? "Current Active Terms"
+                : `All Bids & Counter-Offers (${allNegotiations.length})`}
+            </span>
+          </div>
+
+          <div className="flex items-center rounded-lg bg-muted/80 p-0.5 border border-border/70 text-xs">
+            <button
+              type="button"
+              onClick={() => setBidViewMode("last")}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                bidViewMode === "last"
+                  ? "bg-background text-foreground shadow-xs font-bold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Last Bid
+            </button>
+            <button
+              type="button"
+              onClick={() => setBidViewMode("all")}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                bidViewMode === "all"
+                  ? "bg-background text-foreground shadow-xs font-bold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span>Show All Bids</span>
+              {allNegotiations.length > 0 && (
+                <span
+                  className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                    bidViewMode === "all"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-primary/15 text-primary"
+                  }`}
+                >
+                  {allNegotiations.length}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {bidViewMode === "last" ? (
+          /* LAST BID VIEW */
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  {latestBid
+                    ? latestBid.senderRole === "CLIENT"
+                      ? isClient
+                        ? "Your Proposed Terms"
+                        : `${client} (Client)'s Terms`
+                      : isProfessional
+                        ? "Your Counter Terms"
+                        : `${professional} (Professional)'s Counter-Offer`
+                    : "Proposed Milestone Amount"}
+                </span>
+                <span className="text-2xl font-extrabold text-primary">
+                  ₹{activeAmount.toLocaleString("en-IN")}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 inline-flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" /> Latest / Active Bid
+                </span>
+                {activeDuration && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Timeline: <span className="font-semibold text-foreground">{activeDuration}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {pendingMilestone && (
+              <div className="rounded-lg bg-muted/30 p-2.5 border border-border/50 text-xs">
+                <span className="font-semibold text-foreground uppercase tracking-wide text-[10px] block mb-0.5">
+                  Deliverable Scope
+                </span>
+                <p className="text-foreground/90 font-medium">{pendingMilestone.title}</p>
+                {pendingMilestone.description && (
+                  <p className="text-muted-foreground mt-1">{pendingMilestone.description}</p>
+                )}
+              </div>
+            )}
+
+            {latestBid?.message && (
+              <div className="text-xs text-foreground bg-muted/40 p-2.5 rounded-lg border border-border/60">
+                <span className="font-semibold text-muted-foreground">
+                  {isLatestFromMe ? "Your Note: " : "Note: "}
+                </span>
+                &ldquo;{latestBid.message}&rdquo;
+              </div>
+            )}
+
+            {allNegotiations.length > 1 && (
+              <div className="pt-1 flex items-center justify-between text-xs text-muted-foreground border-t border-border/40">
+                <span>{allNegotiations.length} total bids in this negotiation.</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setBidViewMode("all")}
+                  className="h-6 text-xs text-primary hover:underline gap-1 p-0 font-medium"
+                >
+                  <History className="h-3 w-3" /> View all bids ({allNegotiations.length})
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ALL BIDS VIEW */
+          <div className="space-y-3">
+            {allNegotiations.map((bid, idx) => {
+              const isLatest = idx === allNegotiations.length - 1;
+              const isSenderClient = bid.senderRole === "CLIENT";
+              const isMe = (isClient && isSenderClient) || (isProfessional && !isSenderClient);
+              const senderDisplayName = isSenderClient ? client : professional;
+              const senderRoleTitle = isSenderClient ? "Client" : "Professional";
+
+              return (
+                <div
+                  key={bid.id ?? idx}
+                  className={`rounded-xl border p-3.5 space-y-2 transition-all ${
+                    isLatest
+                      ? "border-primary/40 bg-primary/[0.04] ring-1 ring-primary/20 shadow-xs"
+                      : "border-border/70 bg-background/70"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`flex h-5 w-5 items-center justify-center rounded-md font-bold text-[10px] ${
+                          isLatest
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        #{idx + 1}
+                      </span>
+                      <span className="font-semibold text-foreground">{senderDisplayName}</span>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground uppercase">
+                        {senderRoleTitle}
+                      </span>
+                      {isMe && (
+                        <span className="rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-bold">
+                          You
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isLatest ? (
+                        <span className="rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 px-2 py-0.5 font-bold text-[10px] flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3" /> Current / Last Bid
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-muted/80 text-muted-foreground px-2 py-0.5 text-[10px] font-medium">
+                          Previous Offer
+                        </span>
+                      )}
+                      {bid.createdAt && (
+                        <span className="text-muted-foreground text-[10px]">{date(bid.createdAt)}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 pt-0.5">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-[11px] font-medium text-muted-foreground">Proposed:</span>
+                      <span className="text-base font-bold text-primary">
+                        ₹{(bid.bidAmount ?? 0).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                    {bid.duration && (
+                      <div className="text-xs text-muted-foreground">
+                        Timeline: <span className="font-semibold text-foreground">{bid.duration}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {bid.message && (
+                    <p className="text-xs text-foreground bg-muted/30 p-2 rounded-lg border border-border/50">
+                      &ldquo;{bid.message}&rdquo;
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+
+            <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/40">
+              <span>Showing all {allNegotiations.length} bids exchanged.</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setBidViewMode("last")}
+                className="h-6 text-xs text-primary hover:underline gap-1 p-0 font-medium"
+              >
+                <ChevronUp className="h-3.5 w-3.5" /> Show last bid only
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const recommendedMilestonePercentages = (count: number) => {
     if (count <= 0) return [];
@@ -1044,7 +1308,12 @@ export default function SharedProjectTrackingPage() {
     0,
   );
   const completedMilestones = data.milestones.filter(
-    (m) => m.status === "APPROVED" || m.status === "COMPLETED" || m.payment?.status === "COMPLETED",
+    (m) =>
+      m.status === "APPROVED" ||
+      m.status === "COMPLETED" ||
+      m.payment?.status === "COMPLETED" ||
+      m.payment?.status === "FUNDED" ||
+      m.status === "AWAITING_ADMIN_APPROVAL",
   );
   const remainingProjectBalance = Math.max(
     0,
@@ -1250,201 +1519,154 @@ export default function SharedProjectTrackingPage() {
             </section>
 
             <section className="rounded-2xl border bg-card p-5 shadow-soft">
-              {isClient && data.project.status !== "COMPLETED" ? (
-                canFinal ? (
-                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-4">
-                    <div>
-                      <p className="font-bold text-emerald-950 dark:text-emerald-300 flex items-center gap-2">
-                        <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                        All Milestones Approved! Ready to close project?
-                      </p>
-                      <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-400/90">
-                        All milestone deliverables have been verified and approved. You can now
-                        close and complete this project.
-                      </p>
-                    </div>
-                    <Button
-                      disabled={busy === "complete-project"}
-                      onClick={() => setShowCompleteModal(true)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-semibold shadow-xs"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Complete Project
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-muted/60 border border-border p-4">
-                    <div>
-                      <p className="font-semibold text-foreground">Project in Progress</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {completed} of {data.milestones.length} milestone deliverables approved.
-                        Once all milestones are completed, you can complete this project.
-                      </p>
-                    </div>
-                    <Button
-                      disabled
-                      variant="outline"
-                      className="opacity-70 text-xs font-semibold cursor-not-allowed"
-                    >
-                      {data.milestones.length - completed} milestone(s) pending approval
-                    </Button>
-                  </div>
-                )
-              ) : isProfessional && data.project.status === "AWAITING_PROFESSIONAL_CONFIRMATION" ? (
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-amber-50 p-4">
-                  <div>
-                    <p className="font-semibold text-amber-950">Client requested completion</p>
-                    <p className="mt-1 text-sm text-amber-800">
-                      Confirm that the final work is complete to close this project.
-                    </p>
-                  </div>
-                  <Button
-                    disabled={busy === "confirm-project-completion"}
-                    onClick={() => void action("confirm-project-completion")}
-                  >
-                    {busy === "confirm-project-completion" ? "Confirming…" : "Confirm completion"}
-                  </Button>
-                </div>
-              ) : data.project.status === "AWAITING_PROFESSIONAL_CONFIRMATION" ? (
-                <div className="rounded-2xl bg-muted p-4">
-                  <p className="font-semibold">Waiting for professional confirmation</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    The professional has been notified and must confirm before the project is
-                    completed.
-                  </p>
-                </div>
-              ) : data.project.status === "REOPEN_REQUESTED" ? (
+              {data.project.status === "REOPEN_REQUESTED" ? (
                 isProfessional ? (
-                  <div className="rounded-2xl border border-amber-500/30 bg-amber-50/70 dark:bg-amber-950/25 p-5 space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <p className="font-bold text-base text-amber-950 dark:text-amber-200 flex items-center gap-2">
-                          <RotateCcw className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                          Client Requested to Reopen This Project
-                        </p>
-                        <p className="text-sm text-amber-900/90 dark:text-amber-300/90 mt-1">
-                          The client has proposed to reopen this project for additional work or rework. Review the details below to Accept, Negotiate, or Decline.
-                        </p>
-                      </div>
-                      <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-xs font-bold text-amber-800 dark:text-amber-300 shrink-0">
-                        Awaiting Your Decision
-                      </span>
-                    </div>
-
-                    {data.milestones.find((m) => m.status === "PENDING_CONFIRMATION") && (
-                      <div className="rounded-xl border border-amber-500/20 bg-background/80 p-4 space-y-2 text-sm">
-                        <div className="flex justify-between items-center text-xs text-muted-foreground">
-                          <span className="font-semibold text-foreground uppercase tracking-wide">
-                            {data.milestones.find((m) => m.status === "PENDING_CONFIRMATION")?.title}
-                          </span>
-                          <span className="font-bold text-base text-primary">
-                            ₹{data.milestones.find((m) => m.status === "PENDING_CONFIRMATION")?.amount.toLocaleString("en-IN")}
-                          </span>
+                  data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL" ? (
+                    <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-base text-foreground flex items-center gap-2">
+                            <RotateCcw className="h-5 w-5 text-primary" />
+                            Counter-Offer Sent to Client
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            You proposed counter terms for reopening this project. Waiting for the client to review and respond.
+                          </p>
                         </div>
-                        <p className="text-muted-foreground">
-                          {data.milestones.find((m) => m.status === "PENDING_CONFIRMATION")?.description}
-                        </p>
+                        <span className="rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-bold text-primary shrink-0">
+                          Awaiting Client Decision
+                        </span>
                       </div>
-                    )}
 
-                    {data.latestNegotiation && data.latestNegotiation.senderRole === "CLIENT" && data.latestNegotiation.message && (
-                      <p className="text-xs text-muted-foreground bg-muted/50 p-2.5 rounded-lg border">
-                        <span className="font-semibold text-foreground">Client Note: </span>
-                        {data.latestNegotiation.message}
-                      </p>
-                    )}
+                      {renderNegotiationBidsCard()}
 
-                    <div className="flex flex-wrap items-center gap-2.5 pt-1">
-                      <Button
-                        disabled={busy === "respond-reopen"}
-                        onClick={() => void action("respond-reopen", { decision: "ACCEPT" })}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5 shadow-xs"
-                      >
-                        <CheckCircle2 className="h-4 w-4" />
-                        {busy === "respond-reopen" ? "Accepting…" : "Accept & Start Work"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        disabled={busy === "respond-reopen"}
-                        onClick={() => {
-                          const pending = data.milestones.find((m) => m.status === "PENDING_CONFIRMATION");
-                          setCounterReopenAmount(pending ? String(pending.amount) : "");
-                          setCounterReopenMessage("");
-                          setCounterReopenError(null);
-                          setShowNegotiateReopenModal(true);
-                        }}
-                        className="gap-1.5"
-                      >
-                        <ArrowUpDown className="h-4 w-4" />
-                        Negotiate Terms
-                      </Button>
-                      <Button
-                        variant="outline"
-                        disabled={busy === "respond-reopen"}
-                        onClick={() => void action("respond-reopen", { decision: "REJECT" })}
-                        className="text-destructive border-destructive/30 hover:bg-destructive/10 gap-1.5"
-                      >
-                        <X className="h-4 w-4" />
-                        Decline
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                        <Button
+                          variant="outline"
+                          disabled={busy === "respond-reopen"}
+                          onClick={() => {
+                            setCounterReopenAmount(String(data.latestNegotiation?.bidAmount ?? ""));
+                            setCounterReopenMessage(data.latestNegotiation?.message ?? "");
+                            setCounterReopenDuration(data.latestNegotiation?.duration ?? "1-3 days");
+                            setCounterReopenError(null);
+                            setShowNegotiateReopenModal(true);
+                          }}
+                          className="gap-1.5 font-medium"
+                        >
+                          <ArrowUpDown className="h-4 w-4" />
+                          Revise Counter-Offer
+                        </Button>
+                        <Button
+                          variant="outline"
+                          disabled={busy === "respond-reopen"}
+                          onClick={() => void action("respond-reopen", { decision: "REJECT" })}
+                          className="text-destructive border-destructive/30 hover:bg-destructive/10 gap-1.5"
+                        >
+                          <X className="h-4 w-4" />
+                          Decline Reopen
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 ml-auto"
+                          onClick={() => {
+                            document.getElementById("project-dispute-center")?.scrollIntoView({ behavior: "smooth" });
+                          }}
+                        >
+                          <ShieldAlert className="h-4 w-4" />
+                          Raise Dispute
+                        </Button>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="rounded-2xl border border-amber-500/30 bg-amber-50/70 dark:bg-amber-950/25 p-5 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-base text-amber-950 dark:text-amber-200 flex items-center gap-2">
+                            <RotateCcw className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                            Client Requested to Reopen This Project
+                          </p>
+                          <p className="text-sm text-amber-900/90 dark:text-amber-300/90 mt-1">
+                            The client has proposed to reopen this project for additional work or rework. Review the details below to Accept, Negotiate, or Decline.
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-xs font-bold text-amber-800 dark:text-amber-300 shrink-0">
+                          Awaiting Your Decision
+                        </span>
+                      </div>
+
+                      {renderNegotiationBidsCard()}
+
+                      <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                        <Button
+                          disabled={busy === "respond-reopen"}
+                          onClick={() => void action("respond-reopen", { decision: "ACCEPT" })}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5 shadow-xs"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                          {busy === "respond-reopen" ? "Accepting…" : "Accept & Start Work"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          disabled={busy === "respond-reopen"}
+                          onClick={() => {
+                            const pending = data.milestones.find((m) => m.status === "PENDING_CONFIRMATION");
+                            setCounterReopenAmount(pending ? String(pending.amount) : "");
+                            setCounterReopenMessage("");
+                            setCounterReopenDuration("1-3 days");
+                            setCounterReopenError(null);
+                            setShowNegotiateReopenModal(true);
+                          }}
+                          className="gap-1.5"
+                        >
+                          <ArrowUpDown className="h-4 w-4" />
+                          Negotiate Terms
+                        </Button>
+                        <Button
+                          variant="outline"
+                          disabled={busy === "respond-reopen"}
+                          onClick={() => void action("respond-reopen", { decision: "REJECT" })}
+                          className="text-destructive border-destructive/30 hover:bg-destructive/10 gap-1.5"
+                        >
+                          <X className="h-4 w-4" />
+                          Decline
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 ml-auto"
+                          onClick={() => {
+                            document.getElementById("project-dispute-center")?.scrollIntoView({ behavior: "smooth" });
+                          }}
+                        >
+                          <ShieldAlert className="h-4 w-4" />
+                          Raise Dispute
+                        </Button>
+                      </div>
+                    </div>
+                  )
                 ) : (
                   <div className="rounded-2xl border border-amber-500/30 bg-amber-50/70 dark:bg-amber-950/25 p-5 space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <p className="font-bold text-base text-amber-950 dark:text-amber-200 flex items-center gap-2">
                           <RotateCcw className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                          Reopen Request Pending Professional Approval
+                          {data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL"
+                            ? "Professional Proposed Counter Terms"
+                            : "Reopen Request Pending Professional Approval"}
                         </p>
                         <p className="text-sm text-amber-900/90 dark:text-amber-300/90 mt-1">
                           {data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL"
-                            ? "The professional proposed counter terms for your reopen request. Please review below."
+                            ? "The professional proposed counter terms for your reopen request. Please review below to Accept, Counter Back, or Decline."
                             : "You requested to reopen this project. Waiting for the professional to accept, decline, or negotiate terms."}
                         </p>
                       </div>
                       <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-xs font-bold text-amber-800 dark:text-amber-300 shrink-0">
                         {data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL"
-                          ? "Counter Terms Received"
+                          ? "Counter-Offer Received"
                           : "Pending Professional Response"}
                       </span>
                     </div>
 
-                    {data.milestones.find((m) => m.status === "PENDING_CONFIRMATION") && (
-                      <div className="rounded-xl border border-amber-500/20 bg-background/80 p-4 space-y-2 text-sm">
-                        <div className="flex justify-between items-center text-xs text-muted-foreground">
-                          <span className="font-semibold text-foreground uppercase tracking-wide">
-                            {data.milestones.find((m) => m.status === "PENDING_CONFIRMATION")?.title}
-                          </span>
-                          <span className="font-bold text-base text-primary">
-                            ₹{data.milestones.find((m) => m.status === "PENDING_CONFIRMATION")?.amount.toLocaleString("en-IN")}
-                          </span>
-                        </div>
-                        <p className="text-muted-foreground">
-                          {data.milestones.find((m) => m.status === "PENDING_CONFIRMATION")?.description}
-                        </p>
-                      </div>
-                    )}
-
-                    {data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL" && (
-                      <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-1.5 text-sm">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-primary flex items-center gap-1.5 text-xs">
-                            <ArrowUpDown className="h-4 w-4" /> Professional Counter-Offer: ₹{(data.latestNegotiation.bidAmount ?? 0).toLocaleString("en-IN")}
-                          </span>
-                          {data.latestNegotiation.duration && (
-                            <span className="text-xs text-muted-foreground font-medium">
-                              Estimated timeline: {data.latestNegotiation.duration}
-                            </span>
-                          )}
-                        </div>
-                        {data.latestNegotiation.message && (
-                          <p className="text-xs text-foreground mt-1">
-                            "{data.latestNegotiation.message}"
-                          </p>
-                        )}
-                      </div>
-                    )}
+                    {renderNegotiationBidsCard()}
 
                     <div className="flex flex-wrap items-center gap-2.5 pt-1">
                       {data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL" ? (
@@ -1463,6 +1685,7 @@ export default function SharedProjectTrackingPage() {
                             onClick={() => {
                               setCounterReopenAmount(String(data.latestNegotiation?.bidAmount ?? ""));
                               setCounterReopenMessage("");
+                              setCounterReopenDuration(data.latestNegotiation?.duration ?? "1-3 days");
                               setCounterReopenError(null);
                               setShowNegotiateReopenModal(true);
                             }}
@@ -1497,6 +1720,31 @@ export default function SharedProjectTrackingPage() {
                         Raise Dispute
                       </Button>
                     </div>
+                  </div>
+                )
+              ) : data.project.status === "AWAITING_PROFESSIONAL_CONFIRMATION" ? (
+                isProfessional ? (
+                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-amber-50 p-4">
+                    <div>
+                      <p className="font-semibold text-amber-950">Client requested completion</p>
+                      <p className="mt-1 text-sm text-amber-800">
+                        Confirm that the final work is complete to close this project.
+                      </p>
+                    </div>
+                    <Button
+                      disabled={busy === "confirm-project-completion"}
+                      onClick={() => void action("confirm-project-completion")}
+                    >
+                      {busy === "confirm-project-completion" ? "Confirming…" : "Confirm completion"}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl bg-muted p-4">
+                    <p className="font-semibold">Waiting for professional confirmation</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      The professional has been notified and must confirm before the project is
+                      completed.
+                    </p>
                   </div>
                 )
               ) : data.project.status === "COMPLETED" ? (
@@ -1537,6 +1785,46 @@ export default function SharedProjectTrackingPage() {
                     </Button>
                   </div>
                 </div>
+              ) : isClient ? (
+                canFinal ? (
+                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 p-4">
+                    <div>
+                      <p className="font-bold text-emerald-950 dark:text-emerald-300 flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                        All Milestones Approved! Ready to close project?
+                      </p>
+                      <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-400/90">
+                        All milestone deliverables have been verified and approved. You can now
+                        close and complete this project.
+                      </p>
+                    </div>
+                    <Button
+                      disabled={busy === "complete-project"}
+                      onClick={() => setShowCompleteModal(true)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-semibold shadow-xs"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Complete Project
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-muted/60 border border-border p-4">
+                    <div>
+                      <p className="font-semibold text-foreground">Project in Progress</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {completed} of {data.milestones.length} milestone deliverables approved.
+                        Once all milestones are completed, you can complete this project.
+                      </p>
+                    </div>
+                    <Button
+                      disabled
+                      variant="outline"
+                      className="opacity-70 text-xs font-semibold cursor-not-allowed"
+                    >
+                      {data.milestones.length - completed} milestone(s) pending approval
+                    </Button>
+                  </div>
+                )
               ) : null}
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <Info icon={Clock3} label="Started" value={date(data.project.startedAt)} />
@@ -1882,8 +2170,14 @@ export default function SharedProjectTrackingPage() {
                 disputeCount={data.disputeCount}
                 disputeLimit={data.disputeLimit ?? 3}
                 canRaiseDispute={data.canRaiseDispute}
-                onAction={action}
+                onAction={async (actionKey, payload) => {
+                  await action(actionKey, payload);
+                }}
                 busyAction={busy}
+                onPayMilestone={(m) => {
+                  const target = data.milestones.find((item) => item.id === m.id);
+                  if (target) setApprovalMilestone(target);
+                }}
               />
             )}
           </TabsContent>
@@ -1945,7 +2239,9 @@ export default function SharedProjectTrackingPage() {
                       const filled =
                         milestone?.status === "APPROVED" ||
                         milestone?.status === "COMPLETED" ||
-                        milestone?.payment?.status === "COMPLETED";
+                        milestone?.payment?.status === "COMPLETED" ||
+                        milestone?.payment?.status === "FUNDED" ||
+                        milestone?.status === "AWAITING_ADMIN_APPROVAL";
                       const active =
                         milestone &&
                         ["IN_PROGRESS", "REVISION_REQUESTED", "AWAITING_CLIENT_REVIEW"].includes(
@@ -1985,9 +2281,11 @@ export default function SharedProjectTrackingPage() {
                   const isApproved =
                     m.status === "APPROVED" ||
                     m.status === "COMPLETED" ||
-                    m.payment?.status === "COMPLETED";
+                    m.payment?.status === "COMPLETED" ||
+                    m.payment?.status === "FUNDED" ||
+                    m.status === "AWAITING_ADMIN_APPROVAL";
                   const isAwaitingReview = m.status === "AWAITING_CLIENT_REVIEW";
-                  const isAwaitingAdmin = m.status === "AWAITING_ADMIN_APPROVAL";
+                  const isAwaitingAdmin = false;
                   const isRevision = m.status === "REVISION_REQUESTED";
                   const isInProgress = m.status === "IN_PROGRESS";
 
@@ -2044,11 +2342,17 @@ export default function SharedProjectTrackingPage() {
                               <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                                 <Wallet className="h-3.5 w-3.5 text-emerald-600" />
                                 <span>
-                                  Payout:{" "}
+                                  {isClient ? "Payment: " : "Payout: "}
                                   <strong className="text-foreground font-semibold">
-                                    {m.payment.status === "COMPLETED"
-                                      ? "Paid Out"
-                                      : m.payment.status}
+                                    {isClient
+                                      ? m.payment.status === "FUNDED" || m.payment.status === "COMPLETED"
+                                        ? "Paid"
+                                        : m.payment.status
+                                      : m.payment.status === "COMPLETED"
+                                        ? "Paid Out"
+                                        : m.payment.status === "FUNDED"
+                                          ? "Funded"
+                                          : m.payment.status}
                                   </strong>
                                 </span>
                               </p>
@@ -2102,7 +2406,9 @@ export default function SharedProjectTrackingPage() {
                             {isApproved
                               ? m.payment?.status === "COMPLETED"
                                 ? "Done · Paid Out"
-                                : "Done · Approved"
+                                : isClient
+                                  ? "Done · Paid"
+                                  : "Done · Approved"
                               : label(m.status)}
                           </span>
                           {overdueDays !== null && (
@@ -2898,20 +3204,20 @@ export default function SharedProjectTrackingPage() {
                   return;
                 }
                 setReopenModalError(null);
-                try {
-                  await action("reopen-project", {
-                    projectId: Number(projectId),
-                    reason: reopenReason,
-                    workDescription: reopenWorkDescription.trim(),
-                    amount: numAmount,
-                    duration: reopenDuration || "1-3 days",
-                  });
-                  setShowReopenModal(false);
-                  setReopenWorkDescription("");
-                  setReopenAmount("");
-                } catch {
-                  setReopenModalError("Unable to reopen project.");
+                const res = await action("reopen-project", {
+                  projectId: Number(projectId),
+                  reason: reopenReason,
+                  workDescription: reopenWorkDescription.trim(),
+                  amount: numAmount,
+                  duration: reopenDuration || "1-3 days",
+                });
+                if (res?.ok === false) {
+                  setReopenModalError(res.error || "Unable to reopen project.");
+                  return;
                 }
+                setShowReopenModal(false);
+                setReopenWorkDescription("");
+                setReopenAmount("");
               }}
               className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
             >
@@ -3010,18 +3316,18 @@ export default function SharedProjectTrackingPage() {
                   return;
                 }
                 setCounterReopenError(null);
-                try {
-                  await action("respond-reopen", {
-                    projectId: Number(projectId),
-                    decision: "COUNTER",
-                    counterAmount: num,
-                    message: counterReopenMessage.trim(),
-                    duration: counterReopenDuration || "1-3 days",
-                  });
-                  setShowNegotiateReopenModal(false);
-                } catch {
-                  setCounterReopenError("Unable to send counter-offer.");
+                const res = await action("respond-reopen", {
+                  projectId: Number(projectId),
+                  decision: "COUNTER",
+                  counterAmount: num,
+                  message: counterReopenMessage.trim(),
+                  duration: counterReopenDuration || "1-3 days",
+                });
+                if (res?.ok === false) {
+                  setCounterReopenError(res.error || "Unable to send counter-offer.");
+                  return;
                 }
+                setShowNegotiateReopenModal(false);
               }}
               className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
             >
@@ -3073,7 +3379,7 @@ export default function SharedProjectTrackingPage() {
                         <div>
                           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                             <Sparkles className="h-3.5 w-3.5" />
-                            {offlinePayment ? "Milestone Approved & Paid! 🎉" : "Milestone Funded"}
+                            {offlinePayment ? "Milestone Approved & Paid! 🎉" : "Milestone Paid & Completed! 🎉"}
                           </span>
                           <h3 className="mt-2 font-display text-3xl font-bold tracking-tight text-foreground">
                             ₹{approvalSuccess.charged.toLocaleString("en-IN")}
@@ -3081,7 +3387,7 @@ export default function SharedProjectTrackingPage() {
                           <p className="mt-1 text-sm text-muted-foreground">
                             {offlinePayment
                               ? `Marked as paid directly to ${professional}.`
-                              : "Payment received and waiting for admin payout approval."}
+                              : "Payment confirmed. Milestone completed and next stage has started."}
                           </p>
                         </div>
 
@@ -3168,9 +3474,8 @@ export default function SharedProjectTrackingPage() {
                         </div>
                         {offlinePayment ? null : (
                           <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
-                            ₹{clientCharge.toLocaleString("en-IN")} will move from your wallet to
-                            the secure platform wallet. The professional payout is released only
-                            after admin approval.
+                            ₹{clientCharge.toLocaleString("en-IN")} will be deducted from your wallet.
+                            This milestone will be marked as completed immediately.
                           </p>
                         )}
                         {!offlinePayment && (

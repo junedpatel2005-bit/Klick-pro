@@ -7,6 +7,7 @@ import { useDatabaseStatus } from "@/hooks/use-database-status";
 import {
   BarChart3,
   Bell,
+  Briefcase,
   BriefcaseBusiness,
   ChevronRight,
   CircleDollarSign,
@@ -132,21 +133,24 @@ export function AdminSidebar() {
     <aside className="fixed inset-y-0 hidden w-64 border-r border-slate-200 bg-white p-4 lg:flex lg:flex-col justify-between shadow-xs z-30 overflow-y-auto">
       <div>
         {/* Brand Header */}
-        <div className="flex items-center gap-3 px-2 py-2">
-          <div className="relative grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-500/20">
-            <BarChart3 className="h-5 w-5" />
-            <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 border-2 border-white" />
+        <Link href="/admin" className="flex items-center gap-3 px-2 py-2 group">
+          <div className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl overflow-hidden bg-white shadow-soft border border-slate-200/80 transition-transform group-hover:scale-105">
+            <img
+              src="/logo-icon.png"
+              alt="Klick-Pro"
+              className="h-full w-full object-contain p-0.5"
+            />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
               <p className="font-display font-extrabold text-slate-900 tracking-tight">Klick-Pro</p>
-              <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 border border-indigo-200">
+              <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary border border-primary/20">
                 PRO
               </span>
             </div>
             <p className="text-[11px] text-slate-500 font-medium">Enterprise Control Suite</p>
           </div>
-        </div>
+        </Link>
 
         {/* Grouped Navigation */}
         <nav className="mt-6 space-y-6">

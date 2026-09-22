@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     payment.status !== "FUNDED" ||
     !payment.projectTrackingId ||
     !milestone ||
-    milestone.status !== "AWAITING_ADMIN_APPROVAL"
+    !["AWAITING_ADMIN_APPROVAL", "APPROVED", "COMPLETED"].includes(milestone.status)
   )
     return NextResponse.json(
       { error: "This payment is not waiting for admin payout approval." },

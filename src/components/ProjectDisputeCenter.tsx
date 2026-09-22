@@ -62,6 +62,14 @@ type Milestone = {
   title: string;
   amount: number;
   status: string;
+  description?: string | null;
+  dueDate?: string | null;
+  submittedAt?: string | null;
+  approvedAt?: string | null;
+  payment?: {
+    status: string;
+    professionalPayoutAmount?: number | null;
+  } | null;
 };
 
 interface ProjectDisputeCenterProps {
@@ -74,8 +82,9 @@ interface ProjectDisputeCenterProps {
   disputeCount?: number;
   disputeLimit?: number;
   canRaiseDispute?: boolean;
-  onAction: (actionKey: string, payload: Record<string, unknown>) => Promise<void>;
+  onAction: (actionKey: string, payload: Record<string, unknown>) => Promise<unknown>;
   busyAction: string | null;
+  onPayMilestone?: (milestone: Milestone) => void;
 }
 
 const REASON_OPTIONS = [
@@ -129,10 +138,30 @@ export function ProjectDisputeCenter({
   canRaiseDispute = false,
   onAction,
   busyAction,
+  onPayMilestone,
 }: ProjectDisputeCenterProps) {
   const isClient = viewerRole === "CLIENT";
   const isReporter = dispute ? dispute.reporterId === viewerUserId : false;
   const isRespondent = dispute && !isReporter;
+
+  // Find any payable milestone (matching dispute milestone or in review/revision)
+  const payableMilestone = React.useMemo(() => {
+    if (!milestones || milestones.length === 0) return null;
+    if (dispute?.milestoneId) {
+      const matched = milestones.find((m) => m.id === dispute.milestoneId);
+      if (matched && matched.status !== "APPROVED" && matched.status !== "COMPLETED") {
+        return matched;
+      }
+    }
+    return (
+      milestones.find(
+        (m) =>
+          m.status === "AWAITING_CLIENT_REVIEW" ||
+          m.status === "REVISION_REQUESTED" ||
+          m.status === "IN_PROGRESS",
+      ) ?? null
+    );
+  }, [milestones, dispute?.milestoneId]);
 
   // Create dispute form state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -271,7 +300,7 @@ export function ProjectDisputeCenter({
 
   // Determine current active display state
   const isDisputeActive = dispute && dispute.status !== "RESOLVED";
-  const isWaitingResponse = dispute?.status === "WAITING_RESPONSE";
+  const isWaitingResponse = dispute?.status === "WAITING_RESPONSE" || dispute?.status === "OPEN";
   const isUnderAdminReview = dispute?.status === "UNDER_ADMIN_REVIEW";
   const isResolved = dispute?.status === "RESOLVED";
 
@@ -296,9 +325,13 @@ export function ProjectDisputeCenter({
                 {dispute && (
                   <Badge
                     variant="outline"
-                    className="text-xs font-semibold uppercase tracking-wider"
+                    className={`text-xs font-semibold uppercase tracking-wider ${
+                      isResolved
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+                        : ""
+                    }`}
                   >
-                    Round {dispute.disputeRound} of {disputeLimit}
+                    {isResolved ? "Resolved" : `Round ${dispute.disputeRound} of ${disputeLimit}`}
                   </Badge>
                 )}
               </h2>
@@ -440,6 +473,36 @@ export function ProjectDisputeCenter({
               )}
             </div>
           </div>
+
+          {/* Quick Settle by Paying Milestone Banner */}
+          {isClient && payableMilestone && (
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-50/80 dark:bg-emerald-950/30 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5 font-bold text-xs uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  Settle Dispute by Paying Milestone
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Milestone <span className="font-semibold text-foreground">&ldquo;{payableMilestone.title}&rdquo;</span> (₹{payableMilestone.amount.toLocaleString("en-IN")}) is ready for settlement. Paying this milestone will automatically resolve and close this dispute.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (onPayMilestone) {
+                    onPayMilestone(payableMilestone);
+                  } else {
+                    void onAction("approve-milestone", { milestoneId: payableMilestone.id });
+                  }
+                }}
+                disabled={busyAction !== null}
+                className="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-sm"
+              >
+                <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                Pay & Settle (₹{payableMilestone.amount.toLocaleString("en-IN")})
+              </Button>
+            </div>
+          )}
 
           {/* Details card */}
           <div className="rounded-2xl border bg-card p-5 space-y-4">
@@ -671,6 +734,36 @@ export function ProjectDisputeCenter({
               </div>
             </div>
           </div>
+
+          {/* Quick Settle by Paying Milestone Banner during Admin Review */}
+          {isClient && payableMilestone && (
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-50/80 dark:bg-emerald-950/30 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5 font-bold text-xs uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  Settle Dispute by Paying Milestone
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  The milestone <span className="font-semibold text-foreground">&ldquo;{payableMilestone.title}&rdquo;</span> (₹{payableMilestone.amount.toLocaleString("en-IN")}) is completed and awaiting payment. Paying this milestone will automatically close this admin dispute, release earnings to the freelancer, and resume contract progress.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (onPayMilestone) {
+                    onPayMilestone(payableMilestone);
+                  } else {
+                    void onAction("approve-milestone", { milestoneId: payableMilestone.id });
+                  }
+                }}
+                disabled={busyAction !== null}
+                className="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-sm"
+              >
+                <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                Pay Milestone & Close Dispute (₹{payableMilestone.amount.toLocaleString("en-IN")})
+              </Button>
+            </div>
+          )}
 
           {/* Submissions side-by-side or stacked */}
           <div className="grid md:grid-cols-2 gap-4">

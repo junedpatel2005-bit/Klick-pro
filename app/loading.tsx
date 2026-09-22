@@ -1,5 +1,10 @@
-import { PageSkeleton } from "@/components/LoadingSkeleton";
+import { FullPageLogoLoader } from "@/components/FullPageLogoLoader";
 
 export default function Loading() {
-  return <PageSkeleton />;
+  return (
+    <FullPageLogoLoader
+      title="Loading Klick-Pro…"
+      subtitle="Preparing your experience, please wait a moment…"
+    />
+  );
 }

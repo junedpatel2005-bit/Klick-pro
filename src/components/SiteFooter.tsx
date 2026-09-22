@@ -8,15 +8,7 @@ export function SiteFooter() {
       <footer className="border-t border-border bg-ink text-ink-foreground">
         <div className="mx-auto grid max-w-7xl gap-10 px-4 py-16 sm:px-6 md:grid-cols-5 lg:px-8">
           <div className="md:col-span-2">
-            <Link
-              href="/"
-              className="flex items-center gap-2 font-display text-xl font-bold text-white"
-            >
-              <span className="grid h-9 w-9 place-items-center rounded-lg bg-cta text-cta-foreground">
-                S
-              </span>
-              Klick-Pro
-            </Link>
+            <Logo className="text-white text-xl" />
             <p className="mt-4 max-w-sm text-sm text-white/65">
               The trusted marketplace where clients meet vetted professionals. Post jobs, hire
               experts, track work — all in one platform.

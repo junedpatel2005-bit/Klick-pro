@@ -24,7 +24,11 @@ export async function GET(request: NextRequest) {
     take: 50,
   });
   const earned = await db.walletTransaction.aggregate({
-    where: { walletId: wallet.id, type: "MILESTONE_EARNING", status: "COMPLETED" },
+    where: {
+      walletId: wallet.id,
+      type: { in: ["MILESTONE_EARNING", "DISPUTE_PAYOUT"] },
+      status: "COMPLETED",
+    },
     _sum: { amount: true },
   });
   const commission = await db.payment.aggregate({

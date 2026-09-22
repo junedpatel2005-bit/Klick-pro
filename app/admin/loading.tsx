@@ -1,5 +1,10 @@
-import { AdminPageSkeleton } from "@/components/LoadingSkeleton";
+import { FullPageLogoLoader } from "@/components/FullPageLogoLoader";
 
 export default function Loading() {
-  return <AdminPageSkeleton />;
+  return (
+    <FullPageLogoLoader
+      title="Loading Admin Console…"
+      subtitle="Fetching enterprise metrics and records…"
+    />
+  );
 }

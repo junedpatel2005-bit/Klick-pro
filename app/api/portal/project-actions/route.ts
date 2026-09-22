@@ -6,6 +6,7 @@ import {
   notifyDisputeAccepted,
   notifyDisputeContested,
   notifyDisputeRaised,
+  notifyDisputeResolved,
   notifyUsers,
 } from "@/lib/marketplace-notifications";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
@@ -735,21 +736,21 @@ export async function POST(request: NextRequest) {
           where: {
             id: input.milestoneId,
             trackingId: project.id,
-            status: "AWAITING_CLIENT_REVIEW",
+            status: { in: ["AWAITING_CLIENT_REVIEW", "REVISION_REQUESTED", "IN_PROGRESS"] },
           },
         });
         if (!milestone)
           return NextResponse.json(
-            { error: "This milestone is not awaiting review." },
+            { error: "This milestone is not ready for payment." },
             { status: 409 },
           );
         try {
-          const payment = await db.$transaction(async (tx) => {
+          const { payment, activeDisputes } = await db.$transaction(async (tx) => {
             const claim = await tx.projectMilestone.updateMany({
               where: {
                 id: milestone.id,
                 trackingId: project.id,
-                status: "AWAITING_CLIENT_REVIEW",
+                status: { in: ["AWAITING_CLIENT_REVIEW", "REVISION_REQUESTED", "IN_PROGRESS"] },
               },
               data: { status: "PAYMENT_PROCESSING" },
             });
@@ -819,7 +820,44 @@ export async function POST(request: NextRequest) {
                 data: { status: "IN_PROGRESS", currentStage: null },
               });
             }
-            return payment;
+
+            // Automatically resolve any active disputes for this contract upon client offline payment
+            const activeDisputes = await tx.projectDispute.findMany({
+              where: {
+                trackingId: project.id,
+                status: { not: "RESOLVED" },
+              },
+            });
+
+            for (const activeDispute of activeDisputes) {
+              await tx.projectDispute.update({
+                where: { id: activeDispute.id },
+                data: {
+                  status: "RESOLVED",
+                  respondentAction: "ACCEPTED",
+                  decision: "MUTUAL_SETTLEMENT",
+                  decisionReason: `Client confirmed offline payment of ₹${milestone.amount.toLocaleString("en-IN")} for milestone "${milestone.title}". Dispute automatically resolved and closed.`,
+                  decisionAt: new Date(),
+                  decidedBy: session.userId,
+                  payoutAmount: milestone.amount,
+                  refundAmount: 0,
+                },
+              });
+
+              await tx.projectTimelineEvent.create({
+                data: {
+                  trackingId: project.id,
+                  actorId: session.userId,
+                  actorRole: "CLIENT",
+                  milestoneId: milestone.id,
+                  type: "DISPUTE_RESOLVED",
+                  title: "Dispute closed · Payment received",
+                  description: `Dispute #${activeDispute.id} was automatically closed after client confirmed payment for milestone "${milestone.title}".`,
+                },
+              });
+            }
+
+            return { payment, activeDisputes };
           });
           await event(
             "MILESTONE_PAID",
@@ -827,6 +865,26 @@ export async function POST(request: NextRequest) {
             `The client confirmed offline payment for ${milestone.title}.`,
             { milestoneId: milestone.id },
           );
+          if (activeDisputes.length > 0) {
+            void notifyDisputeResolved({
+              trackingId: project.id,
+              jobTitle: project.job?.title ?? null,
+              status: "RESOLVED",
+              clientId: project.clientId,
+              professionalId: project.professionalId,
+            }).catch(() => undefined);
+
+            for (const d of activeDisputes) {
+              emitAdminEvent("dispute:update", {
+                disputeId: d.id,
+                projectId: project.id,
+                status: "RESOLVED",
+              });
+            }
+          }
+          emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
+            projectId: project.id,
+          });
           return NextResponse.json({
             ok: true,
             paymentMethod: "OFFLINE",
@@ -835,7 +893,11 @@ export async function POST(request: NextRequest) {
             adminReceives: 0,
             platformEarnings: 0,
             status: "COMPLETED",
-            message: "Offline payment recorded. The professional was marked as paid.",
+            disputeResolved: activeDisputes.length > 0,
+            message:
+              activeDisputes.length > 0
+                ? "Offline payment recorded. Dispute was automatically resolved and closed."
+                : "Offline payment recorded. The professional was marked as paid.",
           });
         } catch (error) {
           if (error instanceof Error && error.message.includes("already being processed"))
@@ -1017,6 +1079,14 @@ export async function POST(request: NextRequest) {
         },
       });
 
+      // Clean up any stale PENDING_CONFIRMATION milestones so only ONE milestone is created
+      await db.projectMilestone.deleteMany({
+        where: {
+          trackingId: project.id,
+          status: "PENDING_CONFIRMATION",
+        },
+      });
+
       // Add single deliverable milestone for the reopened work in PENDING_CONFIRMATION status
       const milestoneTitle =
         input.reason === "ISSUE"
@@ -1066,6 +1136,10 @@ export async function POST(request: NextRequest) {
         description: `Client requested ${reasonLabel.toLowerCase()} (₹${input.amount.toLocaleString("en-IN")}): "${input.workDescription.slice(0, 100)}". Review to Accept, Reject, or Negotiate.`,
         href: `/project/${project.id}/tracking`,
       });
+
+      emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
+        projectId: project.id,
+      });
     }
     if (input.action === "respond-reopen") {
       if (project.status !== "REOPEN_REQUESTED") {
@@ -1080,19 +1154,47 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Unauthorized." }, { status: 403 });
       }
 
-      const pendingMilestone = await db.projectMilestone.findFirst({
+      const pendingMilestones = await db.projectMilestone.findMany({
         where: { trackingId: project.id, status: "PENDING_CONFIRMATION" },
         orderBy: { createdAt: "desc" },
       });
+      const pendingMilestone = pendingMilestones[0];
+
+      // Clean up any extra pending milestones so only 1 exists
+      if (pendingMilestones.length > 1) {
+        await db.projectMilestone.deleteMany({
+          where: { id: { in: pendingMilestones.slice(1).map((m) => m.id) } },
+        });
+      }
 
       const jobTitle = project.job?.title?.trim() || `Project #${project.id}`;
 
       if (input.decision === "ACCEPT") {
+        const latestNegotiation = project.requestId
+          ? await db.projectNegotiation.findFirst({
+              where: { requestId: project.requestId },
+              orderBy: { createdAt: "desc" },
+            })
+          : null;
+
+        const finalAmount = latestNegotiation?.bidAmount ?? pendingMilestone?.amount ?? 0;
+        const finalTitle = pendingMilestone?.title ?? "Reopened Work";
+
+        if (pendingMilestone) {
+          await db.projectMilestone.update({
+            where: { id: pendingMilestone.id },
+            data: {
+              status: "IN_PROGRESS",
+              amount: finalAmount,
+            },
+          });
+        }
+
         await db.projectTracking.update({
           where: { id: project.id },
           data: {
             status: "IN_PROGRESS",
-            currentStage: "Reopened Work In Progress",
+            currentStage: finalTitle,
             progress: 0,
             completedAt: null,
           },
@@ -1101,24 +1203,22 @@ export async function POST(request: NextRequest) {
           where: { id: project.jobId },
           data: { status: "CLOSED" },
         });
-        if (pendingMilestone) {
-          await db.projectMilestone.update({
-            where: { id: pendingMilestone.id },
-            data: { status: "UPCOMING" },
-          });
-        }
+
         await event(
           "REOPEN_ACCEPTED",
           "Reopen request accepted",
-          `${session.role === "PROFESSIONAL" ? "Professional" : "Client"} accepted reopen terms. Work has officially resumed.`,
-          { progress: 0, stage: "Reopened Work In Progress" },
+          `${isProfessional ? "Professional" : "Client"} accepted reopen terms (Milestone: "${finalTitle}" · ₹${finalAmount.toLocaleString("en-IN")}). Work has officially resumed.`,
+          { progress: 0, stage: finalTitle },
         );
         const notifyTarget = isProfessional ? project.clientId : project.professionalId;
         await notifyUsers([notifyTarget], {
           type: "PROJECT_REOPENED",
           title: `${jobTitle} · Reopen Accepted! Work in Progress`,
-          description: `The reopen request was accepted. Deliverables and work are active.`,
+          description: `The reopen request was accepted (₹${finalAmount.toLocaleString("en-IN")}). Deliverables and work are active.`,
           href: `/project/${project.id}/tracking`,
+        });
+        emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
+          projectId: project.id,
         });
       } else if (input.decision === "REJECT") {
         await db.projectTracking.update({
@@ -1137,7 +1237,7 @@ export async function POST(request: NextRequest) {
         await event(
           "REOPEN_DECLINED",
           "Reopen request declined",
-          `${session.role === "PROFESSIONAL" ? "Professional" : "Client"} declined the reopen request.`,
+          `${isProfessional ? "Professional" : "Client"} declined the reopen request.`,
           { progress: 100, stage: "Completed" },
         );
         const notifyTarget = isProfessional ? project.clientId : project.professionalId;
@@ -1146,6 +1246,9 @@ export async function POST(request: NextRequest) {
           title: `${jobTitle} · Reopen Request Declined`,
           description: `The request to reopen was declined. You can discuss further or raise a dispute if needed.`,
           href: `/project/${project.id}/tracking`,
+        });
+        emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
+          projectId: project.id,
         });
       } else if (input.decision === "COUNTER") {
         if (input.counterAmount === undefined) {
@@ -1165,18 +1268,23 @@ export async function POST(request: NextRequest) {
               clientId: project.clientId,
               professionalId: project.professionalId,
               senderId: session.userId,
-              senderRole: session.role,
+              senderRole: isProfessional ? "PROFESSIONAL" : "CLIENT",
               bidAmount: input.counterAmount,
               duration: input.duration || "1-3 days",
               message: input.message || "Counter-offer proposed for reopened work.",
             },
           });
         }
+        const stageText = `Reopen Counter-Offer: ₹${input.counterAmount.toLocaleString("en-IN")}`;
+        await db.projectTracking.update({
+          where: { id: project.id },
+          data: { currentStage: stageText },
+        });
         await event(
           "REOPEN_COUNTERED",
           `Counter-offer: ₹${input.counterAmount.toLocaleString("en-IN")}`,
-          `${session.role === "PROFESSIONAL" ? "Professional" : "Client"} proposed: ₹${input.counterAmount.toLocaleString("en-IN")}${input.message ? ` · "${input.message}"` : ""}.`,
-          { stage: "Reopen Terms Under Negotiation" },
+          `${isProfessional ? "Professional" : "Client"} proposed: ₹${input.counterAmount.toLocaleString("en-IN")}${input.message ? ` · "${input.message}"` : ""}.`,
+          { stage: stageText },
         );
         const notifyTarget = isProfessional ? project.clientId : project.professionalId;
         await notifyUsers([notifyTarget], {
@@ -1184,6 +1292,9 @@ export async function POST(request: NextRequest) {
           title: `${jobTitle} · Counter-offer on Reopen Request`,
           description: `New terms proposed: ₹${input.counterAmount.toLocaleString("en-IN")}. Review in project tracking.`,
           href: `/project/${project.id}/tracking`,
+        });
+        emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
+          projectId: project.id,
         });
       }
     }

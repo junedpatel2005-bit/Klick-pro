@@ -5,6 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  Briefcase,
   CheckCircle2,
   Eye,
   EyeOff,
@@ -18,6 +19,7 @@ import {
   User,
   Zap,
 } from "lucide-react";
+import { FullPageLogoLoader } from "@/components/FullPageLogoLoader";
 
 export default function AdminLogin() {
   const router = useRouter();
@@ -58,7 +60,14 @@ export default function AdminLogin() {
   };
 
   return (
-    <main className="relative min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 lg:p-8 selection:bg-indigo-100 selection:text-indigo-900 overflow-hidden">
+    <>
+      <FullPageLogoLoader
+        active={pending}
+        title="Authenticating Console Access…"
+        subtitle="Establishing high-security enterprise administrator session…"
+        overlay
+      />
+      <main className="relative min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 lg:p-8 selection:bg-indigo-100 selection:text-indigo-900 overflow-hidden">
       {/* Subtle Background Glows (Zero black) */}
       <div className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-indigo-200/40 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-violet-200/40 blur-3xl" />
@@ -73,8 +82,12 @@ export default function AdminLogin() {
           <div className="relative z-10">
             {/* Top Brand Tag */}
             <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-inner">
-                <ShieldCheck className="h-6 w-6 text-white" />
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white p-1 border border-white/30 shadow-inner overflow-hidden">
+                <img
+                  src="/logo-icon.png"
+                  alt="Klick-Pro"
+                  className="h-full w-full object-contain"
+                />
               </div>
               <div>
                 <div className="flex items-center gap-2">
@@ -276,5 +289,6 @@ export default function AdminLogin() {
         </section>
       </div>
     </main>
+    </>
   );
 }
