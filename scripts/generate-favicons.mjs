@@ -8,7 +8,7 @@ async function makeFavicons() {
 
   const roundedCorners = (size, radius) =>
     Buffer.from(
-      `<svg><rect x="0" y="0" width="${size}" height="${size}" rx="${radius}" ry="${radius}" fill="#fff"/></svg>`
+      `<svg><rect x="0" y="0" width="${size}" height="${size}" rx="${radius}" ry="${radius}" fill="#fff"/></svg>`,
     );
 
   async function generateSize(size, radius) {
@@ -75,4 +75,3 @@ makeFavicons().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-

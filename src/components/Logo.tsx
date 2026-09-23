@@ -28,11 +28,7 @@ export function Logo({
       title="Klick-Pro"
     >
       <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-xl overflow-hidden bg-white shadow-soft border border-slate-200/80">
-        <img
-          src="/logo-icon.png"
-          alt="Klick-Pro"
-          className="h-full w-full object-contain p-0.5"
-        />
+        <img src="/logo-icon.png" alt="Klick-Pro" className="h-full w-full object-contain p-0.5" />
       </span>
       <span
         className={`whitespace-nowrap text-xl tracking-tight transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden ${

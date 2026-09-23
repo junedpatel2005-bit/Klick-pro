@@ -27,9 +27,11 @@ async function main() {
     const transactions = await db.projectTransaction.findMany({
       where: { trackingId: d.trackingId },
     });
-    console.log(`Tracking ${d.trackingId} projectTransactions:`, JSON.stringify(transactions, null, 2));
+    console.log(
+      `Tracking ${d.trackingId} projectTransactions:`,
+      JSON.stringify(transactions, null, 2),
+    );
   }
 }
 
 main().finally(() => db.$disconnect());
-

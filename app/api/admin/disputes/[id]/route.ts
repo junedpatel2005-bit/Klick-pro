@@ -61,7 +61,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     if (decision) {
       if (dispute.status === "RESOLVED")
-        return NextResponse.json({ error: "This dispute has already been resolved." }, { status: 409 });
+        return NextResponse.json(
+          { error: "This dispute has already been resolved." },
+          { status: 409 },
+        );
 
       // Find candidate milestone and payment associated with the project/dispute
       let targetMilestoneId = milestoneId ?? dispute.milestoneId;
@@ -267,7 +270,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
                 currency: "INR",
                 type: "DISPUTE_PAYOUT",
                 status: "COMPLETED",
-                description: `Dispute #${disputeId} resolved: Payment of ₹${finalPayout.toLocaleString("en-IN")} released to freelancer${milestone ? ` for milestone "${milestone.title}"` : ""}`,
+                description: `Dispute #${disputeId} resolved: Payment of ₹${finalPayout.toLocaleString("en-IN")} released to professional${milestone ? ` for milestone "${milestone.title}"` : ""}`,
               },
             });
           }
@@ -291,7 +294,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
               actorId: adminSession.userId,
               actorRole: "ADMIN",
               type: "DISPUTE_RESOLVED",
-              title: "Dispute decided · Freelancer Wins",
+              title: "Dispute decided · Professional Wins",
               description: `Admin decided case #${disputeId} in favor of professional. Payout released: ₹${finalPayout.toLocaleString("en-IN")}.${reason ? ` Note: ${reason}` : ""}`,
             },
           });
@@ -382,7 +385,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
                 currency: "INR",
                 type: "DISPUTE_PAYOUT",
                 status: "COMPLETED",
-                description: `Dispute #${disputeId} partial settlement: ₹${finalPayout.toLocaleString("en-IN")} released to freelancer${milestone ? ` for milestone "${milestone.title}"` : ""}`,
+                description: `Dispute #${disputeId} partial settlement: ₹${finalPayout.toLocaleString("en-IN")} released to professional${milestone ? ` for milestone "${milestone.title}"` : ""}`,
               },
             });
           }
@@ -407,7 +410,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
               actorRole: "ADMIN",
               type: "DISPUTE_RESOLVED",
               title: "Dispute decided · Partial Settlement",
-              description: `Admin settled case #${disputeId}: ₹${finalRefund.toLocaleString("en-IN")} refunded to client, ₹${finalPayout.toLocaleString("en-IN")} released to freelancer.${reason ? ` Note: ${reason}` : ""}`,
+              description: `Admin settled case #${disputeId}: ₹${finalRefund.toLocaleString("en-IN")} refunded to client, ₹${finalPayout.toLocaleString("en-IN")} released to professional.${reason ? ` Note: ${reason}` : ""}`,
             },
           });
 
@@ -479,87 +482,96 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const tracking = await db.projectTracking.findUnique({ where: { id: dispute.trackingId } });
 
-  const [client, professional, job, milestones, paid, payments, disputeCount, workUploads, clientWallet] =
-    await Promise.all([
-      db.user.findUnique({
-        where: { id: dispute.clientId },
-        select: { id: true, firstName: true, lastName: true, email: true },
-      }),
-      db.user.findUnique({
-        where: { id: dispute.professionalId },
-        select: { id: true, firstName: true, lastName: true, email: true },
-      }),
-      tracking
-        ? db.clientJob.findUnique({
-            where: { id: tracking.jobId },
-            select: { id: true, title: true },
-          })
-        : Promise.resolve(null),
-      tracking
-        ? db.projectMilestone.findMany({
-            where: { trackingId: tracking.id },
-            orderBy: { createdAt: "asc" },
-            select: {
-              id: true,
-              title: true,
-              amount: true,
-              status: true,
-              dueDate: true,
-              description: true,
-              submittedAt: true,
-              approvedAt: true,
-            },
-          })
-        : Promise.resolve([]),
-      tracking
-        ? db.projectTransaction.aggregate({
-            where: { trackingId: tracking.id, status: "COMPLETED" },
-            _sum: { amount: true },
-          })
-        : Promise.resolve({ _sum: { amount: null } }),
-      tracking
-        ? db.payment.findMany({
-            where: { projectTrackingId: tracking.id },
-            orderBy: { createdAt: "desc" },
-            select: {
-              id: true,
-              amount: true,
-              baseAmount: true,
-              professionalPayoutAmount: true,
-              status: true,
-              milestoneId: true,
-              provider: true,
-              capturedAt: true,
-              createdAt: true,
-            },
-          })
-        : Promise.resolve([]),
-      db.projectDispute.count({
-        where: { trackingId: dispute.trackingId },
-      }),
-      tracking
-        ? db.projectWorkUpload.findMany({
-            where: { trackingId: tracking.id },
-            orderBy: { createdAt: "desc" },
-            select: {
-              id: true,
-              milestoneId: true,
-              roundNumber: true,
-              title: true,
-              note: true,
-              fileName: true,
-              fileUrl: true,
-              filesJson: true,
-              createdAt: true,
-              status: true,
-            },
-          })
-        : Promise.resolve([]),
-      db.wallet.findUnique({
-        where: { userId: dispute.clientId },
-        select: { balance: true },
-      }),
-    ]);
+  const [
+    client,
+    professional,
+    job,
+    milestones,
+    paid,
+    payments,
+    disputeCount,
+    workUploads,
+    clientWallet,
+  ] = await Promise.all([
+    db.user.findUnique({
+      where: { id: dispute.clientId },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    }),
+    db.user.findUnique({
+      where: { id: dispute.professionalId },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    }),
+    tracking
+      ? db.clientJob.findUnique({
+          where: { id: tracking.jobId },
+          select: { id: true, title: true },
+        })
+      : Promise.resolve(null),
+    tracking
+      ? db.projectMilestone.findMany({
+          where: { trackingId: tracking.id },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            title: true,
+            amount: true,
+            status: true,
+            dueDate: true,
+            description: true,
+            submittedAt: true,
+            approvedAt: true,
+          },
+        })
+      : Promise.resolve([]),
+    tracking
+      ? db.projectTransaction.aggregate({
+          where: { trackingId: tracking.id, status: "COMPLETED" },
+          _sum: { amount: true },
+        })
+      : Promise.resolve({ _sum: { amount: null } }),
+    tracking
+      ? db.payment.findMany({
+          where: { projectTrackingId: tracking.id },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            amount: true,
+            baseAmount: true,
+            professionalPayoutAmount: true,
+            status: true,
+            milestoneId: true,
+            provider: true,
+            capturedAt: true,
+            createdAt: true,
+          },
+        })
+      : Promise.resolve([]),
+    db.projectDispute.count({
+      where: { trackingId: dispute.trackingId },
+    }),
+    tracking
+      ? db.projectWorkUpload.findMany({
+          where: { trackingId: tracking.id },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            milestoneId: true,
+            roundNumber: true,
+            title: true,
+            note: true,
+            fileName: true,
+            fileUrl: true,
+            filesJson: true,
+            createdAt: true,
+            status: true,
+          },
+        })
+      : Promise.resolve([]),
+    db.wallet.findUnique({
+      where: { userId: dispute.clientId },
+      select: { balance: true },
+    }),
+  ]);
 
   const approvedMilestones = milestones.filter((item) => item.status === "APPROVED");
   const completedMilestones = approvedMilestones.length;

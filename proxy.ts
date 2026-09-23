@@ -4,6 +4,10 @@ import { decodeSessionToken, sessionCookie } from "@/lib/session-token";
 function isTrustedStateChangingRequest(request: NextRequest) {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return true;
 
+  // External webhook callbacks (e.g. Razorpay, Persona) authenticate callers
+  // via cryptographic signatures on the payload (HMAC), not browser Origin headers.
+  if (request.nextUrl.pathname.startsWith("/api/webhooks/")) return true;
+
   const origin = request.headers.get("origin");
   if (!origin) return false;
 

@@ -24,10 +24,7 @@ async function getClient(request: NextRequest) {
   }
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const clientId = await getClient(request);
     if (!clientId) {
@@ -69,8 +66,7 @@ export async function POST(
       return NextResponse.json({ error: "Job not found." }, { status: 404 });
     }
 
-    const reasonLabel =
-      reason === "ISSUE" ? "Issue / Warranty Rework" : "Additional Work";
+    const reasonLabel = reason === "ISSUE" ? "Issue / Warranty Rework" : "Additional Work";
     const timestamp = new Date().toLocaleDateString("en-IN", {
       day: "numeric",
       month: "short",
@@ -157,4 +153,3 @@ export async function POST(
     );
   }
 }
-

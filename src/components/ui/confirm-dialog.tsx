@@ -23,6 +23,7 @@ export interface ConfirmDialogProps {
   variant?: "default" | "destructive";
   onConfirm: () => void | Promise<void>;
   loading?: boolean;
+  className?: string;
 }
 
 export function ConfirmDialog({
@@ -35,10 +36,11 @@ export function ConfirmDialog({
   variant = "default",
   onConfirm,
   loading = false,
+  className,
 }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className={className}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description && <AlertDialogDescription>{description}</AlertDialogDescription>}

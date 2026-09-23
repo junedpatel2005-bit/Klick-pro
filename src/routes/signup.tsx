@@ -145,166 +145,166 @@ function SignupContent() {
       />
       <AuthLayout
         title="Create your account"
-      subtitle="Join 50,000+ clients and pros on Klick-Pro."
-      hideAside
-      footer={
-        <>
-          Already have an account?{" "}
-          <Link href="/login" className="text-primary hover:underline">
-            Log in
-          </Link>
-        </>
-      }
-    >
-      <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-border/70 bg-muted/70 p-1">
-        {(["client", "pro"] as const).map((choice) => (
-          <button
-            key={choice}
-            type="button"
-            disabled={pending}
-            onClick={() => chooseRole(choice)}
-            className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition-all ${role === choice ? "bg-card text-foreground shadow-soft" : "text-muted-foreground"} ${pending ? "opacity-60 cursor-not-allowed" : ""}`}
-          >
-            I&apos;m a {choice === "client" ? "client" : "professional"}
-          </button>
-        ))}
-      </div>
-      <p className="mb-5 text-sm text-muted-foreground">
-        {role === "client"
-          ? "Create an account to post jobs and hire trusted professionals."
-          : "Create a professional account to showcase your services and find work."}
-      </p>
-      <Button
-        type="button"
-        variant="outline"
-        disabled={pending || googleLoading}
-        className="mb-5 h-11 w-full transition-transform hover:-translate-y-0.5"
-        onClick={() => {
-          setGoogleLoading(true);
-          window.location.href = `/api/v1/auth/google?role=${role === "pro" ? "PROFESSIONAL" : "CLIENT"}`;
-        }}
+        subtitle="Join 50,000+ clients and pros on Klick-Pro."
+        hideAside
+        footer={
+          <>
+            Already have an account?{" "}
+            <Link href="/login" className="text-primary hover:underline">
+              Log in
+            </Link>
+          </>
+        }
       >
-        {googleLoading ? (
-          <span className="inline-flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            Connecting to Google…
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-2">
-            <GoogleMark />
-            Continue with Google
-          </span>
-        )}
-      </Button>
-
-      <form onSubmit={handleSubmit} noValidate className="space-y-5">
-        <div className="grid grid-cols-2 gap-3">
-          <Field
-            id="first"
-            name="firstName"
-            label="First name"
-            placeholder="First name"
-            required
-            disabled={pending}
-            error={fieldErrors.firstName}
-            value={draft.firstName}
-            onValueChange={(value) => setDraft({ ...draft, firstName: value })}
-          />
-          <Field
-            id="last"
-            name="lastName"
-            label="Last name"
-            placeholder="Last name"
-            required
-            disabled={pending}
-            error={fieldErrors.lastName}
-            value={draft.lastName}
-            onValueChange={(value) => setDraft({ ...draft, lastName: value })}
-          />
+        <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-border/70 bg-muted/70 p-1">
+          {(["client", "pro"] as const).map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              disabled={pending}
+              onClick={() => chooseRole(choice)}
+              className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition-all ${role === choice ? "bg-card text-foreground shadow-soft" : "text-muted-foreground"} ${pending ? "opacity-60 cursor-not-allowed" : ""}`}
+            >
+              I&apos;m a {choice === "client" ? "client" : "professional"}
+            </button>
+          ))}
         </div>
-        <Field
-          id="email"
-          name="email"
-          label="Work email"
-          placeholder="you@company.com"
-          type="email"
-          required
-          disabled={pending}
-          error={fieldErrors.email}
-          value={draft.email}
-          onValueChange={(value) => {
-            setDraft({ ...draft, email: value });
-            setFieldErrors((current) => {
-              const next = { ...current };
-              delete next.email;
-              return next;
-            });
-          }}
-          onBlur={() => checkAvailability("email", draft.email)}
-        />
-        <Field
-          id="password"
-          name="password"
-          label="Password"
-          placeholder="At least 8 characters"
-          type={showPassword ? "text" : "password"}
-          required
-          disabled={pending}
-          error={fieldErrors.password}
-          value={draft.password}
-          onValueChange={(value) => setDraft({ ...draft, password: value })}
-          trailingAction={{
-            label: showPassword ? "Hide password" : "Show password",
-            onClick: () => setShowPassword((current) => !current),
-          }}
-        />
-        <Field
-          id="confirm-password"
-          name="confirmPassword"
-          label="Confirm password"
-          placeholder="Repeat your password"
-          type={showConfirmPassword ? "text" : "password"}
-          required
-          disabled={pending}
-          error={fieldErrors.confirmPassword}
-          value={draft.confirmPassword}
-          onValueChange={(value) => setDraft({ ...draft, confirmPassword: value })}
-          trailingAction={{
-            label: showConfirmPassword ? "Hide password" : "Show password",
-            onClick: () => setShowConfirmPassword((current) => !current),
-          }}
-        />
-        <label className="flex items-start gap-2 text-xs text-muted-foreground">
-          <input
-            name="terms"
-            type="checkbox"
-            required
-            disabled={pending}
-            checked={draft.terms}
-            onChange={(event) => setDraft({ ...draft, terms: event.target.checked })}
-            className="mt-0.5 h-4 w-4 accent-primary"
-          />
-          I agree to the Terms and Privacy Policy.
-        </label>
-        {fieldErrors.terms && <p className="text-sm text-destructive">{fieldErrors.terms}</p>}
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        <p className="mb-5 text-sm text-muted-foreground">
+          {role === "client"
+            ? "Create an account to post jobs and hire trusted professionals."
+            : "Create a professional account to showcase your services and find work."}
+        </p>
         <Button
-          type="submit"
-          className="h-11 w-full transition-all duration-200"
-          disabled={pending}
-          aria-busy={pending}
+          type="button"
+          variant="outline"
+          disabled={pending || googleLoading}
+          className="mb-5 h-11 w-full transition-transform hover:-translate-y-0.5"
+          onClick={() => {
+            setGoogleLoading(true);
+            window.location.href = `/api/v1/auth/google?role=${role === "pro" ? "PROFESSIONAL" : "CLIENT"}`;
+          }}
         >
-          {pending ? (
-            <span className="flex items-center justify-center gap-2 font-semibold">
-              <Loader2 className="h-4 w-4 animate-spin text-white" />
-              Creating account…
+          {googleLoading ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              Connecting to Google…
             </span>
           ) : (
-            "Create account"
+            <span className="inline-flex items-center gap-2">
+              <GoogleMark />
+              Continue with Google
+            </span>
           )}
         </Button>
-      </form>
-    </AuthLayout>
+
+        <form onSubmit={handleSubmit} noValidate className="space-y-5">
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              id="first"
+              name="firstName"
+              label="First name"
+              placeholder="First name"
+              required
+              disabled={pending}
+              error={fieldErrors.firstName}
+              value={draft.firstName}
+              onValueChange={(value) => setDraft({ ...draft, firstName: value })}
+            />
+            <Field
+              id="last"
+              name="lastName"
+              label="Last name"
+              placeholder="Last name"
+              required
+              disabled={pending}
+              error={fieldErrors.lastName}
+              value={draft.lastName}
+              onValueChange={(value) => setDraft({ ...draft, lastName: value })}
+            />
+          </div>
+          <Field
+            id="email"
+            name="email"
+            label="Work email"
+            placeholder="you@company.com"
+            type="email"
+            required
+            disabled={pending}
+            error={fieldErrors.email}
+            value={draft.email}
+            onValueChange={(value) => {
+              setDraft({ ...draft, email: value });
+              setFieldErrors((current) => {
+                const next = { ...current };
+                delete next.email;
+                return next;
+              });
+            }}
+            onBlur={() => checkAvailability("email", draft.email)}
+          />
+          <Field
+            id="password"
+            name="password"
+            label="Password"
+            placeholder="At least 8 characters"
+            type={showPassword ? "text" : "password"}
+            required
+            disabled={pending}
+            error={fieldErrors.password}
+            value={draft.password}
+            onValueChange={(value) => setDraft({ ...draft, password: value })}
+            trailingAction={{
+              label: showPassword ? "Hide password" : "Show password",
+              onClick: () => setShowPassword((current) => !current),
+            }}
+          />
+          <Field
+            id="confirm-password"
+            name="confirmPassword"
+            label="Confirm password"
+            placeholder="Repeat your password"
+            type={showConfirmPassword ? "text" : "password"}
+            required
+            disabled={pending}
+            error={fieldErrors.confirmPassword}
+            value={draft.confirmPassword}
+            onValueChange={(value) => setDraft({ ...draft, confirmPassword: value })}
+            trailingAction={{
+              label: showConfirmPassword ? "Hide password" : "Show password",
+              onClick: () => setShowConfirmPassword((current) => !current),
+            }}
+          />
+          <label className="flex items-start gap-2 text-xs text-muted-foreground">
+            <input
+              name="terms"
+              type="checkbox"
+              required
+              disabled={pending}
+              checked={draft.terms}
+              onChange={(event) => setDraft({ ...draft, terms: event.target.checked })}
+              className="mt-0.5 h-4 w-4 accent-primary"
+            />
+            I agree to the Terms and Privacy Policy.
+          </label>
+          {fieldErrors.terms && <p className="text-sm text-destructive">{fieldErrors.terms}</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <Button
+            type="submit"
+            className="h-11 w-full transition-all duration-200"
+            disabled={pending}
+            aria-busy={pending}
+          >
+            {pending ? (
+              <span className="flex items-center justify-center gap-2 font-semibold">
+                <Loader2 className="h-4 w-4 animate-spin text-white" />
+                Creating account…
+              </span>
+            ) : (
+              "Create account"
+            )}
+          </Button>
+        </form>
+      </AuthLayout>
     </>
   );
 }

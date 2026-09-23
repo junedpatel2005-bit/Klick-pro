@@ -572,7 +572,7 @@ export default function OperationsPage() {
         : current,
     );
     setMessage(
-      `Case #${details.dispute.id} decided: ${decision === "CLIENT_WINS" ? "Client Wins (Refunded)" : "Freelancer Wins (Released)"}.`,
+      `Case #${details.dispute.id} decided: ${decision === "CLIENT_WINS" ? "Client Wins (Refunded)" : "Professional Wins (Released)"}.`,
     );
   }
 
@@ -1622,35 +1622,36 @@ function DisputeDetailsPanel({
   const [sending, setSending] = useState(false);
   const [sendMessage, setSendMessage] = useState("");
 
-  const [selectedDecision, setSelectedDecision] = useState<
-    "CLIENT_WINS" | "PROFESSIONAL_WINS"
-  >("CLIENT_WINS");
+  const [selectedDecision, setSelectedDecision] = useState<"CLIENT_WINS" | "PROFESSIONAL_WINS">(
+    "CLIENT_WINS",
+  );
   const [decisionNotes, setDecisionNotes] = useState("");
   const [executingDecision, setExecutingDecision] = useState(false);
 
   // Target the specific disputed milestone instead of the entire contract budget
   const targetMilestone = details
-    ? (details.milestones.find((m) => m.id === details.dispute.milestoneId) ||
-       details.milestones.find(
-         (m) =>
-           m.status === "AWAITING_CLIENT_REVIEW" ||
-           m.status === "REVISION_REQUESTED" ||
-           m.status === "IN_PROGRESS",
-       ) ||
-       details.milestones[0] ||
-       null)
+    ? details.milestones.find((m) => m.id === details.dispute.milestoneId) ||
+      details.milestones.find(
+        (m) =>
+          m.status === "AWAITING_CLIENT_REVIEW" ||
+          m.status === "REVISION_REQUESTED" ||
+          m.status === "IN_PROGRESS",
+      ) ||
+      details.milestones[0] ||
+      null
     : null;
 
-  const targetPayment = targetMilestone && details?.payments
-    ? details.payments.find((p) => p.milestoneId === targetMilestone.id)
-    : null;
+  const targetPayment =
+    targetMilestone && details?.payments
+      ? details.payments.find((p) => p.milestoneId === targetMilestone.id)
+      : null;
 
   const isMilestoneFunded = targetPayment?.status === "FUNDED";
 
   // Specific disputed milestone amount (e.g. ₹1,300) rather than the whole project contract (₹41,250)
   const disputeAmount = targetMilestone
     ? targetMilestone.amount
-    : (details?.financial.inEscrow || details?.financial.unpaidApproved || 0);
+    : details?.financial.inEscrow || details?.financial.unpaidApproved || 0;
 
   const refundableAmount = isMilestoneFunded ? (targetPayment?.amount ?? disputeAmount) : 0;
 
@@ -1754,621 +1755,666 @@ function DisputeDetailsPanel({
             Dispute details could not be loaded. Please try again.
           </p>
         ) : null}
-        {details && dispute ? (() => {
-          const milestoneUploads =
-            details.workUploads?.filter(
-              (u) => targetMilestone && u.milestoneId === targetMilestone.id,
-            ) || (details.workUploads ?? []);
+        {details && dispute
+          ? (() => {
+              const milestoneUploads =
+                details.workUploads?.filter(
+                  (u) => targetMilestone && u.milestoneId === targetMilestone.id,
+                ) ||
+                (details.workUploads ?? []);
 
-          const milestonePayment = details.payments?.find(
-            (p) =>
-              (targetMilestone ? p.milestoneId === targetMilestone.id : false) &&
-              (p.status === "SUCCEEDED" || p.status === "RELEASED" || p.status === "COMPLETED"),
-          );
+              const milestonePayment = details.payments?.find(
+                (p) =>
+                  (targetMilestone ? p.milestoneId === targetMilestone.id : false) &&
+                  (p.status === "SUCCEEDED" || p.status === "RELEASED" || p.status === "COMPLETED"),
+              );
 
-          const isMilestonePaid = Boolean(
-            milestonePayment ||
-              (targetMilestone &&
-                (targetMilestone.status === "COMPLETED" || targetMilestone.status === "APPROVED")),
-          );
+              const isMilestonePaid = Boolean(
+                milestonePayment ||
+                (targetMilestone &&
+                  (targetMilestone.status === "COMPLETED" ||
+                    targetMilestone.status === "APPROVED")),
+              );
 
-          const hasWorkSubmitted =
-            milestoneUploads.length > 0 || Boolean(targetMilestone?.submittedAt);
+              const hasWorkSubmitted =
+                milestoneUploads.length > 0 || Boolean(targetMilestone?.submittedAt);
 
-          const combinedText = `${dispute.message || ""} ${
-            details.dispute.responseMessage || ""
-          }`.toLowerCase();
-          const mentionsPayment = /pay|paid|money|escrow|release|fund|salary|fee|amount|balance|cost/i.test(
-            combinedText,
-          );
-          const respondentRole = dispute.reporterRole === "CLIENT" ? "PROFESSIONAL" : "CLIENT";
+              const combinedText = `${dispute.message || ""} ${
+                details.dispute.responseMessage || ""
+              }`.toLowerCase();
+              const mentionsPayment =
+                /pay|paid|money|escrow|release|fund|salary|fee|amount|balance|cost/i.test(
+                  combinedText,
+                );
+              const respondentRole = dispute.reporterRole === "CLIENT" ? "PROFESSIONAL" : "CLIENT";
 
-          return (
-            <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-              <div className="space-y-6">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge value={dispute.status} />
-                  <Badge value={dispute.priority} />
-                  {dispute.disputeRound && (
-                    <span className="rounded-md bg-indigo-50 px-2.5 py-0.5 text-xs font-bold text-indigo-700 border border-indigo-200">
-                      Dispute Round {dispute.disputeRound} of 3
-                    </span>
-                  )}
-                  <span className="text-sm text-slate-500 font-medium">
-                    Case #{dispute.id} · Updated {date(dispute.updatedAt)}
-                  </span>
-                </div>
-
-                {/* RESOLVED OUTCOME CARD */}
-                {details.dispute.status === "RESOLVED" && (
-                  <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/60 p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                        <span className="font-bold text-sm text-emerald-900">
-                          Dispute Resolved · {label(details.dispute.decision || "RESOLVED")}
+              return (
+                <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+                  <div className="space-y-6">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge value={dispute.status} />
+                      <Badge value={dispute.priority} />
+                      {dispute.disputeRound && (
+                        <span className="rounded-md bg-indigo-50 px-2.5 py-0.5 text-xs font-bold text-indigo-700 border border-indigo-200">
+                          Dispute Round {dispute.disputeRound} of 3
                         </span>
-                      </div>
-                      <div className="text-xs font-bold text-emerald-800">
-                        {details.dispute.refundAmount
-                          ? `Client Refund: ₹${details.dispute.refundAmount.toLocaleString()} `
-                          : ""}
-                        {details.dispute.payoutAmount
-                          ? `Freelancer Payout: ₹${details.dispute.payoutAmount.toLocaleString()}`
-                          : ""}
-                      </div>
+                      )}
+                      <span className="text-sm text-slate-500 font-medium">
+                        Case #{dispute.id} · Updated {date(dispute.updatedAt)}
+                      </span>
                     </div>
-                    {details.dispute.decisionReason && (
-                      <p className="text-xs text-slate-700 bg-white p-3 rounded-xl border border-emerald-200">
-                        &ldquo;{details.dispute.decisionReason}&rdquo;
-                      </p>
-                    )}
-                  </div>
-                )}
 
-                {/* 1. PARTICIPANT STATEMENTS & CLAIMS (SHOW BOTH FIRST) */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4 text-indigo-600" />
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                      1. Participant Statements & Dispute Claims
-                    </h3>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {/* Complainant Initial Claim */}
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 flex flex-col justify-between">
-                      <div>
-                        <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200">
-                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                            <CircleAlert className="h-4 w-4 text-rose-500" />
-                            Complainant ({label(dispute.reporterRole)})
-                          </span>
-                          <span className="text-[11px] text-slate-500 font-medium">
-                            {date(dispute.createdAt)}
-                          </span>
-                        </div>
-                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800 bg-white p-3 rounded-xl border border-slate-200">
-                          {dispute.message}
-                        </p>
-                      </div>
-
-                      {details.dispute.evidence && details.dispute.evidence.length > 0 ? (
-                        <div className="mt-3 pt-3 border-t border-slate-200/80">
-                          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                            Complainant Evidence ({details.dispute.evidence.length} files)
-                          </p>
-                          <div className="space-y-1.5">
-                            {details.dispute.evidence.map((file, i) => (
-                              <a
-                                key={i}
-                                href={file.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 hover:bg-slate-50 transition text-xs font-semibold text-indigo-700"
-                              >
-                                <Paperclip className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                <span className="truncate">{file.name}</span>
-                              </a>
-                            ))}
+                    {/* RESOLVED OUTCOME CARD */}
+                    {details.dispute.status === "RESOLVED" && (
+                      <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/60 p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                            <span className="font-bold text-sm text-emerald-900">
+                              Dispute Resolved · {label(details.dispute.decision || "RESOLVED")}
+                            </span>
+                          </div>
+                          <div className="text-xs font-bold text-emerald-800">
+                            {details.dispute.refundAmount
+                              ? `Client Refund: ₹${details.dispute.refundAmount.toLocaleString()} `
+                              : ""}
+                            {details.dispute.payoutAmount
+                              ? `Professional Payout: ₹${details.dispute.payoutAmount.toLocaleString()}`
+                              : ""}
                           </div>
                         </div>
-                      ) : (
-                        <p className="mt-3 text-[11px] text-slate-400 italic">No files attached by complainant.</p>
-                      )}
-                    </div>
+                        {details.dispute.decisionReason && (
+                          <p className="text-xs text-slate-700 bg-white p-3 rounded-xl border border-emerald-200">
+                            &ldquo;{details.dispute.decisionReason}&rdquo;
+                          </p>
+                        )}
+                      </div>
+                    )}
 
-                    {/* Respondent Counter-Explanation */}
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 flex flex-col justify-between">
-                      <div>
-                        <div className="flex items-center justify-between gap-2 pb-2 border-b border-amber-200">
-                          <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                            <ShieldAlert className="h-4 w-4 text-amber-600" />
-                            Respondent ({label(respondentRole)})
-                          </span>
-                          {details.dispute.respondedAt ? (
-                            <span className="text-[11px] text-amber-700 font-medium">
-                              {date(details.dispute.respondedAt)}
-                            </span>
+                    {/* 1. PARTICIPANT STATEMENTS & CLAIMS (SHOW BOTH FIRST) */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4 text-indigo-600" />
+                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
+                          1. Participant Statements & Dispute Claims
+                        </h3>
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {/* Complainant Initial Claim */}
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200">
+                              <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                                <CircleAlert className="h-4 w-4 text-rose-500" />
+                                Complainant ({label(dispute.reporterRole)})
+                              </span>
+                              <span className="text-[11px] text-slate-500 font-medium">
+                                {date(dispute.createdAt)}
+                              </span>
+                            </div>
+                            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800 bg-white p-3 rounded-xl border border-slate-200">
+                              {dispute.message}
+                            </p>
+                          </div>
+
+                          {details.dispute.evidence && details.dispute.evidence.length > 0 ? (
+                            <div className="mt-3 pt-3 border-t border-slate-200/80">
+                              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                                Complainant Evidence ({details.dispute.evidence.length} files)
+                              </p>
+                              <div className="space-y-1.5">
+                                {details.dispute.evidence.map((file, i) => (
+                                  <a
+                                    key={i}
+                                    href={file.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 hover:bg-slate-50 transition text-xs font-semibold text-indigo-700"
+                                  >
+                                    <Paperclip className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                    <span className="truncate">{file.name}</span>
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
                           ) : (
-                            <span className="text-[11px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-md">
-                              Pending Response
-                            </span>
+                            <p className="mt-3 text-[11px] text-slate-400 italic">
+                              No files attached by complainant.
+                            </p>
                           )}
                         </div>
 
-                        {details.dispute.responseMessage ? (
-                          <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800 bg-white p-3 rounded-xl border border-amber-200">
-                            {details.dispute.responseMessage}
-                          </p>
-                        ) : (
-                          <div className="mt-3 rounded-xl border border-dashed border-amber-300 bg-white/60 p-4 text-center">
-                            <p className="text-xs text-amber-800 font-medium">
-                              Respondent has not submitted a counter-explanation yet.
-                            </p>
-                            <p className="text-[11px] text-slate-500 mt-1">
-                              Admin can proceed with ruling based on verified database records.
-                            </p>
+                        {/* Respondent Counter-Explanation */}
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between gap-2 pb-2 border-b border-amber-200">
+                              <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                                <ShieldAlert className="h-4 w-4 text-amber-600" />
+                                Respondent ({label(respondentRole)})
+                              </span>
+                              {details.dispute.respondedAt ? (
+                                <span className="text-[11px] text-amber-700 font-medium">
+                                  {date(details.dispute.respondedAt)}
+                                </span>
+                              ) : (
+                                <span className="text-[11px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-md">
+                                  Pending Response
+                                </span>
+                              )}
+                            </div>
+
+                            {details.dispute.responseMessage ? (
+                              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800 bg-white p-3 rounded-xl border border-amber-200">
+                                {details.dispute.responseMessage}
+                              </p>
+                            ) : (
+                              <div className="mt-3 rounded-xl border border-dashed border-amber-300 bg-white/60 p-4 text-center">
+                                <p className="text-xs text-amber-800 font-medium">
+                                  Respondent has not submitted a counter-explanation yet.
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-1">
+                                  Admin can proceed with ruling based on verified database records.
+                                </p>
+                              </div>
+                            )}
                           </div>
-                        )}
+
+                          {details.dispute.responseEvidence &&
+                            details.dispute.responseEvidence.length > 0 && (
+                              <div className="mt-3 pt-3 border-t border-amber-200/80">
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 mb-1.5">
+                                  Counter-Evidence ({details.dispute.responseEvidence.length} files)
+                                </p>
+                                <div className="space-y-1.5">
+                                  {details.dispute.responseEvidence.map((file, i) => (
+                                    <a
+                                      key={i}
+                                      href={file.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2 rounded-lg border border-amber-200 bg-white p-2 hover:bg-amber-50 transition text-xs font-semibold text-amber-900"
+                                    >
+                                      <Paperclip className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                                      <span className="truncate">{file.name}</span>
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. DATABASE GROUND TRUTH & "WHAT'S THE MATTER" VERIFICATION */}
+                    <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50/30 p-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Database className="h-5 w-5 text-indigo-600" />
+                          <h3 className="text-sm font-bold text-indigo-950">
+                            2. Database Ground Truth & Verified System Records
+                          </h3>
+                        </div>
+                        <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-800">
+                          Live System Records
+                        </span>
                       </div>
 
-                      {details.dispute.responseEvidence && details.dispute.responseEvidence.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-amber-200/80">
-                          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 mb-1.5">
-                            Counter-Evidence ({details.dispute.responseEvidence.length} files)
+                      {/* Smart "What's the Matter" Finding */}
+                      <div className="rounded-xl border border-indigo-200 bg-white p-4 space-y-2.5">
+                        <p className="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <Sparkles className="h-4 w-4 text-indigo-600" />
+                          What&apos;s the Matter · Automated DB Analysis
+                        </p>
+                        <div className="space-y-1.5 text-xs text-slate-700 leading-relaxed">
+                          {mentionsPayment ? (
+                            isMilestonePaid ? (
+                              <div className="flex items-start gap-2 text-emerald-800 font-semibold bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                                <span>
+                                  Payment Verified in DB: Milestone &quot;
+                                  {targetMilestone?.title ?? "Target"}&quot; is recorded as PAID (₹
+                                  {(
+                                    targetMilestone?.amount ?? details.financial.paidAmount
+                                  ).toLocaleString()}
+                                  ). Funds have already been paid out/completed.
+                                </span>
+                              </div>
+                            ) : isMilestoneFunded ? (
+                              <div className="flex items-start gap-2 text-indigo-900 font-semibold bg-indigo-50 p-2.5 rounded-lg border border-indigo-200">
+                                <Wallet className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+                                <span>
+                                  Payment in Escrow: ₹
+                                  {(targetPayment?.amount ?? disputeAmount).toLocaleString()} is
+                                  currently SECURED in platform escrow for this milestone, but has
+                                  NOT been released to the professional.
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-start gap-2 text-rose-900 font-semibold bg-rose-50 p-2.5 rounded-lg border border-rose-200">
+                                <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                                <span>
+                                  Payment Verification: Milestone is UNPAID in database (₹0 paid or
+                                  in escrow). Client wallet balance is ₹
+                                  {(details.clientWalletBalance ?? 0).toLocaleString()}.
+                                </span>
+                              </div>
+                            )
+                          ) : null}
+
+                          {hasWorkSubmitted ? (
+                            <div className="flex items-start gap-2 text-blue-900 bg-blue-50 p-2.5 rounded-lg border border-blue-200">
+                              <FileCheck className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                              <span>
+                                Deliverables Verified: Professional submitted{" "}
+                                {milestoneUploads.length} work deliverable upload(s) in system
+                                {targetMilestone?.submittedAt
+                                  ? ` on ${date(targetMilestone.submittedAt)}`
+                                  : ""}
+                                .
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-start gap-2 text-slate-700 bg-slate-100 p-2.5 rounded-lg border border-slate-200">
+                              <Clock3 className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
+                              <span>
+                                Deliverables Status: No work uploads or deliverable files are
+                                recorded in the database for this milestone.
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Ground Truth Metric Cards */}
+                      <div className="grid gap-3 sm:grid-cols-3 text-xs">
+                        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1">
+                          <p className="text-[11px] font-bold uppercase text-slate-500">
+                            Disputed Milestone
                           </p>
-                          <div className="space-y-1.5">
-                            {details.dispute.responseEvidence.map((file, i) => (
-                              <a
-                                key={i}
-                                href={file.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 rounded-lg border border-amber-200 bg-white p-2 hover:bg-amber-50 transition text-xs font-semibold text-amber-900"
+                          <p className="font-bold text-slate-900 text-sm truncate">
+                            {targetMilestone?.title ?? "General Contract"}
+                          </p>
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="font-semibold text-indigo-700">
+                              ₹{(targetMilestone?.amount ?? 0).toLocaleString()}
+                            </span>
+                            <Badge value={targetMilestone?.status ?? "N/A"} />
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1">
+                          <p className="text-[11px] font-bold uppercase text-slate-500">
+                            Milestone Payment Status
+                          </p>
+                          <div className="pt-0.5">
+                            {isMilestonePaid ? (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                PAID IN DB
+                              </span>
+                            ) : isMilestoneFunded ? (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-2 py-0.5 font-bold text-indigo-800">
+                                <Wallet className="h-3.5 w-3.5 text-indigo-600" />
+                                HELD IN ESCROW
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-2 py-0.5 font-bold text-rose-800">
+                                <CircleAlert className="h-3.5 w-3.5 text-rose-600" />
+                                UNPAID / NOT IN ESCROW
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 pt-1">
+                            {isMilestonePaid
+                              ? `Milestone settled and completed`
+                              : isMilestoneFunded
+                                ? `Secured in platform escrow`
+                                : `Client has not funded this milestone`}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1">
+                          <p className="text-[11px] font-bold uppercase text-slate-500">
+                            Work Delivery Record
+                          </p>
+                          <div className="pt-0.5">
+                            {hasWorkSubmitted ? (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2 py-0.5 font-bold text-blue-800">
+                                <FileCheck className="h-3.5 w-3.5 text-blue-600" />
+                                {milestoneUploads.length} UPLOAD(S) RECORDED
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 font-bold text-slate-700">
+                                NO SUBMISSION IN DB
+                              </span>
+                            )}
+                          </div>
+                          {milestoneUploads[0]?.fileName && (
+                            <p className="text-[11px] text-indigo-600 truncate pt-1">
+                              File: {milestoneUploads[0].fileName}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Uploaded files list if present */}
+                      {milestoneUploads.length > 0 && (
+                        <div className="pt-1">
+                          <p className="text-[11px] font-bold uppercase text-slate-600 mb-1.5">
+                            Database Deliverables & Files on Record:
+                          </p>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {milestoneUploads.map((u) => (
+                              <div
+                                key={u.id}
+                                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 text-xs"
                               >
-                                <Paperclip className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                                <span className="truncate">{file.name}</span>
-                              </a>
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-slate-800 truncate">
+                                    {u.title || u.fileName || "Uploaded Work"}
+                                  </p>
+                                  <p className="text-[10px] text-slate-500">
+                                    Round {u.roundNumber} · {date(u.createdAt)}
+                                  </p>
+                                </div>
+                                {u.fileUrl && (
+                                  <a
+                                    href={u.fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="shrink-0 rounded-md bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100"
+                                  >
+                                    View File
+                                  </a>
+                                )}
+                              </div>
                             ))}
                           </div>
                         </div>
                       )}
                     </div>
-                  </div>
-                </div>
 
-                {/* 2. DATABASE GROUND TRUTH & "WHAT'S THE MATTER" VERIFICATION */}
-                <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50/30 p-5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Database className="h-5 w-5 text-indigo-600" />
-                      <h3 className="text-sm font-bold text-indigo-950">
-                        2. Database Ground Truth & Verified System Records
-                      </h3>
-                    </div>
-                    <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-800">
-                      Live System Records
-                    </span>
-                  </div>
-
-                  {/* Smart "What's the Matter" Finding */}
-                  <div className="rounded-xl border border-indigo-200 bg-white p-4 space-y-2.5">
-                    <p className="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <Sparkles className="h-4 w-4 text-indigo-600" />
-                      What&apos;s the Matter · Automated DB Analysis
-                    </p>
-                    <div className="space-y-1.5 text-xs text-slate-700 leading-relaxed">
-                      {mentionsPayment ? (
-                        isMilestonePaid ? (
-                          <div className="flex items-start gap-2 text-emerald-800 font-semibold bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                            <span>
-                              Payment Verified in DB: Milestone &quot;{targetMilestone?.title ?? "Target"}&quot; is recorded as PAID (₹{(targetMilestone?.amount ?? details.financial.paidAmount).toLocaleString()}). Funds have already been paid out/completed.
-                            </span>
-                          </div>
-                        ) : isMilestoneFunded ? (
-                          <div className="flex items-start gap-2 text-indigo-900 font-semibold bg-indigo-50 p-2.5 rounded-lg border border-indigo-200">
-                            <Wallet className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
-                            <span>
-                              Payment in Escrow: ₹{(targetPayment?.amount ?? disputeAmount).toLocaleString()} is currently SECURED in platform escrow for this milestone, but has NOT been released to the professional.
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex items-start gap-2 text-rose-900 font-semibold bg-rose-50 p-2.5 rounded-lg border border-rose-200">
-                            <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
-                            <span>
-                              Payment Verification: Milestone is UNPAID in database (₹0 paid or in escrow). Client wallet balance is ₹{(details.clientWalletBalance ?? 0).toLocaleString()}.
-                            </span>
-                          </div>
-                        )
-                      ) : null}
-
-                      {hasWorkSubmitted ? (
-                        <div className="flex items-start gap-2 text-blue-900 bg-blue-50 p-2.5 rounded-lg border border-blue-200">
-                          <FileCheck className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-                          <span>
-                            Deliverables Verified: Professional submitted {milestoneUploads.length} work deliverable upload(s) in system{targetMilestone?.submittedAt ? ` on ${date(targetMilestone.submittedAt)}` : ""}.
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-start gap-2 text-slate-700 bg-slate-100 p-2.5 rounded-lg border border-slate-200">
-                          <Clock3 className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
-                          <span>
-                            Deliverables Status: No work uploads or deliverable files are recorded in the database for this milestone.
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Ground Truth Metric Cards */}
-                  <div className="grid gap-3 sm:grid-cols-3 text-xs">
-                    <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1">
-                      <p className="text-[11px] font-bold uppercase text-slate-500">Disputed Milestone</p>
-                      <p className="font-bold text-slate-900 text-sm truncate">
-                        {targetMilestone?.title ?? "General Contract"}
-                      </p>
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="font-semibold text-indigo-700">
-                          ₹{(targetMilestone?.amount ?? 0).toLocaleString()}
+                    {/* 3. PROJECT DETAILS & MILESTONES */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
+                          3. Project Milestones & Contract Breakdown
+                        </h3>
+                        <span className="text-xs font-semibold text-slate-600">
+                          {details.milestoneSummary.completed} of {details.milestoneSummary.total}{" "}
+                          completed
                         </span>
-                        <Badge value={targetMilestone?.status ?? "N/A"} />
+                      </div>
+                      <div className="space-y-2">
+                        {details.milestones.length ? (
+                          details.milestones.map((milestone) => (
+                            <div
+                              key={milestone.id}
+                              className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+                                milestone.id === details.dispute.milestoneId
+                                  ? "border-indigo-400 bg-indigo-50/40 ring-1 ring-indigo-300"
+                                  : "border-slate-200 bg-slate-50/60"
+                              }`}
+                            >
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-semibold text-slate-900">{milestone.title}</p>
+                                  {milestone.id === details.dispute.milestoneId && (
+                                    <span className="rounded-md bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">
+                                      In Dispute
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                  {milestone.dueDate
+                                    ? `Due ${date(milestone.dueDate)}`
+                                    : "No due date"}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <Badge value={milestone.status} />
+                                <p className="mt-1 text-sm font-bold text-slate-900">
+                                  ₹{milestone.amount.toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-slate-500 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            No milestones were created yet.
+                          </p>
+                        )}
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1">
-                      <p className="text-[11px] font-bold uppercase text-slate-500">Milestone Payment Status</p>
-                      <div className="pt-0.5">
-                        {isMilestonePaid ? (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                            PAID IN DB
+                    {/* 4. ADJUDICATION DECISION SUITE */}
+                    {details.dispute.status !== "RESOLVED" && (
+                      <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50/50 p-5 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
+                            <Gavel className="h-5 w-5 text-indigo-600" />
+                            4. Admin Adjudication & Decision Suite
+                          </div>
+                          <span className="text-xs font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-lg">
+                            {isMilestoneFunded
+                              ? `Held in Escrow: ₹${disputeAmount.toLocaleString()}`
+                              : targetMilestone
+                                ? `Disputed Milestone: ₹${disputeAmount.toLocaleString()}`
+                                : `Dispute Amount: ₹${disputeAmount.toLocaleString()}`}
                           </span>
-                        ) : isMilestoneFunded ? (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-2 py-0.5 font-bold text-indigo-800">
-                            <Wallet className="h-3.5 w-3.5 text-indigo-600" />
-                            HELD IN ESCROW
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-2 py-0.5 font-bold text-rose-800">
-                            <CircleAlert className="h-3.5 w-3.5 text-rose-600" />
-                            UNPAID / NOT IN ESCROW
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-500 pt-1">
-                        {isMilestonePaid
-                          ? `Milestone settled and completed`
-                          : isMilestoneFunded
-                            ? `Secured in platform escrow`
-                            : `Client has not funded this milestone`}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1">
-                      <p className="text-[11px] font-bold uppercase text-slate-500">Work Delivery Record</p>
-                      <div className="pt-0.5">
-                        {hasWorkSubmitted ? (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2 py-0.5 font-bold text-blue-800">
-                            <FileCheck className="h-3.5 w-3.5 text-blue-600" />
-                            {milestoneUploads.length} UPLOAD(S) RECORDED
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 font-bold text-slate-700">
-                            NO SUBMISSION IN DB
-                          </span>
-                        )}
-                      </div>
-                      {milestoneUploads[0]?.fileName && (
-                        <p className="text-[11px] text-indigo-600 truncate pt-1">
-                          File: {milestoneUploads[0].fileName}
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Select a binding ruling for{" "}
+                          {targetMilestone
+                            ? `milestone "${targetMilestone.title}" (₹${disputeAmount.toLocaleString()})`
+                            : `₹${disputeAmount.toLocaleString()}`}
+                          . Submitting will execute automated wallet transactions and update
+                          milestone status.
                         </p>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Uploaded files list if present */}
-                  {milestoneUploads.length > 0 && (
-                    <div className="pt-1">
-                      <p className="text-[11px] font-bold uppercase text-slate-600 mb-1.5">
-                        Database Deliverables & Files on Record:
-                      </p>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {milestoneUploads.map((u) => (
-                          <div
-                            key={u.id}
-                            className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 text-xs"
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDecision("CLIENT_WINS")}
+                            className={`p-3.5 rounded-xl border text-left transition ${
+                              selectedDecision === "CLIENT_WINS"
+                                ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500 text-emerald-900"
+                                : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
+                            }`}
                           >
-                            <div className="min-w-0">
-                              <p className="font-semibold text-slate-800 truncate">{u.title || u.fileName || "Uploaded Work"}</p>
-                              <p className="text-[10px] text-slate-500">
-                                Round {u.roundNumber} · {date(u.createdAt)}
+                            <p className="font-bold text-xs flex items-center gap-1.5">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                              Client Wins
+                            </p>
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              {isMilestoneFunded
+                                ? `Full refund of ₹${disputeAmount.toLocaleString()} to client wallet & cancel milestone.`
+                                : `Cancel disputed milestone in client favor (₹0 refund as milestone was unpaid).`}
+                            </p>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDecision("PROFESSIONAL_WINS")}
+                            className={`p-3.5 rounded-xl border text-left transition ${
+                              selectedDecision === "PROFESSIONAL_WINS"
+                                ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500 text-blue-900"
+                                : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
+                            }`}
+                          >
+                            <p className="font-bold text-xs flex items-center gap-1.5">
+                              <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                              Professional Wins
+                            </p>
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              Release payout of ₹{disputeAmount.toLocaleString()} to professional &
+                              approve milestone.
+                            </p>
+                          </button>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-semibold text-slate-800 block mb-1">
+                            Ruling Justification / Resolution Notes *
+                          </label>
+                          <textarea
+                            value={decisionNotes}
+                            onChange={(e) => setDecisionNotes(e.target.value)}
+                            placeholder="Detail the rationale for this ruling..."
+                            className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs focus:ring-2 focus:ring-indigo-200 outline-none"
+                            rows={2}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-end pt-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleExecuteDecision}
+                            disabled={executingDecision || !decisionNotes.trim()}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs"
+                          >
+                            <Gavel className="mr-1.5 h-3.5 w-3.5" />
+                            {executingDecision ? "Executing Ruling..." : "Execute Binding Ruling"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 5. CONTACT PARTICIPANTS */}
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                      <h3 className="text-sm font-semibold text-slate-900">Contact participants</h3>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Send a message directly to the selected participant. They will receive a
+                        notification.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={recipient === "CLIENT" ? "default" : "outline"}
+                          onClick={() => setRecipient("CLIENT")}
+                          className={
+                            recipient === "CLIENT"
+                              ? "bg-indigo-600 text-white"
+                              : "border-slate-200 bg-white text-slate-700"
+                          }
+                        >
+                          Message client
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={recipient === "PROFESSIONAL" ? "default" : "outline"}
+                          onClick={() => setRecipient("PROFESSIONAL")}
+                          className={
+                            recipient === "PROFESSIONAL"
+                              ? "bg-indigo-600 text-white"
+                              : "border-slate-200 bg-white text-slate-700"
+                          }
+                        >
+                          Message professional
+                        </Button>
+                      </div>
+                      <textarea
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        placeholder={`Write a message to the ${recipient.toLowerCase()}...`}
+                        className="mt-3 min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 shadow-2xs"
+                        maxLength={4000}
+                      />
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs text-slate-500">{draft.length}/4000</p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={sendAdminMessage}
+                          disabled={sending || !draft.trim()}
+                          className="bg-indigo-600 text-white hover:bg-indigo-500 shadow-2xs disabled:opacity-50"
+                        >
+                          {sending
+                            ? "Sending..."
+                            : `Send to ${recipient === "CLIENT" ? "client" : "professional"}`}
+                        </Button>
+                      </div>
+                      {sendMessage ? (
+                        <p className="mt-2 text-xs font-semibold text-emerald-700">{sendMessage}</p>
+                      ) : null}
+                      {details.messages.length ? (
+                        <div className="mt-4 space-y-2 border-t border-slate-200 pt-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Message history
+                          </p>
+                          {details.messages.map((item) => (
+                            <div
+                              key={item.id}
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-2xs"
+                            >
+                              <p className="text-[11px] font-bold uppercase text-indigo-700">
+                                {label(item.senderRole)}
+                              </p>
+                              <p className="mt-1 whitespace-pre-wrap">{item.message}</p>
+                              <p className="mt-1 text-[11px] text-slate-400">
+                                {date(item.createdAt)}
                               </p>
                             </div>
-                            {u.fileUrl && (
-                              <a
-                                href={u.fileUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="shrink-0 rounded-md bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100"
-                              >
-                                View File
-                              </a>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* 3. PROJECT DETAILS & MILESTONES */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                      3. Project Milestones & Contract Breakdown
-                    </h3>
-                    <span className="text-xs font-semibold text-slate-600">
-                      {details.milestoneSummary.completed} of {details.milestoneSummary.total} completed
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    {details.milestones.length ? (
-                      details.milestones.map((milestone) => (
-                        <div
-                          key={milestone.id}
-                          className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
-                            milestone.id === details.dispute.milestoneId
-                              ? "border-indigo-400 bg-indigo-50/40 ring-1 ring-indigo-300"
-                              : "border-slate-200 bg-slate-50/60"
-                          }`}
-                        >
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="font-semibold text-slate-900">{milestone.title}</p>
-                              {milestone.id === details.dispute.milestoneId && (
-                                <span className="rounded-md bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">
-                                  In Dispute
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-slate-500">
-                              {milestone.dueDate ? `Due ${date(milestone.dueDate)}` : "No due date"}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <Badge value={milestone.status} />
-                            <p className="mt-1 text-sm font-bold text-slate-900">
-                              ₹{milestone.amount.toLocaleString()}
-                            </p>
-                          </div>
+                          ))}
                         </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                        No milestones were created yet.
-                      </p>
-                    )}
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-
-                {/* 4. ADJUDICATION DECISION SUITE */}
-                {details.dispute.status !== "RESOLVED" && (
-                  <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50/50 p-5 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
-                        <Gavel className="h-5 w-5 text-indigo-600" />
-                        4. Admin Adjudication & Decision Suite
-                      </div>
-                      <span className="text-xs font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-lg">
-                        {isMilestoneFunded
-                          ? `Held in Escrow: ₹${disputeAmount.toLocaleString()}`
-                          : targetMilestone
-                            ? `Disputed Milestone: ₹${disputeAmount.toLocaleString()}`
-                            : `Dispute Amount: ₹${disputeAmount.toLocaleString()}`}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Select a binding ruling for {targetMilestone ? `milestone "${targetMilestone.title}" (₹${disputeAmount.toLocaleString()})` : `₹${disputeAmount.toLocaleString()}`}. Submitting will execute automated wallet transactions and update milestone status.
-                    </p>
-
-                    <div className="grid sm:grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedDecision("CLIENT_WINS")}
-                        className={`p-3.5 rounded-xl border text-left transition ${
-                          selectedDecision === "CLIENT_WINS"
-                            ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500 text-emerald-900"
-                            : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
-                        }`}
-                      >
-                        <p className="font-bold text-xs flex items-center gap-1.5">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                          Client Wins
-                        </p>
-                        <p className="text-[11px] text-slate-500 mt-1">
-                          {isMilestoneFunded
-                            ? `Full refund of ₹${disputeAmount.toLocaleString()} to client wallet & cancel milestone.`
-                            : `Cancel disputed milestone in client favor (₹0 refund as milestone was unpaid).`}
-                        </p>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSelectedDecision("PROFESSIONAL_WINS")}
-                        className={`p-3.5 rounded-xl border text-left transition ${
-                          selectedDecision === "PROFESSIONAL_WINS"
-                            ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500 text-blue-900"
-                            : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
-                        }`}
-                      >
-                        <p className="font-bold text-xs flex items-center gap-1.5">
-                          <CheckCircle2 className="h-4 w-4 text-blue-600" />
-                          Freelancer Wins
-                        </p>
-                        <p className="text-[11px] text-slate-500 mt-1">
-                          Release payout of ₹{disputeAmount.toLocaleString()} to freelancer & approve milestone.
-                        </p>
-                      </button>
-                    </div>
-
+                  <aside className="h-fit space-y-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
                     <div>
-                      <label className="text-xs font-semibold text-slate-800 block mb-1">
-                        Ruling Justification / Resolution Notes *
-                      </label>
-                      <textarea
-                        value={decisionNotes}
-                        onChange={(e) => setDecisionNotes(e.target.value)}
-                        placeholder="Detail the rationale for this ruling..."
-                        className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs focus:ring-2 focus:ring-indigo-200 outline-none"
-                        rows={2}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-end pt-1">
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={handleExecuteDecision}
-                        disabled={executingDecision || !decisionNotes.trim()}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs"
-                      >
-                        <Gavel className="mr-1.5 h-3.5 w-3.5" />
-                        {executingDecision ? "Executing Ruling..." : "Execute Binding Ruling"}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* 5. CONTACT PARTICIPANTS */}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-                  <h3 className="text-sm font-semibold text-slate-900">Contact participants</h3>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Send a message directly to the selected participant. They will receive a
-                    notification.
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={recipient === "CLIENT" ? "default" : "outline"}
-                      onClick={() => setRecipient("CLIENT")}
-                      className={
-                        recipient === "CLIENT"
-                          ? "bg-indigo-600 text-white"
-                          : "border-slate-200 bg-white text-slate-700"
-                      }
-                    >
-                      Message client
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={recipient === "PROFESSIONAL" ? "default" : "outline"}
-                      onClick={() => setRecipient("PROFESSIONAL")}
-                      className={
-                        recipient === "PROFESSIONAL"
-                          ? "bg-indigo-600 text-white"
-                          : "border-slate-200 bg-white text-slate-700"
-                      }
-                    >
-                      Message professional
-                    </Button>
-                  </div>
-                  <textarea
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    placeholder={`Write a message to the ${recipient.toLowerCase()}...`}
-                    className="mt-3 min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 shadow-2xs"
-                    maxLength={4000}
-                  />
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-xs text-slate-500">{draft.length}/4000</p>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={sendAdminMessage}
-                      disabled={sending || !draft.trim()}
-                      className="bg-indigo-600 text-white hover:bg-indigo-500 shadow-2xs disabled:opacity-50"
-                    >
-                      {sending
-                        ? "Sending..."
-                        : `Send to ${recipient === "CLIENT" ? "client" : "professional"}`}
-                    </Button>
-                  </div>
-                  {sendMessage ? (
-                    <p className="mt-2 text-xs font-semibold text-emerald-700">{sendMessage}</p>
-                  ) : null}
-                  {details.messages.length ? (
-                    <div className="mt-4 space-y-2 border-t border-slate-200 pt-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Message history
+                      <h3 className="text-sm font-semibold text-slate-900">Job</h3>
+                      <p className="mt-1 text-sm font-medium text-slate-700">
+                        {details.job?.title ?? "Untitled job"}
                       </p>
-                      {details.messages.map((item) => (
-                        <div
-                          key={item.id}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-2xs"
-                        >
-                          <p className="text-[11px] font-bold uppercase text-indigo-700">
-                            {label(item.senderRole)}
-                          </p>
-                          <p className="mt-1 whitespace-pre-wrap">{item.message}</p>
-                          <p className="mt-1 text-[11px] text-slate-400">{date(item.createdAt)}</p>
+                    </div>
+                    <div className="border-t border-slate-200 pt-4">
+                      <h3 className="text-sm font-semibold text-slate-900">Client</h3>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {details.client
+                          ? `${details.client.firstName} ${details.client.lastName}`
+                          : "Unknown"}
+                      </p>
+                      <p className="text-xs text-slate-500">{details.client?.email}</p>
+                    </div>
+                    <div className="border-t border-slate-200 pt-4">
+                      <h3 className="text-sm font-semibold text-slate-900">Professional</h3>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {details.professional
+                          ? `${details.professional.firstName} ${details.professional.lastName}`
+                          : "Unknown"}
+                      </p>
+                      <p className="text-xs text-slate-500">{details.professional?.email}</p>
+                    </div>
+                    <div className="border-t border-slate-200 pt-4">
+                      <h3 className="text-sm font-semibold text-slate-900">Payments & Escrow</h3>
+                      <dl className="mt-3 grid grid-cols-2 gap-2 text-center">
+                        <div className="rounded-lg bg-white border border-slate-200 p-2 shadow-2xs">
+                          <dt className="text-[10px] uppercase font-semibold text-slate-500">
+                            Paid
+                          </dt>
+                          <dd className="mt-1 text-sm font-bold text-slate-900">
+                            ₹{details.financial.paidAmount.toLocaleString()}
+                          </dd>
                         </div>
-                      ))}
+                        <div className="rounded-lg bg-white border border-slate-200 p-2 shadow-2xs">
+                          <dt className="text-[10px] uppercase font-semibold text-slate-500">
+                            In Escrow
+                          </dt>
+                          <dd className="mt-1 text-sm font-bold text-indigo-700">
+                            ₹{(details.financial.inEscrow ?? 0).toLocaleString()}
+                          </dd>
+                        </div>
+                      </dl>
                     </div>
-                  ) : null}
+                  </aside>
                 </div>
-              </div>
-              <aside className="h-fit space-y-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-900">Job</h3>
-                  <p className="mt-1 text-sm font-medium text-slate-700">
-                    {details.job?.title ?? "Untitled job"}
-                  </p>
-                </div>
-                <div className="border-t border-slate-200 pt-4">
-                  <h3 className="text-sm font-semibold text-slate-900">Client</h3>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
-                    {details.client
-                      ? `${details.client.firstName} ${details.client.lastName}`
-                      : "Unknown"}
-                  </p>
-                  <p className="text-xs text-slate-500">{details.client?.email}</p>
-                </div>
-                <div className="border-t border-slate-200 pt-4">
-                  <h3 className="text-sm font-semibold text-slate-900">Professional</h3>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
-                    {details.professional
-                      ? `${details.professional.firstName} ${details.professional.lastName}`
-                      : "Unknown"}
-                  </p>
-                  <p className="text-xs text-slate-500">{details.professional?.email}</p>
-                </div>
-                <div className="border-t border-slate-200 pt-4">
-                  <h3 className="text-sm font-semibold text-slate-900">Payments & Escrow</h3>
-                  <dl className="mt-3 grid grid-cols-2 gap-2 text-center">
-                    <div className="rounded-lg bg-white border border-slate-200 p-2 shadow-2xs">
-                      <dt className="text-[10px] uppercase font-semibold text-slate-500">Paid</dt>
-                      <dd className="mt-1 text-sm font-bold text-slate-900">
-                        ₹{details.financial.paidAmount.toLocaleString()}
-                      </dd>
-                    </div>
-                    <div className="rounded-lg bg-white border border-slate-200 p-2 shadow-2xs">
-                      <dt className="text-[10px] uppercase font-semibold text-slate-500">
-                        In Escrow
-                      </dt>
-                      <dd className="mt-1 text-sm font-bold text-indigo-700">
-                        ₹{(details.financial.inEscrow ?? 0).toLocaleString()}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-              </aside>
-            </div>
-          );
-        })() : null}
+              );
+            })()
+          : null}
       </section>
     </div>
   );

@@ -1004,7 +1004,8 @@ export async function GET(
                   : projectRequest.professionalId,
               actorRole: projectRequest.origin === "CLIENT_HIRE" ? "CLIENT" : "PROFESSIONAL",
               type: projectRequest.origin === "CLIENT_HIRE" ? "HIRE_REQUEST_SENT" : "PROPOSAL_SENT",
-              title: projectRequest.origin === "CLIENT_HIRE" ? "Hire request sent" : "Proposal sent",
+              title:
+                projectRequest.origin === "CLIENT_HIRE" ? "Hire request sent" : "Proposal sent",
               description: `Initial terms: ₹${projectRequest.bidAmount.toLocaleString("en-IN")} · ${projectRequest.coverLetter}`,
               progress: null,
               stage: null,

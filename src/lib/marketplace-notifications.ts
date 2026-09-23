@@ -305,7 +305,7 @@ export async function notifyDisputeDecided(input: {
     input.decision === "CLIENT_WINS"
       ? "Client Wins (Refund processed)"
       : input.decision === "PROFESSIONAL_WINS"
-        ? "Freelancer Wins (Payment released)"
+        ? "Professional Wins (Payment released)"
         : `Partial Settlement (Split: ₹${(input.refundAmount ?? 0).toLocaleString()} refund / ₹${(input.payoutAmount ?? 0).toLocaleString()} payout)`;
 
   await notifyUsers([input.clientId, input.professionalId], {

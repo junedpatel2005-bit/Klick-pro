@@ -200,7 +200,8 @@ function formatFileSize(bytes: number | null | undefined) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 function milestoneStatusStyle(status: string) {
-  if (status === "APPROVED" || status === "AWAITING_ADMIN_APPROVAL") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "APPROVED" || status === "AWAITING_ADMIN_APPROVAL")
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (status === "AWAITING_CLIENT_REVIEW") return "border-purple-200 bg-purple-50 text-purple-700";
   if (status === "REVISION_REQUESTED") return "border-red-200 bg-red-50 text-red-700";
   if (status === "IN_PROGRESS") return "border-amber-200 bg-amber-50 text-amber-700";
@@ -693,8 +694,7 @@ export default function SharedProjectTrackingPage() {
 
   const renderNegotiationBidsCard = () => {
     const latestBid = latestNegotiationBid;
-    const isLatestFromMe =
-      latestBid?.senderRole === (isClient ? "CLIENT" : "PROFESSIONAL");
+    const isLatestFromMe = latestBid?.senderRole === (isClient ? "CLIENT" : "PROFESSIONAL");
     const activeAmount = latestBid?.bidAmount ?? pendingMilestone?.amount ?? 0;
     const activeDuration = latestBid?.duration || "1-3 days";
 
@@ -776,7 +776,8 @@ export default function SharedProjectTrackingPage() {
                 </span>
                 {activeDuration && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Timeline: <span className="font-semibold text-foreground">{activeDuration}</span>
+                    Timeline:{" "}
+                    <span className="font-semibold text-foreground">{activeDuration}</span>
                   </p>
                 )}
               </div>
@@ -869,21 +870,26 @@ export default function SharedProjectTrackingPage() {
                         </span>
                       )}
                       {bid.createdAt && (
-                        <span className="text-muted-foreground text-[10px]">{date(bid.createdAt)}</span>
+                        <span className="text-muted-foreground text-[10px]">
+                          {date(bid.createdAt)}
+                        </span>
                       )}
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-baseline justify-between gap-2 pt-0.5">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-[11px] font-medium text-muted-foreground">Proposed:</span>
+                      <span className="text-[11px] font-medium text-muted-foreground">
+                        Proposed:
+                      </span>
                       <span className="text-base font-bold text-primary">
                         ₹{(bid.bidAmount ?? 0).toLocaleString("en-IN")}
                       </span>
                     </div>
                     {bid.duration && (
                       <div className="text-xs text-muted-foreground">
-                        Timeline: <span className="font-semibold text-foreground">{bid.duration}</span>
+                        Timeline:{" "}
+                        <span className="font-semibold text-foreground">{bid.duration}</span>
                       </div>
                     )}
                   </div>
@@ -1302,7 +1308,10 @@ export default function SharedProjectTrackingPage() {
   const clientPaidMilestoneTotal = data.milestones.reduce(
     (total, milestone) =>
       total +
-      (milestone.payment?.status === "FUNDED" || milestone.payment?.status === "COMPLETED"
+      (milestone.status === "APPROVED" ||
+      milestone.status === "COMPLETED" ||
+      milestone.payment?.status === "FUNDED" ||
+      milestone.payment?.status === "COMPLETED"
         ? milestone.amount
         : 0),
     0,
@@ -1530,7 +1539,8 @@ export default function SharedProjectTrackingPage() {
                             Counter-Offer Sent to Client
                           </p>
                           <p className="text-sm text-muted-foreground mt-1">
-                            You proposed counter terms for reopening this project. Waiting for the client to review and respond.
+                            You proposed counter terms for reopening this project. Waiting for the
+                            client to review and respond.
                           </p>
                         </div>
                         <span className="rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-bold text-primary shrink-0">
@@ -1547,7 +1557,9 @@ export default function SharedProjectTrackingPage() {
                           onClick={() => {
                             setCounterReopenAmount(String(data.latestNegotiation?.bidAmount ?? ""));
                             setCounterReopenMessage(data.latestNegotiation?.message ?? "");
-                            setCounterReopenDuration(data.latestNegotiation?.duration ?? "1-3 days");
+                            setCounterReopenDuration(
+                              data.latestNegotiation?.duration ?? "1-3 days",
+                            );
                             setCounterReopenError(null);
                             setShowNegotiateReopenModal(true);
                           }}
@@ -1569,7 +1581,9 @@ export default function SharedProjectTrackingPage() {
                           variant="outline"
                           className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 ml-auto"
                           onClick={() => {
-                            document.getElementById("project-dispute-center")?.scrollIntoView({ behavior: "smooth" });
+                            document
+                              .getElementById("project-dispute-center")
+                              ?.scrollIntoView({ behavior: "smooth" });
                           }}
                         >
                           <ShieldAlert className="h-4 w-4" />
@@ -1586,7 +1600,8 @@ export default function SharedProjectTrackingPage() {
                             Client Requested to Reopen This Project
                           </p>
                           <p className="text-sm text-amber-900/90 dark:text-amber-300/90 mt-1">
-                            The client has proposed to reopen this project for additional work or rework. Review the details below to Accept, Negotiate, or Decline.
+                            The client has proposed to reopen this project for additional work or
+                            rework. Review the details below to Accept, Negotiate, or Decline.
                           </p>
                         </div>
                         <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-xs font-bold text-amber-800 dark:text-amber-300 shrink-0">
@@ -1609,7 +1624,9 @@ export default function SharedProjectTrackingPage() {
                           variant="outline"
                           disabled={busy === "respond-reopen"}
                           onClick={() => {
-                            const pending = data.milestones.find((m) => m.status === "PENDING_CONFIRMATION");
+                            const pending = data.milestones.find(
+                              (m) => m.status === "PENDING_CONFIRMATION",
+                            );
                             setCounterReopenAmount(pending ? String(pending.amount) : "");
                             setCounterReopenMessage("");
                             setCounterReopenDuration("1-3 days");
@@ -1634,7 +1651,9 @@ export default function SharedProjectTrackingPage() {
                           variant="outline"
                           className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 ml-auto"
                           onClick={() => {
-                            document.getElementById("project-dispute-center")?.scrollIntoView({ behavior: "smooth" });
+                            document
+                              .getElementById("project-dispute-center")
+                              ?.scrollIntoView({ behavior: "smooth" });
                           }}
                         >
                           <ShieldAlert className="h-4 w-4" />
@@ -1649,18 +1668,21 @@ export default function SharedProjectTrackingPage() {
                       <div>
                         <p className="font-bold text-base text-amber-950 dark:text-amber-200 flex items-center gap-2">
                           <RotateCcw className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                          {data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL"
+                          {data.latestNegotiation &&
+                          data.latestNegotiation.senderRole === "PROFESSIONAL"
                             ? "Professional Proposed Counter Terms"
                             : "Reopen Request Pending Professional Approval"}
                         </p>
                         <p className="text-sm text-amber-900/90 dark:text-amber-300/90 mt-1">
-                          {data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL"
+                          {data.latestNegotiation &&
+                          data.latestNegotiation.senderRole === "PROFESSIONAL"
                             ? "The professional proposed counter terms for your reopen request. Please review below to Accept, Counter Back, or Decline."
                             : "You requested to reopen this project. Waiting for the professional to accept, decline, or negotiate terms."}
                         </p>
                       </div>
                       <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-xs font-bold text-amber-800 dark:text-amber-300 shrink-0">
-                        {data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL"
+                        {data.latestNegotiation &&
+                        data.latestNegotiation.senderRole === "PROFESSIONAL"
                           ? "Counter-Offer Received"
                           : "Pending Professional Response"}
                       </span>
@@ -1669,7 +1691,8 @@ export default function SharedProjectTrackingPage() {
                     {renderNegotiationBidsCard()}
 
                     <div className="flex flex-wrap items-center gap-2.5 pt-1">
-                      {data.latestNegotiation && data.latestNegotiation.senderRole === "PROFESSIONAL" ? (
+                      {data.latestNegotiation &&
+                      data.latestNegotiation.senderRole === "PROFESSIONAL" ? (
                         <>
                           <Button
                             disabled={busy === "respond-reopen"}
@@ -1677,15 +1700,21 @@ export default function SharedProjectTrackingPage() {
                             className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5 shadow-xs"
                           >
                             <CheckCircle2 className="h-4 w-4" />
-                            {busy === "respond-reopen" ? "Accepting…" : "Accept Counter & Start Work"}
+                            {busy === "respond-reopen"
+                              ? "Accepting…"
+                              : "Accept Counter & Start Work"}
                           </Button>
                           <Button
                             variant="outline"
                             disabled={busy === "respond-reopen"}
                             onClick={() => {
-                              setCounterReopenAmount(String(data.latestNegotiation?.bidAmount ?? ""));
+                              setCounterReopenAmount(
+                                String(data.latestNegotiation?.bidAmount ?? ""),
+                              );
                               setCounterReopenMessage("");
-                              setCounterReopenDuration(data.latestNegotiation?.duration ?? "1-3 days");
+                              setCounterReopenDuration(
+                                data.latestNegotiation?.duration ?? "1-3 days",
+                              );
                               setCounterReopenError(null);
                               setShowNegotiateReopenModal(true);
                             }}
@@ -1706,14 +1735,17 @@ export default function SharedProjectTrackingPage() {
                         </>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Waiting for the professional to respond. You can also raise a dispute below if there is no response or an issue.
+                          Waiting for the professional to respond. You can also raise a dispute
+                          below if there is no response or an issue.
                         </p>
                       )}
                       <Button
                         variant="outline"
                         className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 ml-auto"
                         onClick={() => {
-                          document.getElementById("project-dispute-center")?.scrollIntoView({ behavior: "smooth" });
+                          document
+                            .getElementById("project-dispute-center")
+                            ?.scrollIntoView({ behavior: "smooth" });
                         }}
                       >
                         <ShieldAlert className="h-4 w-4" />
@@ -1755,7 +1787,8 @@ export default function SharedProjectTrackingPage() {
                       Project Completed
                     </p>
                     <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-400/90">
-                      All deliverables were completed. Need follow-up rework, a warranty fix, or additional work?
+                      All deliverables were completed. Need follow-up rework, a warranty fix, or
+                      additional work?
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -1777,7 +1810,9 @@ export default function SharedProjectTrackingPage() {
                       variant="outline"
                       className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
                       onClick={() => {
-                        document.getElementById("project-dispute-center")?.scrollIntoView({ behavior: "smooth" });
+                        document
+                          .getElementById("project-dispute-center")
+                          ?.scrollIntoView({ behavior: "smooth" });
                       }}
                     >
                       <ShieldAlert className="h-4 w-4" />
@@ -2338,21 +2373,25 @@ export default function SharedProjectTrackingPage() {
                                 </span>
                               )}
                             </div>
-                            {m.payment && (
+                            {(m.payment || isApproved) && (
                               <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                                 <Wallet className="h-3.5 w-3.5 text-emerald-600" />
                                 <span>
                                   {isClient ? "Payment: " : "Payout: "}
                                   <strong className="text-foreground font-semibold">
                                     {isClient
-                                      ? m.payment.status === "FUNDED" || m.payment.status === "COMPLETED"
+                                      ? isApproved ||
+                                        m.payment?.status === "FUNDED" ||
+                                        m.payment?.status === "COMPLETED"
                                         ? "Paid"
-                                        : m.payment.status
-                                      : m.payment.status === "COMPLETED"
+                                        : (m.payment?.status ?? "Pending")
+                                      : m.payment?.status === "COMPLETED"
                                         ? "Paid Out"
-                                        : m.payment.status === "FUNDED"
+                                        : m.payment?.status === "FUNDED"
                                           ? "Funded"
-                                          : m.payment.status}
+                                          : isApproved
+                                            ? "Approved"
+                                            : (m.payment?.status ?? "Pending")}
                                   </strong>
                                 </span>
                               </p>
@@ -2404,10 +2443,10 @@ export default function SharedProjectTrackingPage() {
                               !isRevision &&
                               !isInProgress && <Layers className="h-3.5 w-3.5" />}
                             {isApproved
-                              ? m.payment?.status === "COMPLETED"
-                                ? "Done · Paid Out"
-                                : isClient
-                                  ? "Done · Paid"
+                              ? isClient
+                                ? "Done · Paid"
+                                : m.payment?.status === "COMPLETED"
+                                  ? "Done · Paid Out"
                                   : "Done · Approved"
                               : label(m.status)}
                           </span>
@@ -3117,7 +3156,9 @@ export default function SharedProjectTrackingPage() {
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-foreground flex items-center justify-between">
                 <span>Work Description</span>
-                <span className="text-xs font-normal text-muted-foreground">What needs to be done?</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  What needs to be done?
+                </span>
               </label>
               <textarea
                 value={reopenWorkDescription}
@@ -3165,9 +3206,7 @@ export default function SharedProjectTrackingPage() {
             <div className="rounded-xl border border-border/80 bg-muted/20 p-3 text-xs text-muted-foreground flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <ShieldAlert className="h-4 w-4 text-destructive shrink-0" />
-                <span>
-                  Having a dispute or unresolved conflict with the professional?
-                </span>
+                <span>Having a dispute or unresolved conflict with the professional?</span>
               </div>
               <Button
                 variant="outline"
@@ -3175,7 +3214,9 @@ export default function SharedProjectTrackingPage() {
                 className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
                 onClick={() => {
                   setShowReopenModal(false);
-                  document.getElementById("project-dispute-center")?.scrollIntoView({ behavior: "smooth" });
+                  document
+                    .getElementById("project-dispute-center")
+                    ?.scrollIntoView({ behavior: "smooth" });
                 }}
               >
                 Raise Dispute
@@ -3379,7 +3420,9 @@ export default function SharedProjectTrackingPage() {
                         <div>
                           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                             <Sparkles className="h-3.5 w-3.5" />
-                            {offlinePayment ? "Milestone Approved & Paid! 🎉" : "Milestone Paid & Completed! 🎉"}
+                            {offlinePayment
+                              ? "Milestone Approved & Paid! 🎉"
+                              : "Milestone Paid & Completed! 🎉"}
                           </span>
                           <h3 className="mt-2 font-display text-3xl font-bold tracking-tight text-foreground">
                             ₹{approvalSuccess.charged.toLocaleString("en-IN")}
@@ -3474,8 +3517,8 @@ export default function SharedProjectTrackingPage() {
                         </div>
                         {offlinePayment ? null : (
                           <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
-                            ₹{clientCharge.toLocaleString("en-IN")} will be deducted from your wallet.
-                            This milestone will be marked as completed immediately.
+                            ₹{clientCharge.toLocaleString("en-IN")} will be deducted from your
+                            wallet. This milestone will be marked as completed immediately.
                           </p>
                         )}
                         {!offlinePayment && (

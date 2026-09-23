@@ -9,12 +9,5 @@ export function PageActionLoading({
   title: string;
   description?: string;
 }) {
-  return (
-    <FullPageLogoLoader
-      active={active}
-      title={title}
-      subtitle={description}
-      overlay={true}
-    />
-  );
+  return <FullPageLogoLoader active={active} title={title} subtitle={description} overlay={true} />;
 }

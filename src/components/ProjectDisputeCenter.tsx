@@ -483,7 +483,12 @@ export function ProjectDisputeCenter({
                   Settle Dispute by Paying Milestone
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Milestone <span className="font-semibold text-foreground">&ldquo;{payableMilestone.title}&rdquo;</span> (₹{payableMilestone.amount.toLocaleString("en-IN")}) is ready for settlement. Paying this milestone will automatically resolve and close this dispute.
+                  Milestone{" "}
+                  <span className="font-semibold text-foreground">
+                    &ldquo;{payableMilestone.title}&rdquo;
+                  </span>{" "}
+                  (₹{payableMilestone.amount.toLocaleString("en-IN")}) is ready for settlement.
+                  Paying this milestone will automatically resolve and close this dispute.
                 </p>
               </div>
               <Button
@@ -524,7 +529,7 @@ export function ProjectDisputeCenter({
                   Filed By
                 </p>
                 <p className="font-bold text-foreground mt-0.5">
-                  {dispute.reporterRole === "CLIENT" ? "Client" : "Freelancer"}
+                  {dispute.reporterRole === "CLIENT" ? "Client" : "Professional"}
                 </p>
               </div>
               <div>
@@ -701,7 +706,7 @@ export function ProjectDisputeCenter({
             <p className="mt-1 text-xs text-muted-foreground max-w-2xl leading-relaxed">
               This dispute was contested and escalated. A Klick-Pro Trust & Safety Dispute Officer
               is reviewing project logs, milestones, and submitted evidence from both parties to
-              deliver a binding ruling (Client Refund, Freelancer Payout, or Partial Settlement).
+              deliver a binding ruling (Client Refund or Professional Payout).
             </p>
 
             {/* Stepper */}
@@ -744,7 +749,13 @@ export function ProjectDisputeCenter({
                   Settle Dispute by Paying Milestone
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  The milestone <span className="font-semibold text-foreground">&ldquo;{payableMilestone.title}&rdquo;</span> (₹{payableMilestone.amount.toLocaleString("en-IN")}) is completed and awaiting payment. Paying this milestone will automatically close this admin dispute, release earnings to the freelancer, and resume contract progress.
+                  The milestone{" "}
+                  <span className="font-semibold text-foreground">
+                    &ldquo;{payableMilestone.title}&rdquo;
+                  </span>{" "}
+                  (₹{payableMilestone.amount.toLocaleString("en-IN")}) is completed and awaiting
+                  payment. Paying this milestone will automatically close this admin dispute,
+                  release earnings to the professional, and resume contract progress.
                 </p>
               </div>
               <Button
@@ -772,7 +783,7 @@ export function ProjectDisputeCenter({
               <div className="flex items-center justify-between border-b pb-2">
                 <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-blue-500" />
-                  Initial Claim ({dispute.reporterRole === "CLIENT" ? "Client" : "Freelancer"})
+                  Initial Claim ({dispute.reporterRole === "CLIENT" ? "Client" : "Professional"})
                 </p>
                 <Badge variant="outline" className="text-[10px]">
                   {dispute.issueType.replaceAll("_", " ")}
@@ -809,7 +820,7 @@ export function ProjectDisputeCenter({
               <div className="flex items-center justify-between border-b pb-2">
                 <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-amber-500" />
-                  Counter-Response ({dispute.reporterRole === "CLIENT" ? "Freelancer" : "Client"})
+                  Counter-Response ({dispute.reporterRole === "CLIENT" ? "Professional" : "Client"})
                 </p>
                 <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700">
                   Contested
@@ -877,7 +888,7 @@ export function ProjectDisputeCenter({
                     {dispute.decision === "CLIENT_WINS"
                       ? "Client Wins (Refund)"
                       : dispute.decision === "PROFESSIONAL_WINS"
-                        ? "Freelancer Wins (Released)"
+                        ? "Professional Wins (Released)"
                         : dispute.decision === "MUTUAL_SETTLEMENT"
                           ? "Mutually Settled"
                           : "Partial Settlement"}
@@ -908,7 +919,7 @@ export function ProjectDisputeCenter({
                 {dispute.payoutAmount != null && dispute.payoutAmount > 0 && (
                   <div className="rounded-xl border bg-background/80 px-3 py-1.5 text-center">
                     <p className="text-[10px] uppercase font-bold text-blue-600">
-                      Freelancer Payout
+                      Professional Payout
                     </p>
                     <p className="text-sm font-black text-foreground">
                       ₹{dispute.payoutAmount.toLocaleString("en-IN")}

@@ -2889,7 +2889,9 @@ export default function JobDetails({
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-foreground flex items-center justify-between">
                 <span>Work Description</span>
-                <span className="text-xs font-normal text-muted-foreground">What needs to be done?</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  What needs to be done?
+                </span>
               </label>
               <textarea
                 value={reopenWorkDescription}
@@ -2943,11 +2945,16 @@ export default function JobDetails({
                   onChange={(e) => setReopenAssignPreviousPro(e.target.checked)}
                   className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                 />
-                <label htmlFor="assignPreviousPro" className="text-xs text-foreground cursor-pointer select-none">
+                <label
+                  htmlFor="assignPreviousPro"
+                  className="text-xs text-foreground cursor-pointer select-none"
+                >
                   <span className="font-semibold block text-sm">
-                    Directly request {job.previousProfessional.firstName} {job.previousProfessional.lastName}
+                    Directly request {job.previousProfessional.firstName}{" "}
+                    {job.previousProfessional.lastName}
                   </span>
-                  Send this work request directly to your previous professional so they can accept or negotiate right away.
+                  Send this work request directly to your previous professional so they can accept
+                  or negotiate right away.
                 </label>
               </div>
             )}
@@ -2956,9 +2963,7 @@ export default function JobDetails({
             <div className="rounded-xl border border-border/80 bg-muted/20 p-3 text-xs text-muted-foreground flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <ShieldAlert className="h-4 w-4 text-destructive shrink-0" />
-                <span>
-                  Having a dispute or unresolved conflict with the professional?
-                </span>
+                <span>Having a dispute or unresolved conflict with the professional?</span>
               </div>
               {job.projectId && (
                 <Button
