@@ -2,8 +2,9 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { invalidateCurrentUser } from "@/lib/current-user";
-import { ExternalLink, LogOut, ShieldCheck } from "lucide-react";
+import { ExternalLink, LogOut, ShieldCheck, Menu } from "lucide-react";
 import { useDatabaseStatus } from "@/hooks/use-database-status";
+import { useAdminSidebar } from "@/components/AdminSidebarContext";
 
 const pageTitles: Record<string, string> = {
   "/admin": "Command Center",
@@ -17,12 +18,14 @@ const pageTitles: Record<string, string> = {
   "/admin/cms": "Visual CMS Editor",
   "/admin/notifications": "Notifications & Alerts",
   "/admin/messages": "Admin Communications",
+  "/admin/templates": "Email Template Library",
 };
 
 export function AdminHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const dbStatus = useDatabaseStatus();
+  const { collapsed, toggleSidebar } = useAdminSidebar();
   const currentPageTitle = pageTitles[pathname] ?? "Admin Workspace";
 
   async function logout() {
@@ -32,15 +35,27 @@ export function AdminHeader() {
   }
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/80 px-6 backdrop-blur-md sticky top-0 z-20">
-      {/* Breadcrumb / Title */}
-      <div className="flex items-center gap-2.5">
-        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-400">
-          <ShieldCheck className="h-3.5 w-3.5 text-indigo-500" />
-          Admin
-        </span>
-        <span className="text-slate-300">/</span>
-        <h2 className="text-sm font-bold text-slate-800 tracking-tight">{currentPageTitle}</h2>
+    <header className="flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/80 px-4 sm:px-6 backdrop-blur-md sticky top-0 z-20">
+      {/* 3 lines toggle & Breadcrumb / Title */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label="Toggle Sidebar"
+          title={collapsed ? "Expand sidebar (show labels)" : "Collapse sidebar (icons only)"}
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition shadow-2xs"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+
+        <div className="flex items-center gap-2.5">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+            <ShieldCheck className="h-3.5 w-3.5 text-indigo-500" />
+            Admin
+          </span>
+          <span className="text-slate-300">/</span>
+          <h2 className="text-sm font-bold text-slate-800 tracking-tight">{currentPageTitle}</h2>
+        </div>
       </div>
 
       {/* Right Controls */}

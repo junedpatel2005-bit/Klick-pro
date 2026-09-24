@@ -1,5 +1,6 @@
 import "server-only";
 import nodemailer from "nodemailer";
+import { getTemplateByKey, interpolateVariables, renderEmailHtml } from "@/lib/email-templates/engine";
 
 let emailConfigurationWarningShown = false;
 
@@ -152,6 +153,8 @@ export async function sendNotificationEmail(input: {
   description: string;
   href?: string;
   details?: Array<{ label: string; value: string }>;
+  templateKey?: string;
+  templateVariables?: Record<string, string | number | undefined | null>;
 }) {
   if (!isEmailConfigured()) {
     if (!emailConfigurationWarningShown) {
@@ -166,6 +169,48 @@ export async function sendNotificationEmail(input: {
   const origin = publicAppOrigin();
   const websiteUrl = origin ?? undefined;
   const actionUrl = absoluteAppUrl(input.href, origin);
+
+  // If a template key is supplied, attempt template-driven email dispatch
+  if (input.templateKey) {
+    try {
+      const template = await getTemplateByKey(input.templateKey);
+      if (template && template.isActive) {
+        const mergedVariables: Record<string, string | number | undefined | null> = {
+          ...input.templateVariables,
+          action_url: actionUrl ?? "",
+          website_url: websiteUrl ?? "",
+        };
+
+        const resolvedSubject = interpolateVariables(template.subject, mergedVariables);
+        const resolvedHeading = interpolateVariables(template.heading, mergedVariables);
+        const resolvedBody = interpolateVariables(template.bodyText, mergedVariables);
+        const resolvedActionUrl = template.actionUrl
+          ? interpolateVariables(template.actionUrl, mergedVariables)
+          : actionUrl;
+
+        const html = renderEmailHtml({
+          subject: resolvedSubject,
+          heading: resolvedHeading,
+          bodyText: resolvedBody,
+          actionText: template.actionText,
+          actionUrl: resolvedActionUrl,
+          websiteUrl,
+        });
+
+        await transporter.sendMail({
+          from: klickProSender(),
+          to: input.to,
+          subject: resolvedSubject.startsWith("Klick-Pro") ? resolvedSubject : `Klick-Pro | ${resolvedSubject}`,
+          text: `${resolvedHeading}\n\n${resolvedBody}${resolvedActionUrl ? `\n\n${template.actionText || "View in Klick-Pro"}: ${resolvedActionUrl}` : ""}`,
+          html,
+        });
+        return;
+      }
+    } catch (err) {
+      console.warn(`Template dispatch for ${input.templateKey} failed, falling back to standard notification layout`, err);
+    }
+  }
+
   const details = input.details?.filter((detail) => detail.value.trim()) ?? [];
   const detailsHtml = details.length
     ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0 0;border:1px solid #e2e8f0;border-collapse:separate;border-spacing:0;overflow:hidden">${details
@@ -194,3 +239,24 @@ export async function sendNotificationEmail(input: {
     }),
   });
 }
+
+export async function sendCustomEmail(input: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+}) {
+  if (!isEmailConfigured()) {
+    return { success: false, reason: "SMTP not configured" };
+  }
+  const transporter = mailTransporter();
+  await transporter.sendMail({
+    from: klickProSender(),
+    to: input.to,
+    subject: input.subject,
+    html: input.html,
+    text: input.text || input.subject,
+  });
+  return { success: true };
+}
+

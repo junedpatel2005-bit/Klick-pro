@@ -1199,3 +1199,34 @@ enum CmsPageStatus {
   PUBLISHED
   ARCHIVED
 }
+
+enum EmailAudience {
+  CLIENT
+  PROFESSIONAL
+  ADMIN
+  SYSTEM
+}
+
+model EmailTemplate {
+  id           Int           @id @default(autoincrement())
+  key          String        @unique
+  name         String
+  description  String        @default("")
+  audience     EmailAudience @default(CLIENT)
+  category     String        @default("General")
+  subject      String
+  heading      String
+  bodyText     String
+  actionText   String?
+  actionUrl    String?
+  isActive     Boolean       @default(true)
+  isCustomized Boolean       @default(false)
+  updatedBy    Int?          @map("updated_by")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  @@index([audience])
+  @@index([category])
+  @@map("email_templates")
+}
+
