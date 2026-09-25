@@ -67,32 +67,109 @@ function renderNotificationEmailHtml(input: {
   detailsHtml: string;
 }) {
   const safeTitle = escapeHtml(input.title);
-  const safeDescription = escapeHtml(input.description);
+  const safeWebsiteUrl = escapeHtml(input.websiteUrl || "https://klick-pro.com");
+
+  const paragraphs = input.description
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => {
+      const formatted = escapeHtml(p).replace(/\n/g, "<br>");
+      return `<p style="margin: 0 0 16px; color: #334e68; font-size: 15px; line-height: 1.65;">${formatted}</p>`;
+    })
+    .join("");
+
   const actionHtml = input.href
-    ? `<p style="margin:28px 0 0;text-align:center"><a href="${escapeHtml(input.href)}" style="display:inline-block;background:#2454d6;color:#ffffff;font-size:16px;font-weight:600;padding:15px 24px;border-radius:8px;text-decoration:none">View in Klick-Pro</a></p><p style="margin:24px 0 0;color:#829ab1;font-size:13px;line-height:1.6;text-align:center">If the button does not work, copy and paste this link into your browser:<br><span style="word-break:break-all;color:#486581">${escapeHtml(input.href)}</span></p>`
+    ? `
+    <div style="margin: 32px 0 28px; text-align: center;">
+      <a href="${escapeHtml(input.href)}"
+         target="_blank"
+         style="display: inline-block; background-color: #2454d6; color: #ffffff; font-size: 15px; font-weight: 600; padding: 14px 28px; border-radius: 8px; text-decoration: none; box-shadow: 0 2px 4px rgba(36, 84, 214, 0.2);">
+        View in Klick-Pro
+      </a>
+    </div>
+    <p style="margin: 16px 0 0; color: #829ab1; font-size: 12px; line-height: 1.5; text-align: center;">
+      If the button above does not work, copy and paste this URL into your browser:<br>
+      <span style="color: #486581; word-break: break-all;">${escapeHtml(input.href)}</span>
+    </p>
+  `
     : "";
 
   return `<!doctype html>
 <html lang="en">
-  <body style="margin:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0b1f4d">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0">${safeTitle}</div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc">
-      <tr><td align="center" style="padding:40px 16px">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
-          <tr><td style="padding:28px 32px;border-bottom:1px solid #eef2f7"><a href="${escapeHtml(input.websiteUrl ?? "#")}" style="font-size:24px;font-weight:700;letter-spacing:-.4px;color:#1748b5;text-decoration:none">Klick-Pro</a></td></tr>
-          <tr><td style="padding:48px 32px;text-align:left">
-            <h1 style="margin:0;color:#0b1f4d;font-size:30px;line-height:1.2">${safeTitle}</h1>
-            <p style="margin:20px 0 0;color:#334e68;font-size:16px;line-height:1.6;white-space:pre-line">${safeDescription}</p>
-            ${input.detailsHtml}
-            ${actionHtml}
-          </td></tr>
-          <tr><td style="padding:20px 32px;border-top:1px solid #eef2f7;text-align:center;color:#829ab1;font-size:12px;line-height:1.5">You are receiving this email from Klick-Pro.<br>&copy; 2026 Klick-Pro, Inc.</td></tr>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>${safeTitle}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #0b1f4d;">
+  <div style="display: none; max-height: 0; overflow: hidden; opacity: 0;">
+    ${safeTitle}
+  </div>
+
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f1f5f9;">
+    <tr>
+      <td align="center" style="padding: 40px 16px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 24px 32px; border-bottom: 1px solid #f1f5f9; background: #ffffff;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td>
+                    <a href="${safeWebsiteUrl}" style="text-decoration: none;">
+                      <span style="font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: #1748b5;">Klick<span style="color: #2454d6;">-Pro</span></span>
+                    </a>
+                  </td>
+                  <td align="right">
+                    <span style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; background: #f8fafc; padding: 4px 8px; border-radius: 4px; border: 1px solid #e2e8f0;">Official Notification</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main Content Area -->
+          <tr>
+            <td style="padding: 40px 32px 32px;">
+              <h1 style="margin: 0 0 20px; color: #0f172a; font-size: 22px; font-weight: 700; line-height: 1.35; letter-spacing: -0.3px;">
+                ${safeTitle}
+              </h1>
+
+              ${paragraphs}
+
+              ${input.detailsHtml}
+
+              ${actionHtml}
+            </td>
+          </tr>
+
+          <!-- Footer Area -->
+          <tr>
+            <td style="padding: 24px 32px; background-color: #f8fafc; border-top: 1px solid #f1f5f9; text-align: center;">
+              <p style="margin: 0 0 8px; color: #64748b; font-size: 12px; line-height: 1.5;">
+                You received this transactional email from Klick-Pro regarding your account activity.
+              </p>
+              <p style="margin: 0; color: #94a3b8; font-size: 11px; line-height: 1.4;">
+                &copy; ${new Date().getFullYear()} Klick-Pro Technologies Inc. All rights reserved.
+              </p>
+            </td>
+          </tr>
         </table>
-      </td></tr>
-    </table>
-  </body>
+      </td>
+    </tr>
+  </table>
+</body>
 </html>`;
 }
+
+export type SendAuthEmailOptions = {
+  templateKey?: string;
+  userName?: string;
+  variables?: Record<string, string | number | undefined | null>;
+  appOrigin?: string;
+};
 
 export async function sendAuthEmail(
   to: string,
@@ -100,41 +177,113 @@ export async function sendAuthEmail(
   heading: string,
   actionUrl: string,
   action: string,
+  options?: SendAuthEmailOptions,
 ) {
   const transporter = mailTransporter();
-  const websiteUrl = publicAppOrigin();
-  const safeHeading = escapeHtml(heading);
-  const safeAction = escapeHtml(action);
-  const safeActionUrl = escapeHtml(actionUrl);
-  const textActionUrl = actionUrl;
+  const websiteUrl = options?.appOrigin || publicAppOrigin() || undefined;
+
+  // Determine template key (explicitly passed or auto-detected)
+  let templateKey = options?.templateKey;
+  if (!templateKey) {
+    if (
+      actionUrl.includes("reset-password") ||
+      heading.toLowerCase().includes("reset") ||
+      subject.toLowerCase().includes("reset")
+    ) {
+      templateKey = "auth_password_reset";
+    } else if (
+      actionUrl.includes("verify-email") ||
+      heading.toLowerCase().includes("verify") ||
+      subject.toLowerCase().includes("verify")
+    ) {
+      templateKey = "auth_email_verification";
+    }
+  }
+
+  // Extract token from actionUrl if present
+  let urlToken = "";
+  try {
+    const parsed = new URL(actionUrl, websiteUrl || "https://klick-pro.com");
+    urlToken = parsed.searchParams.get("token") || "";
+  } catch {}
+
+  const userName = options?.userName || "there";
+
+  const mergedVariables: Record<string, string | number | undefined | null> = {
+    user_name: userName,
+    email: to,
+    user_email: to,
+    reset_token: urlToken,
+    verification_token: urlToken,
+    token: urlToken,
+    action_url: actionUrl,
+    website_url: websiteUrl || "https://klick-pro.com",
+    support_email: "support@klick-pro.com",
+    ...options?.variables,
+  };
+
+  if (templateKey) {
+    try {
+      const template = await getTemplateByKey(templateKey);
+      if (template && template.isActive) {
+        const resolvedSubject = interpolateVariables(template.subject, mergedVariables);
+        const resolvedHeading = interpolateVariables(template.heading, mergedVariables);
+        const resolvedBody = interpolateVariables(template.bodyText, mergedVariables);
+
+        let resolvedActionUrl = actionUrl;
+        if (template.actionUrl) {
+          const interpolated = interpolateVariables(template.actionUrl, mergedVariables);
+          resolvedActionUrl = absoluteAppUrl(interpolated, websiteUrl ?? null) || actionUrl;
+        }
+
+        const actionText = template.actionText || action || "Continue";
+
+        const html = renderEmailHtml({
+          subject: resolvedSubject,
+          heading: resolvedHeading,
+          bodyText: resolvedBody,
+          actionText,
+          actionUrl: resolvedActionUrl,
+          websiteUrl,
+        });
+
+        await transporter.sendMail({
+          from: klickProSender(),
+          to,
+          subject: resolvedSubject.startsWith("Klick-Pro")
+            ? resolvedSubject
+            : `Klick-Pro | ${resolvedSubject}`,
+          text: `${resolvedHeading}\n\n${resolvedBody}\n\n${actionText}: ${resolvedActionUrl}\n\nIf you did not request this, you can safely ignore this email.`,
+          html,
+        });
+        return;
+      }
+    } catch (err) {
+      console.warn(
+        `Template dispatch for auth email ${templateKey} failed, falling back to standard layout`,
+        err,
+      );
+    }
+  }
+
+  // Modern fallback if no template is found or template disabled
+  const safeHeading = heading || subject;
+  const fallbackBody = `Use the secure link below to proceed with your request. This security link expires in 60 minutes.\n\nIf you did not make this request, you can safely ignore this email.`;
+  const fallbackHtml = renderEmailHtml({
+    subject,
+    heading: safeHeading,
+    bodyText: fallbackBody,
+    actionText: action,
+    actionUrl,
+    websiteUrl,
+  });
+
   await transporter.sendMail({
     from: klickProSender(),
     to,
-    subject: `Klick-Pro | ${subject}`,
-    text: `${heading}\n\nUse the secure link below. It expires in 24 hours.\n\n${action}: ${textActionUrl}\n\nIf you did not create this account, you can ignore this email.`,
-    html: `<!doctype html>
-<html lang="en">
-  <body style="margin:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0b1f4d">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0">Confirm your Klick-Pro account email.</div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc">
-      <tr><td align="center" style="padding:40px 16px">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px">
-          <tr><td style="padding:28px 32px;border-bottom:1px solid #eef2f7">
-            <a href="${escapeHtml(websiteUrl ?? "#")}" style="font-size:24px;font-weight:700;letter-spacing:-.4px;color:#1748b5;text-decoration:none">Klick-Pro</a>
-          </td></tr>
-          <tr><td style="padding:56px 32px 48px;text-align:center">
-            <h1 style="margin:0;color:#0b1f4d;font-size:32px;line-height:1.2">${safeHeading}</h1>
-            <p style="margin:24px 0 8px;color:#334e68;font-size:16px;line-height:1.6">Use the secure link below. It expires in 24 hours.</p>
-            <p style="margin:0 0 28px;color:#627d98;font-size:14px;line-height:1.5">Click the button to activate your Klick-Pro account.</p>
-            <a href="${safeActionUrl}" style="display:inline-block;background:#2454d6;color:#ffffff;font-size:16px;font-weight:600;padding:15px 24px;border-radius:8px;text-decoration:none">${safeAction}</a>
-            <p style="margin:32px 0 0;color:#829ab1;font-size:13px;line-height:1.6">If the button does not work, copy and paste this link into your browser:<br><span style="word-break:break-all;color:#486581">${safeActionUrl}</span></p>
-          </td></tr>
-          <tr><td style="padding:20px 32px;border-top:1px solid #eef2f7;text-align:center;color:#829ab1;font-size:12px;line-height:1.5">If you did not create this account, you can safely ignore this email.<br>© 2026 Klick-Pro, Inc.</td></tr>
-        </table>
-      </td></tr>
-    </table>
-  </body>
-</html>`,
+    subject: subject.startsWith("Klick-Pro") ? subject : `Klick-Pro | ${subject}`,
+    text: `${safeHeading}\n\n${fallbackBody}\n\n${action}: ${actionUrl}`,
+    html: fallbackHtml,
   });
 }
 
@@ -147,11 +296,36 @@ export function isEmailConfigured() {
   );
 }
 
+const NOTIFICATION_TYPE_MAP: Record<string, string> = {
+  CLIENT_WELCOME: "client_welcome",
+  NEW_ACCOUNT: "client_welcome",
+  JOB_POSTED: "client_job_posted",
+  PROPOSAL_RECEIVED: "client_proposal_received",
+  MILESTONE_SUBMITTED: "client_milestone_submitted",
+  DISPUTE_RAISED: "client_dispute_opened",
+  DISPUTE_OPENED: "client_dispute_opened",
+  DISPUTE_RESOLVED: "client_dispute_resolved",
+  REFUND_PROCESSED: "client_refund_processed",
+  PROF_WELCOME: "prof_welcome",
+  WELCOME_PROFESSIONAL: "prof_welcome",
+  WELCOME_CLIENT: "client_welcome",
+  VERIFICATION_APPROVED: "prof_verification_approved",
+  VERIFICATION_REJECTED: "prof_verification_rejected",
+  JOB_MATCH: "prof_job_match",
+  PROPOSAL_ACCEPTED: "prof_proposal_accepted",
+  MILESTONE_FUNDED: "prof_milestone_funded",
+  PAYOUT_RELEASED: "prof_payout_released",
+  PROF_DISPUTE_OPENED: "prof_dispute_opened",
+  PASSWORD_RESET: "auth_password_reset",
+  EMAIL_VERIFICATION: "auth_email_verification",
+};
+
 export async function sendNotificationEmail(input: {
   to: string;
   title: string;
   description: string;
   href?: string;
+  type?: string;
   details?: Array<{ label: string; value: string }>;
   templateKey?: string;
   templateVariables?: Record<string, string | number | undefined | null>;
@@ -170,10 +344,13 @@ export async function sendNotificationEmail(input: {
   const websiteUrl = origin ?? undefined;
   const actionUrl = absoluteAppUrl(input.href, origin);
 
-  // If a template key is supplied, attempt template-driven email dispatch
-  if (input.templateKey) {
+  const templateKey =
+    input.templateKey || (input.type ? NOTIFICATION_TYPE_MAP[input.type] : undefined);
+
+  // If a template key is supplied or resolved from notification type, attempt template-driven email dispatch
+  if (templateKey) {
     try {
-      const template = await getTemplateByKey(input.templateKey);
+      const template = await getTemplateByKey(templateKey);
       if (template && template.isActive) {
         const mergedVariables: Record<string, string | number | undefined | null> = {
           ...input.templateVariables,

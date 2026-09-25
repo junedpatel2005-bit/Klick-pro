@@ -34,6 +34,9 @@ import {
   ArrowUpDown,
   X,
   ChevronUp,
+  Star,
+  Reply,
+  Loader2,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { CelebrationConfetti } from "@/components/CelebrationConfetti";
@@ -388,6 +391,7 @@ export default function SharedProjectTrackingPage() {
   const [requestMessage, setRequestMessage] = useState("");
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
+  const [hoverReviewRating, setHoverReviewRating] = useState<number | null>(null);
   const [reviewComment, setReviewComment] = useState("");
   const [showReviewResponseForm, setShowReviewResponseForm] = useState(false);
   const [reviewResponse, setReviewResponse] = useState("");
@@ -2048,85 +2052,219 @@ export default function SharedProjectTrackingPage() {
                 </div>
 
                 <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-xl border bg-card p-4 shadow-soft">
-                    <p className="font-medium">Your review of {reviewRecipient}</p>
+                  <div className="rounded-2xl border bg-card p-5 shadow-soft transition-all">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-foreground">
+                        Your review of {reviewRecipient}
+                      </p>
+                      {hasOwnReview && (
+                        <div className="flex items-center gap-1 text-amber-500">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              className={`h-4 w-4 ${
+                                s <= (ownRating || 0)
+                                  ? "fill-amber-400 text-amber-500"
+                                  : "fill-transparent text-muted-foreground/30"
+                              }`}
+                            />
+                          ))}
+                          <span className="ml-1 text-xs font-bold text-foreground">
+                            {ownRating}/5
+                          </span>
+                        </div>
+                      )}
+                    </div>
                     {hasOwnReview ? (
-                      <div className="mt-2 text-sm text-muted-foreground">
-                        <p className="font-semibold text-foreground">{ownRating}/5</p>
-                        <p className="mt-1">{ownComment || "No comment provided."}</p>
+                      <div className="mt-3 rounded-xl border bg-muted/30 p-3.5 text-sm text-foreground">
+                        <p className="italic text-muted-foreground">
+                          &ldquo;{ownComment || "No comment provided."}&rdquo;
+                        </p>
                       </div>
                     ) : (
                       <>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          Share your feedback about working with {reviewRecipient}.
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          Share your feedback and experience working with {reviewRecipient}.
                         </p>
-                        <Button className="mt-4" size="sm" onClick={() => setShowReviewForm(true)}>
-                          {isClient ? "Rate professional" : "Rate client"}
+                        <Button
+                          className="mt-4 gap-2 rounded-xl bg-amber-500 text-white font-semibold hover:bg-amber-600 shadow-sm"
+                          size="sm"
+                          onClick={() => {
+                            setReviewRating(5);
+                            setShowReviewForm(true);
+                          }}
+                        >
+                          <Star className="h-4 w-4 fill-white" />
+                          {isClient ? "Rate Professional" : "Rate Client"}
                         </Button>
                       </>
                     )}
                   </div>
 
-                  <div className="rounded-xl border bg-card p-4 shadow-soft">
-                    <p className="font-medium">Review from {reviewRecipient}</p>
+                  <div className="rounded-2xl border bg-card p-5 shadow-soft transition-all">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-foreground">
+                        Review from {reviewRecipient}
+                      </p>
+                      {hasReceivedReview && (
+                        <div className="flex items-center gap-1 text-amber-500">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              className={`h-4 w-4 ${
+                                s <= (receivedRating || 0)
+                                  ? "fill-amber-400 text-amber-500"
+                                  : "fill-transparent text-muted-foreground/30"
+                              }`}
+                            />
+                          ))}
+                          <span className="ml-1 text-xs font-bold text-foreground">
+                            {receivedRating}/5
+                          </span>
+                        </div>
+                      )}
+                    </div>
                     {hasReceivedReview ? (
-                      <div className="mt-2 text-sm text-muted-foreground">
-                        <p className="font-semibold text-foreground">{receivedRating}/5</p>
-                        <p className="mt-1">{receivedComment || "No comment provided."}</p>
+                      <div className="mt-3 space-y-3">
+                        <div className="rounded-xl border bg-muted/30 p-3.5 text-sm text-foreground">
+                          <p className="italic text-muted-foreground">
+                            &ldquo;{receivedComment || "No comment provided."}&rdquo;
+                          </p>
+                        </div>
+                        {isProfessional && !data.review?.professionalResponse && (
+                          <Button
+                            className="gap-2 rounded-xl"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowReviewResponseForm(true)}
+                          >
+                            <Reply className="h-4 w-4" />
+                            Respond to review
+                          </Button>
+                        )}
+                        {data.review?.professionalResponse && (
+                          <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-sm">
+                            <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                              {isProfessional ? "Your response" : "Professional response"}
+                            </p>
+                            <p className="mt-1 text-foreground/90">
+                              {data.review.professionalResponse}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     ) : (
-                      <p className="mt-1 text-sm text-muted-foreground">
+                      <p className="mt-2 text-sm text-muted-foreground">
                         {reviewRecipient} has not left a review yet.
-                      </p>
-                    )}
-                    {isProfessional && hasReceivedReview && !data.review?.professionalResponse && (
-                      <Button
-                        className="mt-4"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowReviewResponseForm(true)}
-                      >
-                        Respond to review
-                      </Button>
-                    )}
-                    {isProfessional && data.review?.professionalResponse && (
-                      <p className="mt-3 border-l-2 border-primary/30 pl-3 text-sm text-muted-foreground">
-                        Your response: {data.review.professionalResponse}
                       </p>
                     )}
                   </div>
                 </div>
 
-                {showReviewForm && !hasOwnReview && (
-                  <div className="mt-4 rounded-xl border bg-card p-4">
-                    <div className="grid gap-3">
-                      <label className="grid gap-2 text-sm font-medium">
-                        Rating
-                        <select
-                          value={reviewRating}
-                          onChange={(event) => setReviewRating(Number(event.target.value))}
-                          className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        >
-                          {[5, 4, 3, 2, 1].map((value) => (
-                            <option key={value} value={value}>
-                              {value} / 5
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="grid gap-2 text-sm font-medium">
-                        Review comment
-                        <textarea
-                          value={reviewComment}
-                          onChange={(event) => setReviewComment(event.target.value)}
-                          placeholder="Share what went well, or what could be improved."
-                          className="min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        />
-                      </label>
+                {/* Rate & Review Modal Popup */}
+                <Dialog
+                  open={showReviewForm && !hasOwnReview}
+                  onOpenChange={(open) => {
+                    setShowReviewForm(open);
+                    if (!open) {
+                      setHoverReviewRating(null);
+                    }
+                  }}
+                >
+                  <DialogContent className="max-w-lg rounded-2xl p-6 sm:p-7 bg-background text-foreground shadow-2xl">
+                    <DialogHeader className="space-y-1 text-left">
+                      <DialogTitle className="text-xl font-bold tracking-tight text-foreground">
+                        {isClient ? "Rate & Review Professional" : "Rate & Review Client"}
+                      </DialogTitle>
+                      <DialogDescription className="text-xs sm:text-sm text-muted-foreground">
+                        {data.job?.title ?? `Project #${data.project.id}`} · {isClient ? "Professional" : "Client"}: {reviewRecipient}
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-6 py-2">
+                      {/* Rating section */}
+                      <div className="space-y-2.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          {isClient ? "OVERALL QUALITY & SERVICE" : "CLIENT COLLABORATION & COMMUNICATION"}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div
+                            className="flex items-center gap-1"
+                            onMouseLeave={() => setHoverReviewRating(null)}
+                          >
+                            {[1, 2, 3, 4, 5].map((star) => {
+                              const activeRating = hoverReviewRating ?? reviewRating;
+                              const isFilled = star <= activeRating;
+                              return (
+                                <button
+                                  key={star}
+                                  type="button"
+                                  onClick={() => setReviewRating(star)}
+                                  onMouseEnter={() => setHoverReviewRating(star)}
+                                  className="p-0.5 text-muted-foreground/30 transition-transform hover:scale-110 focus:outline-none"
+                                  aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
+                                >
+                                  <Star
+                                    className={`h-7 w-7 transition-colors ${
+                                      isFilled
+                                        ? "fill-amber-400 text-amber-500"
+                                        : "fill-transparent text-muted-foreground/30 hover:text-amber-300"
+                                    }`}
+                                  />
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <span className="text-xs font-semibold text-foreground sm:text-sm">
+                            {(hoverReviewRating ?? reviewRating) === 5 &&
+                              (isClient ? "5 - Outstanding Quality & Service" : "5 - Excellent Client to Work With")}
+                            {(hoverReviewRating ?? reviewRating) === 4 &&
+                              (isClient ? "4 - Great Work & Professional" : "4 - Great Client, Clear Requirements")}
+                            {(hoverReviewRating ?? reviewRating) === 3 &&
+                              (isClient ? "3 - Satisfactory Delivery" : "3 - Good Experience Overall")}
+                            {(hoverReviewRating ?? reviewRating) === 2 &&
+                              (isClient ? "2 - Needs Improvement" : "2 - Difficult Communication / Delayed")}
+                            {(hoverReviewRating ?? reviewRating) === 1 &&
+                              (isClient ? "1 - Unsatisfactory Experience" : "1 - Poor Experience / Unresponsive")}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Comment section */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            {isClient
+                              ? "SHARE YOUR FEEDBACK ON THIS PROFESSIONAL (OPTIONAL)"
+                              : "SHARE YOUR FEEDBACK ON WORKING WITH THIS CLIENT (OPTIONAL)"}
+                          </p>
+                        </div>
+                        <div className="relative">
+                          <textarea
+                            value={reviewComment}
+                            onChange={(e) => setReviewComment(e.target.value)}
+                            maxLength={1000}
+                            rows={4}
+                            placeholder={
+                              isClient
+                                ? "Describe your experience with the professional's quality of work, turnaround time, communication, and overall delivery."
+                                : "How was the client's communication, clarity of requirements, and milestone responsiveness?"
+                            }
+                            className="w-full resize-none rounded-xl border border-input bg-background/50 p-3.5 pb-7 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          />
+                          <span className="absolute bottom-2.5 right-3 text-[11px] text-muted-foreground">
+                            {reviewComment.length} characters
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
+
+                    <DialogFooter className="flex items-center justify-end gap-2 pt-2">
                       <Button
+                        type="button"
                         variant="outline"
+                        className="rounded-xl px-5"
+                        disabled={busy === "submit-review"}
                         onClick={() => {
                           setShowReviewForm(false);
                           setReviewComment("");
@@ -2135,60 +2273,138 @@ export default function SharedProjectTrackingPage() {
                         Cancel
                       </Button>
                       <Button
-                        onClick={() => {
+                        type="button"
+                        className="min-w-[130px] rounded-xl bg-blue-600 font-semibold text-white shadow-sm hover:bg-blue-700"
+                        disabled={busy === "submit-review" || !reviewRating}
+                        onClick={async () => {
                           if (!reviewRating) return;
-                          void action("submit-review", {
+                          const result = await action("submit-review", {
                             rating: reviewRating,
                             comment: reviewComment.trim() || null,
                           });
-                          setShowReviewForm(false);
-                          setReviewComment("");
+                          if (result?.ok) {
+                            setShowReviewForm(false);
+                            setReviewComment("");
+                          }
                         }}
                       >
-                        Save rating & review
+                        {busy === "submit-review" ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Submitting...
+                          </>
+                        ) : (
+                          "Submit Rating"
+                        )}
                       </Button>
-                    </div>
-                  </div>
-                )}
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
 
-                {showReviewResponseForm &&
-                  isProfessional &&
-                  data.review &&
-                  hasReceivedReview &&
-                  !data.review.professionalResponse && (
-                    <div className="mt-4 rounded-xl border bg-card p-4">
-                      <label className="grid gap-2 text-sm font-medium">
-                        Response to client review
-                        <textarea
-                          value={reviewResponse}
-                          onChange={(event) => setReviewResponse(event.target.value)}
-                          placeholder="Thank the client or add helpful context."
-                          className="min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        />
-                      </label>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setShowReviewResponseForm(false);
-                            setReviewResponse("");
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            if (!reviewResponse.trim()) return;
-                            void action("respond-to-review", { response: reviewResponse.trim() });
-                            setShowReviewResponseForm(false);
-                            setReviewResponse("");
-                          }}
-                        >
-                          Save response
-                        </Button>
+                {/* Professional Review Response Modal */}
+                <Dialog
+                  open={
+                    showReviewResponseForm &&
+                    isProfessional &&
+                    hasReceivedReview &&
+                    !data.review?.professionalResponse
+                  }
+                  onOpenChange={setShowReviewResponseForm}
+                >
+                  <DialogContent className="max-w-lg rounded-2xl p-6 sm:p-7 bg-background text-foreground shadow-2xl">
+                    <DialogHeader className="space-y-1 text-left">
+                      <DialogTitle className="text-xl font-bold tracking-tight text-foreground">
+                        Respond to Client Review
+                      </DialogTitle>
+                      <DialogDescription className="text-xs sm:text-sm text-muted-foreground">
+                        {data.job?.title ?? `Project #${data.project.id}`} · Client: {reviewRecipient}
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-5 py-2">
+                      <div className="rounded-xl border bg-muted/40 p-3.5 text-sm">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <div className="flex text-amber-500">
+                            {[1, 2, 3, 4, 5].map((s) => (
+                              <Star
+                                key={s}
+                                className={`h-4 w-4 ${
+                                  s <= (receivedRating || 0)
+                                    ? "fill-amber-400 text-amber-500"
+                                    : "fill-transparent text-muted-foreground/30"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <span className="font-semibold text-foreground text-xs">
+                            {receivedRating}/5
+                          </span>
+                        </div>
+                        <p className="text-muted-foreground italic">
+                          &ldquo;{receivedComment || "No comment provided."}&rdquo;
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          YOUR PUBLIC RESPONSE
+                        </p>
+                        <div className="relative">
+                          <textarea
+                            value={reviewResponse}
+                            onChange={(e) => setReviewResponse(e.target.value)}
+                            maxLength={1000}
+                            rows={4}
+                            placeholder="Thank the client for their feedback or provide helpful context about the project."
+                            className="w-full resize-none rounded-xl border border-input bg-background/50 p-3.5 pb-7 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          />
+                          <span className="absolute bottom-2.5 right-3 text-[11px] text-muted-foreground">
+                            {reviewResponse.length} characters
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  )}
+
+                    <DialogFooter className="flex items-center justify-end gap-2 pt-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-xl px-5"
+                        disabled={busy === "respond-to-review"}
+                        onClick={() => {
+                          setShowReviewResponseForm(false);
+                          setReviewResponse("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        className="min-w-[130px] rounded-xl bg-blue-600 font-semibold text-white shadow-sm hover:bg-blue-700"
+                        disabled={busy === "respond-to-review" || !reviewResponse.trim()}
+                        onClick={async () => {
+                          if (!reviewResponse.trim()) return;
+                          const result = await action("respond-to-review", {
+                            response: reviewResponse.trim(),
+                          });
+                          if (result?.ok) {
+                            setShowReviewResponseForm(false);
+                            setReviewResponse("");
+                          }
+                        }}
+                      >
+                        {busy === "respond-to-review" ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          "Save Response"
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </section>
             )}
 

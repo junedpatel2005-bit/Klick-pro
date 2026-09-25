@@ -3,42 +3,124 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ClipboardEvent, FormEvent, KeyboardEvent, useRef, useState } from "react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { countryCodes } from "@/lib/country-codes";
+import { isValidPhoneNumber, phoneValidationMessage } from "@/lib/phone-validation";
+import { cn } from "@/lib/utils";
 
 const emptyOtp = ["", "", "", ""];
 
 function EmailTab() {
+  const [email, setEmail] = useState("");
+  const [fieldError, setFieldError] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  async function submit(formData: FormData) {
-    setPending(true);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) return;
+
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setFieldError("Email is required.");
+      setError("Please enter your email.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setFieldError("Enter a valid email.");
+      setError("Enter a valid email.");
+      return;
+    }
+
+    setFieldError("");
+    setError(null);
     setMessage(null);
+    setPending(true);
+
     try {
-      await fetch("/api/v1/auth/forgot-password", {
+      const response = await fetch("/api/v1/auth/forgot-password", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: formData.get("email") }),
+        body: JSON.stringify({ email: trimmed }),
       });
-      setMessage("If an account exists for that email, we sent a reset link.");
+      const data = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        message?: string;
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        setError(data?.error ?? "Your email is not registered.");
+        return;
+      }
+
+      setMessage(data?.message ?? "Reset link sent to your email.");
     } catch {
-      setMessage("Unable to send the reset link. Please check your connection and try again.");
+      setError("Unable to send the reset link. Please check your connection and try again.");
     } finally {
       setPending(false);
     }
   }
+
   return (
-    <form action={submit} className="space-y-4">
+    <form onSubmit={submit} noValidate className="space-y-5">
       <div className="space-y-1.5">
         <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" required placeholder="you@example.com" />
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          required
+          disabled={pending}
+          value={email}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            if (fieldError) setFieldError("");
+            if (error) setError(null);
+          }}
+          placeholder="you@example.com"
+          aria-invalid={Boolean(fieldError || error)}
+          className={cn("h-11", fieldError || error ? "border-destructive" : "")}
+        />
+        {fieldError ? <p className="text-xs text-destructive">{fieldError}</p> : null}
       </div>
-      {message && <p className="text-sm text-success">{message}</p>}
-      <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? "Sending…" : "Send reset link"}
+
+      {error ? (
+        <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+          {error}
+        </div>
+      ) : null}
+
+      {message ? (
+        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5 text-sm text-emerald-600 dark:text-emerald-400">
+          {message}
+        </div>
+      ) : null}
+
+      <Button
+        type="submit"
+        disabled={pending}
+        aria-busy={pending}
+        className={cn(
+          "relative h-11 w-full overflow-hidden transition-all duration-200",
+          pending && "cursor-wait opacity-90",
+        )}
+      >
+        {pending ? (
+          <span className="inline-flex items-center justify-center gap-2 text-sm font-semibold">
+            <Loader2 className="h-4 w-4 animate-spin text-white" />
+            Sending reset link…
+          </span>
+        ) : (
+          <span className="inline-flex items-center justify-center gap-2 text-sm font-semibold">
+            Send reset link <ArrowRight className="h-4 w-4" />
+          </span>
+        )}
       </Button>
     </form>
   );
@@ -67,29 +149,39 @@ function PhoneTab() {
     setOtpOpen(false);
     setResetToken(null);
     setError(null);
+    setMessage(null);
   }
 
   async function requestCode() {
     setError(null);
-    if (phone.trim().length < 7) {
-      setError("Enter a valid phone number first.");
+    setMessage(null);
+    if (!isValidPhoneNumber(phone, countryCode)) {
+      setError(phoneValidationMessage(countryCode));
       return;
     }
     setSendingCode(true);
-    const response = await fetch("/api/v1/auth/forgot-password-phone", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ phone: fullPhone }),
-    });
-    setSendingCode(false);
-    if (!response.ok) {
-      const result = (await response.json().catch(() => null)) as { error?: string } | null;
-      setError(result?.error ?? "Unable to send a verification code.");
-      return;
+    try {
+      const response = await fetch("/api/v1/auth/forgot-password-phone", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ phone: fullPhone }),
+      });
+      const result = (await response.json().catch(() => null)) as {
+        error?: string;
+        message?: string;
+      } | null;
+      if (!response.ok) {
+        setError(result?.error ?? "Your phone number is not registered.");
+        return;
+      }
+      setOtpOpen(true);
+      setMessage(result?.message ?? "Verification code sent to your phone.");
+      requestAnimationFrame(() => otpRefs.current[0]?.focus());
+    } catch {
+      setError("Unable to send verification code. Please check your connection.");
+    } finally {
+      setSendingCode(false);
     }
-    setOtpOpen(true);
-    setMessage("If that number is registered, a verification code has been sent.");
-    requestAnimationFrame(() => otpRefs.current[0]?.focus());
   }
 
   function updateOtp(index: number, value: string) {
@@ -120,19 +212,27 @@ function PhoneTab() {
     }
     setError(null);
     setVerifying(true);
-    const response = await fetch("/api/v1/auth/verify-forgot-password-phone", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ phone: fullPhone, code }),
-    });
-    const result = (await response.json()) as { error?: string; token?: string };
-    setVerifying(false);
-    if (!response.ok || !result.token) {
-      setError(result.error ?? "Unable to verify this code.");
-      return;
+    try {
+      const response = await fetch("/api/v1/auth/verify-forgot-password-phone", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ phone: fullPhone, code }),
+      });
+      const result = (await response.json().catch(() => null)) as {
+        error?: string;
+        token?: string;
+      } | null;
+      if (!response.ok || !result?.token) {
+        setError(result?.error ?? "Unable to verify this code.");
+        return;
+      }
+      setResetToken(result.token);
+      setMessage(null);
+    } catch {
+      setError("Unable to verify code. Please check your connection.");
+    } finally {
+      setVerifying(false);
     }
-    setResetToken(result.token);
-    setMessage(null);
   }
 
   async function submitNewPassword(event: FormEvent<HTMLFormElement>) {
@@ -148,30 +248,38 @@ function PhoneTab() {
     }
     setError(null);
     setResetting(true);
-    const response = await fetch("/api/v1/auth/reset-password", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ token: resetToken, password }),
-    });
-    const result = (await response.json().catch(() => null)) as { error?: string } | null;
-    setResetting(false);
-    if (!response.ok) {
-      setError(result?.error ?? "Unable to reset your password.");
-      return;
+    try {
+      const response = await fetch("/api/v1/auth/reset-password", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token: resetToken, password }),
+      });
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) {
+        setError(result?.error ?? "Unable to reset your password.");
+        return;
+      }
+      router.push("/login");
+    } catch {
+      setError("Unable to reset password. Please check your connection.");
+    } finally {
+      setResetting(false);
     }
-    router.push("/login");
   }
 
   if (resetToken) {
     return (
-      <form onSubmit={submitNewPassword} className="space-y-4">
-        <p className="text-sm text-success">Phone verified. Choose a new password.</p>
+      <form onSubmit={submitNewPassword} className="space-y-5">
+        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5 text-sm text-emerald-600 dark:text-emerald-400">
+          Phone verified. Choose a new password.
+        </div>
         <div className="space-y-1.5">
           <Label htmlFor="new-password">New password</Label>
           <Input
             id="new-password"
             type="password"
             required
+            className="h-11"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
@@ -182,20 +290,34 @@ function PhoneTab() {
             id="confirm-new-password"
             type="password"
             required
+            className="h-11"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
           />
         </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button type="submit" className="w-full" disabled={resetting}>
-          {resetting ? "Resetting…" : "Reset password"}
+        {error && (
+          <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+        <Button type="submit" className="h-11 w-full" disabled={resetting}>
+          {resetting ? (
+            <span className="inline-flex items-center justify-center gap-2 text-sm font-semibold">
+              <Loader2 className="h-4 w-4 animate-spin text-white" />
+              Resetting…
+            </span>
+          ) : (
+            <span className="inline-flex items-center justify-center gap-2 text-sm font-semibold">
+              Reset password <ArrowRight className="h-4 w-4" />
+            </span>
+          )}
         </Button>
       </form>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="space-y-1.5">
         <Label htmlFor="reset-phone">Phone number</Label>
         <div className="flex gap-2">
@@ -206,8 +328,8 @@ function PhoneTab() {
               setCountryCode(event.target.value);
               resetVerification();
             }}
-            disabled={otpOpen}
-            className="h-10 w-[104px] shrink-0 rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
+            disabled={otpOpen || sendingCode}
+            className="h-11 w-[108px] rounded-lg border border-input bg-background px-2.5 text-sm shadow-sm outline-none transition focus:border-ring focus:ring-1 focus:ring-ring disabled:opacity-50"
           >
             {countryCodes.map((country) => (
               <option key={country.code} value={country.code}>
@@ -220,19 +342,20 @@ function PhoneTab() {
             type="tel"
             required
             value={phone}
-            disabled={otpOpen}
+            disabled={otpOpen || sendingCode}
             onChange={(event) => {
               setPhone(event.target.value.replace(/[^\d\s-]/g, ""));
               resetVerification();
             }}
             placeholder="98765 43210"
+            className="h-11"
           />
         </div>
       </div>
       {otpOpen ? (
-        <div className="space-y-3 rounded-lg border border-border p-3">
+        <div className="space-y-3 rounded-xl border border-border/80 bg-muted/30 p-4">
           <Label>Verification code</Label>
-          <div className="flex gap-2">
+          <div className="flex justify-center gap-2">
             {otp.map((digit, index) => (
               <Input
                 key={index}
@@ -247,36 +370,66 @@ function PhoneTab() {
                 autoComplete="one-time-code"
                 maxLength={1}
                 aria-label={`Verification digit ${index + 1}`}
-                className="h-11 w-11 text-center text-lg"
+                className="h-12 w-12 text-center text-lg font-semibold"
               />
             ))}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 pt-2">
             <Button
               type="button"
+              className="h-11 flex-1"
               onClick={verifyCode}
               disabled={verifying || otp.join("").length !== 4}
             >
-              {verifying ? "Verifying…" : "Verify code"}
+              {verifying ? (
+                <span className="inline-flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-white" />
+                  Verifying…
+                </span>
+              ) : (
+                "Verify code"
+              )}
             </Button>
             <Button
               type="button"
-              variant="link"
-              size="sm"
+              variant="outline"
+              className="h-11"
               onClick={requestCode}
               disabled={sendingCode}
             >
-              {sendingCode ? "Sending…" : "Resend code"}
+              {sendingCode ? "Sending…" : "Resend"}
             </Button>
           </div>
         </div>
       ) : (
-        <Button type="button" className="w-full" onClick={requestCode} disabled={sendingCode}>
-          {sendingCode ? "Sending…" : "Send verification code"}
+        <Button
+          type="button"
+          className="h-11 w-full"
+          onClick={requestCode}
+          disabled={sendingCode}
+        >
+          {sendingCode ? (
+            <span className="inline-flex items-center justify-center gap-2 text-sm font-semibold">
+              <Loader2 className="h-4 w-4 animate-spin text-white" />
+              Sending code…
+            </span>
+          ) : (
+            <span className="inline-flex items-center justify-center gap-2 text-sm font-semibold">
+              Send verification code <ArrowRight className="h-4 w-4" />
+            </span>
+          )}
         </Button>
       )}
-      {message && <p className="text-sm text-success">{message}</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {message && (
+        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5 text-sm text-emerald-600 dark:text-emerald-400">
+          {message}
+        </div>
+      )}
+      {error && (
+        <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+          {error}
+        </div>
+      )}
     </div>
   );
 }
@@ -287,6 +440,7 @@ export default function Forgot() {
     <AuthLayout
       title="Reset your password"
       subtitle="Choose how you'd like to verify it's you."
+      hideAside
       footer={
         <>
           Remembered it?{" "}
@@ -296,17 +450,27 @@ export default function Forgot() {
         </>
       }
     >
-      <div className="mb-5 grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
-        {(["email", "phone"] as const).map((choice) => (
-          <button
-            key={choice}
-            type="button"
-            onClick={() => setTab(choice)}
-            className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${tab === choice ? "bg-card text-foreground shadow-soft" : "text-muted-foreground"}`}
-          >
-            {choice === "email" ? "Email" : "Phone OTP"}
-          </button>
-        ))}
+      <div className="mb-6 grid grid-cols-2 gap-1 rounded-xl border border-border/70 bg-muted/70 p-1">
+        <button
+          type="button"
+          onClick={() => setTab("email")}
+          className={cn(
+            "rounded-lg px-4 py-2.5 text-sm font-semibold transition-all",
+            tab === "email" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+          )}
+        >
+          Email
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("phone")}
+          className={cn(
+            "rounded-lg px-4 py-2.5 text-sm font-semibold transition-all",
+            tab === "phone" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+          )}
+        >
+          Phone OTP
+        </button>
       </div>
       {tab === "email" ? <EmailTab /> : <PhoneTab />}
     </AuthLayout>

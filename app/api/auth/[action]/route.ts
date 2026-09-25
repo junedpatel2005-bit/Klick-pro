@@ -80,13 +80,27 @@ async function createEmailVerificationToken(userId: number) {
   });
   return raw;
 }
-async function sendEmailVerificationLink(email: string, raw: string, appOrigin: string) {
+async function sendEmailVerificationLink(
+  email: string,
+  raw: string,
+  appOrigin: string,
+  userName?: string,
+) {
   await sendAuthEmail(
     email,
-    "Verify your Klick-Pro email",
-    "Verify your email",
+    "Verify your email address for Klick-Pro",
+    "Confirm your Klick-Pro email address",
     `${appOrigin}/verify-email?token=${encodeURIComponent(raw)}`,
-    "Verify email",
+    "Verify Email Address",
+    {
+      templateKey: "auth_email_verification",
+      userName: userName || "there",
+      appOrigin,
+      variables: {
+        user_name: userName || "there",
+        verification_token: raw,
+      },
+    },
   );
 }
 
@@ -419,9 +433,13 @@ export async function POST(
       { userId: user.id },
     );
     const raw = await createEmailVerificationToken(user.id);
+    const userName =
+      [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
+      user.firstName ||
+      "there";
     enqueueBackgroundJob(
       "email.verification",
-      () => sendEmailVerificationLink(user.email, raw, publicAppOrigin(request)),
+      () => sendEmailVerificationLink(user.email, raw, publicAppOrigin(request), userName),
       { userId: user.id },
     );
     const response = NextResponse.json(
@@ -696,7 +714,11 @@ export async function POST(
           },
         }),
       ]);
-      await sendEmailVerificationLink(parsed.data.email, raw, publicAppOrigin(request));
+      const userName =
+        [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
+        user.firstName ||
+        "there";
+      await sendEmailVerificationLink(parsed.data.email, raw, publicAppOrigin(request), userName);
       return NextResponse.json({
         success: true,
         message: "Email updated. A new confirmation link has been sent.",
@@ -715,9 +737,13 @@ export async function POST(
       const user = await db.user.findUniqueOrThrow({ where: { id: session.userId } });
       if (user.emailVerifiedAt) return NextResponse.json({ success: true });
       const raw = await createEmailVerificationToken(user.id);
+      const userName =
+        [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
+        user.firstName ||
+        "there";
       enqueueBackgroundJob(
         "email.verification.resend",
-        () => sendEmailVerificationLink(user.email, raw, publicAppOrigin(request)),
+        () => sendEmailVerificationLink(user.email, raw, publicAppOrigin(request), userName),
         { userId: user.id },
       );
       return NextResponse.json({ success: true });
@@ -727,45 +753,65 @@ export async function POST(
   }
   if (action === "forgot-password") {
     const parsed = z.object({ email: z.string().email() }).safeParse(body);
-    if (!parsed.success) return NextResponse.json({ success: true });
-    const user = await db.user.findUnique({ where: { email: parsed.data.email } });
-    if (user) {
-      const raw = randomBytes(32).toString("hex");
-      await db.apiToken.create({
-        data: {
-          userId: user.id,
-          tokenHash: tokenHash(raw),
-          kind: "PASSWORD_RESET",
-          expiresAt: new Date(Date.now() + 3600000),
-        },
-      });
-      enqueueBackgroundJob(
-        "email.password-reset",
-        () =>
-          sendAuthEmail(
-            user.email,
-            "Reset your Klick-Pro password",
-            "Reset your password",
-            `${publicAppOrigin(request)}/reset-password?token=${encodeURIComponent(raw)}`,
-            "Reset password",
-          ),
-        { userId: user.id },
-      );
+    if (!parsed.success) return safe("Please enter a valid email address.", 400);
+    const email = parsed.data.email.trim().toLowerCase();
+    const user = await db.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+    });
+    if (!user) {
+      return NextResponse.json({ error: "Your email is not registered." }, { status: 404 });
     }
-    return NextResponse.json({ success: true });
+    const raw = randomBytes(32).toString("hex");
+    await db.apiToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: tokenHash(raw),
+        kind: "PASSWORD_RESET",
+        expiresAt: new Date(Date.now() + 3600000),
+      },
+    });
+    const userName =
+      [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
+      user.firstName ||
+      "there";
+    const appOrigin = publicAppOrigin(request);
+    const resetUrl = `${appOrigin}/reset-password?token=${encodeURIComponent(raw)}`;
+    enqueueBackgroundJob(
+      "email.password-reset",
+      () =>
+        sendAuthEmail(
+          user.email,
+          "Reset your Klick-Pro account password",
+          "Password Reset Request",
+          resetUrl,
+          "Reset My Password",
+          {
+            templateKey: "auth_password_reset",
+            userName,
+            appOrigin,
+            variables: {
+              user_name: userName,
+              reset_token: raw,
+            },
+          },
+        ),
+      { userId: user.id },
+    );
+    return NextResponse.json({ success: true, message: "Reset link sent to your email." });
   }
   if (action === "forgot-password-phone") {
     const parsed = z.object({ phone: z.string().min(7).max(25) }).safeParse(body);
-    if (!parsed.success) return NextResponse.json({ success: true });
+    if (!parsed.success) return safe("Enter a valid phone number.", 400);
     const phone = parsed.data.phone.trim();
     if (!rateLimit(`forgot-password-phone:${clientKey(request)}:${phone}`, 3, 10 * 60_000))
       return safe("Too many code requests. Please try again later.", 429);
     const user = await db.user.findFirst({ where: { phone, isActive: true } });
-    if (user && (user.role === "CLIENT" || user.role === "PROFESSIONAL")) {
-      const result = await requestPhoneOtp(phone, user.role);
-      if (!result.ok) return safe(result.error, result.status);
+    if (!user || (user.role !== "CLIENT" && user.role !== "PROFESSIONAL")) {
+      return safe("Your phone number is not registered.", 404);
     }
-    return NextResponse.json({ success: true });
+    const result = await requestPhoneOtp(phone, user.role);
+    if (!result.ok) return safe(result.error, result.status);
+    return NextResponse.json({ success: true, message: "Verification code sent to your phone." });
   }
   if (action === "verify-forgot-password-phone") {
     const parsed = z

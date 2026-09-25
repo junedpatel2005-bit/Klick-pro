@@ -61,24 +61,7 @@ function displayStatus(status: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-type StatusFilter =
-  | "ALL"
-  | "READY_TO_START"
-  | "IN_PROGRESS"
-  | "AWAITING_CLIENT_REVIEW"
-  | "AWAITING_PROFESSIONAL_CONFIRMATION"
-  | "REVISION_REQUESTED"
-  | "FINAL_WORK_SUBMITTED";
-
-const statusFilters: { value: StatusFilter; label: string }[] = [
-  { value: "ALL", label: "All projects" },
-  { value: "READY_TO_START", label: "Ready to Start" },
-  { value: "IN_PROGRESS", label: "In Progress" },
-  { value: "AWAITING_CLIENT_REVIEW", label: "Awaiting Review" },
-  { value: "AWAITING_PROFESSIONAL_CONFIRMATION", label: "Confirm Completion" },
-  { value: "REVISION_REQUESTED", label: "Needs Revision" },
-  { value: "FINAL_WORK_SUBMITTED", label: "Final Submitted" },
-];
+type FilterTab = "all_active" | "in_progress" | "needs_action" | "completed" | "closed";
 
 function money(project: RunningProject) {
   if (project.budget == null) return "Amount pending";
@@ -96,8 +79,7 @@ export default function RunningProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
-  const [view, setView] = useState<"active" | "completed" | "closed">("active");
+  const [filterTab, setFilterTab] = useState<FilterTab>("all_active");
 
   const loadProjects = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -154,10 +136,17 @@ export default function RunningProjectsPage() {
     };
   }, [loadProjects]);
 
+  const inProgress = projects.filter((project) => project.status === "IN_PROGRESS").length;
+  const needsActionCount = projects.length - inProgress;
+
   const visibleProjects = useMemo(() => {
     const term = search.trim().toLowerCase();
     return projects
-      .filter((project) => statusFilter === "ALL" || project.status === statusFilter)
+      .filter((project) => {
+        if (filterTab === "in_progress") return project.status === "IN_PROGRESS";
+        if (filterTab === "needs_action") return project.status !== "IN_PROGRESS";
+        return true;
+      })
       .filter(
         (project) =>
           !term ||
@@ -165,7 +154,7 @@ export default function RunningProjectsPage() {
             value?.toLowerCase().includes(term),
           ),
       );
-  }, [projects, search, statusFilter]);
+  }, [projects, search, filterTab]);
 
   const visibleCompletedProjects = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -188,8 +177,6 @@ export default function RunningProjectsPage() {
         ),
     );
   }, [closedProjects, search]);
-
-  const inProgress = projects.filter((project) => project.status === "IN_PROGRESS").length;
   const totalValue = projects.reduce(
     (sum, project) => sum + (project.timingType === "HOURLY" ? 0 : (project.budget ?? 0)),
     0,
@@ -258,93 +245,85 @@ export default function RunningProjectsPage() {
       </section>
 
       <section>
-        <div className="flex flex-col justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-end">
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="font-display text-xl font-semibold">
-                {view === "active"
-                  ? "Active projects"
-                  : view === "completed"
-                    ? "Completed projects"
-                    : "Closed projects"}
-              </h2>
-              <div className="inline-flex rounded-xl border border-border bg-muted/50 p-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setView("active");
-                    setStatusFilter("ALL");
-                  }}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
-                    view === "active"
-                      ? "bg-card text-foreground shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Active ({projects.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setView("completed");
-                    setStatusFilter("ALL");
-                  }}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
-                    view === "completed"
-                      ? "bg-card text-emerald-600 dark:text-emerald-400 shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Completed ({completedProjects.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setView("closed");
-                    setStatusFilter("ALL");
-                  }}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
-                    view === "closed"
-                      ? "bg-card text-slate-700 dark:text-slate-300 shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Closed ({closedProjects.length})
-                </button>
-              </div>
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {view === "active"
-                ? `${visibleProjects.length} active ${visibleProjects.length === 1 ? "project" : "projects"}`
-                : view === "completed"
-                  ? `${visibleCompletedProjects.length} completed ${visibleCompletedProjects.length === 1 ? "project" : "projects"}`
-                  : `${visibleClosedProjects.length} closed ${visibleClosedProjects.length === 1 ? "project" : "projects"}`}
-            </p>
+        {/* Unified single-line filter and search bar */}
+        <div className="flex flex-col gap-3.5 border-b border-border pb-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-border bg-muted/50 p-1 no-scrollbar">
+            <button
+              type="button"
+              onClick={() => setFilterTab("all_active")}
+              className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all sm:text-sm ${
+                filterTab === "all_active"
+                  ? "bg-card text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              All Active ({projects.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterTab("in_progress")}
+              className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all sm:text-sm ${
+                filterTab === "in_progress"
+                  ? "bg-card text-primary shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              In Progress ({inProgress})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterTab("needs_action")}
+              className={`inline-flex whitespace-nowrap items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all sm:text-sm ${
+                filterTab === "needs_action"
+                  ? "bg-card text-amber-700 dark:text-amber-400 shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span>Needs Action</span>
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                  needsActionCount > 0
+                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {needsActionCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterTab("completed")}
+              className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all sm:text-sm ${
+                filterTab === "completed"
+                  ? "bg-card text-emerald-600 dark:text-emerald-400 shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Completed ({completedProjects.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterTab("closed")}
+              className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all sm:text-sm ${
+                filterTab === "closed"
+                  ? "bg-card text-slate-700 dark:text-slate-300 shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Closed ({closedProjects.length})
+            </button>
           </div>
-          <div className="relative w-full sm:max-w-sm">
+
+          <div className="relative w-full sm:max-w-xs">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="h-11 w-full rounded-xl border border-input bg-card pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+              className="h-10 w-full rounded-xl border border-input bg-card pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
               placeholder="Search projects or clients"
             />
           </div>
         </div>
-        {view === "active" && (
-          <div className="mt-4 flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-muted/50 p-1">
-            {statusFilters.map((filter) => (
-              <button
-                key={filter.value}
-                type="button"
-                onClick={() => setStatusFilter(filter.value)}
-                className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition-all sm:text-sm ${statusFilter === filter.value ? "bg-card text-primary shadow-soft" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-        )}
         {error ? (
           <p className="mt-5 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             {error}
@@ -353,7 +332,7 @@ export default function RunningProjectsPage() {
         <div className="mt-5 space-y-4">
           {loading ? (
             <CardListSkeleton count={2} />
-          ) : view === "active" ? (
+          ) : filterTab === "all_active" || filterTab === "in_progress" || filterTab === "needs_action" ? (
             visibleProjects.map((project) => (
               <article
                 key={project.id}
@@ -529,7 +508,7 @@ export default function RunningProjectsPage() {
                 </div>
               </article>
             ))
-          ) : view === "completed" ? (
+          ) : filterTab === "completed" ? (
             visibleCompletedProjects.map((project) => (
               <article
                 key={project.id}
@@ -608,36 +587,40 @@ export default function RunningProjectsPage() {
           )}
           {!loading &&
           !error &&
-          (view === "active"
-            ? !visibleProjects.length
-            : view === "completed"
-              ? !visibleCompletedProjects.length
-              : !visibleClosedProjects.length) ? (
+          (filterTab === "completed"
+            ? !visibleCompletedProjects.length
+            : filterTab === "closed"
+              ? !visibleClosedProjects.length
+              : !visibleProjects.length) ? (
             <div className="rounded-2xl border border-dashed border-primary/25 bg-primary/[0.025] px-6 py-14 text-center">
               <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
                 <BriefcaseBusiness className="h-6 w-6" />
               </div>
               <h3 className="mt-4 text-lg font-semibold">
-                {view === "completed"
+                {filterTab === "completed"
                   ? "No completed projects yet"
-                  : view === "closed"
+                  : filterTab === "closed"
                     ? "No closed projects yet"
-                    : search || statusFilter !== "ALL"
-                      ? "No matching projects"
-                      : "No active projects yet"}
+                    : filterTab === "in_progress"
+                      ? search ? "No in-progress projects match your search" : "No projects currently in progress"
+                      : filterTab === "needs_action"
+                        ? search ? "No action-pending projects match your search" : "No projects requiring action right now"
+                        : search
+                          ? "No matching projects"
+                          : "No active projects yet"}
               </h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                {view === "completed"
+                {filterTab === "completed"
                   ? "Completed projects will appear here after a project is confirmed."
-                  : view === "closed"
+                  : filterTab === "closed"
                     ? "Closed or cancelled projects will appear here."
-                    : search
-                      ? "Try another project or client name."
-                      : statusFilter !== "ALL"
-                        ? "No projects have this status right now."
+                    : filterTab === "needs_action"
+                      ? "Projects awaiting your review, client response, or revisions will appear here."
+                      : search
+                        ? "Try another project or client name."
                         : "Accepted client work will appear here when it starts."}
               </p>
-              {!search && statusFilter === "ALL" && (
+              {!search && filterTab === "all_active" && (
                 <Button asChild className="mt-6">
                   <Link href="/professional/my-jobs">Browse open jobs</Link>
                 </Button>

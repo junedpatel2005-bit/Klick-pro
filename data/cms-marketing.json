@@ -2,33 +2,45 @@
   "how-it-works": {
     "hero": {
       "label": "How it works",
-      "title": "A simpler way to hire & get hired",
-      "description": "Klick-Pro handles the busywork — discovery, vetting, payments, and tracking — so you can focus on the work."
+      "title": "A simpler, safer way to hire & get hired",
+      "description": "Klick-Pro connects clients with verified professionals through a secure, milestone-based escrow workflow. Here is how the end-to-end process works."
     },
     "items": [
       {
-        "id": "post",
-        "title": "Post your job",
-        "description": "Describe the work, set your budget and timeline. It's free and takes 2 minutes.",
+        "id": "step-1-post",
+        "title": "1. Post your job",
+        "description": "Describe what you need, choose a service category, and specify your budget and timeline. It takes under two minutes.",
         "icon": "clipboard"
       },
       {
-        "id": "hire",
-        "title": "Hire safely",
-        "description": "Funds are held in escrow and released only when each milestone is approved.",
-        "icon": "shield"
-      },
-      {
-        "id": "compare",
-        "title": "Compare proposals",
-        "description": "Receive quotes from vetted pros. Chat, compare ratings, and shortlist the best.",
+        "id": "step-2-proposals",
+        "title": "2. Receive & compare quotes",
+        "description": "Verified professionals review your job and send customized proposals. Chat directly, compare ratings, and choose the best match.",
         "icon": "message"
       },
       {
-        "id": "pay",
-        "title": "Pay & review",
-        "description": "Release final payment and rate your pro to help our community.",
+        "id": "step-3-escrow",
+        "title": "3. Fund secure escrow",
+        "description": "Accept a proposal and deposit milestone funds into secure escrow. Money is protected safely by Klick-Pro before work begins.",
+        "icon": "shield"
+      },
+      {
+        "id": "step-4-tracking",
+        "title": "4. Collaborate & track milestones",
+        "description": "Professionals start work, update stages, share progress, and submit completed deliverables directly within the project tracker.",
+        "icon": "briefcase"
+      },
+      {
+        "id": "step-5-approval",
+        "title": "5. Inspect & release payment",
+        "description": "Review the submitted deliverables. Once you approve the work, funds are released directly to the professional's wallet.",
         "icon": "wallet"
+      },
+      {
+        "id": "step-6-review",
+        "title": "6. Rate & review",
+        "description": "Both parties leave verified reviews and ratings upon project completion, helping build reputation and trust across the community.",
+        "icon": "star"
       }
     ]
   },
@@ -95,32 +107,44 @@
     "hero": {
       "label": "For clients",
       "title": "Hire trusted pros — without the back-and-forth",
-      "description": "Post once. Get qualified, vetted proposals fast. Pay only when work is done. It's the modern way to get things done."
+      "description": "Post once. Get qualified, vetted proposals fast. Pay securely only when work is completed and approved."
     },
     "items": [
       {
-        "id": "vetted",
-        "title": "Vetted professionals",
-        "description": "Every pro is ID-verified. Background checks for in-home services.",
+        "id": "step-1-post",
+        "title": "1. Post your job requirement",
+        "description": "Describe your task or project, choose the service category, and set your budget and timeline. It's completely free to post.",
+        "icon": "clipboard"
+      },
+      {
+        "id": "step-2-proposals",
+        "title": "2. Get verified proposals",
+        "description": "Receive competitive quotes from ID-verified, background-checked professionals. Review their ratings, completed projects, and client feedback.",
+        "icon": "users"
+      },
+      {
+        "id": "step-3-chat",
+        "title": "3. Chat & finalize scope",
+        "description": "Message professionals in real-time to discuss details, ask questions, negotiate terms, and shortlist the top candidate.",
+        "icon": "message"
+      },
+      {
+        "id": "step-4-escrow",
+        "title": "4. Secure escrow deposit",
+        "description": "Deposit milestone payments securely through Razorpay. Your money is held safely in escrow and never released upfront.",
         "icon": "shield"
       },
       {
-        "id": "escrow",
-        "title": "Escrow payments",
-        "description": "Your money is safe. Released only when you approve a milestone.",
-        "icon": "wallet"
+        "id": "step-5-milestones",
+        "title": "5. Track work & inspect results",
+        "description": "Follow project stages in real-time, inspect deliverables uploaded by your pro, and request revisions until you are 100% satisfied.",
+        "icon": "briefcase"
       },
       {
-        "id": "matches",
-        "title": "Fast matches",
-        "description": "Get your first proposal in under 2 hours, on average.",
-        "icon": "clock"
-      },
-      {
-        "id": "support",
-        "title": "World-class support",
-        "description": "Real humans, 24/7 — never a bot.",
-        "icon": "users"
+        "id": "step-6-release-review",
+        "title": "6. Release payment & review",
+        "description": "Approve the completed milestone to release payment to the pro, then leave a review to help others in the community.",
+        "icon": "star"
       }
     ]
   },
@@ -128,31 +152,43 @@
     "hero": {
       "label": "For professionals",
       "title": "Find quality jobs. Get paid safely. Grow your business.",
-      "description": "No more chasing leads or waiting on payments. Klick-Pro brings nearby and remote jobs straight to you."
+      "description": "Connect with verified clients, submit competitive proposals, and receive guaranteed milestone payouts with zero payment chasing."
     },
     "items": [
       {
-        "id": "grow",
-        "title": "Grow",
-        "description": "Algorithmic match-making puts you in front of the right clients.",
-        "icon": "trend"
-      },
-      {
-        "id": "trusted",
-        "title": "Trusted",
-        "description": "Verified badges and ratings build long-term reputation.",
+        "id": "step-1-profile",
+        "title": "1. Build profile & verify ID",
+        "description": "Showcase your expertise, add skills, set service areas, and complete verification to earn your verified pro trust badge.",
         "icon": "shield"
       },
       {
-        "id": "nearby",
-        "title": "Nearby",
-        "description": "See jobs by distance, urgency, and budget — at a glance.",
-        "icon": "map"
+        "id": "step-2-browse",
+        "title": "2. Discover matching jobs",
+        "description": "Browse local and digital job postings matched to your trade, filtered by budget, location distance, and client urgency.",
+        "icon": "search"
       },
       {
-        "id": "paid",
-        "title": "Paid weekly",
-        "description": "Withdraw earnings to your bank or wallet, anytime.",
+        "id": "step-3-proposals",
+        "title": "3. Send custom proposals",
+        "description": "Pitch your services with tailored quotes and timelines. Chat directly with clients to understand requirements and win contracts.",
+        "icon": "message"
+      },
+      {
+        "id": "step-4-escrow",
+        "title": "4. Guaranteed escrow funding",
+        "description": "Start work with total peace of mind. Client funds are deposited into secure escrow before you start, guaranteeing payment upon delivery.",
+        "icon": "clipboard"
+      },
+      {
+        "id": "step-5-deliver",
+        "title": "5. Submit milestone deliverables",
+        "description": "Keep clients updated with stage progression, upload completed work deliverables, and request milestone review in one click.",
+        "icon": "briefcase"
+      },
+      {
+        "id": "step-6-payouts",
+        "title": "6. Instant payouts & reputation",
+        "description": "Once milestones are approved, withdraw your earnings directly to your bank account anytime via Razorpay and collect 5-star reviews.",
         "icon": "wallet"
       }
     ]

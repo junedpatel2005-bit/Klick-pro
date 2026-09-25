@@ -102,5 +102,5 @@ const LOOPBACK_ALIASES = new Set(["0.0.0.0", "::", "127.0.0.1", "::1"]);
 const browseHost = LOOPBACK_ALIASES.has(hostname) ? "localhost" : hostname;
 
 httpServer.listen(port, hostname, () => {
-  console.log(`> Servio ready on http://${browseHost}:${port} (bound to ${hostname})`);
+  console.log(`> Klick-pro ready on http://${browseHost}:${port} (bound to ${hostname})`);
 });

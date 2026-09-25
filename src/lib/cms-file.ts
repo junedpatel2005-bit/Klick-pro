@@ -16,29 +16,52 @@ export type CmsContent = {
 export const defaultContent: CmsContent = {
   hero: {
     label: "ABOUT KLICK-PRO",
-    title: "Better work starts with trust.",
+    title: "Empowering honest work through trust & transparency",
     description:
-      "Klick-Pro brings clients and skilled professionals together in one safe, simple marketplace.",
+      "Klick-Pro is a milestone-based service marketplace designed to connect clients with verified professionals across India, backed by secure escrow protection and clear accountability.",
   },
   cards: [
     {
-      id: "trust-first",
-      title: "Trust first",
+      id: "trust-verification",
+      title: "Trust & ID Verification",
       description:
-        "Verified profiles and clear project milestones help everyone work with confidence.",
+        "Every professional undergoes identity and credential verification so clients hire with total confidence and peace of mind.",
       icon: "shield",
     },
     {
+      id: "escrow-protection",
+      title: "Guaranteed Escrow Protection",
+      description:
+        "Milestone payments remain safely deposited in escrow before work begins and are released only when deliverables are approved.",
+      icon: "briefcase",
+    },
+    {
       id: "both-sides",
-      title: "Built for both sides",
-      description: "Clients hire with clarity while professionals grow their business.",
+      title: "Built for Both Sides",
+      description:
+        "Clients receive reliable work without haggling, while professionals grow sustainable businesses without chasing unpaid invoices.",
       icon: "handshake",
     },
     {
-      id: "work-worth-doing",
-      title: "Work worth doing",
-      description: "From local services to digital projects, good work deserves a better home.",
+      id: "fair-pricing",
+      title: "Fair & Transparent Pricing",
+      description:
+        "Clear milestones, transparent pricing, and low platform commissions with zero hidden charges or surprise deductions.",
       icon: "award",
+    },
+    {
+      id: "community-reputation",
+      title: "Community-Driven Reputation",
+      description:
+        "Only clients with completed, paid projects can leave ratings and reviews, ensuring 100% genuine reputation across the platform.",
+      icon: "users",
+    },
+    {
+      id: "support-dispute",
+      title: "Dedicated Support & Mediation",
+      description:
+        "A dedicated support team and built-in dispute resolution protect both parties and ensure fair outcomes if issues ever arise.",
+      icon: "shield",
     },
   ],
   sectionOrder: ["hero", "features"],

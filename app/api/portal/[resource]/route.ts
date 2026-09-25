@@ -356,46 +356,242 @@ export async function GET(
       );
     if (resource === "reviews") {
       const isClient = session.role === "CLIENT";
-      const reviews = await db.projectReview.findMany({
+
+      const currentUser = await db.user.findUnique({
+        where: { id: session.userId },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          averageRating: true,
+          reviewCount: true,
+          role: true,
+          isVerified: true,
+        },
+      });
+
+      // 1. Fetch reviews received by this user
+      const receivedReviews = await db.projectReview.findMany({
         where: isClient
           ? { clientId: session.userId, professionalRating: { not: null } }
           : { professionalId: session.userId, rating: { not: null } },
-        orderBy: isClient ? { professionalReviewedAt: "desc" } : { clientReviewedAt: "desc" },
+        orderBy: isClient
+          ? [{ professionalReviewedAt: "desc" }, { createdAt: "desc" }]
+          : [{ clientReviewedAt: "desc" }, { createdAt: "desc" }],
       });
+
+      // 2. Fetch reviews given by this user
+      const givenReviews = await db.projectReview.findMany({
+        where: isClient
+          ? { clientId: session.userId, rating: { not: null } }
+          : { professionalId: session.userId, professionalRating: { not: null } },
+        orderBy: isClient
+          ? [{ clientReviewedAt: "desc" }, { createdAt: "desc" }]
+          : [{ professionalReviewedAt: "desc" }, { createdAt: "desc" }],
+      });
+
+      // 3. Completed projects for pending reviews
+      const completedProjects = await db.projectTracking.findMany({
+        where: isClient
+          ? { clientId: session.userId, status: { in: ["COMPLETED", "CLOSED"] } }
+          : { professionalId: session.userId, status: { in: ["COMPLETED", "CLOSED"] } },
+        include: {
+          job: { select: { id: true, title: true, category: true } },
+          client: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
+          professional: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              avatarUrl: true,
+              professionalCategory: true,
+            },
+          },
+        },
+        orderBy: { completedAt: "desc" },
+        take: 50,
+      });
+
+      const trackingIdsWithReviews = await db.projectReview.findMany({
+        where: { trackingId: { in: completedProjects.map((p) => p.id) } },
+      });
+      const reviewByTrackingId = new Map(trackingIdsWithReviews.map((r) => [r.trackingId, r]));
+
+      const pendingProjects = completedProjects.filter((project) => {
+        const rev = reviewByTrackingId.get(project.id);
+        if (!rev) return true;
+        if (isClient && rev.rating === null) return true;
+        if (!isClient && rev.professionalRating === null) return true;
+        return false;
+      });
+
+      // 4. Gather users & projects
       const otherUserIds = [
-        ...new Set(reviews.map((review) => (isClient ? review.professionalId : review.clientId))),
+        ...new Set([
+          ...receivedReviews.map((r) => (isClient ? r.professionalId : r.clientId)),
+          ...givenReviews.map((r) => (isClient ? r.professionalId : r.clientId)),
+        ]),
       ];
+      const trackingIds = [
+        ...new Set([
+          ...receivedReviews.map((r) => r.trackingId),
+          ...givenReviews.map((r) => r.trackingId),
+        ]),
+      ];
+
       const [otherUsers, projects] = await Promise.all([
         db.user.findMany({
           where: { id: { in: otherUserIds } },
-          select: { id: true, firstName: true, lastName: true },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            role: true,
+            professionalCategory: true,
+            isVerified: true,
+          },
         }),
         db.projectTracking.findMany({
-          where: { id: { in: reviews.map((review) => review.trackingId) } },
-          select: { id: true, job: { select: { id: true, title: true } } },
+          where: { id: { in: trackingIds } },
+          select: {
+            id: true,
+            job: { select: { id: true, title: true, category: true } },
+          },
         }),
       ]);
-      const userMap = new Map(
-        otherUsers.map((user) => [user.id, `${user.firstName} ${user.lastName}`.trim()]),
-      );
+
+      const userMap = new Map(otherUsers.map((user) => [user.id, user]));
       const projectMap = new Map(projects.map((project) => [project.id, project]));
-      return NextResponse.json(
-        reviews.map((review) => ({
+
+      const distribution: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+      let ratingSum = 0;
+      let ratedCount = 0;
+
+      const formattedReceived = receivedReviews.map((review) => {
+        const rating = isClient ? review.professionalRating! : review.rating!;
+        const comment = isClient ? review.professionalComment : review.comment;
+        const otherUser = isClient
+          ? userMap.get(review.professionalId)
+          : userMap.get(review.clientId);
+        const project = projectMap.get(review.trackingId);
+
+        if (rating >= 1 && rating <= 5) {
+          const star = Math.min(5, Math.max(1, Math.round(rating)));
+          distribution[star] = (distribution[star] || 0) + 1;
+          ratingSum += rating;
+          ratedCount += 1;
+        }
+
+        return {
           id: review.id,
           trackingId: review.trackingId,
-          rating: isClient ? review.professionalRating! : review.rating!,
-          comment: isClient ? review.professionalComment : review.comment,
-          professionalResponse: review.professionalResponse,
-          clientName: isClient
-            ? (userMap.get(review.professionalId) ?? "Professional")
-            : (userMap.get(review.clientId) ?? "Client"),
-          projectId: projectMap.get(review.trackingId)?.job.id ?? null,
-          projectTitle: projectMap.get(review.trackingId)?.job.title ?? null,
+          rating,
+          comment: comment ?? null,
+          professionalResponse: review.professionalResponse ?? null,
+          professionalResponseAt: review.professionalResponseAt
+            ? review.professionalResponseAt.toISOString()
+            : null,
+          reviewerId: otherUser?.id ?? (isClient ? review.professionalId : review.clientId),
+          reviewerName: otherUser
+            ? `${otherUser.firstName} ${otherUser.lastName}`.trim()
+            : isClient
+              ? "Professional"
+              : "Client",
+          reviewerAvatar: otherUser?.avatarUrl ?? null,
+          reviewerRole: otherUser?.role ?? (isClient ? "PROFESSIONAL" : "CLIENT"),
+          reviewerCategory: otherUser?.professionalCategory ?? project?.job?.category ?? null,
+          reviewerVerified: otherUser?.isVerified ?? false,
+          clientName: otherUser
+            ? `${otherUser.firstName} ${otherUser.lastName}`.trim()
+            : isClient
+              ? "Professional"
+              : "Client",
+          projectId: project?.job?.id ?? null,
+          projectTitle: project?.job?.title ?? null,
           createdAt: (
             (isClient ? review.professionalReviewedAt : review.clientReviewedAt) ?? review.createdAt
           ).toISOString(),
-        })),
-      );
+        };
+      });
+
+      const formattedGiven = givenReviews.map((review) => {
+        const rating = isClient ? review.rating! : review.professionalRating!;
+        const comment = isClient ? review.comment : review.professionalComment;
+        const recipientUser = isClient
+          ? userMap.get(review.professionalId)
+          : userMap.get(review.clientId);
+        const project = projectMap.get(review.trackingId);
+
+        return {
+          id: review.id,
+          trackingId: review.trackingId,
+          rating,
+          comment: comment ?? null,
+          professionalResponse: review.professionalResponse ?? null,
+          professionalResponseAt: review.professionalResponseAt
+            ? review.professionalResponseAt.toISOString()
+            : null,
+          recipientId: recipientUser?.id ?? (isClient ? review.professionalId : review.clientId),
+          recipientName: recipientUser
+            ? `${recipientUser.firstName} ${recipientUser.lastName}`.trim()
+            : isClient
+              ? "Professional"
+              : "Client",
+          recipientAvatar: recipientUser?.avatarUrl ?? null,
+          recipientRole: recipientUser?.role ?? (isClient ? "PROFESSIONAL" : "CLIENT"),
+          recipientCategory:
+            recipientUser?.professionalCategory ?? project?.job?.category ?? null,
+          recipientVerified: recipientUser?.isVerified ?? false,
+          projectId: project?.job?.id ?? null,
+          projectTitle: project?.job?.title ?? null,
+          createdAt: (
+            (isClient ? review.clientReviewedAt : review.professionalReviewedAt) ?? review.createdAt
+          ).toISOString(),
+        };
+      });
+
+      const formattedPending = pendingProjects.map((project) => {
+        const otherUser = isClient ? project.professional : project.client;
+        return {
+          trackingId: project.id,
+          projectId: project.job?.id ?? null,
+          projectTitle: project.job?.title ?? `Project #${project.id}`,
+          projectCategory: project.job?.category ?? null,
+          otherPartyName: otherUser
+            ? `${otherUser.firstName} ${otherUser.lastName}`.trim()
+            : isClient
+              ? "Professional"
+              : "Client",
+          otherPartyAvatar: otherUser?.avatarUrl ?? null,
+          otherPartyCategory: isClient
+            ? (project.professional?.professionalCategory ?? project.job?.category ?? null)
+            : null,
+          completedAt: (project.completedAt ?? project.updatedAt).toISOString(),
+        };
+      });
+
+      const averageRating =
+        ratedCount > 0
+          ? Number((ratingSum / ratedCount).toFixed(1))
+          : (currentUser?.averageRating ?? 0);
+
+      const totalReviews = ratedCount > 0 ? ratedCount : (currentUser?.reviewCount ?? 0);
+
+      return NextResponse.json({
+        stats: {
+          averageRating,
+          totalReviews,
+          distribution,
+          isVerified: currentUser?.isVerified ?? false,
+          userRole: session.role,
+          userName: `${currentUser?.firstName ?? ""} ${currentUser?.lastName ?? ""}`.trim(),
+        },
+        reviews: formattedReceived,
+        receivedReviews: formattedReceived,
+        givenReviews: formattedGiven,
+        pendingReviews: formattedPending,
+      });
     }
     if (resource === "professional-jobs") {
       if (session.role !== "PROFESSIONAL")
