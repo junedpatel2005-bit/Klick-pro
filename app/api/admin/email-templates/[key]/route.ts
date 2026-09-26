@@ -52,12 +52,21 @@ export async function GET(
     ? interpolateVariables(template.actionUrl, template.sampleData)
     : null;
 
+  const sampleDetails = template.variables
+    .filter((v) => !["client_name", "user_name", "support_email"].includes(v.key))
+    .map((v) => ({
+      label: v.label,
+      value: String(template.sampleData[v.key] || v.sample),
+    }))
+    .filter((d) => d.value.trim());
+
   const html = renderEmailHtml({
     subject: sampleSubject,
     heading: sampleHeading,
     bodyText: sampleBody,
     actionText: template.actionText,
     actionUrl: sampleActionUrl,
+    details: sampleDetails,
   });
 
   return NextResponse.json({

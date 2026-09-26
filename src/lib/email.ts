@@ -59,111 +59,6 @@ function absoluteAppUrl(path: string | undefined, origin: string | null) {
   }
 }
 
-function renderNotificationEmailHtml(input: {
-  title: string;
-  description: string;
-  href?: string;
-  websiteUrl?: string;
-  detailsHtml: string;
-}) {
-  const safeTitle = escapeHtml(input.title);
-  const safeWebsiteUrl = escapeHtml(input.websiteUrl || "https://klick-pro.com");
-
-  const paragraphs = input.description
-    .split(/\n\s*\n/)
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .map((p) => {
-      const formatted = escapeHtml(p).replace(/\n/g, "<br>");
-      return `<p style="margin: 0 0 16px; color: #334e68; font-size: 15px; line-height: 1.65;">${formatted}</p>`;
-    })
-    .join("");
-
-  const actionHtml = input.href
-    ? `
-    <div style="margin: 32px 0 28px; text-align: center;">
-      <a href="${escapeHtml(input.href)}"
-         target="_blank"
-         style="display: inline-block; background-color: #2454d6; color: #ffffff; font-size: 15px; font-weight: 600; padding: 14px 28px; border-radius: 8px; text-decoration: none; box-shadow: 0 2px 4px rgba(36, 84, 214, 0.2);">
-        View in Klick-Pro
-      </a>
-    </div>
-    <p style="margin: 16px 0 0; color: #829ab1; font-size: 12px; line-height: 1.5; text-align: center;">
-      If the button above does not work, copy and paste this URL into your browser:<br>
-      <span style="color: #486581; word-break: break-all;">${escapeHtml(input.href)}</span>
-    </p>
-  `
-    : "";
-
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>${safeTitle}</title>
-</head>
-<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #0b1f4d;">
-  <div style="display: none; max-height: 0; overflow: hidden; opacity: 0;">
-    ${safeTitle}
-  </div>
-
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f1f5f9;">
-    <tr>
-      <td align="center" style="padding: 40px 16px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);">
-          <!-- Header -->
-          <tr>
-            <td style="padding: 24px 32px; border-bottom: 1px solid #f1f5f9; background: #ffffff;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                <tr>
-                  <td>
-                    <a href="${safeWebsiteUrl}" style="text-decoration: none;">
-                      <span style="font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: #1748b5;">Klick<span style="color: #2454d6;">-Pro</span></span>
-                    </a>
-                  </td>
-                  <td align="right">
-                    <span style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; background: #f8fafc; padding: 4px 8px; border-radius: 4px; border: 1px solid #e2e8f0;">Official Notification</span>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Main Content Area -->
-          <tr>
-            <td style="padding: 40px 32px 32px;">
-              <h1 style="margin: 0 0 20px; color: #0f172a; font-size: 22px; font-weight: 700; line-height: 1.35; letter-spacing: -0.3px;">
-                ${safeTitle}
-              </h1>
-
-              ${paragraphs}
-
-              ${input.detailsHtml}
-
-              ${actionHtml}
-            </td>
-          </tr>
-
-          <!-- Footer Area -->
-          <tr>
-            <td style="padding: 24px 32px; background-color: #f8fafc; border-top: 1px solid #f1f5f9; text-align: center;">
-              <p style="margin: 0 0 8px; color: #64748b; font-size: 12px; line-height: 1.5;">
-                You received this transactional email from Klick-Pro regarding your account activity.
-              </p>
-              <p style="margin: 0; color: #94a3b8; font-size: 11px; line-height: 1.4;">
-                &copy; ${new Date().getFullYear()} Klick-Pro Technologies Inc. All rights reserved.
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
-}
-
 export type SendAuthEmailOptions = {
   templateKey?: string;
   userName?: string;
@@ -320,6 +215,83 @@ const NOTIFICATION_TYPE_MAP: Record<string, string> = {
   EMAIL_VERIFICATION: "auth_email_verification",
 };
 
+export function resolveNotificationTemplate(
+  type?: string,
+  audience?: "CLIENT" | "PROFESSIONAL" | "ADMIN" | "SYSTEM",
+): string | undefined {
+  if (!type) return undefined;
+  const isProf = audience === "PROFESSIONAL";
+
+  if (type.startsWith("PROJECT_ACTIVITY_")) {
+    if (type.includes("MILESTONE") || type.includes("DELIVERABLE") || type.includes("WORK")) {
+      return "client_milestone_submitted";
+    }
+    if (type.includes("DISPUTE")) {
+      return isProf ? "prof_dispute_opened" : "client_dispute_opened";
+    }
+    if (type.includes("PAYOUT") || type.includes("PAYMENT")) {
+      return "prof_payout_released";
+    }
+    return isProf ? "prof_proposal_accepted" : "client_milestone_submitted";
+  }
+
+  switch (type) {
+    case "WELCOME_CLIENT":
+    case "CLIENT_WELCOME":
+      return "client_welcome";
+    case "WELCOME_PROFESSIONAL":
+    case "PROF_WELCOME":
+      return "prof_welcome";
+    case "NEW_ACCOUNT":
+      return isProf ? "prof_welcome" : "client_welcome";
+    case "JOB_POSTED":
+      return "client_job_posted";
+    case "JOB_MATCH":
+      return "prof_job_match";
+    case "PROPOSAL_RECEIVED":
+    case "PROPOSAL_UPDATED":
+    case "REQUEST_COUNTERED":
+      return "client_proposal_received";
+    case "PROPOSAL_ACCEPTED":
+    case "REQUEST_ACCEPTED":
+      return isProf ? "prof_proposal_accepted" : "client_welcome";
+    case "REQUEST_DECLINED":
+      return "client_job_posted";
+    case "MILESTONE_SUBMITTED":
+    case "PROJECT_COMPLETED":
+    case "PROJECT_REOPENED":
+    case "PROJECT_REOPEN_REQUESTED":
+    case "PROJECT_REQUEST":
+      return isProf ? "prof_proposal_accepted" : "client_milestone_submitted";
+    case "MILESTONE_FUNDED":
+    case "WALLET_MILESTONE_FUNDED":
+      return "prof_milestone_funded";
+    case "PAYOUT_RELEASED":
+    case "MILESTONE_PAYOUT_APPROVED":
+      return "prof_payout_released";
+    case "DISPUTE_RAISED":
+    case "DISPUTE_OPENED":
+      return isProf ? "prof_dispute_opened" : "client_dispute_opened";
+    case "DISPUTE_UPDATED":
+    case "DISPUTE_RESOLVED":
+      return "client_dispute_resolved";
+    case "DISPUTE_MESSAGE":
+      return isProf ? "prof_dispute_opened" : "client_dispute_opened";
+    case "REFUND_PROCESSED":
+      return "client_refund_processed";
+    case "VERIFICATION_APPROVED":
+      return "prof_verification_approved";
+    case "VERIFICATION_REJECTED":
+      return "prof_verification_rejected";
+    case "PASSWORD_RESET":
+      return "auth_password_reset";
+    case "EMAIL_VERIFICATION":
+      return "auth_email_verification";
+    default:
+      return NOTIFICATION_TYPE_MAP[type];
+  }
+}
+
 export async function sendNotificationEmail(input: {
   to: string;
   title: string;
@@ -329,6 +301,8 @@ export async function sendNotificationEmail(input: {
   details?: Array<{ label: string; value: string }>;
   templateKey?: string;
   templateVariables?: Record<string, string | number | undefined | null>;
+  audience?: "CLIENT" | "PROFESSIONAL" | "ADMIN" | "SYSTEM";
+  recipientName?: string;
 }) {
   if (!isEmailConfigured()) {
     if (!emailConfigurationWarningShown) {
@@ -345,17 +319,80 @@ export async function sendNotificationEmail(input: {
   const actionUrl = absoluteAppUrl(input.href, origin);
 
   const templateKey =
-    input.templateKey || (input.type ? NOTIFICATION_TYPE_MAP[input.type] : undefined);
+    input.templateKey || resolveNotificationTemplate(input.type, input.audience);
 
   // If a template key is supplied or resolved from notification type, attempt template-driven email dispatch
   if (templateKey) {
     try {
       const template = await getTemplateByKey(templateKey);
       if (template && template.isActive) {
+        // Auto-extract semantic variables from input.details
+        const detailVariables: Record<string, string> = {};
+        if (input.details) {
+          for (const d of input.details) {
+            if (!d.label || !d.value) continue;
+            const key = d.label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+            detailVariables[key] = d.value;
+            if (key === "project" || key === "project_name") {
+              detailVariables["project_title"] = d.value;
+              detailVariables["job_title"] = d.value;
+            }
+            if (key === "project_amount" || key === "proposed_amount" || key === "bid_amount") {
+              detailVariables["bid_amount"] = d.value;
+              detailVariables["amount"] = d.value;
+              detailVariables["agreed_amount"] = d.value;
+              detailVariables["budget"] = d.value;
+              detailVariables["accepted_amount"] = d.value;
+            }
+            if (key === "milestone") {
+              detailVariables["milestone_title"] = d.value;
+            }
+            if (key === "milestone_amount") {
+              detailVariables["milestone_amount"] = d.value;
+              detailVariables["amount"] = d.value;
+            }
+            if (key === "project_timeline" || key === "delivery_time" || key === "timeline") {
+              detailVariables["delivery_time"] = d.value;
+              detailVariables["timeline"] = d.value;
+            }
+            if (key === "payout_credited") {
+              detailVariables["payout_amount"] = d.value;
+              detailVariables["amount"] = d.value;
+            }
+            if (key === "platform_commission") {
+              detailVariables["platform_fee"] = d.value;
+            }
+          }
+        }
+
+        // Auto-extract project_id, job_id, dispute_id from href
+        if (input.href) {
+          const projectMatch = input.href.match(/\/project\/(\d+)/);
+          if (projectMatch?.[1]) detailVariables["project_id"] = projectMatch[1];
+          const jobMatch = input.href.match(/\/jobs?\/(\d+)/);
+          if (jobMatch?.[1]) detailVariables["job_id"] = jobMatch[1];
+          const disputeMatch = input.href.match(/dispute=(\d+)/);
+          if (disputeMatch?.[1]) detailVariables["dispute_id"] = disputeMatch[1];
+        }
+
+        const recipientFallback = input.recipientName || "there";
+
         const mergedVariables: Record<string, string | number | undefined | null> = {
-          ...input.templateVariables,
+          client_name: input.recipientName || "Client",
+          professional_name: input.recipientName || "Professional",
+          prof_name: input.recipientName || "Professional",
+          user_name: recipientFallback,
+          project_title: detailVariables.project_title || input.title || "Project",
+          job_title: detailVariables.job_title || input.title || "Job",
+          milestone_title: detailVariables.milestone_title || "Project Milestone",
+          milestone_amount: detailVariables.milestone_amount || detailVariables.amount || "Agreed Amount",
+          amount: detailVariables.amount || "Agreed Amount",
           action_url: actionUrl ?? "",
           website_url: websiteUrl ?? "",
+          title: input.title,
+          description: input.description,
+          ...detailVariables,
+          ...input.templateVariables,
         };
 
         const resolvedSubject = interpolateVariables(template.subject, mergedVariables);
@@ -365,6 +402,38 @@ export async function sendNotificationEmail(input: {
           ? interpolateVariables(template.actionUrl, mergedVariables)
           : actionUrl;
 
+        // Auto-generate Info Box details if not passed explicitly
+        let effectiveDetails =
+          input.details?.filter((d) => d && d.value && String(d.value).trim()) ?? [];
+
+        if (effectiveDetails.length === 0 && template.variables?.length) {
+          const nonInfoKeys = new Set([
+            "client_name",
+            "professional_name",
+            "prof_name",
+            "user_name",
+            "support_email",
+            "verification_token",
+            "reset_token",
+            "token",
+            "action_url",
+            "website_url",
+            "title",
+            "description",
+          ]);
+          effectiveDetails = template.variables
+            .filter((v) => !nonInfoKeys.has(v.key))
+            .map((v) => {
+              const rawVal = mergedVariables[v.key];
+              const valStr = rawVal !== undefined && rawVal !== null ? String(rawVal).trim() : "";
+              return {
+                label: v.label,
+                value: valStr,
+              };
+            })
+            .filter((d) => d.value.length > 0 && !d.value.startsWith("{{"));
+        }
+
         const html = renderEmailHtml({
           subject: resolvedSubject,
           heading: resolvedHeading,
@@ -372,6 +441,7 @@ export async function sendNotificationEmail(input: {
           actionText: template.actionText,
           actionUrl: resolvedActionUrl,
           websiteUrl,
+          details: effectiveDetails,
         });
 
         await transporter.sendMail({
@@ -388,31 +458,26 @@ export async function sendNotificationEmail(input: {
     }
   }
 
-  const details = input.details?.filter((detail) => detail.value.trim()) ?? [];
-  const detailsHtml = details.length
-    ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0 0;border:1px solid #e2e8f0;border-collapse:separate;border-spacing:0;overflow:hidden">${details
-        .map(
-          (detail) =>
-            `<tr><td style="width:34%;padding:13px 16px;border-bottom:1px solid #eef2f7;background:#f8fafc;vertical-align:top;font-size:12px;font-weight:700;color:#627d98">${escapeHtml(detail.label)}</td><td style="padding:13px 16px;border-bottom:1px solid #eef2f7;vertical-align:top;font-size:15px;color:#102a43;line-height:1.5;white-space:pre-line">${escapeHtml(detail.value)}</td></tr>`,
-        )
-        .join("")}</table>`
-    : "";
-  const textDetails = details.length
-    ? `\n\n${details.map((detail) => `${detail.label}: ${detail.value}`).join("\n")}`
+  // Consistent modern fallback: renders with the exact same 600px responsive box & brand layout
+  const fallbackDetails = input.details?.filter((detail) => detail.value.trim()) ?? [];
+  const textDetails = fallbackDetails.length
+    ? `\n\n${fallbackDetails.map((detail) => `${detail.label}: ${detail.value}`).join("\n")}`
     : "";
   const textDescription = `\n\n${input.description}`;
   const actionText = actionUrl ? `\n\nView in Klick-Pro: ${actionUrl}` : "";
   await transporter.sendMail({
     from: klickProSender(),
     to: input.to,
-    subject: `Klick-Pro | ${input.title}`,
+    subject: input.title.startsWith("Klick-Pro") ? input.title : `Klick-Pro | ${input.title}`,
     text: `${input.title}${textDescription}${textDetails}${actionText}`,
-    html: renderNotificationEmailHtml({
-      title: input.title,
-      description: input.description,
-      href: actionUrl,
+    html: renderEmailHtml({
+      subject: input.title,
+      heading: input.title,
+      bodyText: input.description,
+      actionText: actionUrl ? "View in Klick-Pro" : null,
+      actionUrl,
       websiteUrl,
-      detailsHtml,
+      details: fallbackDetails,
     }),
   });
 }

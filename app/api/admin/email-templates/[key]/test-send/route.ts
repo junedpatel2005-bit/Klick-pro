@@ -72,12 +72,25 @@ export async function POST(
     ? interpolateVariables(actionUrl, def.sampleData)
     : null;
 
+  const appOrigin = process.env.APP_URL?.trim() || "https://klick-pro.com";
+
+  // Build sample info box from template variables
+  const sampleDetails = def.variables
+    .filter((v) => !["client_name", "user_name", "support_email"].includes(v.key))
+    .map((v) => ({
+      label: v.label,
+      value: String(def.sampleData[v.key] || v.sample),
+    }))
+    .filter((d) => d.value.trim());
+
   const html = renderEmailHtml({
     subject: renderedSubject,
     heading: renderedHeading,
     bodyText: renderedBody,
     actionText: actionText || null,
     actionUrl: renderedActionUrl,
+    websiteUrl: appOrigin,
+    details: sampleDetails,
   });
 
   try {

@@ -50,12 +50,21 @@ export async function POST(
   const renderedBody = interpolateVariables(bodyText, mergedData);
   const renderedActionUrl = actionUrl ? interpolateVariables(actionUrl, mergedData) : null;
 
+  const sampleDetails = def.variables
+    .filter((v) => !["client_name", "user_name", "support_email"].includes(v.key))
+    .map((v) => ({
+      label: v.label,
+      value: String(mergedData[v.key] || def.sampleData[v.key] || v.sample),
+    }))
+    .filter((d) => d.value.trim());
+
   const html = renderEmailHtml({
     subject: renderedSubject,
     heading: renderedHeading,
     bodyText: renderedBody,
     actionText: actionText || null,
     actionUrl: renderedActionUrl,
+    details: sampleDetails,
   });
 
   return NextResponse.json({
