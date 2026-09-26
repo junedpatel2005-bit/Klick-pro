@@ -8,7 +8,10 @@ const PanInputSchema = z.object({
     .string()
     .trim()
     .toUpperCase()
-    .regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, "Invalid PAN format. Must be 10 characters (e.g. ABCDE1234F)."),
+    .regex(
+      /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+      "Invalid PAN format. Must be 10 characters (e.g. ABCDE1234F).",
+    ),
 });
 
 async function getAuthenticatedProfessional(request: NextRequest) {
@@ -57,4 +60,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

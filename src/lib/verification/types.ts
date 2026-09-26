@@ -78,4 +78,3 @@ export type BgvCheckSession = {
   candidatePortalUrl: string | null;
   message?: string;
 };
-

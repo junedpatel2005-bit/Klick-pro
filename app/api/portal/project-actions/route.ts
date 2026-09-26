@@ -10,9 +10,19 @@ import {
   notifyDisputeResolved,
   notifyUsers,
 } from "@/lib/marketplace-notifications";
-import { refundDisputeToClient, releaseDisputeToProfessional } from "@/lib/wallet-ledger";
+import {
+  calculateMilestoneMoney,
+  fundMilestoneFromWallet,
+  refundDisputeToClient,
+  releaseDisputeToProfessional,
+  releaseMilestoneToProfessional,
+} from "@/lib/wallet-ledger";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
-import { emitAdminEvent, emitRealtimeProjectUpdate } from "@/lib/realtime";
+import {
+  emitAdminEvent,
+  emitRealtimeDisputeMessage,
+  emitRealtimeProjectUpdate,
+} from "@/lib/realtime";
 
 const attachmentIds = z.array(z.number().int().positive()).min(1).max(10);
 
@@ -290,11 +300,14 @@ export async function POST(request: NextRequest) {
             : [project.clientId, project.professionalId].filter((id) => id !== session.userId);
         const jobTitle = project.job?.title?.trim() || `Project #${project.id}`;
         const notificationTitle = title.includes(" · ") ? title : `${jobTitle} · ${title}`;
+        const href = fields.milestoneId
+          ? `/project/${project.id}/tracking?tab=milestones&milestoneId=${fields.milestoneId}`
+          : `/project/${project.id}/tracking`;
         await notifyUsers(partnerRecipients, {
           type: `PROJECT_ACTIVITY_${type}`,
           title: notificationTitle,
           description: description ?? title,
-          href: `/project/${project.id}/tracking`,
+          href,
           emailDetails: activityDetails,
         });
       }
@@ -662,13 +675,41 @@ export async function POST(request: NextRequest) {
       );
     }
     if (input.action === "submit-milestone") {
-      const milestone = await db.projectMilestone.findFirst({
+      let milestone = await db.projectMilestone.findFirst({
         where: {
           id: input.milestoneId,
           trackingId: project.id,
           status: { in: ["IN_PROGRESS", "REVISION_REQUESTED"] },
         },
       });
+      if (!milestone) {
+        const upcomingCandidate = await db.projectMilestone.findFirst({
+          where: {
+            id: input.milestoneId,
+            trackingId: project.id,
+            status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+          },
+        });
+        if (upcomingCandidate) {
+          const priorUnapproved = await db.projectMilestone.count({
+            where: {
+              trackingId: project.id,
+              id: { lt: upcomingCandidate.id },
+              status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+            },
+          });
+          if (priorUnapproved === 0) {
+            milestone = await db.projectMilestone.update({
+              where: { id: upcomingCandidate.id },
+              data: { status: "IN_PROGRESS" },
+            });
+            await db.projectTracking.update({
+              where: { id: project.id },
+              data: { status: "IN_PROGRESS", currentStage: upcomingCandidate.title },
+            });
+          }
+        }
+      }
       if (!milestone)
         return NextResponse.json({ error: "This milestone cannot be submitted." }, { status: 409 });
       const attachments = await attachmentsFor(input.attachmentIds);
@@ -818,8 +859,12 @@ export async function POST(request: NextRequest) {
               },
             });
             const next = await tx.projectMilestone.findFirst({
-              where: { trackingId: project.id, status: "UPCOMING" },
-              orderBy: { createdAt: "asc" },
+              where: {
+                trackingId: project.id,
+                id: { not: milestone.id },
+                status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+              },
+              orderBy: [{ id: "asc" }],
             });
             if (next) {
               await tx.projectMilestone.update({
@@ -831,10 +876,18 @@ export async function POST(request: NextRequest) {
                 data: { status: "IN_PROGRESS", currentStage: next.title },
               });
             } else {
-              await tx.projectTracking.update({
-                where: { id: project.id },
-                data: { status: "IN_PROGRESS", currentStage: null },
+              const remainingUnapproved = await tx.projectMilestone.count({
+                where: {
+                  trackingId: project.id,
+                  status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+                },
               });
+              if (remainingUnapproved === 0) {
+                await tx.projectTracking.update({
+                  where: { id: project.id },
+                  data: { currentStage: null },
+                });
+              }
             }
 
             // Automatically resolve any active disputes for this contract upon client offline payment
@@ -1574,7 +1627,11 @@ export async function POST(request: NextRequest) {
         projectId: project.id,
       });
       emitAdminEvent("dispute:new", { disputeId: dispute.id, projectId: project.id });
-      return NextResponse.json({ ok: true, disputeId: dispute.id, disputeRound: dispute.disputeRound });
+      return NextResponse.json({
+        ok: true,
+        disputeId: dispute.id,
+        disputeRound: dispute.disputeRound,
+      });
     }
     if (input.action === "respond-dispute") {
       const dispute = await db.projectDispute.findUnique({
@@ -1617,6 +1674,16 @@ export async function POST(request: NextRequest) {
             orderBy: { id: "asc" },
           });
           targetMilestoneId = candidateMilestone?.id ?? null;
+          if (!targetMilestoneId) {
+            const firstUnfinished = await db.projectMilestone.findFirst({
+              where: {
+                trackingId: project.id,
+                status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+              },
+              orderBy: { id: "asc" },
+            });
+            targetMilestoneId = firstUnfinished?.id ?? null;
+          }
         }
 
         const payment = targetMilestoneId
@@ -1639,80 +1706,268 @@ export async function POST(request: NextRequest) {
         let refundAmount = 0;
         let payoutAmount = 0;
 
-        await db.$transaction(async (tx) => {
-          if (dispute.reporterRole === "CLIENT") {
-            // Client reported poor work/issue, Professional accepted: refund funded escrow to client
-            if (isFunded && payment) {
-              refundAmount = payment.amount;
-              await refundDisputeToClient(tx, {
-                disputeId: dispute.id,
-                paymentId: payment.id,
-                clientId: dispute.clientId,
-                amount: refundAmount,
-                reason: input.message?.trim() || "Professional accepted dispute claim (Mutual Refund)",
-              });
-              await tx.payment.update({
-                where: { id: payment.id },
-                data: { status: "REFUNDED" },
-              });
-            }
-            if (targetMilestoneId) {
-              await tx.projectMilestone.update({
-                where: { id: targetMilestoneId },
-                data: { status: "CANCELLED" },
-              });
-            }
-          } else {
-            // Professional reported payment issue, Client accepted: release funded escrow to professional
-            if (isFunded && payment) {
-              payoutAmount = payment.professionalPayoutAmount || payment.baseAmount;
-              await releaseDisputeToProfessional(tx, {
-                disputeId: dispute.id,
-                paymentId: payment.id,
-                professionalId: dispute.professionalId,
-                amount: payoutAmount,
-                reason: input.message?.trim() || "Client accepted dispute claim (Mutual Payment Release)",
-              });
-              await tx.payment.update({
-                where: { id: payment.id },
-                data: {
-                  status: "COMPLETED",
-                  professionalPayoutAmount: payoutAmount,
-                  capturedAt: payment.capturedAt || new Date(),
-                },
-              });
-            }
-            if (targetMilestoneId) {
-              await tx.projectMilestone.update({
-                where: { id: targetMilestoneId },
-                data: { status: "APPROVED", approvedAt: new Date() },
-              });
-            }
-          }
+        try {
+          await db.$transaction(async (tx) => {
+            if (dispute.reporterRole === "CLIENT") {
+              // Client reported poor work/issue, Professional accepted: refund funded escrow to client
+              if (isFunded && payment) {
+                refundAmount = payment.amount;
+                await refundDisputeToClient(tx, {
+                  disputeId: dispute.id,
+                  paymentId: payment.id,
+                  clientId: dispute.clientId,
+                  amount: refundAmount,
+                  reason:
+                    input.message?.trim() || "Professional accepted dispute claim (Mutual Refund)",
+                });
+                await tx.payment.update({
+                  where: { id: payment.id },
+                  data: { status: "REFUNDED" },
+                });
+              }
+              if (targetMilestoneId) {
+                await tx.projectMilestone.update({
+                  where: { id: targetMilestoneId },
+                  data: { status: "CANCELLED" },
+                });
+                const nextMilestone = await tx.projectMilestone.findFirst({
+                  where: {
+                    trackingId: project.id,
+                    id: { not: targetMilestoneId },
+                    status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+                  },
+                  orderBy: { id: "asc" },
+                });
+                if (nextMilestone) {
+                  await tx.projectMilestone.update({
+                    where: { id: nextMilestone.id },
+                    data: { status: "IN_PROGRESS" },
+                  });
+                  await tx.projectTracking.update({
+                    where: { id: project.id },
+                    data: { status: "IN_PROGRESS", currentStage: nextMilestone.title },
+                  });
+                }
+              }
+            } else {
+              // Professional reported payment issue, Client accepted: release funded escrow or pay from client wallet
+              if (isFunded && payment) {
+                payoutAmount = payment.professionalPayoutAmount || payment.baseAmount;
+                await releaseDisputeToProfessional(tx, {
+                  disputeId: dispute.id,
+                  paymentId: payment.id,
+                  professionalId: dispute.professionalId,
+                  amount: payoutAmount,
+                  reason:
+                    input.message?.trim() ||
+                    "Client accepted dispute claim (Mutual Payment Release)",
+                });
+                await tx.payment.update({
+                  where: { id: payment.id },
+                  data: {
+                    status: "COMPLETED",
+                    professionalPayoutAmount: payoutAmount,
+                    capturedAt: payment.capturedAt || new Date(),
+                  },
+                });
+              } else if (targetMilestoneId) {
+                // Milestone was NOT funded in escrow! Client must pay from wallet or offline
+                const targetMilestone = await tx.projectMilestone.findUnique({
+                  where: { id: targetMilestoneId },
+                });
+                if (!targetMilestone) {
+                  throw new Error("Target milestone could not be found.");
+                }
+                const job = await tx.clientJob.findUnique({
+                  where: { id: project.jobId },
+                  select: { paymentMethod: true },
+                });
+                const isOffline = job?.paymentMethod === "OFFLINE";
+                if (isOffline) {
+                  payoutAmount = targetMilestone.amount;
+                  await tx.payment.upsert({
+                    where: { milestoneId: targetMilestone.id },
+                    create: {
+                      clientId: dispute.clientId,
+                      professionalId: dispute.professionalId,
+                      jobId: project.jobId,
+                      amount: targetMilestone.amount,
+                      baseAmount: targetMilestone.amount,
+                      professionalPayoutAmount: targetMilestone.amount,
+                      currency: "INR",
+                      provider: "offline",
+                      projectTrackingId: project.id,
+                      milestoneId: targetMilestone.id,
+                      status: "COMPLETED",
+                      capturedAt: new Date(),
+                      idempotencyKey: `offline-dispute-${dispute.id}-milestone-${targetMilestone.id}`,
+                    },
+                    update: {
+                      status: "COMPLETED",
+                      capturedAt: new Date(),
+                    },
+                  });
+                } else {
+                  // Online Wallet Payment: verify client has sufficient wallet balance!
+                  const money = calculateMilestoneMoney(targetMilestone.amount);
+                  const clientWallet = await tx.wallet.findUnique({
+                    where: { userId: dispute.clientId },
+                  });
+                  const currentBalance = clientWallet?.balance ?? 0;
+                  if (currentBalance < money.clientChargeAmount) {
+                    throw new Error(
+                      `INSUFFICIENT_WALLET_BALANCE:${money.clientChargeAmount}:${currentBalance}`,
+                    );
+                  }
+                  const resolvedPayment = await tx.payment.upsert({
+                    where: { milestoneId: targetMilestone.id },
+                    create: {
+                      clientId: dispute.clientId,
+                      professionalId: dispute.professionalId,
+                      jobId: project.jobId,
+                      amount: money.clientChargeAmount,
+                      baseAmount: money.baseAmount,
+                      clientFeeAmount: money.clientFeeAmount,
+                      professionalPayoutAmount: money.professionalPayoutAmount,
+                      adminNetAmount: money.adminNetAmount,
+                      commissionAmount: money.baseAmount - money.professionalPayoutAmount,
+                      currency: "INR",
+                      provider: "wallet",
+                      projectTrackingId: project.id,
+                      milestoneId: targetMilestone.id,
+                      status: "PENDING",
+                      capturedAt: new Date(),
+                      idempotencyKey: `dispute-${dispute.id}-milestone-${targetMilestone.id}`,
+                    },
+                    update: {
+                      amount: money.clientChargeAmount,
+                      baseAmount: money.baseAmount,
+                      clientFeeAmount: money.clientFeeAmount,
+                      professionalPayoutAmount: money.professionalPayoutAmount,
+                      adminNetAmount: money.adminNetAmount,
+                      commissionAmount: money.baseAmount - money.professionalPayoutAmount,
+                    },
+                  });
+                  await fundMilestoneFromWallet(tx, {
+                    paymentId: resolvedPayment.id,
+                    clientId: dispute.clientId,
+                    professionalId: dispute.professionalId,
+                    baseAmount: targetMilestone.amount,
+                    milestoneId: targetMilestone.id,
+                  });
+                  await releaseMilestoneToProfessional(tx, {
+                    paymentId: resolvedPayment.id,
+                    clientId: dispute.clientId,
+                    professionalId: dispute.professionalId,
+                    baseAmount: targetMilestone.amount,
+                    milestoneId: targetMilestone.id,
+                  });
+                  await tx.payment.update({
+                    where: { id: resolvedPayment.id },
+                    data: {
+                      status: "COMPLETED",
+                      capturedAt: new Date(),
+                    },
+                  });
+                  await tx.invoice.upsert({
+                    where: { paymentId: resolvedPayment.id },
+                    create: {
+                      invoiceNumber: `INV-${new Date().getFullYear()}-${String(resolvedPayment.id).padStart(6, "0")}`,
+                      paymentId: resolvedPayment.id,
+                      clientId: dispute.clientId,
+                      professionalId: dispute.professionalId,
+                      amount: money.clientChargeAmount,
+                      commissionAmount: money.adminNetAmount,
+                      netAmount: money.professionalPayoutAmount,
+                      currency: "INR",
+                    },
+                    update: {
+                      netAmount: money.professionalPayoutAmount,
+                    },
+                  });
+                  payoutAmount = money.professionalPayoutAmount;
+                }
+              }
+              if (targetMilestoneId) {
+                await tx.projectMilestone.update({
+                  where: { id: targetMilestoneId },
+                  data: { status: "APPROVED", approvedAt: new Date() },
+                });
 
-          await tx.projectDispute.update({
-            where: { id: dispute.id },
-            data: {
-              status: "RESOLVED",
-              respondentAction: "ACCEPTED",
-              decision: "MUTUAL_SETTLEMENT",
-              decisionReason:
-                input.message?.trim() ||
-                `${respondentName} accepted the dispute claim. Mutually settled with ${
-                  refundAmount > 0
-                    ? `₹${refundAmount.toLocaleString("en-IN")} refunded to client`
-                    : payoutAmount > 0
-                      ? `₹${payoutAmount.toLocaleString("en-IN")} released to professional`
-                      : "contract milestone updated"
-                }.`,
-              refundAmount,
-              payoutAmount,
-              respondedAt: new Date(),
-              decisionAt: new Date(),
-              decidedBy: session.userId,
-            },
+                const nextMilestone = await tx.projectMilestone.findFirst({
+                  where: {
+                    trackingId: project.id,
+                    id: { not: targetMilestoneId },
+                    status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+                  },
+                  orderBy: { id: "asc" },
+                });
+                if (nextMilestone) {
+                  await tx.projectMilestone.update({
+                    where: { id: nextMilestone.id },
+                    data: { status: "IN_PROGRESS" },
+                  });
+                  await tx.projectTracking.update({
+                    where: { id: project.id },
+                    data: { status: "IN_PROGRESS", currentStage: nextMilestone.title },
+                  });
+                } else {
+                  const remainingUnapproved = await tx.projectMilestone.count({
+                    where: {
+                      trackingId: project.id,
+                      status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+                    },
+                  });
+                  if (remainingUnapproved === 0) {
+                    await tx.projectTracking.update({
+                      where: { id: project.id },
+                      data: { currentStage: null },
+                    });
+                  }
+                }
+              }
+            }
+
+            await tx.projectDispute.update({
+              where: { id: dispute.id },
+              data: {
+                status: "RESOLVED",
+                respondentAction: "ACCEPTED",
+                decision: "MUTUAL_SETTLEMENT",
+                decisionReason:
+                  input.message?.trim() ||
+                  `${respondentName} accepted the dispute claim. Mutually settled with ${
+                    refundAmount > 0
+                      ? `₹${refundAmount.toLocaleString("en-IN")} refunded to client`
+                      : payoutAmount > 0
+                        ? `₹${payoutAmount.toLocaleString("en-IN")} released to professional`
+                        : "contract milestone updated"
+                  }.`,
+                refundAmount,
+                payoutAmount,
+                respondedAt: new Date(),
+                decisionAt: new Date(),
+                decidedBy: session.userId,
+              },
+            });
           });
-        });
+        } catch (txErr) {
+          if (txErr instanceof Error && txErr.message.startsWith("INSUFFICIENT_WALLET_BALANCE:")) {
+            const [, reqStr, curStr] = txErr.message.split(":");
+            const required = Number(reqStr) || 0;
+            const current = Number(curStr) || 0;
+            return NextResponse.json(
+              {
+                error: `Insufficient wallet balance. You need ₹${required.toLocaleString("en-IN")} to accept and settle this milestone (Current balance: ₹${current.toLocaleString("en-IN")}). Please add funds to your wallet.`,
+                code: "INSUFFICIENT_WALLET_BALANCE",
+                requiredAmount: required,
+                currentBalance: current,
+              },
+              { status: 400 },
+            );
+          }
+          throw txErr;
+        }
 
         await event(
           "DISPUTE_ACCEPTED",
@@ -1809,7 +2064,8 @@ export async function POST(request: NextRequest) {
         data: {
           status: "RESOLVED",
           decision: "WITHDRAWN_BY_REPORTER",
-          decisionReason: input.reason?.trim() || "Dispute voluntarily withdrawn by the complainant.",
+          decisionReason:
+            input.reason?.trim() || "Dispute voluntarily withdrawn by the complainant.",
           decisionAt: new Date(),
           decidedBy: session.userId,
         },
@@ -1887,9 +2143,16 @@ export async function POST(request: NextRequest) {
       emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
         projectId: project.id,
       });
+      emitRealtimeDisputeMessage([project.clientId, project.professionalId], {
+        disputeId: dispute.id,
+        message: {
+          ...record,
+          senderName,
+        },
+      });
       emitAdminEvent("dispute:update", { disputeId: dispute.id, projectId: project.id });
 
-      return NextResponse.json({ ok: true, message: record });
+      return NextResponse.json({ ok: true, message: { ...record, senderName } });
     }
     return NextResponse.json({ ok: true });
   } catch (error) {

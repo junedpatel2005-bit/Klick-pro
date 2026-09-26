@@ -6,7 +6,9 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
     const rawBody = await request.text();
-    const signature = request.headers.get("X-SpringVerify-Signature") ?? request.headers.get("SpringVerify-Signature");
+    const signature =
+      request.headers.get("X-SpringVerify-Signature") ??
+      request.headers.get("SpringVerify-Signature");
 
     const result = await verificationService.processWebhook(rawBody, signature, "springverify");
     if (!result.ok) {
@@ -26,4 +28,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unable to process SpringVerify webhook." }, { status: 500 });
   }
 }
-

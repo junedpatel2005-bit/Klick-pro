@@ -540,8 +540,7 @@ export async function GET(
               : "Client",
           recipientAvatar: recipientUser?.avatarUrl ?? null,
           recipientRole: recipientUser?.role ?? (isClient ? "PROFESSIONAL" : "CLIENT"),
-          recipientCategory:
-            recipientUser?.professionalCategory ?? project?.job?.category ?? null,
+          recipientCategory: recipientUser?.professionalCategory ?? project?.job?.category ?? null,
           recipientVerified: recipientUser?.isVerified ?? false,
           projectId: project?.job?.id ?? null,
           projectTitle: project?.job?.title ?? null,
@@ -1105,6 +1104,35 @@ export async function GET(
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         include: { payment: { select: { status: true, professionalPayoutAmount: true } } },
       });
+
+      // Self-healing: If there are unfinished milestones and none is actively in progress/review (e.g. prior milestone was approved/paid),
+      // auto-promote the next eligible milestone to IN_PROGRESS so work and payment requests can proceed smoothly.
+      const hasActiveMilestone = milestones.some((m) =>
+        ["IN_PROGRESS", "AWAITING_CLIENT_REVIEW", "REVISION_REQUESTED"].includes(m.status),
+      );
+      if (
+        !hasActiveMilestone &&
+        project.status !== "COMPLETED" &&
+        project.status !== "CANCELLED" &&
+        project.status !== "CLOSED"
+      ) {
+        const nextMilestone = milestones.find(
+          (m) => !["APPROVED", "COMPLETED", "CANCELLED"].includes(m.status),
+        );
+        if (nextMilestone) {
+          await db.projectMilestone.update({
+            where: { id: nextMilestone.id },
+            data: { status: "IN_PROGRESS" },
+          });
+          await db.projectTracking.update({
+            where: { id: project.id },
+            data: { status: "IN_PROGRESS", currentStage: nextMilestone.title },
+          });
+          nextMilestone.status = "IN_PROGRESS";
+          project.status = "IN_PROGRESS";
+          project.currentStage = nextMilestone.title;
+        }
+      }
       const [
         job,
         professional,
@@ -1233,13 +1261,26 @@ export async function GET(
       const canRaiseDispute = disputeCount < 3 && !activeDispute;
 
       const disputeIds = disputes.map((d) => d.id);
-      const disputeMessages =
+      const rawDisputeMessages =
         disputeIds.length > 0
           ? await db.projectDisputeMessage.findMany({
               where: { disputeId: { in: disputeIds } },
               orderBy: { createdAt: "asc" },
             })
           : [];
+      const clientFullName = client ? `${client.firstName} ${client.lastName}`.trim() : "Client";
+      const professionalFullName = professional
+        ? `${professional.firstName} ${professional.lastName}`.trim()
+        : "Professional";
+      const disputeMessages = rawDisputeMessages.map((m) => ({
+        ...m,
+        senderName:
+          m.senderRole === "ADMIN"
+            ? "Klick-Pro Dispute Team (Admin)"
+            : m.senderId === project.clientId || m.senderRole === "CLIENT"
+              ? clientFullName
+              : professionalFullName,
+      }));
 
       return NextResponse.json({
         project,

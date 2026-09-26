@@ -46,31 +46,56 @@ export function RealtimeNotifications() {
       );
     }
 
-    toast(titleContent, {
-      icon: <CircleCheck className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />,
-      description: notification.description,
-      action: notification.href
-        ? {
-            label: actionLabel,
-            onClick: () => {
-              if (notification.id != null) {
-                void fetch("/api/portal/notifications", {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ id: notification.id }),
-                });
-              }
-              window.location.assign(notification.href!);
-            },
-          }
-        : undefined,
-      cancel: {
-        label: "Dismiss all",
-        onClick: () => {
-          toast.dismiss();
-        },
-      },
-    });
+    toast.custom(
+      (t) => (
+        <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl ring-1 ring-black/5 dark:ring-white/10 space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+              <CircleCheck className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              {titleContent}
+              {notification.description && (
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                  {notification.description}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* 2 Buttons placed below */}
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
+            <button
+              type="button"
+              onClick={() => toast.dismiss(t)}
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              Dismiss All
+            </button>
+            {notification.href && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (notification.id != null) {
+                    void fetch("/api/portal/notifications", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ id: notification.id }),
+                    });
+                  }
+                  toast.dismiss(t);
+                  window.location.assign(notification.href!);
+                }}
+                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground shadow-xs hover:bg-primary/90 transition-colors"
+              >
+                {actionLabel}
+              </button>
+            )}
+          </div>
+        </div>
+      ),
+      { duration: 6000 },
+    );
     window.dispatchEvent(new CustomEvent("servio:notification"));
   }, []);
 

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { FullPageLogoLoader } from "@/components/FullPageLogoLoader";
+import { invalidateCurrentUser } from "@/lib/current-user";
 
 function SignupContent() {
   const router = useRouter();
@@ -123,7 +124,10 @@ function SignupContent() {
       if (!response.ok) {
         setFieldErrors(result.fields ?? {});
         setError(result.error ?? "Unable to create your account.");
-      } else router.push(result.redirect ?? "/client-profile");
+      } else {
+        invalidateCurrentUser();
+        router.push(result.redirect ?? "/my-info");
+      }
     } catch {
       setError("Network error. Check your connection and try again.");
     } finally {

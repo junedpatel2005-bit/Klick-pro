@@ -14,27 +14,25 @@ import {
 } from "@/lib/portal-navigation";
 import { useSidebarCollapse } from "@/hooks/use-sidebar-collapse";
 import dynamic from "next/dynamic";
+import { type AccountUser } from "@/components/ClientAccountMenu";
 
 const RealtimeNotifications = dynamic(
   () => import("@/components/RealtimeNotifications").then((m) => m.RealtimeNotifications),
   { ssr: false },
 );
 
-type PortalUser = {
-  firstName: string;
-  lastName: string;
-  role: string;
-  avatarUrl: string | null;
-};
+type PortalUser = AccountUser;
 
 export function AppShell({
   children,
   title,
   initialUser,
+  backHref,
 }: {
   children: React.ReactNode;
   title?: string;
   initialUser?: PortalUser | null;
+  backHref?: string;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -56,6 +54,24 @@ export function AppShell({
     : Boolean(
         pathname?.startsWith("/professional") || pathname?.startsWith("/professional-profile"),
       );
+
+  const handleBack = () => {
+    if (backHref) {
+      router.push(backHref);
+      return;
+    }
+    if (
+      typeof window !== "undefined" &&
+      window.history.length > 2 &&
+      document.referrer &&
+      !document.referrer.includes("/signup") &&
+      !document.referrer.includes("/login")
+    ) {
+      router.back();
+    } else {
+      router.push(isProfessional ? "/professional/dashboard" : "/dashboard");
+    }
+  };
 
   const items = isProfessional ? professionalItems : clientItems;
   const mobileItems = isProfessional ? professionalMobileItems : clientMobileItems;
@@ -85,11 +101,14 @@ export function AppShell({
           navigationUser ? (sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-64") : ""
         }`}
       >
-        <AppHeader role={activeUser?.role ?? (isProfessional ? "PROFESSIONAL" : "CLIENT")} />
+        <AppHeader
+          role={activeUser?.role ?? (isProfessional ? "PROFESSIONAL" : "CLIENT")}
+          initialUser={activeUser}
+        />
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <button
             type="button"
-            onClick={() => router.back()}
+            onClick={handleBack}
             className="mb-5 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />

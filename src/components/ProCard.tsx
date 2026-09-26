@@ -9,12 +9,16 @@ export function ProCard({
   onCardClick,
   profileHref,
   requireLogin = false,
+  isSaved = false,
+  onToggleSave,
 }: {
   pro: MarketplaceProfessional;
   onShowLocation?: () => void;
   onCardClick?: () => void;
   profileHref?: string;
   requireLogin?: boolean;
+  isSaved?: boolean;
+  onToggleSave?: (proId: string | number) => void;
 }) {
   const initial = pro.name.slice(0, 1).toUpperCase();
   const destination = profileHref ?? `/pro/${pro.id}`;
@@ -35,11 +39,23 @@ export function ProCard({
     >
       <button
         type="button"
-        aria-label={`Save ${pro.name}`}
-        onClick={(event) => event.stopPropagation()}
-        className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-surface/80 text-muted-foreground hover:bg-surface hover:text-cta"
+        aria-label={isSaved ? `Remove ${pro.name} from saved` : `Save ${pro.name}`}
+        title={isSaved ? "Saved to favorites" : "Save professional"}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleSave?.(pro.id);
+        }}
+        className={`absolute right-4 top-4 z-10 grid h-8 w-8 place-items-center rounded-full transition-all ${
+          isSaved
+            ? "bg-rose-50 text-rose-600 shadow-sm ring-1 ring-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:ring-rose-900/60"
+            : "bg-surface/80 text-muted-foreground hover:bg-surface hover:text-rose-500 hover:scale-105"
+        }`}
       >
-        <Heart className="h-4 w-4" />
+        <Heart
+          className={`h-4 w-4 transition-transform active:scale-125 ${
+            isSaved ? "fill-rose-500 text-rose-500" : ""
+          }`}
+        />
       </button>
       <div className="flex items-start gap-4">
         <div className="relative shrink-0">

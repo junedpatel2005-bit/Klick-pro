@@ -116,8 +116,12 @@ export async function POST(request: NextRequest) {
 
         // Automatically start the next upcoming milestone so work can continue seamlessly
         const nextMilestone = await tx.projectMilestone.findFirst({
-          where: { trackingId: project.id, status: "UPCOMING" },
-          orderBy: { id: "asc" },
+          where: {
+            trackingId: project.id,
+            id: { not: milestone.id },
+            status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+          },
+          orderBy: [{ id: "asc" }],
         });
         if (nextMilestone) {
           await tx.projectMilestone.update({
@@ -128,6 +132,19 @@ export async function POST(request: NextRequest) {
             where: { id: project.id },
             data: { status: "IN_PROGRESS", currentStage: nextMilestone.title },
           });
+        } else {
+          const remainingUnapproved = await tx.projectMilestone.count({
+            where: {
+              trackingId: project.id,
+              status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+            },
+          });
+          if (remainingUnapproved === 0) {
+            await tx.projectTracking.update({
+              where: { id: project.id },
+              data: { currentStage: null },
+            });
+          }
         }
 
         await tx.projectTransaction.create({

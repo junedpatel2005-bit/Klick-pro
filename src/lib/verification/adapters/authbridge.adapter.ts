@@ -30,10 +30,10 @@ export class AuthBridgeAdapter {
   constructor(customConfig?: Partial<AuthBridgeConfig>) {
     this.config = {
       enabled: customConfig?.enabled ?? process.env.AUTHBRIDGE_ENABLED === "true",
-      apiKey: customConfig?.apiKey ?? (process.env.AUTHBRIDGE_API_KEY?.trim() ?? ""),
-      clientId: customConfig?.clientId ?? (process.env.AUTHBRIDGE_CLIENT_ID?.trim() ?? ""),
+      apiKey: customConfig?.apiKey ?? process.env.AUTHBRIDGE_API_KEY?.trim() ?? "",
+      clientId: customConfig?.clientId ?? process.env.AUTHBRIDGE_CLIENT_ID?.trim() ?? "",
       webhookSecret:
-        customConfig?.webhookSecret ?? (process.env.AUTHBRIDGE_WEBHOOK_SECRET?.trim() ?? ""),
+        customConfig?.webhookSecret ?? process.env.AUTHBRIDGE_WEBHOOK_SECRET?.trim() ?? "",
       isDevelopment: process.env.NODE_ENV !== "production",
     };
   }

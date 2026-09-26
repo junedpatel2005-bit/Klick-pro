@@ -225,12 +225,33 @@ export default function Login() {
         subtitle="Log in to continue to your dashboard."
         hideAside
         footer={
-          <>
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-primary hover:underline">
-              Sign up
-            </Link>
-          </>
+          <div className="space-y-3">
+            <p>
+              Don&apos;t have an account?{" "}
+              <Link href="/signup" className="text-primary hover:underline font-semibold">
+                Sign up
+              </Link>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              By logging in, you agree to our{" "}
+              <Link
+                href="/terms"
+                target="_blank"
+                className="text-primary hover:underline font-medium underline underline-offset-2"
+              >
+                Terms and Conditions
+              </Link>{" "}
+              and{" "}
+              <Link
+                href="/privacy-policy"
+                target="_blank"
+                className="text-primary hover:underline font-medium underline underline-offset-2"
+              >
+                Privacy Policy
+              </Link>
+              .
+            </p>
+          </div>
         }
       >
         {profileSetupReminder ? (
@@ -402,6 +423,16 @@ export default function Login() {
                 </span>
               )}
             </Button>
+            <p className="text-center text-xs text-muted-foreground pt-1">
+              By continuing, you agree to our{" "}
+              <Link
+                href="/terms"
+                target="_blank"
+                className="font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
+              >
+                Terms and Conditions
+              </Link>
+            </p>
           </form>
         ) : (
           <form onSubmit={submitPhone} noValidate className="space-y-5">
@@ -482,6 +513,16 @@ export default function Login() {
                 "Send OTP"
               )}
             </Button>
+            <p className="text-center text-xs text-muted-foreground pt-1">
+              By continuing, you agree to our{" "}
+              <Link
+                href="/terms"
+                target="_blank"
+                className="font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
+              >
+                Terms and Conditions
+              </Link>
+            </p>
           </form>
         )}
       </AuthLayout>

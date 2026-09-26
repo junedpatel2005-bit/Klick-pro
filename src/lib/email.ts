@@ -1,6 +1,10 @@
 import "server-only";
 import nodemailer from "nodemailer";
-import { getTemplateByKey, interpolateVariables, renderEmailHtml } from "@/lib/email-templates/engine";
+import {
+  getTemplateByKey,
+  interpolateVariables,
+  renderEmailHtml,
+} from "@/lib/email-templates/engine";
 
 let emailConfigurationWarningShown = false;
 
@@ -100,7 +104,9 @@ export async function sendAuthEmail(
   try {
     const parsed = new URL(actionUrl, websiteUrl || "https://klick-pro.com");
     urlToken = parsed.searchParams.get("token") || "";
-  } catch {}
+  } catch {
+    // Ignore URL parse errors
+  }
 
   const userName = options?.userName || "there";
 
@@ -318,8 +324,7 @@ export async function sendNotificationEmail(input: {
   const websiteUrl = origin ?? undefined;
   const actionUrl = absoluteAppUrl(input.href, origin);
 
-  const templateKey =
-    input.templateKey || resolveNotificationTemplate(input.type, input.audience);
+  const templateKey = input.templateKey || resolveNotificationTemplate(input.type, input.audience);
 
   // If a template key is supplied or resolved from notification type, attempt template-driven email dispatch
   if (templateKey) {
@@ -331,7 +336,10 @@ export async function sendNotificationEmail(input: {
         if (input.details) {
           for (const d of input.details) {
             if (!d.label || !d.value) continue;
-            const key = d.label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+            const key = d.label
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "_")
+              .replace(/^_+|_+$/g, "");
             detailVariables[key] = d.value;
             if (key === "project" || key === "project_name") {
               detailVariables["project_title"] = d.value;
@@ -385,7 +393,8 @@ export async function sendNotificationEmail(input: {
           project_title: detailVariables.project_title || input.title || "Project",
           job_title: detailVariables.job_title || input.title || "Job",
           milestone_title: detailVariables.milestone_title || "Project Milestone",
-          milestone_amount: detailVariables.milestone_amount || detailVariables.amount || "Agreed Amount",
+          milestone_amount:
+            detailVariables.milestone_amount || detailVariables.amount || "Agreed Amount",
           amount: detailVariables.amount || "Agreed Amount",
           action_url: actionUrl ?? "",
           website_url: websiteUrl ?? "",
@@ -447,14 +456,19 @@ export async function sendNotificationEmail(input: {
         await transporter.sendMail({
           from: klickProSender(),
           to: input.to,
-          subject: resolvedSubject.startsWith("Klick-Pro") ? resolvedSubject : `Klick-Pro | ${resolvedSubject}`,
+          subject: resolvedSubject.startsWith("Klick-Pro")
+            ? resolvedSubject
+            : `Klick-Pro | ${resolvedSubject}`,
           text: `${resolvedHeading}\n\n${resolvedBody}${resolvedActionUrl ? `\n\n${template.actionText || "View in Klick-Pro"}: ${resolvedActionUrl}` : ""}`,
           html,
         });
         return;
       }
     } catch (err) {
-      console.warn(`Template dispatch for ${input.templateKey} failed, falling back to standard notification layout`, err);
+      console.warn(
+        `Template dispatch for ${input.templateKey} failed, falling back to standard notification layout`,
+        err,
+      );
     }
   }
 
@@ -501,4 +515,3 @@ export async function sendCustomEmail(input: {
   });
   return { success: true };
 }
-

@@ -2,6 +2,7 @@
 
 import { Toaster } from "@/components/ui/sonner";
 import { GoogleMapsProvider } from "@/components/GoogleMapsProvider";
+import { NavigationProgressBar } from "@/components/NavigationProgressBar";
 
 // RealtimeNotifications is intentionally NOT mounted here: it belongs to the
 // signed-in surfaces only (PortalShell, AdminPortal). Mounting it globally kept
@@ -9,6 +10,7 @@ import { GoogleMapsProvider } from "@/components/GoogleMapsProvider";
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <GoogleMapsProvider>
+      <NavigationProgressBar />
       {children}
       <Toaster
         position="top-right"

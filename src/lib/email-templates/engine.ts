@@ -1,11 +1,7 @@
 import { db } from "@/lib/db";
 import { EMAIL_TEMPLATE_REGISTRY } from "./registry";
 import { HydratedEmailTemplate } from "./types";
-import {
-  escapeHtml,
-  interpolateVariables,
-  renderEmailHtml,
-} from "./render";
+import { escapeHtml, interpolateVariables, renderEmailHtml } from "./render";
 
 export { escapeHtml, interpolateVariables, renderEmailHtml };
 
@@ -57,7 +53,10 @@ export async function getAllTemplates(): Promise<HydratedEmailTemplate[]> {
       };
     });
   } catch (error) {
-    console.error("Failed to load email templates from database, falling back to code defaults:", error);
+    console.error(
+      "Failed to load email templates from database, falling back to code defaults:",
+      error,
+    );
     return Object.values(EMAIL_TEMPLATE_REGISTRY).map((def) => ({
       key: def.key,
       name: def.name,
@@ -129,4 +128,3 @@ export async function getTemplateByKey(key: string): Promise<HydratedEmailTempla
     sampleData: def.sampleData,
   };
 }
-

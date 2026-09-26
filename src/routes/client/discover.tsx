@@ -13,7 +13,7 @@ import { ProCard } from "@/components/ProCard";
 import Skeleton from "react-loading-skeleton";
 import type { MarketplaceCategory, MarketplaceProfessional } from "@/lib/types/marketplace";
 import type { ProfessionalDiscoveryResponse } from "@/lib/types/professional-discovery";
-import { Home, LocateFixed, Map, SlidersHorizontal, Search } from "lucide-react";
+import { Home, LocateFixed, Map, SlidersHorizontal, Search, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -53,6 +53,8 @@ function DiscoverContent() {
   const jobId = searchParams.get("jobId");
   const [results, setResults] = useState<ProfessionalDiscoveryResponse | null>(null);
   const [categories, setCategories] = useState<MarketplaceCategory[]>([]);
+  const [savedIds, setSavedIds] = useState<number[]>([]);
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [query, setQuery] = useState("");
   const [segment, setSegment] = useState("");
@@ -70,6 +72,7 @@ function DiscoverContent() {
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [selectedProfessionalId, setSelectedProfessionalId] = useState<string | null>(null);
   const [sort, setSort] = useState<
     "recommended" | "rating" | "distance" | "most-reviewed" | "price"
   >("recommended");
@@ -77,10 +80,76 @@ function DiscoverContent() {
   const mapSectionRef = useRef<HTMLDivElement | null>(null);
   const userLocationRef = useRef<{ lat: number; lng: number } | null>(null);
 
-  const professionals = useMemo(
-    () => (results ? results.professionals.map(toMarketplaceProfessional) : []),
-    [results],
-  );
+  useEffect(() => {
+    async function loadSavedProfessionals() {
+      try {
+        const res = await fetch("/api/client/saved-professionals");
+        if (res.ok) {
+          const data = (await res.json()) as { savedIds?: number[] };
+          if (Array.isArray(data.savedIds)) {
+            setSavedIds(data.savedIds);
+          }
+        }
+      } catch {
+        // Silently ignore if not logged in
+      }
+    }
+    void loadSavedProfessionals();
+  }, []);
+
+  const handleToggleSave = async (proId: string | number) => {
+    const numericId = Number(proId);
+    if (!numericId) return;
+    const isCurrentlySaved = savedIds.includes(numericId);
+    // Optimistic state update
+    setSavedIds((prev) =>
+      isCurrentlySaved ? prev.filter((id) => id !== numericId) : [...prev, numericId],
+    );
+
+    try {
+      const res = await fetch(`/api/client/saved-professionals/${numericId}`, {
+        method: isCurrentlySaved ? "DELETE" : "POST",
+      });
+
+      if (!res.ok) {
+        // Revert on error
+        setSavedIds((prev) =>
+          isCurrentlySaved ? [...prev, numericId] : prev.filter((id) => id !== numericId),
+        );
+        if (res.status === 401) {
+          toast.error("Please sign in as a client to save professionals.", {
+            action: {
+              label: "Sign in",
+              onClick: () =>
+                router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`),
+            },
+          });
+        } else {
+          toast.error("Unable to update saved professional.");
+        }
+        return;
+      }
+
+      toast.success(
+        isCurrentlySaved ? "Professional removed from saved." : "Professional saved to favorites!",
+      );
+    } catch {
+      // Revert on error
+      setSavedIds((prev) =>
+        isCurrentlySaved ? [...prev, numericId] : prev.filter((id) => id !== numericId),
+      );
+      toast.error("Network error. Please try again.");
+    }
+  };
+
+  const professionals = useMemo(() => {
+    if (!results) return [];
+    const list = results.professionals.map(toMarketplaceProfessional);
+    if (showSavedOnly) {
+      return list.filter((p) => savedIds.includes(Number(p.id)));
+    }
+    return list;
+  }, [results, showSavedOnly, savedIds]);
 
   function requestMyLocation() {
     if (!navigator.geolocation) return;
@@ -204,6 +273,21 @@ function DiscoverContent() {
       params.set("originLng", String(originLng));
     }
     if (verifiedOnly) params.set("verified", "true");
+    if (showSavedOnly) {
+      if (savedIds.length === 0) {
+        setResults({
+          professionals: [],
+          total: 0,
+          page: 1,
+          limit: PAGE_SIZE,
+          hasMore: false,
+          facets: { cities: [], categories: [] },
+        });
+        setStatus("ready");
+        return () => controller.abort();
+      }
+      params.set("ids", savedIds.join(","));
+    }
     params.set("sort", sort);
     params.set("page", String(page));
     params.set("limit", String(PAGE_SIZE));
@@ -241,11 +325,13 @@ function DiscoverContent() {
     originLat,
     originLng,
     verifiedOnly,
+    showSavedOnly,
+    savedIds,
     sort,
     page,
   ]);
 
-  const totalProfessionals = results?.total ?? 0;
+  const totalProfessionals = showSavedOnly ? professionals.length : (results?.total ?? 0);
   const parentCategories = useMemo(
     () => categories.filter((item) => item.parentId === null),
     [categories],
@@ -314,12 +400,38 @@ function DiscoverContent() {
                 setDistanceKm("");
                 setOriginLat(null);
                 setOriginLng(null);
+                setShowSavedOnly(false);
                 setVerifiedOnly(false);
                 setPage(1);
               }}
             >
               Clear all
             </button>
+          </div>
+
+          <div className="mb-5 rounded-xl border border-border bg-background/50 p-3">
+            <label className="flex items-center justify-between text-sm cursor-pointer select-none">
+              <span className="flex items-center gap-2 font-medium">
+                <Heart
+                  className={`h-4 w-4 ${showSavedOnly ? "fill-rose-500 text-rose-500" : "text-muted-foreground"}`}
+                />
+                Saved professionals
+              </span>
+              <input
+                type="checkbox"
+                checked={showSavedOnly}
+                onChange={(e) => {
+                  setShowSavedOnly(e.target.checked);
+                  setPage(1);
+                }}
+                className="h-4 w-4 rounded border-border accent-rose-500"
+              />
+            </label>
+            {savedIds.length > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {savedIds.length} {savedIds.length === 1 ? "pro" : "pros"} saved in your favorites
+              </p>
+            )}
           </div>
 
           <FilterSection title="Service type">
@@ -665,16 +777,58 @@ function DiscoverContent() {
               onClick={() => {
                 setShowMap((current) => {
                   const next = !current;
-                  if (!current && mapSectionRef.current) {
-                    window.requestAnimationFrame(() => {
-                      mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-                    });
+                  if (!current) {
+                    setSelectedProfessionalId(null);
+                    setSelectedPoint(null);
+                    if (mapSectionRef.current) {
+                      window.requestAnimationFrame(() => {
+                        mapSectionRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      });
+                    }
                   }
                   return next;
                 });
               }}
             >
               <Map className="h-4 w-4" /> {showMap ? "Hide map" : "View on map"}
+            </Button>
+            <Button
+              variant={showSavedOnly ? "default" : "outline"}
+              size="sm"
+              className={`gap-2 transition-all ${
+                showSavedOnly
+                  ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-600 shadow-sm"
+                  : "border-border hover:border-rose-300 hover:text-rose-600"
+              }`}
+              onClick={() => {
+                setShowSavedOnly((prev) => !prev);
+                setPage(1);
+              }}
+            >
+              <Heart
+                className={`h-4 w-4 transition-transform active:scale-125 ${
+                  showSavedOnly
+                    ? "fill-white text-white"
+                    : savedIds.length > 0
+                      ? "fill-rose-500 text-rose-500"
+                      : ""
+                }`}
+              />
+              <span>Saved</span>
+              {savedIds.length > 0 && (
+                <span
+                  className={`ml-0.5 rounded-full px-1.5 py-0.2 text-[11px] font-bold ${
+                    showSavedOnly
+                      ? "bg-white/20 text-white"
+                      : "bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400"
+                  }`}
+                >
+                  {savedIds.length}
+                </span>
+              )}
             </Button>
           </div>
 
@@ -683,6 +837,8 @@ function DiscoverContent() {
               role="button"
               tabIndex={0}
               onClick={() => {
+                setSelectedProfessionalId(null);
+                setSelectedPoint(null);
                 setShowMap(true);
                 if (mapSectionRef.current) {
                   window.requestAnimationFrame(() => {
@@ -727,11 +883,34 @@ function DiscoverContent() {
               Professionals could not be loaded. Refresh the page to try again.
             </div>
           )}
-          {status === "ready" && professionals.length === 0 && (
-            <div className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
-              No professionals match these filters yet.
-            </div>
-          )}
+          {status === "ready" &&
+            professionals.length === 0 &&
+            (showSavedOnly ? (
+              <div className="rounded-2xl border border-border bg-card p-10 text-center shadow-soft">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-500 ring-4 ring-rose-50/50 dark:bg-rose-950/40 dark:ring-rose-950/20">
+                  <Heart className="h-6 w-6 fill-rose-500 text-rose-500" />
+                </div>
+                <h3 className="text-base font-semibold text-foreground">
+                  No saved professionals yet
+                </h3>
+                <p className="mt-1.5 text-sm text-muted-foreground max-w-sm mx-auto">
+                  Click the heart icon on any professional's card to save them to your favorites for
+                  quick access.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-5 border-border hover:border-primary/40"
+                  onClick={() => setShowSavedOnly(false)}
+                >
+                  Browse all professionals
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
+                No professionals match these filters yet.
+              </div>
+            ))}
           {status === "ready" && professionals.length > 0 && (
             <>
               {showMap && (results?.professionals?.length ?? 0) > 0 && (
@@ -743,7 +922,18 @@ function DiscoverContent() {
                   >
                     <ProfessionalDiscoveryMap
                       professionals={results?.professionals ?? []}
+                      selectedProfessionalId={selectedProfessionalId}
                       selectedPoint={selectedPoint ?? undefined}
+                      userLocation={
+                        originLat !== null && originLng !== null
+                          ? { lat: originLat, lng: originLng }
+                          : null
+                      }
+                      userRadiusKm={distanceKm !== "" ? Number(distanceKm) : null}
+                      onClearSelected={() => {
+                        setSelectedProfessionalId(null);
+                        setSelectedPoint(null);
+                      }}
                     />
                   </Suspense>
                   <p className="mt-1.5 text-[11px] text-muted-foreground">
@@ -756,13 +946,21 @@ function DiscoverContent() {
                   <ProCard
                     key={p.id}
                     pro={p}
+                    isSaved={savedIds.includes(Number(p.id))}
+                    onToggleSave={handleToggleSave}
                     onCardClick={() => router.push(`/pro/${p.id}`)}
                     profileHref={
                       jobId ? `/pro/${p.id}?jobId=${encodeURIComponent(jobId)}` : undefined
                     }
                     onShowLocation={() => {
-                      const proResult = results?.professionals.find((item) => item.id === p.id);
-                      if (!proResult?.displayPoint) return;
+                      const proResult = results?.professionals.find(
+                        (item) => String(item.id) === String(p.id),
+                      );
+                      if (!proResult?.displayPoint) {
+                        toast.info(`Location details for ${p.name} are not available on the map.`);
+                        return;
+                      }
+                      setSelectedProfessionalId(String(proResult.id));
                       setSelectedPoint(proResult.displayPoint);
                       setShowMap(true);
                       window.requestAnimationFrame(() => {

@@ -332,7 +332,9 @@ export default function RunningProjectsPage() {
         <div className="mt-5 space-y-4">
           {loading ? (
             <CardListSkeleton count={2} />
-          ) : filterTab === "all_active" || filterTab === "in_progress" || filterTab === "needs_action" ? (
+          ) : filterTab === "all_active" ||
+            filterTab === "in_progress" ||
+            filterTab === "needs_action" ? (
             visibleProjects.map((project) => (
               <article
                 key={project.id}
@@ -602,9 +604,13 @@ export default function RunningProjectsPage() {
                   : filterTab === "closed"
                     ? "No closed projects yet"
                     : filterTab === "in_progress"
-                      ? search ? "No in-progress projects match your search" : "No projects currently in progress"
+                      ? search
+                        ? "No in-progress projects match your search"
+                        : "No projects currently in progress"
                       : filterTab === "needs_action"
-                        ? search ? "No action-pending projects match your search" : "No projects requiring action right now"
+                        ? search
+                          ? "No action-pending projects match your search"
+                          : "No projects requiring action right now"
                         : search
                           ? "No matching projects"
                           : "No active projects yet"}

@@ -142,6 +142,10 @@ type PlatformLedgerItem = {
   status: string;
   description: string;
   createdAt: string;
+  clientName?: string | null;
+  professionalName?: string | null;
+  projectTitle?: string | null;
+  milestoneTitle?: string | null;
 };
 
 type FinanceData = {
@@ -406,13 +410,13 @@ export default function AdminFinancePage() {
         kind: "LEDGER",
         refId: tx.id,
         date: tx.createdAt,
-        title: tx.type.replaceAll("_", " "),
+        title: tx.projectTitle || tx.type.replaceAll("_", " "),
         categoryOrRef: tx.description,
-        milestoneInfo: null,
+        milestoneInfo: tx.milestoneTitle || null,
         remainingAmount: null,
-        clientName: null,
+        clientName: tx.clientName || null,
         clientEmail: null,
-        proName: null,
+        proName: tx.professionalName || null,
         proEmail: null,
         clientPaid: tx.amount > 0 ? tx.amount : null,
         baseAmount: null,

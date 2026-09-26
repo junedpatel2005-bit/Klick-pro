@@ -21,6 +21,15 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   images: { remotePatterns: [{ protocol: "https", hostname: "i.pravatar.cc" }] },
+  async redirects() {
+    return [
+      {
+        source: "/ladmin",
+        destination: "/admin",
+        permanent: false,
+      },
+    ];
+  },
   async rewrites() {
     return [
       // Canonical, mobile-ready API namespace. Existing route handlers remain the single

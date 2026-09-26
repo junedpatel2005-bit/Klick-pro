@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   UsersRound,
   Wrench,
+  Sliders,
 } from "lucide-react";
 
 const linkGroups = [
@@ -55,6 +56,7 @@ const linkGroups = [
       { href: "/admin/templates", label: "Email templates", icon: Mail },
       { href: "/admin/support", label: "Support & FAQs", icon: FileText },
       { href: "/admin/cms", label: "Website content", icon: FileText },
+      { href: "/admin/settings", label: "Platform settings", icon: Sliders },
       { href: "/admin/notifications", label: "Notifications", icon: Bell, badge: "notifications" },
       { href: "/admin/messages", label: "Messages", icon: MessageSquare, badge: "messages" },
     ],
@@ -157,7 +159,9 @@ export function AdminSidebar() {
           {!collapsed && (
             <div>
               <div className="flex items-center gap-1.5">
-                <p className="font-display font-extrabold text-slate-900 tracking-tight">Klick-Pro</p>
+                <p className="font-display font-extrabold text-slate-900 tracking-tight">
+                  Klick-Pro
+                </p>
                 <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary border border-primary/20">
                   PRO
                 </span>
@@ -207,8 +211,9 @@ export function AdminSidebar() {
                         <link.icon className="h-4 w-4" />
                       </div>
                       {!collapsed && <span>{link.label}</span>}
-                      {badgeCount > 0 && !active && (
-                        collapsed ? (
+                      {badgeCount > 0 &&
+                        !active &&
+                        (collapsed ? (
                           <span className="absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-indigo-600 px-1 text-[9px] font-bold text-white shadow-xs">
                             {badgeCount > 9 ? "9+" : badgeCount}
                           </span>
@@ -216,9 +221,10 @@ export function AdminSidebar() {
                           <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-indigo-100 px-1.5 text-[10px] font-bold text-indigo-700">
                             {badgeCount > 99 ? "99+" : badgeCount}
                           </span>
-                        )
+                        ))}
+                      {active && !collapsed && (
+                        <ChevronRight className="ml-auto h-4 w-4 text-indigo-500" />
                       )}
-                      {active && !collapsed && <ChevronRight className="ml-auto h-4 w-4 text-indigo-500" />}
                     </Link>
                   );
                 })}
@@ -264,7 +270,7 @@ export function AdminSidebar() {
               {dbStatus === "connected"
                 ? "All services operational"
                 : dbStatus === "disconnected"
-                  ? "Database disconnected"
+                  ? "System Server Offline"
                   : "Checking health…"}
             </span>
           </div>

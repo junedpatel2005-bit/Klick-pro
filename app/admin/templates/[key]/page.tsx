@@ -8,4 +8,3 @@ export default async function AdminTemplateDetailPage({
   const { key } = await params;
   return <AdminTemplateEditorStudio templateKey={key} />;
 }
-

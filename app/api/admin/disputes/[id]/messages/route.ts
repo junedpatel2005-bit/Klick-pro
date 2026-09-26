@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import { notifyDisputeMessage } from "@/lib/marketplace-notifications";
+import { notifyUsers } from "@/lib/marketplace-notifications";
+import { emitRealtimeDisputeMessage } from "@/lib/realtime";
 
 async function admin(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -21,8 +22,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const disputeId = Number((await params).id);
   const parsed = z
     .object({
-      recipient: z.enum(["CLIENT", "PROFESSIONAL"]),
-      message: z.string().trim().min(2).max(4000),
+      recipient: z.enum(["CLIENT", "PROFESSIONAL", "ALL"]).optional().default("ALL"),
+      message: z.string().trim().min(1).max(4000),
     })
     .safeParse(await request.json().catch(() => null));
   if (!Number.isInteger(disputeId) || disputeId < 1 || !parsed.success)
@@ -30,11 +31,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const dispute = await db.projectDispute.findUnique({ where: { id: disputeId } });
   if (!dispute) return NextResponse.json({ error: "Dispute not found." }, { status: 404 });
   const recipientId =
-    parsed.data.recipient === "CLIENT" ? dispute.clientId : dispute.professionalId;
+    parsed.data.recipient === "PROFESSIONAL" ? dispute.professionalId : dispute.clientId;
   const sender = await db.user.findUnique({
     where: { id: session.userId },
     select: { firstName: true, lastName: true },
   });
+  const senderName = "Klick-Pro Dispute Team (Admin)";
   const record = await db.projectDisputeMessage.create({
     data: {
       disputeId,
@@ -44,12 +46,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       message: parsed.data.message,
     },
   });
-  await notifyDisputeMessage({
+  emitRealtimeDisputeMessage([dispute.clientId, dispute.professionalId], {
     disputeId,
-    trackingId: dispute.trackingId,
-    recipientId,
-    senderName: `${sender?.firstName ?? "Klick-Pro"} ${sender?.lastName ?? "Support"}`.trim(),
-    message: record.message,
+    message: {
+      ...record,
+      senderName,
+    },
   });
-  return NextResponse.json({ message: record }, { status: 201 });
+  await notifyUsers([dispute.clientId, dispute.professionalId], {
+    type: "DISPUTE_MESSAGE",
+    title: `Message from Klick-Pro Support regarding dispute #${disputeId}`,
+    description: `${sender?.firstName ?? "Klick-Pro"} ${sender?.lastName ?? "Support"}: ${record.message.slice(0, 180)}`,
+    href: `/project/${dispute.trackingId}/tracking`,
+  });
+  return NextResponse.json({ message: { ...record, senderName } }, { status: 201 });
 }

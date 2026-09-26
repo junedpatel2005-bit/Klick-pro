@@ -87,8 +87,12 @@ export async function POST(request: NextRequest) {
         });
 
         const next = await tx.projectMilestone.findFirst({
-          where: { trackingId: payment.projectTrackingId!, status: "UPCOMING" },
-          orderBy: { createdAt: "asc" },
+          where: {
+            trackingId: payment.projectTrackingId!,
+            id: { not: milestone.id },
+            status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+          },
+          orderBy: [{ id: "asc" }],
         });
         if (next) {
           await tx.projectMilestone.update({
@@ -100,10 +104,18 @@ export async function POST(request: NextRequest) {
             data: { status: "IN_PROGRESS", currentStage: next.title },
           });
         } else {
-          await tx.projectTracking.update({
-            where: { id: payment.projectTrackingId! },
-            data: { status: "IN_PROGRESS", currentStage: null },
+          const remainingUnapproved = await tx.projectMilestone.count({
+            where: {
+              trackingId: payment.projectTrackingId!,
+              status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+            },
           });
+          if (remainingUnapproved === 0) {
+            await tx.projectTracking.update({
+              where: { id: payment.projectTrackingId! },
+              data: { currentStage: null },
+            });
+          }
         }
         return money;
       },

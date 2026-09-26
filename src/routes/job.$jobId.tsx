@@ -2441,40 +2441,138 @@ export default function JobDetails({
           if (!open) setPendingAcceptProposal(null);
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Confirm hire</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              Confirm Hire & Start Project
+            </DialogTitle>
             <DialogDescription>
-              {pendingAcceptProposal
-                ? `Hire ${pendingAcceptProposal.professional?.firstName ?? "this professional"} for ₹${pendingAcceptProposal.bidAmount.toLocaleString()}?`
-                : "Hire this professional?"}
+              Review candidate details and proposal terms before officially hiring.
             </DialogDescription>
           </DialogHeader>
 
           {pendingAcceptProposal && (
-            <div className="space-y-3 py-2 text-sm text-muted-foreground">
-              <p>
-                <span className="font-semibold text-foreground">Job:</span> {job.title}
-              </p>
-              <p>
-                <span className="font-semibold text-foreground">Agreed amount:</span> ₹
-                {pendingAcceptProposal.bidAmount.toLocaleString()}
+            <div className="space-y-4 py-2 text-sm">
+              {/* Professional Profile Card */}
+              {pendingAcceptProposal.professional && (
+                <div className="flex items-start gap-3.5 rounded-2xl border border-border/80 bg-muted/30 p-3.5">
+                  <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary font-bold overflow-hidden border border-border">
+                    {pendingAcceptProposal.professional.avatarUrl ? (
+                      <img
+                        src={pendingAcceptProposal.professional.avatarUrl}
+                        alt={`${pendingAcceptProposal.professional.firstName} ${pendingAcceptProposal.professional.lastName}`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span>
+                        {pendingAcceptProposal.professional.firstName?.[0]}
+                        {pendingAcceptProposal.professional.lastName?.[0]}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-semibold text-foreground truncate">
+                        {pendingAcceptProposal.professional.firstName}{" "}
+                        {pendingAcceptProposal.professional.lastName}
+                      </h4>
+                      {pendingAcceptProposal.professional.isVerified && (
+                        <span className="rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 px-2 py-0.5 text-[10px] font-bold">
+                          Verified Pro
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {pendingAcceptProposal.professional.professionalCategory ||
+                        "Service Professional"}
+                      {pendingAcceptProposal.professional.professionalCity
+                        ? ` · ${pendingAcceptProposal.professional.professionalCity}`
+                        : ""}
+                    </p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground pt-0.5">
+                      <span className="flex items-center gap-1 font-semibold text-amber-500">
+                        <Star className="h-3.5 w-3.5 fill-amber-500" />
+                        {pendingAcceptProposal.professional.averageRating > 0
+                          ? pendingAcceptProposal.professional.averageRating.toFixed(1)
+                          : "New"}
+                      </span>
+                      {pendingAcceptProposal.professional.reviewCount > 0 && (
+                        <span>({pendingAcceptProposal.professional.reviewCount} reviews)</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Proposal & Job Terms Summary */}
+              <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                <div className="flex items-center justify-between text-xs border-b border-border/60 pb-2">
+                  <span className="text-muted-foreground">Job Title</span>
+                  <span className="font-semibold text-foreground text-right truncate max-w-[220px]">
+                    {job.title}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs border-b border-border/60 pb-2">
+                  <span className="text-muted-foreground">Agreed Price</span>
+                  <span className="font-bold text-base text-primary">
+                    ₹{pendingAcceptProposal.bidAmount.toLocaleString("en-IN")}
+                  </span>
+                </div>
+                {job.timingType === "HOURLY" &&
+                  pendingAcceptProposal.hourlyRate != null &&
+                  pendingAcceptProposal.totalJobHours != null && (
+                    <div className="flex items-center justify-between text-xs border-b border-border/60 pb-2">
+                      <span className="text-muted-foreground">Hourly Rate</span>
+                      <span className="font-semibold text-foreground">
+                        ₹{pendingAcceptProposal.hourlyRate.toLocaleString("en-IN")}/hr ×{" "}
+                        {pendingAcceptProposal.totalJobHours} hrs
+                      </span>
+                    </div>
+                  )}
+                {pendingAcceptProposal.duration && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Estimated Timeline</span>
+                    <span className="font-semibold text-foreground">
+                      {pendingAcceptProposal.duration}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {pendingAcceptProposal.coverLetter && (
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground space-y-1">
+                  <span className="font-semibold text-foreground block">Proposal Note:</span>
+                  <p className="line-clamp-3 leading-relaxed">
+                    {pendingAcceptProposal.coverLetter}
+                  </p>
+                </div>
+              )}
+
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                By clicking <strong>Confirm & Hire</strong>, this proposal will be accepted, a
+                formal workspace contract will be initialized, and you can fund the agreed
+                milestones safely via escrow.
               </p>
             </div>
           )}
 
-          <div className="mt-4 flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setPendingAcceptProposal(null)}>
+          <div className="mt-2 flex justify-end gap-2.5">
+            <Button variant="outline" size="sm" onClick={() => setPendingAcceptProposal(null)}>
               Cancel
             </Button>
             <Button
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm gap-1.5"
               onClick={async () => {
                 if (!pendingAcceptProposal) return;
+                const prop = pendingAcceptProposal;
                 setPendingAcceptProposal(null);
-                await respondToRequest("clientProposal", pendingAcceptProposal.id, "accept");
+                await respondToRequest("clientProposal", prop.id, "accept");
               }}
             >
-              Confirm
+              <CheckCircle2 className="h-4 w-4" />
+              Confirm & Hire
             </Button>
           </div>
         </DialogContent>
@@ -2748,15 +2846,93 @@ export default function JobDetails({
           if (!open) closeSelectHire();
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Hire {hireTarget?.name ?? "professional"}</DialogTitle>
+            <DialogTitle className="text-xl font-bold">
+              Hire {hireTarget?.name ?? "Professional"}
+            </DialogTitle>
             <DialogDescription>
-              Send a hire request for {job?.title ?? "this job"}. The professional can accept,
-              decline, or counter.
+              Send a direct hire proposal for &ldquo;{job?.title ?? "this job"}&rdquo;.
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-2 grid gap-3 [&_input]:rounded-md [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
+
+          {/* Professional Details Card */}
+          {hireTarget && (
+            <div className="rounded-2xl border border-border/80 bg-muted/30 p-4 space-y-3">
+              <div className="flex items-start gap-3.5">
+                <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+                  {hireTarget.avatarUrl ? (
+                    <img
+                      src={hireTarget.avatarUrl}
+                      alt={hireTarget.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="grid h-full w-full place-items-center bg-primary/10 text-primary font-bold text-lg">
+                      {hireTarget.name.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-base text-foreground truncate">
+                      {hireTarget.name}
+                    </h4>
+                    {hireTarget.verified && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 text-[11px] font-semibold">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                        Verified
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">
+                    {hireTarget.title || "Service Professional"}
+                    {hireTarget.location ? ` • ${hireTarget.location}` : ""}
+                  </p>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                    <div className="flex items-center gap-1 font-semibold text-foreground">
+                      <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+                      <span>{hireTarget.rating > 0 ? hireTarget.rating.toFixed(1) : "New"}</span>
+                      {hireTarget.reviewCount > 0 && (
+                        <span className="text-muted-foreground font-normal">
+                          ({hireTarget.reviewCount} reviews)
+                        </span>
+                      )}
+                    </div>
+
+                    {hireTarget.hourlyRate != null && hireTarget.hourlyRate > 0 && (
+                      <span className="font-bold text-primary">
+                        ₹{hireTarget.hourlyRate.toLocaleString("en-IN")}/hr
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {hireTarget.skills && hireTarget.skills.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1 border-t border-border/50">
+                  {hireTarget.skills.slice(0, 4).map((skill) => (
+                    <span
+                      key={skill}
+                      className="rounded-md bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground border border-border/60"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                  {hireTarget.skills.length > 4 && (
+                    <span className="text-[11px] text-muted-foreground self-center">
+                      +{hireTarget.skills.length - 4} more
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-1 grid gap-3 [&_input]:rounded-xl [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_textarea]:rounded-xl [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
             <input
               type="number"
               min="1"

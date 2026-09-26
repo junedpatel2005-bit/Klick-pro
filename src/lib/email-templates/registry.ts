@@ -17,8 +17,18 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultActionText: "Post Your First Job",
     defaultActionUrl: "/post-job",
     variables: [
-      { key: "client_name", label: "Client Name", description: "First name of the client", sample: "Sarah Jenkins" },
-      { key: "support_email", label: "Support Email", description: "Platform support email", sample: "support@klick-pro.com" },
+      {
+        key: "client_name",
+        label: "Client Name",
+        description: "First name of the client",
+        sample: "Sarah Jenkins",
+      },
+      {
+        key: "support_email",
+        label: "Support Email",
+        description: "Platform support email",
+        sample: "support@klick-pro.com",
+      },
     ],
     sampleData: {
       client_name: "Sarah Jenkins",
@@ -35,15 +45,40 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultSubject: "Your job has been published: {{job_title}}",
     defaultHeading: "Your job posting is live on Klick-Pro",
     defaultBodyText:
-      "Hello {{client_name}},\n\nYour job \"{{job_title}}\" has been successfully posted. Qualified and verified professionals in {{category_name}} are being notified.\n\nYou'll receive email and in-app alerts as soon as proposals and quotes start coming in.",
+      'Hello {{client_name}},\n\nYour job "{{job_title}}" has been successfully posted. Qualified and verified professionals in {{category_name}} are being notified.\n\nYou\'ll receive email and in-app alerts as soon as proposals and quotes start coming in.',
     defaultActionText: "View Job & Proposals",
     defaultActionUrl: "/client/jobs/{{job_id}}",
     variables: [
-      { key: "client_name", label: "Client Name", description: "Name of the client", sample: "Sarah Jenkins" },
-      { key: "job_title", label: "Job Title", description: "Title of the posted job", sample: "Full-Stack Next.js Web Application" },
-      { key: "category_name", label: "Job Category", description: "Category/trade name", sample: "Software Development" },
-      { key: "budget", label: "Job Budget", description: "Allocated budget or range", sample: "₹45,000" },
-      { key: "job_id", label: "Job ID", description: "Unique identifier of the job", sample: "1082" },
+      {
+        key: "client_name",
+        label: "Client Name",
+        description: "Name of the client",
+        sample: "Sarah Jenkins",
+      },
+      {
+        key: "job_title",
+        label: "Job Title",
+        description: "Title of the posted job",
+        sample: "Full-Stack Next.js Web Application",
+      },
+      {
+        key: "category_name",
+        label: "Job Category",
+        description: "Category/trade name",
+        sample: "Software Development",
+      },
+      {
+        key: "budget",
+        label: "Job Budget",
+        description: "Allocated budget or range",
+        sample: "₹45,000",
+      },
+      {
+        key: "job_id",
+        label: "Job ID",
+        description: "Unique identifier of the job",
+        sample: "1082",
+      },
     ],
     sampleData: {
       client_name: "Sarah Jenkins",
@@ -63,17 +98,42 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultSubject: "New proposal for {{job_title}} from {{professional_name}}",
     defaultHeading: "You received a new proposal",
     defaultBodyText:
-      "Hello {{client_name}},\n\n{{professional_name}} just submitted a proposal for \"{{job_title}}\".\n\nProposed Amount: {{bid_amount}}\nEstimated Timeline: {{delivery_time}}\n\nReview their proposal details, portfolio, and ratings to decide if they are the right fit for your job.",
+      'Hello {{client_name}},\n\n{{professional_name}} just submitted a proposal for "{{job_title}}".\n\nProposed Amount: {{bid_amount}}\nEstimated Timeline: {{delivery_time}}\n\nReview their proposal details, portfolio, and ratings to decide if they are the right fit for your job.',
     defaultActionText: "Review Proposal",
     defaultActionUrl: "/client/jobs/{{job_id}}?proposal={{proposal_id}}",
     variables: [
-      { key: "client_name", label: "Client Name", description: "Name of the client", sample: "Sarah Jenkins" },
-      { key: "professional_name", label: "Professional Name", description: "Name of bidding pro", sample: "Rahul Verma" },
-      { key: "job_title", label: "Job Title", description: "Title of the job", sample: "Full-Stack Next.js Web Application" },
+      {
+        key: "client_name",
+        label: "Client Name",
+        description: "Name of the client",
+        sample: "Sarah Jenkins",
+      },
+      {
+        key: "professional_name",
+        label: "Professional Name",
+        description: "Name of bidding pro",
+        sample: "Rahul Verma",
+      },
+      {
+        key: "job_title",
+        label: "Job Title",
+        description: "Title of the job",
+        sample: "Full-Stack Next.js Web Application",
+      },
       { key: "bid_amount", label: "Bid Amount", description: "Quote amount", sample: "₹42,000" },
-      { key: "delivery_time", label: "Delivery Time", description: "Estimated project timeline", sample: "14 Days" },
+      {
+        key: "delivery_time",
+        label: "Delivery Time",
+        description: "Estimated project timeline",
+        sample: "14 Days",
+      },
       { key: "job_id", label: "Job ID", description: "Job identifier", sample: "1082" },
-      { key: "proposal_id", label: "Proposal ID", description: "Proposal identifier", sample: "305" },
+      {
+        key: "proposal_id",
+        label: "Proposal ID",
+        description: "Proposal identifier",
+        sample: "305",
+      },
     ],
     sampleData: {
       client_name: "Sarah Jenkins",
@@ -92,18 +152,43 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     description: "Sent to client when the professional submits completed milestone deliverables.",
     audience: "CLIENT",
     category: "Projects & Milestones",
-    defaultSubject: "Work submitted: Milestone \"{{milestone_title}}\" on {{project_title}}",
+    defaultSubject: 'Work submitted: Milestone "{{milestone_title}}" on {{project_title}}',
     defaultHeading: "Work ready for your inspection",
     defaultBodyText:
-      "Hello {{client_name}},\n\n{{professional_name}} has completed and submitted deliverables for milestone \"{{milestone_title}}\" on project \"{{project_title}}\".\n\nPlease review the submitted files and notes. If everything meets your requirements, you can approve the milestone to release the escrow payment. If changes are needed, you can request revisions directly.",
+      'Hello {{client_name}},\n\n{{professional_name}} has completed and submitted deliverables for milestone "{{milestone_title}}" on project "{{project_title}}".\n\nPlease review the submitted files and notes. If everything meets your requirements, you can approve the milestone to release the escrow payment. If changes are needed, you can request revisions directly.',
     defaultActionText: "Review Milestone Work",
     defaultActionUrl: "/project/{{project_id}}/tracking",
     variables: [
-      { key: "client_name", label: "Client Name", description: "Name of the client", sample: "Sarah Jenkins" },
-      { key: "professional_name", label: "Professional Name", description: "Name of the pro", sample: "Rahul Verma" },
-      { key: "project_title", label: "Project Title", description: "Title of the project", sample: "E-Commerce Web Portal" },
-      { key: "milestone_title", label: "Milestone Title", description: "Name of milestone", sample: "Milestone 1: Database & Auth Setup" },
-      { key: "milestone_amount", label: "Milestone Amount", description: "Escrow funds locked", sample: "₹15,000" },
+      {
+        key: "client_name",
+        label: "Client Name",
+        description: "Name of the client",
+        sample: "Sarah Jenkins",
+      },
+      {
+        key: "professional_name",
+        label: "Professional Name",
+        description: "Name of the pro",
+        sample: "Rahul Verma",
+      },
+      {
+        key: "project_title",
+        label: "Project Title",
+        description: "Title of the project",
+        sample: "E-Commerce Web Portal",
+      },
+      {
+        key: "milestone_title",
+        label: "Milestone Title",
+        description: "Name of milestone",
+        sample: "Milestone 1: Database & Auth Setup",
+      },
+      {
+        key: "milestone_amount",
+        label: "Milestone Amount",
+        description: "Escrow funds locked",
+        sample: "₹15,000",
+      },
       { key: "project_id", label: "Project ID", description: "Tracking ID", sample: "419" },
     ],
     sampleData: {
@@ -125,14 +210,34 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultSubject: "Dispute Notice: Project {{project_title}}",
     defaultHeading: "A dispute has been initiated",
     defaultBodyText:
-      "Hello {{client_name}},\n\nA dispute has been raised regarding project \"{{project_title}}\".\n\nIssue Type: {{issue_type}}\nRaised By: {{raised_by}}\n\nAll escrow funds for this project are securely held in dispute protection. Both parties have the opportunity to provide statements, evidence, and resolve the matter mutually before escalation to an administrator.",
+      'Hello {{client_name}},\n\nA dispute has been raised regarding project "{{project_title}}".\n\nIssue Type: {{issue_type}}\nRaised By: {{raised_by}}\n\nAll escrow funds for this project are securely held in dispute protection. Both parties have the opportunity to provide statements, evidence, and resolve the matter mutually before escalation to an administrator.',
     defaultActionText: "Go to Dispute Center",
     defaultActionUrl: "/project/{{project_id}}/tracking",
     variables: [
-      { key: "client_name", label: "Client Name", description: "Name of the client", sample: "Sarah Jenkins" },
-      { key: "project_title", label: "Project Title", description: "Project title", sample: "E-Commerce Web Portal" },
-      { key: "issue_type", label: "Issue Type", description: "Dispute categorization", sample: "Quality of Work & Scope Mismatch" },
-      { key: "raised_by", label: "Raised By", description: "Reporter identity", sample: "Rahul Verma" },
+      {
+        key: "client_name",
+        label: "Client Name",
+        description: "Name of the client",
+        sample: "Sarah Jenkins",
+      },
+      {
+        key: "project_title",
+        label: "Project Title",
+        description: "Project title",
+        sample: "E-Commerce Web Portal",
+      },
+      {
+        key: "issue_type",
+        label: "Issue Type",
+        description: "Dispute categorization",
+        sample: "Quality of Work & Scope Mismatch",
+      },
+      {
+        key: "raised_by",
+        label: "Raised By",
+        description: "Reporter identity",
+        sample: "Rahul Verma",
+      },
       { key: "project_id", label: "Project ID", description: "Tracking ID", sample: "419" },
     ],
     sampleData: {
@@ -153,15 +258,35 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultSubject: "Dispute Resolved: Case #{{dispute_id}} on {{project_title}}",
     defaultHeading: "Dispute resolution notice",
     defaultBodyText:
-      "Hello {{client_name}},\n\nThe dispute #{{dispute_id}} regarding \"{{project_title}}\" has been reviewed and officially resolved.\n\nResolution Decision: {{decision_summary}}\nDetails & Notes: {{resolution_notes}}\n\nAny adjustments to escrow balances or refunds have been applied to your account.",
+      'Hello {{client_name}},\n\nThe dispute #{{dispute_id}} regarding "{{project_title}}" has been reviewed and officially resolved.\n\nResolution Decision: {{decision_summary}}\nDetails & Notes: {{resolution_notes}}\n\nAny adjustments to escrow balances or refunds have been applied to your account.',
     defaultActionText: "View Case Summary",
     defaultActionUrl: "/project/{{project_id}}/tracking",
     variables: [
-      { key: "client_name", label: "Client Name", description: "Client name", sample: "Sarah Jenkins" },
+      {
+        key: "client_name",
+        label: "Client Name",
+        description: "Client name",
+        sample: "Sarah Jenkins",
+      },
       { key: "dispute_id", label: "Dispute ID", description: "Dispute case ID", sample: "84" },
-      { key: "project_title", label: "Project Title", description: "Project title", sample: "E-Commerce Web Portal" },
-      { key: "decision_summary", label: "Decision", description: "Decision summary", sample: "Refund Approved (Full ₹15,000 credited back)" },
-      { key: "resolution_notes", label: "Resolution Notes", description: "Admin comments", sample: "Deliverables did not meet agreed scope criteria." },
+      {
+        key: "project_title",
+        label: "Project Title",
+        description: "Project title",
+        sample: "E-Commerce Web Portal",
+      },
+      {
+        key: "decision_summary",
+        label: "Decision",
+        description: "Decision summary",
+        sample: "Refund Approved (Full ₹15,000 credited back)",
+      },
+      {
+        key: "resolution_notes",
+        label: "Resolution Notes",
+        description: "Admin comments",
+        sample: "Deliverables did not meet agreed scope criteria.",
+      },
       { key: "project_id", label: "Project ID", description: "Project tracking ID", sample: "419" },
     ],
     sampleData: {
@@ -177,21 +302,47 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
   client_refund_processed: {
     key: "client_refund_processed",
     name: "Refund Credited Confirmation",
-    description: "Sent to client when a refund is issued from escrow back to their payment method or wallet.",
+    description:
+      "Sent to client when a refund is issued from escrow back to their payment method or wallet.",
     audience: "CLIENT",
     category: "Financial & Payments",
     defaultSubject: "Refund Processed: {{refund_amount}} for {{project_title}}",
     defaultHeading: "Your refund has been processed",
     defaultBodyText:
-      "Hello {{client_name}},\n\nA refund of {{refund_amount}} has been credited for \"{{project_title}}\".\n\nTransaction Reference: {{transaction_ref}}\nPayment Method: {{payment_source}}\n\nPlease allow 3-5 business days for bank processing if returned to your original payment method.",
+      'Hello {{client_name}},\n\nA refund of {{refund_amount}} has been credited for "{{project_title}}".\n\nTransaction Reference: {{transaction_ref}}\nPayment Method: {{payment_source}}\n\nPlease allow 3-5 business days for bank processing if returned to your original payment method.',
     defaultActionText: "View Transaction History",
     defaultActionUrl: "/client/billing",
     variables: [
-      { key: "client_name", label: "Client Name", description: "Client name", sample: "Sarah Jenkins" },
-      { key: "project_title", label: "Project Title", description: "Project title", sample: "E-Commerce Web Portal" },
-      { key: "refund_amount", label: "Refund Amount", description: "Credited amount", sample: "₹15,000" },
-      { key: "transaction_ref", label: "Transaction Reference", description: "Gateway ref ID", sample: "TXN_982341908" },
-      { key: "payment_source", label: "Payment Source", description: "Bank or wallet", sample: "Original Payment Card" },
+      {
+        key: "client_name",
+        label: "Client Name",
+        description: "Client name",
+        sample: "Sarah Jenkins",
+      },
+      {
+        key: "project_title",
+        label: "Project Title",
+        description: "Project title",
+        sample: "E-Commerce Web Portal",
+      },
+      {
+        key: "refund_amount",
+        label: "Refund Amount",
+        description: "Credited amount",
+        sample: "₹15,000",
+      },
+      {
+        key: "transaction_ref",
+        label: "Transaction Reference",
+        description: "Gateway ref ID",
+        sample: "TXN_982341908",
+      },
+      {
+        key: "payment_source",
+        label: "Payment Source",
+        description: "Bank or wallet",
+        sample: "Original Payment Card",
+      },
     ],
     sampleData: {
       client_name: "Sarah Jenkins",
@@ -218,8 +369,18 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultActionText: "Complete Your Profile",
     defaultActionUrl: "/professional/profile",
     variables: [
-      { key: "prof_name", label: "Professional Name", description: "First name of professional", sample: "Vikram Mehta" },
-      { key: "support_email", label: "Support Email", description: "Support contact email", sample: "support@klick-pro.com" },
+      {
+        key: "prof_name",
+        label: "Professional Name",
+        description: "First name of professional",
+        sample: "Vikram Mehta",
+      },
+      {
+        key: "support_email",
+        label: "Support Email",
+        description: "Support contact email",
+        sample: "support@klick-pro.com",
+      },
     ],
     sampleData: {
       prof_name: "Vikram Mehta",
@@ -240,7 +401,12 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultActionText: "Explore Available Jobs",
     defaultActionUrl: "/professional/jobs",
     variables: [
-      { key: "prof_name", label: "Professional Name", description: "Name of the professional", sample: "Vikram Mehta" },
+      {
+        key: "prof_name",
+        label: "Professional Name",
+        description: "Name of the professional",
+        sample: "Vikram Mehta",
+      },
     ],
     sampleData: {
       prof_name: "Vikram Mehta",
@@ -256,12 +422,22 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultSubject: "Action Required: Update your verification documents",
     defaultHeading: "Verification review update",
     defaultBodyText:
-      "Hello {{prof_name}},\n\nOur team reviewed your recent verification submission, but was unable to approve it due to the following reason:\n\n\"{{rejection_reason}}\"\n\nPlease review the feedback, take a clear photo or scan of your document, and re-upload it via your verification dashboard.",
+      'Hello {{prof_name}},\n\nOur team reviewed your recent verification submission, but was unable to approve it due to the following reason:\n\n"{{rejection_reason}}"\n\nPlease review the feedback, take a clear photo or scan of your document, and re-upload it via your verification dashboard.',
     defaultActionText: "Resubmit Documents",
     defaultActionUrl: "/professional/verification",
     variables: [
-      { key: "prof_name", label: "Professional Name", description: "Name of the professional", sample: "Vikram Mehta" },
-      { key: "rejection_reason", label: "Reason / Notes", description: "Admin feedback", sample: "Government ID document photo was blurry and expired." },
+      {
+        key: "prof_name",
+        label: "Professional Name",
+        description: "Name of the professional",
+        sample: "Vikram Mehta",
+      },
+      {
+        key: "rejection_reason",
+        label: "Reason / Notes",
+        description: "Admin feedback",
+        sample: "Government ID document photo was blurry and expired.",
+      },
     ],
     sampleData: {
       prof_name: "Vikram Mehta",
@@ -282,10 +458,30 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultActionText: "View Job & Submit Proposal",
     defaultActionUrl: "/professional/jobs/{{job_id}}",
     variables: [
-      { key: "prof_name", label: "Professional Name", description: "Name of pro", sample: "Vikram Mehta" },
-      { key: "job_title", label: "Job Title", description: "Title of job", sample: "Full-Stack Next.js Web Application" },
-      { key: "category_name", label: "Category", description: "Job category", sample: "Web Development" },
-      { key: "job_location", label: "Location", description: "Job location or Remote", sample: "Mumbai / Remote" },
+      {
+        key: "prof_name",
+        label: "Professional Name",
+        description: "Name of pro",
+        sample: "Vikram Mehta",
+      },
+      {
+        key: "job_title",
+        label: "Job Title",
+        description: "Title of job",
+        sample: "Full-Stack Next.js Web Application",
+      },
+      {
+        key: "category_name",
+        label: "Category",
+        description: "Job category",
+        sample: "Web Development",
+      },
+      {
+        key: "job_location",
+        label: "Location",
+        description: "Job location or Remote",
+        sample: "Mumbai / Remote",
+      },
       { key: "budget", label: "Budget", description: "Client's budget", sample: "₹50,000" },
       { key: "job_id", label: "Job ID", description: "Identifier", sample: "1082" },
     ],
@@ -308,14 +504,34 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultSubject: "Congratulations! {{client_name}} accepted your proposal for {{job_title}}",
     defaultHeading: "Your proposal has been accepted!",
     defaultBodyText:
-      "Hello {{prof_name}},\n\nFantastic news! {{client_name}} has accepted your proposal for \"{{job_title}}\" at {{accepted_amount}}.\n\nThe project workspace is now active. Once the client funds the first milestone, you can begin work with guaranteed escrow payment protection.",
+      'Hello {{prof_name}},\n\nFantastic news! {{client_name}} has accepted your proposal for "{{job_title}}" at {{accepted_amount}}.\n\nThe project workspace is now active. Once the client funds the first milestone, you can begin work with guaranteed escrow payment protection.',
     defaultActionText: "Open Project Workspace",
     defaultActionUrl: "/project/{{project_id}}/tracking",
     variables: [
-      { key: "prof_name", label: "Professional Name", description: "Name of pro", sample: "Vikram Mehta" },
-      { key: "client_name", label: "Client Name", description: "Client name", sample: "Sarah Jenkins" },
-      { key: "job_title", label: "Job Title", description: "Job title", sample: "Full-Stack Next.js Web Application" },
-      { key: "accepted_amount", label: "Accepted Amount", description: "Contract value", sample: "₹42,000" },
+      {
+        key: "prof_name",
+        label: "Professional Name",
+        description: "Name of pro",
+        sample: "Vikram Mehta",
+      },
+      {
+        key: "client_name",
+        label: "Client Name",
+        description: "Client name",
+        sample: "Sarah Jenkins",
+      },
+      {
+        key: "job_title",
+        label: "Job Title",
+        description: "Job title",
+        sample: "Full-Stack Next.js Web Application",
+      },
+      {
+        key: "accepted_amount",
+        label: "Accepted Amount",
+        description: "Contract value",
+        sample: "₹42,000",
+      },
       { key: "project_id", label: "Project ID", description: "Project tracking ID", sample: "419" },
     ],
     sampleData: {
@@ -336,15 +552,40 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultSubject: "Milestone Funded: {{milestone_title}} on {{project_title}}",
     defaultHeading: "Escrow funded - You are authorized to begin work",
     defaultBodyText:
-      "Hello {{prof_name}},\n\n{{client_name}} has deposited {{milestone_amount}} into Klick-Pro Escrow for milestone \"{{milestone_title}}\".\n\nYour funds are safely held and protected. You may now start executing this milestone according to your agreed timeline.",
+      'Hello {{prof_name}},\n\n{{client_name}} has deposited {{milestone_amount}} into Klick-Pro Escrow for milestone "{{milestone_title}}".\n\nYour funds are safely held and protected. You may now start executing this milestone according to your agreed timeline.',
     defaultActionText: "View Milestone Requirements",
     defaultActionUrl: "/project/{{project_id}}/tracking",
     variables: [
-      { key: "prof_name", label: "Professional Name", description: "Name of pro", sample: "Vikram Mehta" },
-      { key: "client_name", label: "Client Name", description: "Client name", sample: "Sarah Jenkins" },
-      { key: "project_title", label: "Project Title", description: "Project title", sample: "E-Commerce Web Portal" },
-      { key: "milestone_title", label: "Milestone Title", description: "Milestone title", sample: "Milestone 1: Database & Auth Setup" },
-      { key: "milestone_amount", label: "Milestone Amount", description: "Funded escrow value", sample: "₹15,000" },
+      {
+        key: "prof_name",
+        label: "Professional Name",
+        description: "Name of pro",
+        sample: "Vikram Mehta",
+      },
+      {
+        key: "client_name",
+        label: "Client Name",
+        description: "Client name",
+        sample: "Sarah Jenkins",
+      },
+      {
+        key: "project_title",
+        label: "Project Title",
+        description: "Project title",
+        sample: "E-Commerce Web Portal",
+      },
+      {
+        key: "milestone_title",
+        label: "Milestone Title",
+        description: "Milestone title",
+        sample: "Milestone 1: Database & Auth Setup",
+      },
+      {
+        key: "milestone_amount",
+        label: "Milestone Amount",
+        description: "Funded escrow value",
+        sample: "₹15,000",
+      },
       { key: "project_id", label: "Project ID", description: "Project ID", sample: "419" },
     ],
     sampleData: {
@@ -366,15 +607,40 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultSubject: "Payout Released: {{payout_amount}} has been added to your wallet",
     defaultHeading: "Your milestone payout is in your wallet",
     defaultBodyText:
-      "Hello {{prof_name}},\n\nPayment for milestone \"{{milestone_title}}\" on project \"{{project_title}}\" has been approved and released.\n\nNet Payout Credited: {{payout_amount}}\nPlatform Fee: {{platform_fee}}\n\nYou can request a withdrawal to your verified bank account at any time from your earnings dashboard.",
+      'Hello {{prof_name}},\n\nPayment for milestone "{{milestone_title}}" on project "{{project_title}}" has been approved and released.\n\nNet Payout Credited: {{payout_amount}}\nPlatform Fee: {{platform_fee}}\n\nYou can request a withdrawal to your verified bank account at any time from your earnings dashboard.',
     defaultActionText: "View Earnings & Withdraw",
     defaultActionUrl: "/professional/earnings",
     variables: [
-      { key: "prof_name", label: "Professional Name", description: "Name of pro", sample: "Vikram Mehta" },
-      { key: "milestone_title", label: "Milestone Title", description: "Milestone title", sample: "Milestone 1: Database & Auth Setup" },
-      { key: "project_title", label: "Project Title", description: "Project title", sample: "E-Commerce Web Portal" },
-      { key: "payout_amount", label: "Payout Amount", description: "Net payout", sample: "₹13,500" },
-      { key: "platform_fee", label: "Platform Fee", description: "Service commission", sample: "₹1,500 (10%)" },
+      {
+        key: "prof_name",
+        label: "Professional Name",
+        description: "Name of pro",
+        sample: "Vikram Mehta",
+      },
+      {
+        key: "milestone_title",
+        label: "Milestone Title",
+        description: "Milestone title",
+        sample: "Milestone 1: Database & Auth Setup",
+      },
+      {
+        key: "project_title",
+        label: "Project Title",
+        description: "Project title",
+        sample: "E-Commerce Web Portal",
+      },
+      {
+        key: "payout_amount",
+        label: "Payout Amount",
+        description: "Net payout",
+        sample: "₹13,500",
+      },
+      {
+        key: "platform_fee",
+        label: "Platform Fee",
+        description: "Service commission",
+        sample: "₹1,500 (10%)",
+      },
     ],
     sampleData: {
       prof_name: "Vikram Mehta",
@@ -394,15 +660,40 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultSubject: "Action Required: Dispute raised on project {{project_title}}",
     defaultHeading: "Dispute claim opened by client",
     defaultBodyText:
-      "Hello {{prof_name}},\n\n{{client_name}} has raised a dispute regarding project \"{{project_title}}\".\n\nIssue Type: {{issue_type}}\nMessage: \"{{dispute_message}}\"\n\nPlease review the claim in the Dispute Center. You can accept the claim or submit your counter-evidence and documentation within 72 hours.",
+      'Hello {{prof_name}},\n\n{{client_name}} has raised a dispute regarding project "{{project_title}}".\n\nIssue Type: {{issue_type}}\nMessage: "{{dispute_message}}"\n\nPlease review the claim in the Dispute Center. You can accept the claim or submit your counter-evidence and documentation within 72 hours.',
     defaultActionText: "Open Dispute Center",
     defaultActionUrl: "/project/{{project_id}}/tracking",
     variables: [
-      { key: "prof_name", label: "Professional Name", description: "Name of pro", sample: "Vikram Mehta" },
-      { key: "client_name", label: "Client Name", description: "Client name", sample: "Sarah Jenkins" },
-      { key: "project_title", label: "Project Title", description: "Project title", sample: "E-Commerce Web Portal" },
-      { key: "issue_type", label: "Issue Type", description: "Dispute issue type", sample: "Delay & Incomplete Deliverables" },
-      { key: "dispute_message", label: "Dispute Message", description: "Client statement", sample: "The required responsive layouts were not implemented as specified." },
+      {
+        key: "prof_name",
+        label: "Professional Name",
+        description: "Name of pro",
+        sample: "Vikram Mehta",
+      },
+      {
+        key: "client_name",
+        label: "Client Name",
+        description: "Client name",
+        sample: "Sarah Jenkins",
+      },
+      {
+        key: "project_title",
+        label: "Project Title",
+        description: "Project title",
+        sample: "E-Commerce Web Portal",
+      },
+      {
+        key: "issue_type",
+        label: "Issue Type",
+        description: "Dispute issue type",
+        sample: "Delay & Incomplete Deliverables",
+      },
+      {
+        key: "dispute_message",
+        label: "Dispute Message",
+        description: "Client statement",
+        sample: "The required responsive layouts were not implemented as specified.",
+      },
       { key: "project_id", label: "Project ID", description: "Project ID", sample: "419" },
     ],
     sampleData: {
@@ -432,7 +723,12 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultActionUrl: "/verify-email?token={{verification_token}}",
     variables: [
       { key: "user_name", label: "User Name", description: "Name of user", sample: "Alex Rivera" },
-      { key: "verification_token", label: "Verification Token", description: "Secret token", sample: "sec_tok_91a03f4d8e" },
+      {
+        key: "verification_token",
+        label: "Verification Token",
+        description: "Secret token",
+        sample: "sec_tok_91a03f4d8e",
+      },
     ],
     sampleData: {
       user_name: "Alex Rivera",
@@ -454,7 +750,12 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     defaultActionUrl: "/reset-password?token={{reset_token}}",
     variables: [
       { key: "user_name", label: "User Name", description: "Name of user", sample: "Alex Rivera" },
-      { key: "reset_token", label: "Reset Token", description: "Secret reset token", sample: "rst_8849bca01e" },
+      {
+        key: "reset_token",
+        label: "Reset Token",
+        description: "Secret reset token",
+        sample: "rst_8849bca01e",
+      },
     ],
     sampleData: {
       user_name: "Alex Rivera",
@@ -462,4 +763,3 @@ export const EMAIL_TEMPLATE_REGISTRY: Record<string, EmailTemplateDefinition> = 
     },
   },
 };
-

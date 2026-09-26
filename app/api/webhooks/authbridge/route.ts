@@ -6,7 +6,8 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
     const rawBody = await request.text();
-    const signature = request.headers.get("X-AuthBridge-Signature") ?? request.headers.get("AuthBridge-Signature");
+    const signature =
+      request.headers.get("X-AuthBridge-Signature") ?? request.headers.get("AuthBridge-Signature");
 
     const result = await verificationService.processWebhook(rawBody, signature, "authbridge");
     if (!result.ok) {
@@ -26,4 +27,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unable to process AuthBridge webhook." }, { status: 500 });
   }
 }
-

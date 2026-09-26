@@ -253,17 +253,54 @@ export async function GET(
             include: { wallet: { select: { userId: true } } },
           })
         : [];
-    const platformWalletTransactions = platformWalletTransactionsRaw.map((item) => ({
-      id: item.id,
-      type: item.type,
-      amount: item.amount,
-      status: item.status,
-      description:
-        adminWallets.length > 1
-          ? `${item.description} (${adminNameByUserId[item.wallet.userId] ?? `#${item.wallet.userId}`})`
-          : item.description,
-      createdAt: item.createdAt,
-    }));
+    const paymentIdsFromLedger = [
+      ...new Set(
+        platformWalletTransactionsRaw
+          .map((tx) => tx.paymentId)
+          .filter((id): id is number => typeof id === "number" && id > 0),
+      ),
+    ];
+    const ledgerPayments =
+      paymentIdsFromLedger.length > 0
+        ? await db.payment.findMany({
+            where: { id: { in: paymentIdsFromLedger } },
+            include: {
+              client: { select: { id: true, firstName: true, lastName: true } },
+              professional: { select: { id: true, firstName: true, lastName: true } },
+              job: { select: { id: true, title: true } },
+              milestone: { select: { id: true, title: true } },
+            },
+          })
+        : [];
+    const ledgerPaymentMap = new Map(ledgerPayments.map((p) => [p.id, p]));
+
+    const platformWalletTransactions = platformWalletTransactionsRaw.map((item) => {
+      const relPayment = item.paymentId ? ledgerPaymentMap.get(item.paymentId) : null;
+      const clientName = relPayment?.client
+        ? `${relPayment.client.firstName} ${relPayment.client.lastName}`.trim()
+        : null;
+      const professionalName = relPayment?.professional
+        ? `${relPayment.professional.firstName} ${relPayment.professional.lastName}`.trim()
+        : null;
+      const projectTitle = relPayment?.job?.title ?? null;
+      const milestoneTitle = relPayment?.milestone?.title ?? null;
+
+      return {
+        id: item.id,
+        type: item.type,
+        amount: item.amount,
+        status: item.status,
+        description:
+          adminWallets.length > 1
+            ? `${item.description} (${adminNameByUserId[item.wallet.userId] ?? `#${item.wallet.userId}`})`
+            : item.description,
+        createdAt: item.createdAt,
+        clientName,
+        professionalName,
+        projectTitle,
+        milestoneTitle,
+      };
+    });
     const platformTotalReceived = platformWalletTransactionsRaw
       .filter((item) => item.type === "ADMIN_MILESTONE_RECEIPT" && item.amount > 0)
       .reduce((sum, item) => sum + item.amount, 0);

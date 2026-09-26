@@ -119,7 +119,9 @@ export default function ClientReviews() {
           stats: {
             averageRating:
               json.length > 0
-                ? Number((json.reduce((acc, r) => acc + (r.rating || 0), 0) / json.length).toFixed(1))
+                ? Number(
+                    (json.reduce((acc, r) => acc + (r.rating || 0), 0) / json.length).toFixed(1),
+                  )
                 : 0,
             totalReviews: json.length,
             distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
@@ -142,8 +144,11 @@ export default function ClientReviews() {
     void fetchReviews();
   }, []);
 
-  const receivedReviews = data?.receivedReviews ?? data?.reviews ?? [];
-  const givenReviews = data?.givenReviews ?? [];
+  const receivedReviews = useMemo(
+    () => data?.receivedReviews ?? data?.reviews ?? [],
+    [data?.receivedReviews, data?.reviews],
+  );
+  const givenReviews = useMemo(() => data?.givenReviews ?? [], [data?.givenReviews]);
   const pendingReviews = data?.pendingReviews ?? [];
 
   const stats = useMemo(() => {
@@ -353,9 +358,7 @@ export default function ClientReviews() {
                       style={{ width: `${pct}%` }}
                     />
                   </div>
-                  <span className="w-8 text-right font-medium text-muted-foreground">
-                    {count}
-                  </span>
+                  <span className="w-8 text-right font-medium text-muted-foreground">{count}</span>
                 </div>
               );
             })}
@@ -554,7 +557,8 @@ export default function ClientReviews() {
                 All caught up! No pending reviews
               </h3>
               <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                You've completed reviews for all finished projects. Whenever a professional completes work, you can rate them here.
+                You've completed reviews for all finished projects. Whenever a professional
+                completes work, you can rate them here.
               </p>
             </div>
           ) : (
@@ -583,15 +587,13 @@ export default function ClientReviews() {
                       <span className="font-semibold text-foreground">
                         {pending.otherPartyName}
                       </span>{" "}
-                      {pending.otherPartyCategory ? `(${pending.otherPartyCategory})` : ""} · Completed{" "}
-                      {new Date(pending.completedAt).toLocaleDateString()}
+                      {pending.otherPartyCategory ? `(${pending.otherPartyCategory})` : ""} ·
+                      Completed {new Date(pending.completedAt).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <Button asChild variant="outline" size="sm">
-                      <Link href={`/project/${pending.trackingId}/tracking`}>
-                        View Project
-                      </Link>
+                      <Link href={`/project/${pending.trackingId}/tracking`}>View Project</Link>
                     </Button>
                     <Button
                       size="sm"
@@ -606,166 +608,162 @@ export default function ClientReviews() {
               ))}
             </div>
           )
+        ) : /* REVIEWS LIST (RECEIVED OR GIVEN) */
+        currentList.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-border p-12 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+              <MessageSquare className="h-8 w-8" />
+            </div>
+            <h3 className="mt-4 font-display text-lg font-bold text-foreground">
+              {activeTab === "received" ? "No received reviews found" : "No reviews left yet"}
+            </h3>
+            <p className="mt-1 max-w-md text-sm text-muted-foreground">
+              {searchQuery || filterRating !== "ALL"
+                ? "No reviews match your selected filter. Try clearing the search or rating filter."
+                : activeTab === "received"
+                  ? "Professionals who complete projects for you will leave ratings and comments here."
+                  : "When you complete a project, leave feedback to help professionals build their reputation."}
+            </p>
+            {(searchQuery || filterRating !== "ALL") && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => {
+                  setSearchQuery("");
+                  setFilterRating("ALL");
+                }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
         ) : (
-          /* REVIEWS LIST (RECEIVED OR GIVEN) */
-          currentList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-border p-12 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
-                <MessageSquare className="h-8 w-8" />
-              </div>
-              <h3 className="mt-4 font-display text-lg font-bold text-foreground">
-                {activeTab === "received" ? "No received reviews found" : "No reviews left yet"}
-              </h3>
-              <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                {searchQuery || filterRating !== "ALL"
-                  ? "No reviews match your selected filter. Try clearing the search or rating filter."
-                  : activeTab === "received"
-                    ? "Professionals who complete projects for you will leave ratings and comments here."
-                    : "When you complete a project, leave feedback to help professionals build their reputation."}
-              </p>
-              {(searchQuery || filterRating !== "ALL") && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setFilterRating("ALL");
-                  }}
+          <div className="grid gap-5">
+            {currentList.map((review) => {
+              const displayName =
+                activeTab === "received"
+                  ? review.reviewerName || review.clientName || "Professional"
+                  : review.recipientName || "Professional";
+
+              const category =
+                activeTab === "received" ? review.reviewerCategory : review.recipientCategory;
+
+              const avatar =
+                activeTab === "received" ? review.reviewerAvatar : review.recipientAvatar;
+
+              return (
+                <article
+                  key={review.id}
+                  className="overflow-hidden rounded-3xl border border-border/80 bg-card p-6 shadow-soft transition-all hover:border-border hover:shadow-elevated"
                 >
-                  Clear filters
-                </Button>
-              )}
-            </div>
-          ) : (
-            <div className="grid gap-5">
-              {currentList.map((review) => {
-                const displayName =
-                  activeTab === "received"
-                    ? review.reviewerName || review.clientName || "Professional"
-                    : review.recipientName || "Professional";
-
-                const category =
-                  activeTab === "received"
-                    ? review.reviewerCategory
-                    : review.recipientCategory;
-
-                const avatar =
-                  activeTab === "received" ? review.reviewerAvatar : review.recipientAvatar;
-
-                return (
-                  <article
-                    key={review.id}
-                    className="overflow-hidden rounded-3xl border border-border/80 bg-card p-6 shadow-soft transition-all hover:border-border hover:shadow-elevated"
-                  >
-                    {/* Header Row: Reviewer / Recipient Info + Rating */}
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-3">
-                        {avatar ? (
-                          <img
-                            src={avatar}
-                            alt={displayName}
-                            className="h-12 w-12 rounded-2xl object-cover ring-2 ring-primary/10"
-                          />
-                        ) : (
-                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-base font-bold text-primary">
-                            {displayName.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-foreground">{displayName}</h3>
-                            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                              {activeTab === "received" ? "Verified Professional" : "Reviewed Pro"}
-                            </span>
-                          </div>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            {category && <span>{category}</span>}
-                            {category && <span>·</span>}
-                            <span className="inline-flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {new Date(review.createdAt).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              })}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Star Rating Badge */}
-                      <div className="flex items-center gap-2 self-start sm:self-center">
-                        <div className="flex items-center text-amber-500">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <Star
-                              key={i}
-                              className={`h-4 w-4 ${
-                                i < review.rating
-                                  ? "fill-amber-400 text-amber-400"
-                                  : "text-muted-foreground/30"
-                              }`}
-                            />
-                          ))}
-                        </div>
-                        <span className="rounded-lg bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-300">
-                          {review.rating.toFixed(1)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Associated Project Banner */}
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-muted/50 px-4 py-2.5 text-xs border border-border/40">
-                      <div className="flex items-center gap-2">
-                        <Briefcase className="h-3.5 w-3.5 text-primary" />
-                        <span className="font-medium text-foreground">
-                          {review.projectTitle?.trim() ||
-                            (review.projectId ? `Project #${review.projectId}` : "Completed Project")}
-                        </span>
-                      </div>
-                      <Link
-                        href={`/project/${review.trackingId}/tracking`}
-                        className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
-                      >
-                        <span>View project workspace</span>
-                        <ArrowUpRight className="h-3 w-3" />
-                      </Link>
-                    </div>
-
-                    {/* Review Comment */}
-                    <div className="mt-4">
-                      {review.comment ? (
-                        <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap">
-                          "{review.comment}"
-                        </p>
+                  {/* Header Row: Reviewer / Recipient Info + Rating */}
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                      {avatar ? (
+                        <img
+                          src={avatar}
+                          alt={displayName}
+                          className="h-12 w-12 rounded-2xl object-cover ring-2 ring-primary/10"
+                        />
                       ) : (
-                        <p className="text-xs italic text-muted-foreground">
-                          Rating provided without written comment.
-                        </p>
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-base font-bold text-primary">
+                          {displayName.charAt(0).toUpperCase()}
+                        </div>
                       )}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-foreground">{displayName}</h3>
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            {activeTab === "received" ? "Verified Professional" : "Reviewed Pro"}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          {category && <span>{category}</span>}
+                          {category && <span>·</span>}
+                          <span className="inline-flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {new Date(review.createdAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Professional Response Callout (if any) */}
-                    {review.professionalResponse && (
-                      <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-xs">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-bold text-primary">Professional's Response:</span>
-                          {review.professionalResponseAt && (
-                            <span className="text-muted-foreground">
-                              {new Date(review.professionalResponseAt).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-1.5 text-sm text-foreground/90 whitespace-pre-wrap">
-                          "{review.professionalResponse}"
-                        </p>
+                    {/* Star Rating Badge */}
+                    <div className="flex items-center gap-2 self-start sm:self-center">
+                      <div className="flex items-center text-amber-500">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star
+                            key={i}
+                            className={`h-4 w-4 ${
+                              i < review.rating
+                                ? "fill-amber-400 text-amber-400"
+                                : "text-muted-foreground/30"
+                            }`}
+                          />
+                        ))}
                       </div>
+                      <span className="rounded-lg bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-300">
+                        {review.rating.toFixed(1)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Associated Project Banner */}
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-muted/50 px-4 py-2.5 text-xs border border-border/40">
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="h-3.5 w-3.5 text-primary" />
+                      <span className="font-medium text-foreground">
+                        {review.projectTitle?.trim() ||
+                          (review.projectId ? `Project #${review.projectId}` : "Completed Project")}
+                      </span>
+                    </div>
+                    <Link
+                      href={`/project/${review.trackingId}/tracking`}
+                      className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
+                    >
+                      <span>View project workspace</span>
+                      <ArrowUpRight className="h-3 w-3" />
+                    </Link>
+                  </div>
+
+                  {/* Review Comment */}
+                  <div className="mt-4">
+                    {review.comment ? (
+                      <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap">
+                        "{review.comment}"
+                      </p>
+                    ) : (
+                      <p className="text-xs italic text-muted-foreground">
+                        Rating provided without written comment.
+                      </p>
                     )}
-                  </article>
-                );
-              })}
-            </div>
-          )
+                  </div>
+
+                  {/* Professional Response Callout (if any) */}
+                  {review.professionalResponse && (
+                    <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-primary">Professional's Response:</span>
+                        {review.professionalResponseAt && (
+                          <span className="text-muted-foreground">
+                            {new Date(review.professionalResponseAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1.5 text-sm text-foreground/90 whitespace-pre-wrap">
+                        "{review.professionalResponse}"
+                      </p>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
         )}
       </div>
 

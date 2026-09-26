@@ -237,8 +237,7 @@ async function notifyRole(
       notification.href.match(/\/project\/(\d+)/)?.[1] ||
       notification.href.match(/project=(\d+)/)?.[1];
     const jobIdMatch = !projectIdMatch
-      ? notification.href.match(/\/jobs?\/(\d+)/)?.[1] ||
-        notification.href.match(/job=(\d+)/)?.[1]
+      ? notification.href.match(/\/jobs?\/(\d+)/)?.[1] || notification.href.match(/job=(\d+)/)?.[1]
       : null;
 
     const contextualInfo = projectIdMatch
@@ -339,8 +338,7 @@ export async function notifyUsers(userIds: number[], notification: BroadcastNoti
       notification.href.match(/\/project\/(\d+)/)?.[1] ||
       notification.href.match(/project=(\d+)/)?.[1];
     const jobIdMatch = !projectIdMatch
-      ? notification.href.match(/\/jobs?\/(\d+)/)?.[1] ||
-        notification.href.match(/job=(\d+)/)?.[1]
+      ? notification.href.match(/\/jobs?\/(\d+)/)?.[1] || notification.href.match(/job=(\d+)/)?.[1]
       : null;
 
     const contextualInfo = projectIdMatch
@@ -534,7 +532,7 @@ export async function notifyMilestoneFunded(input: {
   clientId: number;
   professionalId: number;
 }) {
-  const href = `/project/${input.projectId}/tracking`;
+  const href = `/project/${input.projectId}/tracking?tab=milestones&milestoneId=${input.milestoneId}`;
   const amount = `₹${input.amount.toLocaleString("en-IN")}`;
   await notifyUsers([input.professionalId], {
     type: "MILESTONE_FUNDED",

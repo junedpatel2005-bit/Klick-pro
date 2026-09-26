@@ -20,7 +20,10 @@ import {
   Sparkles,
   MessageSquare,
   Send,
+  CreditCard,
+  Wallet,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -37,6 +40,7 @@ export type DisputeMessage = {
   disputeId: number;
   senderId: number;
   senderRole: string;
+  senderName?: string | null;
   recipientId?: number;
   message: string;
   createdAt: string;
@@ -88,6 +92,8 @@ interface ProjectDisputeCenterProps {
   projectId: number;
   viewerRole: "CLIENT" | "PROFESSIONAL" | "ADMIN";
   viewerUserId: number;
+  clientName?: string;
+  professionalName?: string;
   projectStatus: string;
   milestones: Milestone[];
   dispute: DisputeData | null;
@@ -100,49 +106,141 @@ interface ProjectDisputeCenterProps {
   onPayMilestone?: (milestone: Milestone) => void;
 }
 
-const REASON_OPTIONS = [
+export type DisputeReasonOption = {
+  id: string;
+  label: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
+
+export const CLIENT_DISPUTE_REASONS: DisputeReasonOption[] = [
   {
     id: "QUALITY_OF_WORK",
-    label: "Quality of Work",
-    description: "Deliverables are incomplete, defective, or do not match agreed specifications.",
+    label: "Quality of Work / Defective Deliverables",
+    description:
+      "Submitted work is incomplete, defective, substandard, or does not meet agreed specifications.",
     icon: AlertTriangle,
   },
   {
     id: "MISSED_DEADLINE",
-    label: "Missed Deadlines",
-    description: "Agreed milestones or project delivery schedule was severely breached.",
+    label: "Missed Deadlines & Project Delays",
+    description:
+      "Agreed milestones or project delivery schedule was severely breached without reasonable explanation.",
     icon: Clock,
   },
   {
-    id: "UNRESPONSIVE",
-    label: "Unresponsive Party",
-    description: "Prolonged lack of communication or unresponsiveness preventing progress.",
+    id: "PROFESSIONAL_UNRESPONSIVE",
+    label: "Professional Unresponsive / Abandoned",
+    description:
+      "Professional has stopped communicating, missed check-ins, or abandoned the project.",
     icon: HelpCircle,
   },
   {
     id: "SCOPE_DISAGREEMENT",
-    label: "Scope Disagreement",
-    description: "Conflict over deliverables, feature changes, or out-of-scope demands.",
+    label: "Scope Disagreement / Missing Features",
+    description:
+      "Delivered work does not match agreed contract scope or key project features are missing.",
     icon: Scale,
   },
   {
-    id: "PAYMENT_ISSUE",
-    label: "Payment / Milestone Issue",
-    description: "Milestone payment withholding, unauthorized changes, or billing conflict.",
-    icon: Gavel,
+    id: "REFUND_REQUEST",
+    label: "Refund / Escrow Return Request",
+    description:
+      "Requesting a partial or full refund of funded milestone escrow due to non-performance or contract cancellation.",
+    icon: RotateCcw,
   },
   {
     id: "OTHER",
     label: "Other Contractual Issue",
-    description: "Any other substantial dispute regarding project terms or commitments.",
+    description: "Any other substantial dispute regarding project terms, conduct, or deliverables.",
     icon: FileText,
   },
 ];
+
+export const PROFESSIONAL_DISPUTE_REASONS: DisputeReasonOption[] = [
+  {
+    id: "PAYMENT_NOT_RELEASED",
+    label: "Payment Not Released / Money Not Received",
+    description:
+      "Completed work was submitted according to terms, but the client is delaying or refusing to release milestone payment.",
+    icon: Gavel,
+  },
+  {
+    id: "APPROVAL_DELAY",
+    label: "Client Refusing / Unresponsive to Approval",
+    description:
+      "Milestone deliverables have been submitted for review, but the client is not reviewing or approving them.",
+    icon: Clock,
+  },
+  {
+    id: "SCOPE_CREEP",
+    label: "Scope Creep / Unpaid Extra Demands",
+    description:
+      "Client is demanding additional work, features, or out-of-scope revisions without additional payment.",
+    icon: Scale,
+  },
+  {
+    id: "UNFUNDED_MILESTONE",
+    label: "Milestone Not Funded in Escrow",
+    description:
+      "Client has requested work to proceed or revisions to start without depositing agreed funds into escrow.",
+    icon: AlertTriangle,
+  },
+  {
+    id: "CLIENT_UNRESPONSIVE",
+    label: "Client Unresponsive / Missing Assets",
+    description:
+      "Client is not communicating or failing to provide required credentials, feedback, or assets needed to proceed.",
+    icon: HelpCircle,
+  },
+  {
+    id: "OTHER",
+    label: "Other Contractual Issue",
+    description: "Any other substantial dispute regarding project terms, conduct, or agreements.",
+    icon: FileText,
+  },
+];
+
+export const REASON_OPTIONS = CLIENT_DISPUTE_REASONS;
+
+const ALL_DISPUTE_REASON_LABELS: Record<string, string> = {
+  // Client reasons
+  QUALITY_OF_WORK: "Quality of Work / Defective Deliverables",
+  MISSED_DEADLINE: "Missed Deadlines & Delays",
+  PROFESSIONAL_UNRESPONSIVE: "Professional Unresponsive / Abandoned",
+  SCOPE_DISAGREEMENT: "Scope Disagreement / Missing Features",
+  REFUND_REQUEST: "Refund / Escrow Return Request",
+
+  // Professional reasons
+  PAYMENT_NOT_RELEASED: "Payment Not Released / Money Not Received",
+  APPROVAL_DELAY: "Client Refusing / Unresponsive to Approval",
+  SCOPE_CREEP: "Scope Creep / Unpaid Extra Demands",
+  UNFUNDED_MILESTONE: "Milestone Not Funded in Escrow",
+  CLIENT_UNRESPONSIVE: "Client Unresponsive / Missing Assets",
+
+  // Shared / Legacy reasons
+  PAYMENT_ISSUE: "Payment / Milestone Issue",
+  UNRESPONSIVE: "Unresponsive Party",
+  POOR_QUALITY: "Poor Quality Deliverables",
+  OTHER: "Other Contractual Issue",
+};
+
+export function formatDisputeReason(issueType: string): string {
+  if (ALL_DISPUTE_REASON_LABELS[issueType]) {
+    return ALL_DISPUTE_REASON_LABELS[issueType];
+  }
+  return issueType
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export function ProjectDisputeCenter({
   projectId,
   viewerRole,
   viewerUserId,
+  clientName,
+  professionalName,
   projectStatus,
   milestones,
   dispute,
@@ -177,15 +275,43 @@ export function ProjectDisputeCenter({
     );
   }, [milestones, dispute?.milestoneId]);
 
+  // Computed reason options based on user role (Client vs Professional)
+  const reasonOptions = React.useMemo(() => {
+    return isClient ? CLIENT_DISPUTE_REASONS : PROFESSIONAL_DISPUTE_REASONS;
+  }, [isClient]);
+
   // Create dispute form state
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedReason, setSelectedReason] = useState(REASON_OPTIONS[0]?.id ?? "POOR_QUALITY");
+  const [selectedReason, setSelectedReason] = useState<string>(
+    () =>
+      (isClient ? CLIENT_DISPUTE_REASONS[0]?.id : PROFESSIONAL_DISPUTE_REASONS[0]?.id) ?? "OTHER",
+  );
   const [priority, setPriority] = useState<"LOW" | "MEDIUM" | "HIGH">("MEDIUM");
   const [targetMilestoneId, setTargetMilestoneId] = useState<string>("none");
   const [explanation, setExplanation] = useState("");
   const [evidenceFiles, setEvidenceFiles] = useState<DisputeAttachment[]>([]);
   const [uploadingEvidence, setUploadingEvidence] = useState(false);
   const [formError, setFormError] = useState("");
+
+  const handleOpenCreateModal = () => {
+    setSelectedReason(reasonOptions[0]?.id ?? "OTHER");
+    setFormError("");
+    const activeMilestone =
+      milestones.find(
+        (m) =>
+          m.status === "AWAITING_CLIENT_REVIEW" ||
+          m.status === "REVISION_REQUESTED" ||
+          m.status === "IN_PROGRESS",
+      ) || milestones.find((m) => !["APPROVED", "COMPLETED", "CANCELLED"].includes(m.status));
+    setTargetMilestoneId(activeMilestone ? String(activeMilestone.id) : "none");
+    setShowCreateModal(true);
+  };
+
+  React.useEffect(() => {
+    if (!reasonOptions.some((opt) => opt.id === selectedReason)) {
+      setSelectedReason(reasonOptions[0]?.id ?? "OTHER");
+    }
+  }, [reasonOptions, selectedReason]);
 
   // Respondent response form state
   const [showRejectForm, setShowRejectForm] = useState(false);
@@ -205,6 +331,28 @@ export function ProjectDisputeCenter({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const rejectFileInputRef = useRef<HTMLInputElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToBottom = React.useCallback((smooth = true) => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior: smooth ? "smooth" : "auto",
+      });
+    } else if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
+    }
+  }, []);
+
+  React.useEffect(() => {
+    scrollToBottom(true);
+  }, [disputeMessages, scrollToBottom]);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => scrollToBottom(false), 200);
+    return () => clearTimeout(timer);
+  }, [dispute?.id, scrollToBottom]);
 
   // Parse evidence from current dispute
   const complainantEvidence: DisputeAttachment[] = React.useMemo(() => {
@@ -264,14 +412,16 @@ export function ProjectDisputeCenter({
   const handleWithdrawDispute = async () => {
     if (!dispute) return;
     try {
-      await onAction("withdraw-dispute", {
+      const res = (await onAction("withdraw-dispute", {
         disputeId: dispute.id,
         reason: withdrawReason.trim() || undefined,
-      });
+      })) as { ok?: boolean; error?: string | null } | void;
+      if (res && res.ok === false) return;
       setShowWithdrawConfirm(false);
       setWithdrawReason("");
+      toast.success("Dispute withdrawn successfully.");
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to withdraw dispute.");
+      toast.error(err instanceof Error ? err.message : "Failed to withdraw dispute.");
     }
   };
 
@@ -279,13 +429,14 @@ export function ProjectDisputeCenter({
     if (!dispute || !newDisputeMessage.trim()) return;
     setSendingDisputeMessage(true);
     try {
-      await onAction("send-dispute-message", {
+      const res = (await onAction("send-dispute-message", {
         disputeId: dispute.id,
         message: newDisputeMessage.trim(),
-      });
+      })) as { ok?: boolean; error?: string | null } | void;
+      if (res && res.ok === false) return;
       setNewDisputeMessage("");
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to send message.");
+      toast.error(err instanceof Error ? err.message : "Failed to send message.");
     } finally {
       setSendingDisputeMessage(false);
     }
@@ -298,16 +449,18 @@ export function ProjectDisputeCenter({
     }
     setFormError("");
     try {
-      await onAction("submit-dispute", {
+      const res = (await onAction("submit-dispute", {
         issueType: selectedReason,
         priority,
         message: explanation.trim(),
         evidence: evidenceFiles,
         milestoneId: targetMilestoneId !== "none" ? Number(targetMilestoneId) : undefined,
-      });
+      })) as { ok?: boolean; error?: string | null } | void;
+      if (res && res.ok === false) return;
       setShowCreateModal(false);
       setExplanation("");
       setEvidenceFiles([]);
+      toast.success("Dispute submitted successfully.");
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : "Failed to create dispute.");
     }
@@ -316,13 +469,17 @@ export function ProjectDisputeCenter({
   const handleAcceptDispute = async () => {
     if (!dispute) return;
     try {
-      await onAction("respond-dispute", {
+      const res = (await onAction("respond-dispute", {
         disputeId: dispute.id,
         responseAction: "ACCEPT",
-      });
+      })) as { ok?: boolean; error?: string | null } | void;
+      if (res && res.ok === false) {
+        return;
+      }
       setShowAcceptConfirm(false);
+      toast.success("Dispute accepted and settled.");
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to accept dispute.");
+      toast.error(err instanceof Error ? err.message : "Failed to accept dispute.");
     }
   };
 
@@ -336,15 +493,17 @@ export function ProjectDisputeCenter({
     }
     setRejectError("");
     try {
-      await onAction("respond-dispute", {
+      const res = (await onAction("respond-dispute", {
         disputeId: dispute.id,
         responseAction: "REJECT",
         message: rejectMessage.trim(),
         evidence: rejectEvidence,
-      });
+      })) as { ok?: boolean; error?: string | null } | void;
+      if (res && res.ok === false) return;
       setShowRejectForm(false);
       setRejectMessage("");
       setRejectEvidence([]);
+      toast.success("Dispute contested. Escalated to Admin Review.");
     } catch (err: unknown) {
       setRejectError(err instanceof Error ? err.message : "Failed to contest dispute.");
     }
@@ -410,7 +569,7 @@ export function ProjectDisputeCenter({
 
           {!isDisputeActive && canRaiseDispute && (
             <Button
-              onClick={() => setShowCreateModal(true)}
+              onClick={handleOpenCreateModal}
               className="bg-amber-600 hover:bg-amber-500 text-white shadow-sm font-semibold text-xs"
               size="sm"
             >
@@ -441,15 +600,16 @@ export function ProjectDisputeCenter({
           <div className="space-y-1">
             <p className="text-sm font-semibold text-foreground">Contract in good standing</p>
             <p className="text-xs text-muted-foreground">
-              If an issue regarding quality, missed deadlines, scope disagreement, or milestone
-              payments arises, you can initiate a structured dispute. You have {remainingAllowance}{" "}
-              dispute claim(s) remaining.
+              {isClient
+                ? "If an issue regarding quality, missed deadlines, scope disagreement, or refund arises, you can initiate a structured dispute. You have "
+                : "If an issue regarding withheld payments, unapproved milestones, scope creep, or unresponsive client arises, you can initiate a structured dispute. You have "}
+              {remainingAllowance} dispute claim(s) remaining.
             </p>
           </div>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowCreateModal(true)}
+            onClick={handleOpenCreateModal}
             className="shrink-0 font-medium"
           >
             <ShieldAlert className="mr-1.5 h-4 w-4 text-amber-600" />
@@ -509,7 +669,9 @@ export function ProjectDisputeCenter({
                     className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
                   >
                     <CheckCircle2 className="mr-1.5 h-4 w-4" />
-                    Accept Claim
+                    {isClient && dispute.reporterRole === "PROFESSIONAL" && payableMilestone
+                      ? `Accept Claim (₹${payableMilestone.amount.toLocaleString("en-IN")})`
+                      : "Accept Claim"}
                   </Button>
                   <Button
                     size="sm"
@@ -583,7 +745,7 @@ export function ProjectDisputeCenter({
               <div>
                 <p className="font-semibold text-muted-foreground uppercase text-[10px]">Reason</p>
                 <p className="font-bold text-foreground mt-0.5">
-                  {dispute.issueType.replaceAll("_", " ")}
+                  {formatDisputeReason(dispute.issueType)}
                 </p>
               </div>
               <div>
@@ -774,9 +936,9 @@ export function ProjectDisputeCenter({
                   Official Admin Adjudication in Progress
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground max-w-2xl leading-relaxed">
-                  This dispute was contested and escalated. A Klick-Pro Trust & Safety Dispute Officer
-                  is reviewing project logs, milestones, and submitted evidence from both parties to
-                  deliver a binding ruling (Client Refund or Professional Payout).
+                  This dispute was contested and escalated. A Klick-Pro Trust & Safety Dispute
+                  Officer is reviewing project logs, milestones, and submitted evidence from both
+                  parties to deliver a binding ruling (Client Refund or Professional Payout).
                 </p>
               </div>
 
@@ -871,7 +1033,7 @@ export function ProjectDisputeCenter({
                   Initial Claim ({dispute.reporterRole === "CLIENT" ? "Client" : "Professional"})
                 </p>
                 <Badge variant="outline" className="text-[10px]">
-                  {dispute.issueType.replaceAll("_", " ")}
+                  {formatDisputeReason(dispute.issueType)}
                 </Badge>
               </div>
               <p className="whitespace-pre-wrap text-xs text-muted-foreground leading-relaxed">
@@ -1015,6 +1177,53 @@ export function ProjectDisputeCenter({
             </div>
           </div>
 
+          {/* If Professional Won and Client owes milestone payment */}
+          {isClient &&
+            dispute.decision === "PROFESSIONAL_WINS" &&
+            payableMilestone &&
+            payableMilestone.status !== "APPROVED" &&
+            payableMilestone.status !== "COMPLETED" && (
+              <div className="rounded-2xl border-2 border-blue-400 bg-blue-50/90 dark:bg-blue-950/40 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white font-bold shadow-xs">
+                    <Gavel className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-foreground">
+                        Professional Won Dispute — Milestone Payment Required
+                      </h4>
+                      <Badge
+                        variant="outline"
+                        className="border-blue-400 bg-blue-100/70 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-[10px] font-bold"
+                      >
+                        Payment Action Required
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      The dispute was resolved by Admin in favor of the professional. Please approve
+                      and pay{" "}
+                      <strong>
+                        Milestone #{payableMilestone.id}: {payableMilestone.title}
+                      </strong>{" "}
+                      (₹{payableMilestone.amount.toLocaleString("en-IN")}) to complete the payment
+                      and advance the project.
+                    </p>
+                  </div>
+                </div>
+                {onPayMilestone && (
+                  <Button
+                    size="default"
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shrink-0 shadow-sm gap-1.5"
+                    onClick={() => onPayMilestone(payableMilestone)}
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    Pay Milestone (₹{payableMilestone.amount.toLocaleString("en-IN")})
+                  </Button>
+                )}
+              </div>
+            )}
+
           {/* If can raise another dispute later in the project */}
           {canRaiseDispute && (
             <div className="flex items-center justify-between rounded-xl border bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
@@ -1025,7 +1234,7 @@ export function ProjectDisputeCenter({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowCreateModal(true)}
+                onClick={handleOpenCreateModal}
                 className="text-xs h-7"
               >
                 Raise New Dispute
@@ -1058,7 +1267,7 @@ export function ProjectDisputeCenter({
           </div>
 
           {/* Message list */}
-          <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+          <div ref={messagesContainerRef} className="space-y-3 max-h-72 overflow-y-auto pr-1">
             {disputeMessages.filter((m) => m.disputeId === dispute.id).length === 0 ? (
               <div className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground">
                 No official discussion messages yet. You can post clarifications or updates below.
@@ -1068,37 +1277,46 @@ export function ProjectDisputeCenter({
                 .filter((m) => m.disputeId === dispute.id)
                 .map((msg) => {
                   const isAdmin = msg.senderRole === "ADMIN";
-                  const isOwn = msg.senderId === viewerUserId;
+                  const isOwn = msg.senderId === viewerUserId || msg.senderRole === viewerRole;
+                  const senderDisplayName =
+                    msg.senderName ||
+                    (isAdmin
+                      ? "Klick-Pro Dispute Team (Admin)"
+                      : msg.senderRole === "CLIENT"
+                        ? `${clientName || "Client"} (Client)`
+                        : `${professionalName || "Professional"} (Professional)`);
                   return (
                     <div
                       key={msg.id}
-                      className={`flex flex-col ${
-                        isAdmin
-                          ? "items-center"
-                          : isOwn
-                            ? "items-end"
-                            : "items-start"
+                      className={`flex flex-col w-full ${
+                        isAdmin ? "items-center" : isOwn ? "items-end" : "items-start"
                       }`}
                     >
                       <div
-                        className={`max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed ${
+                        className={`max-w-[85%] sm:max-w-[75%] rounded-2xl p-3 text-xs leading-relaxed shadow-xs ${
                           isAdmin
                             ? "border-2 border-indigo-300 bg-indigo-50/90 text-indigo-950 dark:bg-indigo-950/40 dark:text-indigo-200"
                             : isOwn
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-foreground border"
+                              ? "bg-primary text-primary-foreground rounded-br-xs"
+                              : "bg-muted text-foreground border rounded-bl-xs"
                         }`}
                       >
-                        <div className="flex items-center gap-1.5 font-bold text-[10px] uppercase tracking-wider mb-1 opacity-90">
+                        <div
+                          className={`flex items-center gap-1.5 font-bold text-[10px] uppercase tracking-wider mb-1 ${
+                            isOwn
+                              ? "justify-end text-primary-foreground/90"
+                              : "text-muted-foreground"
+                          }`}
+                        >
                           {isAdmin ? (
                             <>
                               <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                              <span>Klick-Pro Dispute Team</span>
+                              <span>{senderDisplayName}</span>
                             </>
                           ) : isOwn ? (
-                            <span>You ({msg.senderRole === "CLIENT" ? "Client" : "Professional"})</span>
+                            <span>You · {senderDisplayName}</span>
                           ) : (
-                            <span>{msg.senderRole === "CLIENT" ? "Client" : "Professional"}</span>
+                            <span className="font-bold text-foreground">{senderDisplayName}</span>
                           )}
                           <span className="opacity-60 text-[9px] font-normal lowercase">
                             ·{" "}
@@ -1114,6 +1332,7 @@ export function ProjectDisputeCenter({
                   );
                 })
             )}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Send Message Box (active dispute only) */}
@@ -1157,11 +1376,16 @@ export function ProjectDisputeCenter({
             <div className="flex items-start justify-between border-b pb-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-amber-600">
-                  Step 1 of 3: Raise Dispute
+                  Step 1 of 3: {isClient ? "Client Dispute Claim" : "Professional Dispute Claim"}
                 </p>
                 <h3 className="text-lg font-bold text-foreground">
-                  File a Formal Contract Dispute
+                  {isClient ? "Raise Dispute Against Professional" : "Raise Dispute Against Client"}
                 </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {isClient
+                    ? "Report defective deliverables, missed deadlines, or request milestone escrow refunds."
+                    : "Report unreleased payments, unpaid scope creep, or unresponsive approvals."}
+                </p>
               </div>
               <button
                 type="button"
@@ -1177,10 +1401,10 @@ export function ProjectDisputeCenter({
               {/* Reason Selector */}
               <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">
-                  Select Reason *
+                  Select Dispute Reason *
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {REASON_OPTIONS.map((opt) => {
+                  {reasonOptions.map((opt) => {
                     const Icon = opt.icon;
                     const isSelected = selectedReason === opt.id;
                     return (
@@ -1190,15 +1414,17 @@ export function ProjectDisputeCenter({
                         onClick={() => setSelectedReason(opt.id)}
                         className={`flex flex-col text-left p-3 rounded-xl border transition-all ${
                           isSelected
-                            ? "border-amber-500 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-500"
+                            ? "border-amber-500 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-500 shadow-xs"
                             : "border-border hover:bg-muted/40"
                         }`}
                       >
                         <div className="flex items-center gap-2">
                           <Icon
-                            className={`h-4 w-4 ${isSelected ? "text-amber-600" : "text-muted-foreground"}`}
+                            className={`h-4 w-4 shrink-0 ${isSelected ? "text-amber-600" : "text-muted-foreground"}`}
                           />
-                          <span className="text-xs font-bold text-foreground">{opt.label}</span>
+                          <span className="text-xs font-bold text-foreground line-clamp-1">
+                            {opt.label}
+                          </span>
                         </div>
                         <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">
                           {opt.description}
@@ -1255,7 +1481,11 @@ export function ProjectDisputeCenter({
                 <textarea
                   value={explanation}
                   onChange={(e) => setExplanation(e.target.value)}
-                  placeholder="Detail specifically what went wrong, contract terms breached, and your requested resolution..."
+                  placeholder={
+                    isClient
+                      ? "Detail specifically what went wrong with the deliverables, missed deadlines, or why an escrow refund is requested..."
+                      : "Detail specifically what work was completed, why payment has not been received, or what extra work was requested..."
+                  }
                   className="w-full rounded-xl border border-input bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary min-h-[110px]"
                 />
               </div>
@@ -1349,17 +1579,45 @@ export function ProjectDisputeCenter({
               </div>
               <div>
                 <h3 className="text-base font-bold text-foreground">
-                  Accept Dispute & Mutually Settle?
+                  {isClient && dispute?.reporterRole === "PROFESSIONAL" && payableMilestone
+                    ? "Accept Claim & Pay Milestone?"
+                    : "Accept Dispute & Mutually Settle?"}
                 </h3>
                 <p className="text-xs text-muted-foreground">Mutual Settlement Confirmation</p>
               </div>
             </div>
 
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              By accepting this dispute, you agree to mutually settle the claim with the other
-              party. The dispute will be closed as resolved without requiring an administrative
-              penalty or formal hearing.
-            </p>
+            {isClient && dispute?.reporterRole === "PROFESSIONAL" && payableMilestone ? (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  The professional filed this dispute requesting payment for:
+                </p>
+                <div className="rounded-2xl border bg-muted/40 p-3 space-y-1 text-xs">
+                  <div className="flex justify-between font-semibold">
+                    <span className="text-foreground">{payableMilestone.title}</span>
+                    <span className="text-emerald-600 font-bold">
+                      ₹{payableMilestone.amount.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                  {payableMilestone.description && (
+                    <p className="text-[11px] text-muted-foreground line-clamp-2">
+                      {payableMilestone.description}
+                    </p>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  To accept this claim, you will proceed to review and pay the milestone via your
+                  wallet. If your wallet balance is sufficient, the funds will be released to the
+                  professional and the dispute will be resolved immediately.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                By accepting this dispute, you agree to mutually settle the claim with the other
+                party. The dispute will be closed as resolved without requiring an administrative
+                penalty or formal hearing.
+              </p>
+            )}
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <Button
@@ -1370,15 +1628,33 @@ export function ProjectDisputeCenter({
               >
                 Cancel
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleAcceptDispute}
-                disabled={busyAction !== null}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
-              >
-                Confirm Mutual Settlement
-              </Button>
+              {isClient &&
+              dispute?.reporterRole === "PROFESSIONAL" &&
+              payableMilestone &&
+              onPayMilestone ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    setShowAcceptConfirm(false);
+                    onPayMilestone(payableMilestone);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold gap-1.5"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  Proceed to Pay (₹{payableMilestone.amount.toLocaleString("en-IN")})
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleAcceptDispute}
+                  disabled={busyAction !== null}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                >
+                  Confirm Mutual Settlement
+                </Button>
+              )}
             </div>
           </div>
         </div>

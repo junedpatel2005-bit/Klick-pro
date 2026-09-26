@@ -948,13 +948,19 @@ NEEDS VERIFICATION
 
 After relevant changes run as applicable:
 
-npx prisma format
-npx prisma validate
-npx prisma generate
-npm run typecheck
-npm run lint
-npm test
-npm run build
+For database/schema changes (MANDATORY):
+- Create corresponding migration in prisma/migrations/<YYYYMMDDNNNN_name>/migration.sql
+- npx prisma format
+- npx prisma validate
+- npx prisma migrate deploy
+- npx prisma generate
+- npx prisma migrate status
+
+For code/TypeScript changes:
+- npm run typecheck
+- npm run lint
+- npm test
+- npm run build
 
 Use the project's actual scripts from package.json.
 

@@ -6,13 +6,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import {
   AlertCircle,
+  AlertTriangle,
   CalendarDays,
   CheckCircle2,
   Clock3,
   Coins,
+  CreditCard,
   Download,
   FileText,
   Flag,
+  Gavel,
   History,
   Layers,
   LayoutGrid,
@@ -54,7 +57,12 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { calculateMilestoneMoney } from "@/lib/payment-fees";
-import { ProjectDisputeCenter, DisputeData, DisputeMessage } from "@/components/ProjectDisputeCenter";
+import {
+  ProjectDisputeCenter,
+  DisputeData,
+  DisputeMessage,
+} from "@/components/ProjectDisputeCenter";
+import { toast } from "sonner";
 
 type Person = { firstName: string | null; lastName: string | null } | null;
 export type DraftMilestone = {
@@ -336,6 +344,31 @@ function getTrackingLoadingMeta(busy: string | null): { title: string; descripti
 export default function SharedProjectTrackingPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const searchParams = useSearchParams();
+  const queryTab = searchParams.get("tab");
+  const queryMilestoneId = searchParams.get("milestoneId");
+  const queryAction = searchParams.get("action");
+
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (queryMilestoneId || queryTab === "milestones") return "milestones";
+    if (queryTab === "timeline") return "timeline";
+    if (queryTab === "uploads") return "uploads";
+    return "overview";
+  });
+
+  const hasAutoScrolledMilestone = useRef<string | null>(null);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    const mId = searchParams.get("milestoneId");
+    if (mId || tab === "milestones") {
+      setActiveTab("milestones");
+    } else if (tab === "timeline") {
+      setActiveTab("timeline");
+    } else if (tab === "uploads") {
+      setActiveTab("uploads");
+    }
+  }, [searchParams]);
+
   const [data, setData] = useState<Data | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -433,6 +466,18 @@ export default function SharedProjectTrackingPage() {
     };
 
     socket.on("project:updated", onProjectUpdated);
+    socket.on("dispute:update", () => void refresh().catch(() => undefined));
+    socket.on("dispute:message", (payload?: { disputeId?: number; message?: DisputeMessage }) => {
+      if (payload?.message) {
+        setData((prev) => {
+          if (!prev) return prev;
+          const current = prev.disputeMessages || [];
+          if (current.some((m) => m.id === payload.message!.id)) return prev;
+          return { ...prev, disputeMessages: [...current, payload.message!] };
+        });
+      }
+      void refresh().catch(() => undefined);
+    });
     socket.on("notification:new", () => void refresh().catch(() => undefined));
     socket.on("proposal:new", () => void refresh().catch(() => undefined));
 
@@ -457,6 +502,8 @@ export default function SharedProjectTrackingPage() {
 
     return () => {
       socket.off("project:updated", onProjectUpdated);
+      socket.off("dispute:update");
+      socket.off("dispute:message");
       socket.off("notification:new");
       socket.off("proposal:new");
       socket.disconnect();
@@ -498,7 +545,7 @@ export default function SharedProjectTrackingPage() {
   ) => {
     if (!alreadyLocked && actionInFlight.current) return;
     if (!alreadyLocked) actionInFlight.current = true;
-    setBusy(key);
+    if (key !== "send-dispute-message") setBusy(key);
     setMessage(null);
     try {
       const response = await fetch("/api/v1/portal/project-actions", {
@@ -508,6 +555,14 @@ export default function SharedProjectTrackingPage() {
       });
       const result = await response.json().catch(() => null);
       if (!response.ok) throw new Error(result?.error || "Unable to update project.");
+      if (key === "send-dispute-message" && result?.message) {
+        setData((prev) => {
+          if (!prev) return prev;
+          const current = prev.disputeMessages || [];
+          if (current.some((m) => m.id === result.message.id)) return prev;
+          return { ...prev, disputeMessages: [...current, result.message] };
+        });
+      }
       setNote("");
       setFiles([]);
       setWorkTitle("");
@@ -519,10 +574,10 @@ export default function SharedProjectTrackingPage() {
       return { ok: true, error: null };
     } catch (error) {
       const errText = error instanceof Error ? error.message : "Unable to update project.";
-      setMessage(errText);
+      toast.error(errText);
       return { ok: false, error: errText };
     } finally {
-      setBusy(null);
+      if (key !== "send-dispute-message") setBusy(null);
       if (!alreadyLocked) actionInFlight.current = false;
     }
   };
@@ -531,11 +586,13 @@ export default function SharedProjectTrackingPage() {
     payload: Record<string, unknown> = {},
     selectedFiles = files,
   ) => {
-    if (!selectedFiles.length) return setMessage("Choose at least one file.");
+    if (!selectedFiles.length) {
+      toast.error("Choose at least one file.");
+      return;
+    }
     if (actionInFlight.current) return;
     actionInFlight.current = true;
     setBusy(key);
-    setMessage(null);
     try {
       const form = new FormData();
       form.set("projectId", String(projectId));
@@ -553,7 +610,8 @@ export default function SharedProjectTrackingPage() {
         true,
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to store the selected files.");
+      const errMsg = error instanceof Error ? error.message : "Unable to store the selected files.";
+      toast.error(errMsg);
       setBusy(null);
     } finally {
       actionInFlight.current = false;
@@ -632,6 +690,63 @@ export default function SharedProjectTrackingPage() {
     return [];
   }, [data?.negotiations, data?.latestNegotiation, data?.milestones, data?.project]);
 
+  const disputePaymentMilestone = useMemo(() => {
+    if (!data?.dispute || data.dispute.decision !== "PROFESSIONAL_WINS") return null;
+    if (data.viewerRole !== "CLIENT") return null;
+    const targetMilestoneId = data.dispute.milestoneId;
+    if (targetMilestoneId) {
+      const matched = data.milestones?.find((m) => m.id === targetMilestoneId);
+      if (matched && matched.status !== "APPROVED" && matched.status !== "COMPLETED") {
+        return matched;
+      }
+    }
+    return (
+      data.milestones?.find(
+        (m) =>
+          m.status === "AWAITING_CLIENT_REVIEW" ||
+          m.status === "REVISION_REQUESTED" ||
+          m.status === "IN_PROGRESS",
+      ) ?? null
+    );
+  }, [data?.dispute, data?.milestones, data?.viewerRole]);
+
+  const hasAutoPromptedDisputePayment = useRef(false);
+  useEffect(() => {
+    if (disputePaymentMilestone && !approvalMilestone && !hasAutoPromptedDisputePayment.current) {
+      hasAutoPromptedDisputePayment.current = true;
+      setApprovalMilestone(disputePaymentMilestone);
+      toast.info(
+        `Dispute decided in favor of professional. Please review and pay "${disputePaymentMilestone.title}".`,
+      );
+    }
+  }, [disputePaymentMilestone, approvalMilestone]);
+
+  useEffect(() => {
+    const mId = searchParams.get("milestoneId");
+    if (!mId || !data?.milestones) return;
+    if (hasAutoScrolledMilestone.current === mId) return;
+
+    setActiveTab("milestones");
+
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`milestone-${mId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        hasAutoScrolledMilestone.current = mId;
+      }
+    }, 400);
+
+    const action = searchParams.get("action");
+    if ((action === "approve" || action === "pay") && data.viewerRole === "CLIENT") {
+      const target = data.milestones.find((m) => String(m.id) === mId);
+      if (target && target.status !== "APPROVED" && target.status !== "COMPLETED") {
+        setApprovalMilestone(target);
+      }
+    }
+
+    return () => clearTimeout(timer);
+  }, [searchParams, data?.milestones, data?.viewerRole]);
+
   if (!data)
     return (
       <AppShell>
@@ -660,9 +775,10 @@ export default function SharedProjectTrackingPage() {
   const receivedComment = isClient ? data.review?.professionalComment : data.review?.comment;
   const hasOwnReview = ownRating != null;
   const hasReceivedReview = receivedRating != null;
-  const current = data.milestones.find((m) =>
-    ["IN_PROGRESS", "REVISION_REQUESTED", "AWAITING_CLIENT_REVIEW"].includes(m.status),
-  );
+  const current =
+    data.milestones.find((m) =>
+      ["IN_PROGRESS", "REVISION_REQUESTED", "AWAITING_CLIENT_REVIEW"].includes(m.status),
+    ) || data.milestones.find((m) => !["APPROVED", "COMPLETED", "CANCELLED"].includes(m.status));
   const completed = data.milestones.filter(
     (m) =>
       m.status === "APPROVED" ||
@@ -1376,8 +1492,18 @@ export default function SharedProjectTrackingPage() {
     }
   };
   const submit = (milestoneId: number) => {
-    if (!note.trim() || !files.length)
-      return setMessage("Enter a completion note and choose at least one file.");
+    if (!files.length && !note.trim()) {
+      toast.error("Enter a completion note and choose at least one file.");
+      return;
+    }
+    if (!files.length) {
+      toast.error("Please choose at least one deliverable file/document.");
+      return;
+    }
+    if (!note.trim()) {
+      toast.error("Please enter a deliverable completion note.");
+      return;
+    }
     void actionWithFiles("submit-milestone", { milestoneId, note });
   };
 
@@ -1385,12 +1511,6 @@ export default function SharedProjectTrackingPage() {
     <AppShell>
       <CelebrationConfetti active={showCelebration} onComplete={() => setShowCelebration(false)} />
       <main className="mx-auto max-w-6xl space-y-6">
-        {message && (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-            {message}
-          </div>
-        )}
-
         {/* Hero */}
         <section className="relative overflow-hidden rounded-3xl bg-[linear-gradient(120deg,var(--color-ink),var(--color-primary))] px-6 py-7 text-white shadow-card sm:px-8 sm:py-8">
           <div className="absolute -right-12 -top-24 h-64 w-64 rounded-full bg-cta/20 blur-3xl" />
@@ -1445,10 +1565,41 @@ export default function SharedProjectTrackingPage() {
           </div>
         )}
 
-        <Tabs
-          defaultValue={searchParams.get("tab") === "timeline" ? "timeline" : "overview"}
-          className="w-full"
-        >
+        {disputePaymentMilestone && (
+          <div className="rounded-2xl border-2 border-blue-400 bg-blue-50/90 dark:bg-blue-950/40 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white font-bold shadow-xs">
+                <Gavel className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-bold text-foreground">
+                    Dispute Ruled in Favor of Professional — Milestone Payment Required
+                  </h4>
+                  <span className="rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700 px-2 py-0.5 text-[10px] font-bold">
+                    Action Required
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  The dispute was decided in favor of {professional}. Please pay and approve{" "}
+                  <strong>{disputePaymentMilestone.title}</strong> (₹
+                  {disputePaymentMilestone.amount.toLocaleString("en-IN")}) to complete the
+                  settlement and advance the project.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shrink-0 shadow-sm gap-1.5"
+              onClick={() => setApprovalMilestone(disputePaymentMilestone)}
+            >
+              <CreditCard className="h-4 w-4" />
+              Pay Milestone (₹{disputePaymentMilestone.amount.toLocaleString("en-IN")})
+            </Button>
+          </div>
+        )}
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview" className="gap-1.5">
               <LayoutGrid className="h-3.5 w-3.5" />
@@ -1750,7 +1901,8 @@ export default function SharedProjectTrackingPage() {
                             {busy === "respond-reopen" ? "Cancelling…" : "Cancel Reopen Request"}
                           </Button>
                           <p className="text-xs text-muted-foreground">
-                            Waiting for the professional to respond. You can cancel this request anytime.
+                            Waiting for the professional to respond. You can cancel this request
+                            anytime.
                           </p>
                         </div>
                       )}
@@ -2007,7 +2159,7 @@ export default function SharedProjectTrackingPage() {
                       onClick={() => {
                         const note = finalWorkNote.trim();
                         if (!note || !files.length)
-                          return setMessage("Enter a final note and choose files.");
+                          return toast.error("Enter a final note and choose files.");
                         void actionWithFiles("submit-final-work", {
                           note,
                         });
@@ -2188,7 +2340,8 @@ export default function SharedProjectTrackingPage() {
                         {isClient ? "Rate & Review Professional" : "Rate & Review Client"}
                       </DialogTitle>
                       <DialogDescription className="text-xs sm:text-sm text-muted-foreground">
-                        {data.job?.title ?? `Project #${data.project.id}`} · {isClient ? "Professional" : "Client"}: {reviewRecipient}
+                        {data.job?.title ?? `Project #${data.project.id}`} ·{" "}
+                        {isClient ? "Professional" : "Client"}: {reviewRecipient}
                       </DialogDescription>
                     </DialogHeader>
 
@@ -2196,7 +2349,9 @@ export default function SharedProjectTrackingPage() {
                       {/* Rating section */}
                       <div className="space-y-2.5">
                         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          {isClient ? "OVERALL QUALITY & SERVICE" : "CLIENT COLLABORATION & COMMUNICATION"}
+                          {isClient
+                            ? "OVERALL QUALITY & SERVICE"
+                            : "CLIENT COLLABORATION & COMMUNICATION"}
                         </p>
                         <div className="flex flex-wrap items-center gap-3">
                           <div
@@ -2228,15 +2383,25 @@ export default function SharedProjectTrackingPage() {
                           </div>
                           <span className="text-xs font-semibold text-foreground sm:text-sm">
                             {(hoverReviewRating ?? reviewRating) === 5 &&
-                              (isClient ? "5 - Outstanding Quality & Service" : "5 - Excellent Client to Work With")}
+                              (isClient
+                                ? "5 - Outstanding Quality & Service"
+                                : "5 - Excellent Client to Work With")}
                             {(hoverReviewRating ?? reviewRating) === 4 &&
-                              (isClient ? "4 - Great Work & Professional" : "4 - Great Client, Clear Requirements")}
+                              (isClient
+                                ? "4 - Great Work & Professional"
+                                : "4 - Great Client, Clear Requirements")}
                             {(hoverReviewRating ?? reviewRating) === 3 &&
-                              (isClient ? "3 - Satisfactory Delivery" : "3 - Good Experience Overall")}
+                              (isClient
+                                ? "3 - Satisfactory Delivery"
+                                : "3 - Good Experience Overall")}
                             {(hoverReviewRating ?? reviewRating) === 2 &&
-                              (isClient ? "2 - Needs Improvement" : "2 - Difficult Communication / Delayed")}
+                              (isClient
+                                ? "2 - Needs Improvement"
+                                : "2 - Difficult Communication / Delayed")}
                             {(hoverReviewRating ?? reviewRating) === 1 &&
-                              (isClient ? "1 - Unsatisfactory Experience" : "1 - Poor Experience / Unresponsive")}
+                              (isClient
+                                ? "1 - Unsatisfactory Experience"
+                                : "1 - Poor Experience / Unresponsive")}
                           </span>
                         </div>
                       </div>
@@ -2328,7 +2493,8 @@ export default function SharedProjectTrackingPage() {
                         Respond to Client Review
                       </DialogTitle>
                       <DialogDescription className="text-xs sm:text-sm text-muted-foreground">
-                        {data.job?.title ?? `Project #${data.project.id}`} · Client: {reviewRecipient}
+                        {data.job?.title ?? `Project #${data.project.id}`} · Client:{" "}
+                        {reviewRecipient}
                       </DialogDescription>
                     </DialogHeader>
 
@@ -2426,6 +2592,8 @@ export default function SharedProjectTrackingPage() {
                 viewerUserId={
                   isClient ? (data.project.clientId ?? 0) : (data.project.professionalId ?? 0)
                 }
+                clientName={client}
+                professionalName={professional}
                 projectStatus={data.project.status}
                 milestones={data.milestones}
                 dispute={data.dispute}
@@ -2550,23 +2718,50 @@ export default function SharedProjectTrackingPage() {
                   const isAwaitingReview = m.status === "AWAITING_CLIENT_REVIEW";
                   const isAwaitingAdmin = false;
                   const isRevision = m.status === "REVISION_REQUESTED";
-                  const isInProgress = m.status === "IN_PROGRESS";
+                  const isPrecedingApproved =
+                    index === 0 ||
+                    data.milestones
+                      .slice(0, index)
+                      .every(
+                        (prev) =>
+                          prev.status === "APPROVED" ||
+                          prev.status === "COMPLETED" ||
+                          prev.payment?.status === "COMPLETED" ||
+                          prev.payment?.status === "FUNDED",
+                      );
+                  const isCurrentActive = current?.id === m.id;
+                  const isInProgress =
+                    m.status === "IN_PROGRESS" ||
+                    (!isApproved &&
+                      !isAwaitingReview &&
+                      !isRevision &&
+                      isPrecedingApproved &&
+                      isCurrentActive);
+                  const isEligibleToWork =
+                    !isApproved &&
+                    (["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status) ||
+                      isPrecedingApproved);
+
+                  const isTargetMilestone = queryMilestoneId === String(m.id);
 
                   return (
                     <div
                       key={m.id}
-                      className={`relative rounded-2xl border bg-card p-5 sm:p-6 shadow-xs transition-all hover:shadow-soft space-y-4 ${
-                        isApproved
-                          ? "border-emerald-500/30 hover:border-emerald-500/50"
-                          : isAwaitingAdmin
-                            ? "border-indigo-500/30 hover:border-indigo-500/50"
-                            : isAwaitingReview
-                              ? "border-purple-500/30 hover:border-purple-500/50"
-                              : isRevision
-                                ? "border-rose-500/30 hover:border-rose-500/50"
-                                : isInProgress
-                                  ? "border-amber-500/30 hover:border-amber-500/50"
-                                  : "border-border"
+                      id={`milestone-${m.id}`}
+                      className={`relative rounded-2xl border bg-card p-5 sm:p-6 shadow-xs transition-all hover:shadow-soft space-y-4 scroll-mt-24 ${
+                        isTargetMilestone
+                          ? "ring-2 ring-primary ring-offset-2 ring-offset-background border-primary/60 shadow-lg"
+                          : isApproved
+                            ? "border-emerald-500/30 hover:border-emerald-500/50"
+                            : isAwaitingAdmin
+                              ? "border-indigo-500/30 hover:border-indigo-500/50"
+                              : isAwaitingReview
+                                ? "border-purple-500/30 hover:border-purple-500/50"
+                                : isRevision
+                                  ? "border-rose-500/30 hover:border-rose-500/50"
+                                  : isInProgress
+                                    ? "border-amber-500/30 hover:border-amber-500/50"
+                                    : "border-border"
                       }`}
                     >
                       {/* Top Row: Index, Title, Amount & Status */}
@@ -2592,6 +2787,12 @@ export default function SharedProjectTrackingPage() {
                               <h3 className="font-bold text-base sm:text-lg text-foreground">
                                 {m.title}
                               </h3>
+                              {isTargetMilestone && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-primary text-primary-foreground px-2.5 py-0.5 text-[11px] font-bold shadow-xs animate-pulse">
+                                  <Flag className="h-3 w-3" />
+                                  Selected Milestone
+                                </span>
+                              )}
                               <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary border border-primary/20">
                                 ₹{m.amount.toLocaleString("en-IN")}
                               </span>
@@ -2676,7 +2877,9 @@ export default function SharedProjectTrackingPage() {
                                 : m.payment?.status === "COMPLETED"
                                   ? "Done · Paid Out"
                                   : "Done · Approved"
-                              : label(m.status)}
+                              : isInProgress
+                                ? "In Progress"
+                                : label(m.status)}
                           </span>
                           {overdueDays !== null && (
                             <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">
@@ -2864,65 +3067,74 @@ export default function SharedProjectTrackingPage() {
                       )}
 
                       {/* Actions: Professional Submit */}
-                      {isProfessional &&
-                        ["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status) && (
-                          <div className="pt-2 border-t flex flex-col sm:flex-row sm:items-center gap-2">
-                            <FilePicker
-                              inputId={`milestone-${m.id}-files`}
-                              files={files}
-                              setFiles={setFiles}
-                            />
-                            <Input
-                              value={note}
-                              onChange={(e) => setNote(e.target.value)}
-                              placeholder={
-                                m.status === "REVISION_REQUESTED"
-                                  ? "Describe changes/fixes made in this revised deliverable..."
-                                  : "Deliverable note or comment for client"
-                              }
-                              className="flex-1"
-                            />
-                            <Button
-                              disabled={busy === "submit-milestone"}
-                              onClick={() => submit(m.id)}
-                              className="gap-1.5 shrink-0"
-                            >
-                              <Upload className="h-4 w-4" />
-                              {busy === "submit-milestone"
-                                ? "Submitting…"
-                                : m.status === "REVISION_REQUESTED"
-                                  ? "Submit Revised Proof"
-                                  : "Request Payment"}
-                            </Button>
-                          </div>
-                        )}
-
-                      {/* Actions: Client Review */}
-                      {isClient && m.status === "AWAITING_CLIENT_REVIEW" && (
-                        <div className="pt-2 border-t flex flex-wrap gap-2.5">
+                      {isProfessional && isEligibleToWork && (
+                        <div className="pt-2 border-t flex flex-col sm:flex-row sm:items-center gap-2">
+                          <FilePicker
+                            inputId={`milestone-${m.id}-files`}
+                            files={files}
+                            setFiles={setFiles}
+                          />
+                          <Input
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder={
+                              m.status === "REVISION_REQUESTED"
+                                ? "Describe changes/fixes made in this revised deliverable..."
+                                : "Deliverable note or comment for client"
+                            }
+                            className="flex-1"
+                          />
                           <Button
-                            disabled={busy === "approve-milestone"}
-                            onClick={() => setApprovalMilestone(m)}
-                            className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                            disabled={busy === "submit-milestone"}
+                            onClick={() => submit(m.id)}
+                            className="gap-1.5 shrink-0"
                           >
-                            <CheckCircle2 className="h-4 w-4" />
-                            Approve & Pay (₹{m.amount.toLocaleString("en-IN")})
-                          </Button>
-                          <Button
-                            variant="outline"
-                            disabled={busy === "request-revision" || busy === "approve-milestone"}
-                            onClick={() => {
-                              setRevisionMilestone(m);
-                              setRevisionFeedback("");
-                              setRevisionError("");
-                            }}
-                            className="gap-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 border-rose-200"
-                          >
-                            <AlertCircle className="h-4 w-4" />
-                            Request Revision
+                            <Upload className="h-4 w-4" />
+                            {busy === "submit-milestone"
+                              ? "Submitting…"
+                              : m.status === "REVISION_REQUESTED"
+                                ? "Submit Revised Proof"
+                                : "Request Payment"}
                           </Button>
                         </div>
                       )}
+
+                      {/* Actions: Client Review */}
+                      {isClient &&
+                        (m.status === "AWAITING_CLIENT_REVIEW" ||
+                          (disputePaymentMilestone?.id === m.id &&
+                            m.status !== "APPROVED" &&
+                            m.status !== "COMPLETED")) && (
+                          <div className="pt-2 border-t flex flex-wrap gap-2.5">
+                            <Button
+                              disabled={busy === "approve-milestone"}
+                              onClick={() => setApprovalMilestone(m)}
+                              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                              {disputePaymentMilestone?.id === m.id
+                                ? `Pay & Settle Dispute (₹${m.amount.toLocaleString("en-IN")})`
+                                : `Approve & Pay (₹${m.amount.toLocaleString("en-IN")})`}
+                            </Button>
+                            {m.status === "AWAITING_CLIENT_REVIEW" && !disputePaymentMilestone && (
+                              <Button
+                                variant="outline"
+                                disabled={
+                                  busy === "request-revision" || busy === "approve-milestone"
+                                }
+                                onClick={() => {
+                                  setRevisionMilestone(m);
+                                  setRevisionFeedback("");
+                                  setRevisionError("");
+                                }}
+                                className="gap-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 border-rose-200"
+                              >
+                                <AlertCircle className="h-4 w-4" />
+                                Request Revision
+                              </Button>
+                            )}
+                          </div>
+                        )}
                     </div>
                   );
                 })}
@@ -3005,7 +3217,7 @@ export default function SharedProjectTrackingPage() {
                       disabled={busy === "upload-work"}
                       onClick={() => {
                         if (!workTitle.trim() || !workFiles.length)
-                          return setMessage("Enter a work title and choose at least one file.");
+                          return toast.error("Enter a work title and choose at least one file.");
                         void actionWithFiles(
                           "upload-work",
                           {
@@ -3609,39 +3821,55 @@ export default function SharedProjectTrackingPage() {
       <Dialog
         open={approvalMilestone !== null}
         onOpenChange={(open) => {
-          if (!open) setApprovalMilestone(null);
+          if (!open) {
+            setApprovalMilestone(null);
+            setApprovalSuccess(null);
+          }
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {data.job?.paymentMethod === "OFFLINE"
-                ? "Confirm offline payment"
-                : "Approve milestone payment"}
-            </DialogTitle>
-            <DialogDescription>
-              {data.job?.paymentMethod === "OFFLINE"
-                ? "Confirm that you paid the professional directly for this milestone."
-                : "Review the wallet payment breakdown before approving this milestone."}
-            </DialogDescription>
-          </DialogHeader>
-          {approvalMilestone ? (
-            <div className="mt-4 space-y-3">
-              {(() => {
+        <DialogContent className="sm:max-w-md max-h-[min(90vh,680px)] flex flex-col p-0 overflow-hidden sm:rounded-2xl border border-border shadow-2xl">
+          {approvalMilestone
+            ? (() => {
                 const offlinePayment = data.job?.paymentMethod === "OFFLINE";
+                const isDisputeSettlement = Boolean(
+                  data?.dispute &&
+                  (data.dispute.milestoneId === approvalMilestone.id ||
+                    !data.dispute.milestoneId) &&
+                  (data.dispute.status === "OPEN" ||
+                    data.dispute.status === "UNDER_REVIEW" ||
+                    data.dispute.status === "WAITING_RESPONSE" ||
+                    data.dispute.status === "UNDER_ADMIN_REVIEW" ||
+                    data.dispute.decision === "PROFESSIONAL_WINS"),
+                );
                 const milestoneMoney = calculateMilestoneMoney(approvalMilestone.amount);
                 const clientFee = offlinePayment ? 0 : milestoneMoney.clientFeeAmount;
                 const clientCharge = offlinePayment
                   ? approvalMilestone.amount
                   : milestoneMoney.clientChargeAmount;
-                return (
-                  <>
-                    {approvalSuccess ? (
-                      <div className="space-y-4 py-2 text-center">
-                        <div className="relative mx-auto flex h-20 w-20 items-center justify-center">
+                const isInsufficient =
+                  !offlinePayment &&
+                  approvalWalletBalance !== null &&
+                  approvalWalletBalance < clientCharge;
+                const shortAmount = isInsufficient
+                  ? Math.ceil(clientCharge - approvalWalletBalance)
+                  : 0;
+
+                if (approvalSuccess) {
+                  return (
+                    <div className="flex flex-col h-full">
+                      <div className="border-b border-border/80 px-6 py-4 bg-muted/30">
+                        <DialogTitle className="text-base font-semibold text-foreground">
+                          Payment Successful
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                          Milestone settled and released to {professional}.
+                        </DialogDescription>
+                      </div>
+                      <div className="p-6 overflow-y-auto space-y-4 text-center flex-1">
+                        <div className="relative mx-auto flex h-16 w-16 items-center justify-center">
                           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/30 opacity-75" />
-                          <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/30">
-                            <CheckCircle2 className="h-9 w-9" />
+                          <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/30">
+                            <CheckCircle2 className="h-8 w-8" />
                           </div>
                         </div>
 
@@ -3652,17 +3880,17 @@ export default function SharedProjectTrackingPage() {
                               ? "Milestone Approved & Paid! 🎉"
                               : "Milestone Paid & Completed! 🎉"}
                           </span>
-                          <h3 className="mt-2 font-display text-3xl font-bold tracking-tight text-foreground">
+                          <h3 className="mt-2 font-display text-2xl font-bold tracking-tight text-foreground">
                             ₹{approvalSuccess.charged.toLocaleString("en-IN")}
                           </h3>
-                          <p className="mt-1 text-sm text-muted-foreground">
+                          <p className="mt-1 text-xs text-muted-foreground">
                             {offlinePayment
                               ? `Marked as paid directly to ${professional}.`
-                              : "Payment confirmed. Milestone completed and next stage has started."}
+                              : "Payment confirmed. Milestone completed and funds credited to professional."}
                           </p>
                         </div>
 
-                        <div className="space-y-2 rounded-2xl border border-border bg-muted/40 p-4 text-left text-sm">
+                        <div className="space-y-2 rounded-xl border border-border/80 bg-muted/40 p-3.5 text-left text-xs">
                           <div className="flex items-center justify-between">
                             <span className="text-muted-foreground">Milestone</span>
                             <span className="font-semibold text-foreground">
@@ -3670,132 +3898,283 @@ export default function SharedProjectTrackingPage() {
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">
-                              Professional milestone amount
-                            </span>
+                            <span className="text-muted-foreground">Professional receives</span>
                             <span className="font-bold text-emerald-600 dark:text-emerald-400">
                               ₹{approvalSuccess.professionalReceives.toLocaleString("en-IN")}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Client service fee</span>
+                            <span className="text-muted-foreground">Platform service fee</span>
                             <span className="font-medium text-foreground">
                               ₹{clientFee.toLocaleString("en-IN")}
                             </span>
                           </div>
                           {!offlinePayment && (
                             <div className="flex items-center justify-between border-t border-border pt-2 text-xs">
-                              <span className="text-muted-foreground">
-                                Remaining wallet balance
-                              </span>
+                              <span className="text-muted-foreground">Remaining balance</span>
                               <span className="font-bold text-foreground">
                                 ₹{approvalSuccess.remainingBalance.toLocaleString("en-IN")}
                               </span>
                             </div>
                           )}
                         </div>
-
-                        <DialogFooter className="pt-2 sm:justify-center">
-                          <Button
-                            onClick={() => {
-                              setApprovalMilestone(null);
-                              setApprovalSuccess(null);
-                            }}
-                            className="w-full sm:w-auto px-8 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
-                          >
-                            Done
-                          </Button>
-                        </DialogFooter>
                       </div>
-                    ) : null}
-                    {!approvalSuccess ? (
-                      <div className="space-y-3">
-                        <div className="rounded-2xl bg-primary/5 p-4">
-                          <p className="text-sm text-muted-foreground">{approvalMilestone.title}</p>
-                          <p className="mt-1 text-2xl font-bold">
-                            ₹{approvalMilestone.amount.toLocaleString("en-IN")}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">Full Milestone Value</p>
+                      <div className="border-t border-border/80 px-6 py-3 bg-muted/20 flex justify-end">
+                        <Button
+                          onClick={() => {
+                            setApprovalMilestone(null);
+                            setApprovalSuccess(null);
+                          }}
+                          className="px-6 h-9 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+                        >
+                          Done
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="flex flex-col h-full">
+                    {/* Header */}
+                    <div className="border-b border-border/80 px-5 py-4 bg-muted/30">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
+                            isDisputeSettlement
+                              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                              : "bg-primary/10 text-primary"
+                          }`}
+                        >
+                          {isDisputeSettlement ? (
+                            <Gavel className="h-4 w-4" />
+                          ) : (
+                            <CreditCard className="h-4 w-4" />
+                          )}
                         </div>
-                        <div className="space-y-3 rounded-2xl border border-border p-4 text-sm">
-                          <div className="flex justify-between gap-4">
-                            <span className="text-muted-foreground">Milestone amount</span>
-                            <span className="font-semibold">
+                        <div>
+                          <DialogTitle className="text-base font-bold tracking-tight text-foreground">
+                            {isDisputeSettlement
+                              ? "Pay Milestone & Settle Dispute"
+                              : offlinePayment
+                                ? "Confirm Offline Payment"
+                                : "Approve Milestone Payment"}
+                          </DialogTitle>
+                          <DialogDescription className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                            {isDisputeSettlement
+                              ? `Fulfill dispute settlement and release funds to ${professional}.`
+                              : offlinePayment
+                                ? `Confirm direct payment made to ${professional}.`
+                                : "Review wallet payment breakdown before approving."}
+                          </DialogDescription>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Body */}
+                    <div className="px-5 py-4 overflow-y-auto space-y-3.5 flex-1">
+                      {/* Dispute Settlement Banner */}
+                      {isDisputeSettlement && (
+                        <div className="rounded-xl border border-blue-500/25 bg-blue-500/10 dark:border-blue-900/60 dark:bg-blue-950/40 p-3 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2.5">
+                          <Gavel className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5" />
+                          <div className="leading-relaxed">
+                            <span className="font-bold">Dispute Settlement Payment:</span> Paying
+                            this milestone fulfills the claim, releases funds to{" "}
+                            <span className="font-semibold text-foreground">{professional}</span>,
+                            and marks the dispute resolved.
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Payment Breakdown Card */}
+                      <div className="rounded-xl border border-border/80 bg-card p-4 space-y-3 shadow-xs">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                              Milestone Deliverable
+                            </span>
+                            <h4 className="text-sm font-bold text-foreground mt-0.5">
+                              {approvalMilestone.title}
+                            </h4>
+                          </div>
+                          <span className="rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-bold">
+                            ₹{approvalMilestone.amount.toLocaleString("en-IN")}
+                          </span>
+                        </div>
+
+                        <div className="border-t border-border/60 pt-2.5 space-y-1.5 text-xs">
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>Milestone deliverable amount</span>
+                            <span className="font-semibold text-foreground">
                               ₹{approvalMilestone.amount.toLocaleString("en-IN")}
                             </span>
                           </div>
-                          <div className="flex justify-between gap-4">
-                            <span className="text-muted-foreground">
-                              Client service fee {offlinePayment ? "" : "(10%)"}
-                            </span>
+                          <div className="flex justify-between text-muted-foreground">
+                            <span>Client service fee {offlinePayment ? "" : "(10%)"}</span>
                             <span className="font-semibold text-foreground">
                               ₹{clientFee.toLocaleString("en-IN")}
                             </span>
                           </div>
-                          <div className="flex justify-between gap-4 border-t border-border pt-3">
-                            <span className="font-semibold">
-                              {offlinePayment
-                                ? "Amount paid offline"
-                                : "Total charged to your wallet"}
+                          <div className="flex justify-between border-t border-border/60 pt-2.5 text-sm font-semibold">
+                            <span className="text-foreground">
+                              {offlinePayment ? "Amount paid offline" : "Total charged to wallet"}
                             </span>
-                            <span className="font-bold text-primary">
+                            <span className="text-base font-bold text-primary">
                               ₹{clientCharge.toLocaleString("en-IN")}
                             </span>
                           </div>
                         </div>
-                        {offlinePayment ? null : (
-                          <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
-                            ₹{clientCharge.toLocaleString("en-IN")} will be deducted from your
-                            wallet. This milestone will be marked as completed immediately.
-                          </p>
-                        )}
-                        {!offlinePayment && (
-                          <div className="flex items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
-                            <span className="text-muted-foreground">Current wallet balance</span>
-                            <span
-                              className={`font-bold ${approvalWalletBalance !== null && approvalWalletBalance < clientCharge ? "text-destructive" : "text-success"}`}
-                            >
-                              {approvalWalletBalance === null
-                                ? "Loading…"
-                                : `₹${approvalWalletBalance.toLocaleString("en-IN")}`}
-                            </span>
-                          </div>
-                        )}
-                        {approvalError ? (
-                          <p className="rounded-xl bg-destructive/10 p-3 text-sm font-medium text-destructive">
-                            {approvalError}
-                          </p>
-                        ) : null}
-                        <DialogFooter className="pt-2">
-                          <Button variant="outline" onClick={() => setApprovalMilestone(null)}>
-                            Cancel
-                          </Button>
-                          <Button
-                            disabled={
-                              busy === "approve-milestone" ||
-                              (!offlinePayment &&
-                                approvalWalletBalance !== null &&
-                                approvalWalletBalance < clientCharge)
-                            }
-                            onClick={async () => {
-                              await approveMilestoneWithPayment(approvalMilestone.id);
-                            }}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
-                          >
-                            {busy === "approve-milestone"
-                              ? "Processing…"
-                              : offlinePayment
-                                ? "Approve & Pay"
-                                : "Approve & Fund"}
-                          </Button>
-                        </DialogFooter>
                       </div>
-                    ) : null}
-                  </>
+
+                      {/* Wallet Balance & Funding Status */}
+                      {!offlinePayment && (
+                        <div
+                          className={`rounded-xl border p-3.5 space-y-2.5 transition-colors ${
+                            isInsufficient
+                              ? "border-destructive/30 bg-destructive/5"
+                              : "border-border/80 bg-muted/20"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <Wallet
+                                className={`h-4 w-4 ${isInsufficient ? "text-destructive" : "text-muted-foreground"}`}
+                              />
+                              <span className="text-xs font-semibold text-foreground">
+                                Current Wallet Balance
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`text-sm font-bold ${
+                                  isInsufficient
+                                    ? "text-destructive"
+                                    : "text-emerald-600 dark:text-emerald-400"
+                                }`}
+                              >
+                                {approvalWalletBalance === null
+                                  ? "Loading…"
+                                  : `₹${approvalWalletBalance.toLocaleString("en-IN")}`}
+                              </span>
+                              <button
+                                type="button"
+                                title="Refresh wallet balance"
+                                onClick={() => {
+                                  void fetch("/api/v1/wallet", { cache: "no-store" })
+                                    .then((res) => (res.ok ? res.json() : Promise.reject()))
+                                    .then((w: { wallet?: { balance?: number } }) =>
+                                      setApprovalWalletBalance(w.wallet?.balance ?? 0),
+                                    )
+                                    .catch(() => undefined);
+                                }}
+                                className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted transition"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {isInsufficient ? (
+                            <div className="space-y-2 border-t border-destructive/20 pt-2 text-xs">
+                              <div className="flex items-center justify-between font-semibold text-destructive">
+                                <span className="flex items-center gap-1">
+                                  <AlertTriangle className="h-3.5 w-3.5" />
+                                  Insufficient Wallet Balance
+                                </span>
+                                <span>Short by ₹{shortAmount.toLocaleString("en-IN")}</span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground leading-tight">
+                                You have ₹{approvalWalletBalance.toLocaleString("en-IN")}, but this
+                                settlement requires ₹{clientCharge.toLocaleString("en-IN")}. Please
+                                top up your wallet.
+                              </p>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => {
+                                  window.open(
+                                    `/wallet?tab=deposit&amount=${shortAmount}`,
+                                    "_blank",
+                                  );
+                                }}
+                                className="w-full h-8 text-xs font-semibold bg-cta text-cta-foreground hover:bg-cta/90 shadow-sm gap-1.5"
+                              >
+                                <Wallet className="h-3.5 w-3.5" />
+                                Top Up Wallet (Deposit ₹{shortAmount.toLocaleString("en-IN")})
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="border-t border-border/60 pt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Sufficient funds available
+                              </span>
+                              <span>
+                                Remaining after pay: ₹
+                                {((approvalWalletBalance ?? 0) - clientCharge).toLocaleString(
+                                  "en-IN",
+                                )}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {approvalError && (
+                        <p className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-xs font-medium text-destructive">
+                          {approvalError}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="border-t border-border/80 px-5 py-3.5 bg-muted/20 flex items-center justify-end gap-2.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setApprovalMilestone(null)}
+                        className="h-9 px-4 text-xs font-semibold"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={
+                          busy === "approve-milestone" ||
+                          (!offlinePayment &&
+                            approvalWalletBalance !== null &&
+                            approvalWalletBalance < clientCharge)
+                        }
+                        onClick={async () => {
+                          await approveMilestoneWithPayment(approvalMilestone.id);
+                        }}
+                        className={`h-9 px-5 text-xs font-semibold text-white shadow-sm ${
+                          isInsufficient
+                            ? "bg-muted-foreground/50 hover:bg-muted-foreground/50 cursor-not-allowed"
+                            : "bg-emerald-600 hover:bg-emerald-700"
+                        }`}
+                      >
+                        {busy === "approve-milestone" ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                            Processing…
+                          </>
+                        ) : isInsufficient ? (
+                          "Top Up to Settle"
+                        ) : isDisputeSettlement ? (
+                          "Pay & Settle Dispute"
+                        ) : offlinePayment ? (
+                          "Approve & Pay"
+                        ) : (
+                          "Approve & Fund"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
                 );
-              })()}
-            </div>
-          ) : null}
+              })()
+            : null}
         </DialogContent>
       </Dialog>
 
@@ -4493,7 +4872,7 @@ export default function SharedProjectTrackingPage() {
       />
 
       <PageActionLoading
-        active={busy !== null}
+        active={busy !== null && busy !== "send-dispute-message"}
         title={getTrackingLoadingMeta(busy).title}
         description={getTrackingLoadingMeta(busy).description}
       />

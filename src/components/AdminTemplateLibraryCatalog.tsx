@@ -49,10 +49,22 @@ export function AdminTemplateLibraryCatalog() {
   }, []);
 
   // Compute counts
-  const clientCount = useMemo(() => templates.filter((t) => t.audience === "CLIENT").length, [templates]);
-  const profCount = useMemo(() => templates.filter((t) => t.audience === "PROFESSIONAL").length, [templates]);
-  const systemCount = useMemo(() => templates.filter((t) => t.audience === "SYSTEM").length, [templates]);
-  const customizedCount = useMemo(() => templates.filter((t) => t.isCustomized).length, [templates]);
+  const clientCount = useMemo(
+    () => templates.filter((t) => t.audience === "CLIENT").length,
+    [templates],
+  );
+  const profCount = useMemo(
+    () => templates.filter((t) => t.audience === "PROFESSIONAL").length,
+    [templates],
+  );
+  const systemCount = useMemo(
+    () => templates.filter((t) => t.audience === "SYSTEM").length,
+    [templates],
+  );
+  const customizedCount = useMemo(
+    () => templates.filter((t) => t.isCustomized).length,
+    [templates],
+  );
 
   // Extract unique categories
   const categories = useMemo(() => {
@@ -66,10 +78,8 @@ export function AdminTemplateLibraryCatalog() {
   // Filter templates
   const filteredTemplates = useMemo(() => {
     return templates.filter((tpl) => {
-      const matchesAudience =
-        audienceFilter === "ALL" || tpl.audience === audienceFilter;
-      const matchesCategory =
-        categoryFilter === "ALL" || tpl.category === categoryFilter;
+      const matchesAudience = audienceFilter === "ALL" || tpl.audience === audienceFilter;
+      const matchesCategory = categoryFilter === "ALL" || tpl.category === categoryFilter;
 
       const query = searchQuery.toLowerCase().trim();
       const matchesSearch =
@@ -119,13 +129,16 @@ export function AdminTemplateLibraryCatalog() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Email Template Library</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                Email Template Library
+              </h1>
               <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200/80 text-xs">
                 {templates.length} Templates
               </Badge>
             </div>
             <p className="text-sm text-slate-500 mt-0.5">
-              Select any transactional email template to customize copy, dynamic merge tags, and preview live inboxes.
+              Select any transactional email template to customize copy, dynamic merge tags, and
+              preview live inboxes.
             </p>
           </div>
         </div>
@@ -302,4 +315,3 @@ export function AdminTemplateLibraryCatalog() {
     </div>
   );
 }
-

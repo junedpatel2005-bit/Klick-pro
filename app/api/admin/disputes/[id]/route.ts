@@ -4,8 +4,11 @@ import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { notifyDisputeDecided, notifyDisputeResolved } from "@/lib/marketplace-notifications";
 import {
+  calculateMilestoneMoney,
+  fundMilestoneFromWallet,
   refundDisputeToClient,
   releaseDisputeToProfessional,
+  releaseMilestoneToProfessional,
   settlePartialDispute,
 } from "@/lib/wallet-ledger";
 import { emitRealtimeProjectUpdate } from "@/lib/realtime";
@@ -24,6 +27,7 @@ async function getAdminSession(request: NextRequest) {
 const patchSchema = z.object({
   status: z.enum(["OPEN", "RESOLVED", "WAITING_RESPONSE", "UNDER_ADMIN_REVIEW"]).optional(),
   decision: z.enum(["CLIENT_WINS", "PROFESSIONAL_WINS", "PARTIAL_SETTLEMENT"]).optional(),
+  clientAction: z.enum(["REVISION", "REFUND"]).optional(),
   reason: z.string().trim().max(4000).optional(),
   refundAmount: z.number().int().min(0).optional(),
   payoutAmount: z.number().int().min(0).optional(),
@@ -78,6 +82,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         });
         if (candidateMilestone) {
           targetMilestoneId = candidateMilestone.id;
+        } else {
+          const firstUnfinished = await db.projectMilestone.findFirst({
+            where: {
+              trackingId: dispute.trackingId,
+              status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+            },
+            orderBy: { id: "asc" },
+          });
+          if (firstUnfinished) {
+            targetMilestoneId = firstUnfinished.id;
+          }
         }
       }
 
@@ -125,33 +140,100 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
       const updatedDispute = await db.$transaction(async (tx) => {
         if (decision === "CLIENT_WINS") {
-          const finalRefund = isFunded
-            ? refundAmount != null && refundAmount > 0
-              ? Math.min(refundAmount, escrowBalance)
-              : escrowBalance
-            : 0;
+          const isRevision =
+            parsed.data.clientAction === "REVISION" ||
+            (!parsed.data.clientAction &&
+              ["QUALITY_OF_WORK", "MISSED_DEADLINE", "SCOPE_DISAGREEMENT", "POOR_QUALITY"].includes(
+                dispute.issueType,
+              ) &&
+              (!refundAmount || refundAmount === 0));
 
-          if (finalRefund > 0) {
-            await refundDisputeToClient(tx, {
-              disputeId,
-              paymentId: payment?.id,
-              clientId: dispute.clientId,
-              amount: finalRefund,
-              reason: reason || "Dispute decided in favor of client (Full Refund)",
-            });
-          }
+          let finalRefund = 0;
 
-          if (payment) {
-            await tx.payment.update({
-              where: { id: payment.id },
-              data: { status: isFunded ? "REFUNDED" : "CANCELLED" },
-            });
-          }
-
-          if (targetMilestoneId) {
+          if (isRevision && targetMilestoneId) {
+            // Client won work dispute: professional is instructed to revise and deliver updated work
             await tx.projectMilestone.update({
               where: { id: targetMilestoneId },
-              data: { status: "CANCELLED" },
+              data: { status: "REVISION_REQUESTED" },
+            });
+            await tx.projectTracking.update({
+              where: { id: dispute.trackingId },
+              data: {
+                status: "IN_PROGRESS",
+                currentStage: "Revision Required from Professional",
+              },
+            });
+            await tx.projectTimelineEvent.create({
+              data: {
+                trackingId: dispute.trackingId,
+                actorId: adminSession.userId,
+                actorRole: "ADMIN",
+                milestoneId: targetMilestoneId,
+                type: "REVISION_REQUESTED",
+                title: "Dispute decided · Professional Revision Required",
+                description: `Admin decided case #${disputeId} in favor of client. Professional must submit revised deliverables for milestone #${targetMilestoneId}.${reason ? ` Instructions: ${reason}` : ""}`,
+              },
+            });
+          } else {
+            // Refund flow: return escrow to client wallet and cancel milestone
+            finalRefund = isFunded
+              ? refundAmount != null && refundAmount > 0
+                ? Math.min(refundAmount, escrowBalance)
+                : escrowBalance
+              : 0;
+
+            if (finalRefund > 0) {
+              await refundDisputeToClient(tx, {
+                disputeId,
+                paymentId: payment?.id,
+                clientId: dispute.clientId,
+                amount: finalRefund,
+                reason: reason || "Dispute decided in favor of client (Full Refund)",
+              });
+            }
+
+            if (payment) {
+              await tx.payment.update({
+                where: { id: payment.id },
+                data: { status: isFunded ? "REFUNDED" : "CANCELLED" },
+              });
+            }
+
+            if (targetMilestoneId) {
+              await tx.projectMilestone.update({
+                where: { id: targetMilestoneId },
+                data: { status: "CANCELLED" },
+              });
+
+              const nextMilestone = await tx.projectMilestone.findFirst({
+                where: {
+                  trackingId: dispute.trackingId,
+                  id: { not: targetMilestoneId },
+                  status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+                },
+                orderBy: { id: "asc" },
+              });
+              if (nextMilestone) {
+                await tx.projectMilestone.update({
+                  where: { id: nextMilestone.id },
+                  data: { status: "IN_PROGRESS" },
+                });
+                await tx.projectTracking.update({
+                  where: { id: dispute.trackingId },
+                  data: { status: "IN_PROGRESS", currentStage: nextMilestone.title },
+                });
+              }
+            }
+
+            await tx.projectTimelineEvent.create({
+              data: {
+                trackingId: dispute.trackingId,
+                actorId: adminSession.userId,
+                actorRole: "ADMIN",
+                type: "DISPUTE_RESOLVED",
+                title: "Dispute decided · Client Wins (Refund Issued)",
+                description: `Admin decided case #${disputeId} in favor of client. Refund: ₹${finalRefund.toLocaleString("en-IN")}.${reason ? ` Note: ${reason}` : ""}`,
+              },
             });
           }
 
@@ -162,24 +244,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
               decision: "CLIENT_WINS",
               decisionReason:
                 reason ||
-                (isFunded
-                  ? "Admin decided in favor of client. Full escrow refund issued."
-                  : "Admin decided in favor of client. Unfunded milestone cancelled."),
-              refundAmount: finalRefund,
+                (isRevision
+                  ? "Admin decided in favor of client. Professional instructed to submit required revisions."
+                  : isFunded
+                    ? "Admin decided in favor of client. Full escrow refund issued."
+                    : "Admin decided in favor of client. Unfunded milestone cancelled."),
+              refundAmount: isRevision ? 0 : finalRefund,
               payoutAmount: 0,
               decisionAt: new Date(),
               decidedBy: adminSession.userId,
-            },
-          });
-
-          await tx.projectTimelineEvent.create({
-            data: {
-              trackingId: dispute.trackingId,
-              actorId: adminSession.userId,
-              actorRole: "ADMIN",
-              type: "DISPUTE_RESOLVED",
-              title: "Dispute decided · Client Wins",
-              description: `Admin decided case #${disputeId} in favor of client. Refund: ₹${finalRefund.toLocaleString("en-IN")}.${reason ? ` Note: ${reason}` : ""}`,
             },
           });
 
@@ -187,11 +260,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         } else if (decision === "PROFESSIONAL_WINS") {
           const defaultPayout =
             payment?.professionalPayoutAmount || payment?.baseAmount || escrowBalance;
-          const finalPayout = isFunded
+          let finalPayout = isFunded
             ? payoutAmount != null && payoutAmount > 0
               ? Math.min(payoutAmount, defaultPayout)
               : defaultPayout
             : 0;
+
+          let resolvedPayment = payment;
+          let milestoneFullyPaid = isFunded && finalPayout > 0;
 
           if (finalPayout > 0 && isFunded) {
             await releaseDisputeToProfessional(tx, {
@@ -201,42 +277,77 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
               amount: finalPayout,
               reason: reason || "Dispute decided in favor of professional (Payment Released)",
             });
-          }
-
-          let resolvedPayment = payment;
-          if (resolvedPayment && isFunded) {
-            resolvedPayment = await tx.payment.update({
-              where: { id: resolvedPayment.id },
-              data: {
-                status: "COMPLETED",
-                professionalPayoutAmount: finalPayout,
-                capturedAt: resolvedPayment.capturedAt || new Date(),
-              },
+            if (resolvedPayment) {
+              resolvedPayment = await tx.payment.update({
+                where: { id: resolvedPayment.id },
+                data: {
+                  status: "COMPLETED",
+                  professionalPayoutAmount: finalPayout,
+                  capturedAt: resolvedPayment.capturedAt || new Date(),
+                },
+              });
+            }
+          } else if (targetMilestoneId && milestone && !isFunded) {
+            // Milestone is NOT funded! Check if client has sufficient wallet balance to pay professional immediately
+            const money = calculateMilestoneMoney(milestone.amount);
+            const clientWallet = await tx.wallet.findUnique({
+              where: { userId: dispute.clientId },
             });
-          } else if (targetMilestoneId && milestone && isFunded && finalPayout > 0) {
-            resolvedPayment = await tx.payment.create({
-              data: {
+            if (clientWallet && clientWallet.balance >= money.clientChargeAmount) {
+              resolvedPayment = await tx.payment.upsert({
+                where: { milestoneId: milestone.id },
+                create: {
+                  clientId: dispute.clientId,
+                  professionalId: dispute.professionalId,
+                  jobId: tracking?.jobId,
+                  amount: money.clientChargeAmount,
+                  baseAmount: money.baseAmount,
+                  clientFeeAmount: money.clientFeeAmount,
+                  professionalPayoutAmount: money.professionalPayoutAmount,
+                  adminNetAmount: money.adminNetAmount,
+                  commissionAmount: money.baseAmount - money.professionalPayoutAmount,
+                  currency: "INR",
+                  provider: "wallet",
+                  projectTrackingId: dispute.trackingId,
+                  milestoneId: milestone.id,
+                  status: "PENDING",
+                  capturedAt: new Date(),
+                  idempotencyKey: `dispute-${disputeId}-milestone-${milestone.id}`,
+                },
+                update: {},
+              });
+              await fundMilestoneFromWallet(tx, {
+                paymentId: resolvedPayment.id,
                 clientId: dispute.clientId,
                 professionalId: dispute.professionalId,
-                jobId: tracking?.jobId,
-                amount: milestone.amount,
                 baseAmount: milestone.amount,
-                clientFeeAmount: 0,
-                professionalPayoutAmount: finalPayout,
-                adminNetAmount: 0,
-                commissionAmount: 0,
-                currency: "INR",
-                provider: "wallet",
-                projectTrackingId: dispute.trackingId,
                 milestoneId: milestone.id,
-                status: "COMPLETED",
-                capturedAt: new Date(),
-                idempotencyKey: `dispute-${disputeId}-milestone-${milestone.id}`,
-              },
-            });
+              });
+              await releaseMilestoneToProfessional(tx, {
+                paymentId: resolvedPayment.id,
+                clientId: dispute.clientId,
+                professionalId: dispute.professionalId,
+                baseAmount: milestone.amount,
+                milestoneId: milestone.id,
+              });
+              resolvedPayment = await tx.payment.update({
+                where: { id: resolvedPayment.id },
+                data: {
+                  status: "COMPLETED",
+                  capturedAt: new Date(),
+                },
+              });
+              finalPayout = money.professionalPayoutAmount;
+              milestoneFullyPaid = true;
+            } else {
+              // Client does not have sufficient wallet balance yet.
+              // Keep milestone payable (AWAITING_CLIENT_REVIEW) so client is prompted with the payment popup
+              finalPayout = money.professionalPayoutAmount;
+              milestoneFullyPaid = false;
+            }
           }
 
-          if (resolvedPayment) {
+          if (resolvedPayment && milestoneFullyPaid) {
             await tx.invoice.upsert({
               where: { paymentId: resolvedPayment.id },
               create: {
@@ -256,37 +367,55 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           }
 
           if (targetMilestoneId) {
-            await tx.projectMilestone.update({
-              where: { id: targetMilestoneId },
-              data: { status: "APPROVED", approvedAt: new Date() },
-            });
-
-            const nextMilestone = await tx.projectMilestone.findFirst({
-              where: { trackingId: dispute.trackingId, status: "UPCOMING" },
-              orderBy: { id: "asc" },
-            });
-            if (nextMilestone) {
+            if (milestoneFullyPaid) {
+              // Only mark approved and advance if payment was actually completed
               await tx.projectMilestone.update({
-                where: { id: nextMilestone.id },
-                data: { status: "IN_PROGRESS" },
+                where: { id: targetMilestoneId },
+                data: { status: "APPROVED", approvedAt: new Date() },
+              });
+
+              const nextMilestone = await tx.projectMilestone.findFirst({
+                where: {
+                  trackingId: dispute.trackingId,
+                  id: { not: targetMilestoneId },
+                  status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+                },
+                orderBy: { id: "asc" },
+              });
+              if (nextMilestone) {
+                await tx.projectMilestone.update({
+                  where: { id: nextMilestone.id },
+                  data: { status: "IN_PROGRESS" },
+                });
+                await tx.projectTracking.update({
+                  where: { id: dispute.trackingId },
+                  data: { status: "IN_PROGRESS", currentStage: nextMilestone.title },
+                });
+              } else {
+                const remainingUnapproved = await tx.projectMilestone.count({
+                  where: {
+                    trackingId: dispute.trackingId,
+                    status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+                  },
+                });
+                if (remainingUnapproved === 0) {
+                  await tx.projectTracking.update({
+                    where: { id: dispute.trackingId },
+                    data: { currentStage: null },
+                  });
+                }
+              }
+            } else {
+              // Payment is still required from client.
+              // Put milestone in AWAITING_CLIENT_REVIEW so client can pay using the milestone payment popup
+              await tx.projectMilestone.update({
+                where: { id: targetMilestoneId },
+                data: { status: "AWAITING_CLIENT_REVIEW" },
               });
               await tx.projectTracking.update({
                 where: { id: dispute.trackingId },
-                data: { status: "IN_PROGRESS", currentStage: nextMilestone.title },
+                data: { status: "IN_PROGRESS", currentStage: milestone?.title ?? null },
               });
-            } else {
-              const remainingUnapproved = await tx.projectMilestone.count({
-                where: {
-                  trackingId: dispute.trackingId,
-                  status: { notIn: ["APPROVED", "COMPLETED"] },
-                },
-              });
-              if (remainingUnapproved === 0) {
-                await tx.projectTracking.update({
-                  where: { id: dispute.trackingId },
-                  data: { status: "COMPLETED", currentStage: null },
-                });
-              }
             }
           }
 
@@ -409,6 +538,38 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
               where: { id: targetMilestoneId },
               data: { status: "APPROVED", approvedAt: new Date() },
             });
+
+            const nextMilestone = await tx.projectMilestone.findFirst({
+              where: {
+                trackingId: dispute.trackingId,
+                id: { not: targetMilestoneId },
+                status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+              },
+              orderBy: { id: "asc" },
+            });
+            if (nextMilestone) {
+              await tx.projectMilestone.update({
+                where: { id: nextMilestone.id },
+                data: { status: "IN_PROGRESS" },
+              });
+              await tx.projectTracking.update({
+                where: { id: dispute.trackingId },
+                data: { status: "IN_PROGRESS", currentStage: nextMilestone.title },
+              });
+            } else {
+              const remainingUnapproved = await tx.projectMilestone.count({
+                where: {
+                  trackingId: dispute.trackingId,
+                  status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+                },
+              });
+              if (remainingUnapproved === 0) {
+                await tx.projectTracking.update({
+                  where: { id: dispute.trackingId },
+                  data: { currentStage: null },
+                });
+              }
+            }
           }
 
           if (finalPayout > 0) {
@@ -646,6 +807,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     void err;
   }
 
+  const clientFullName = client ? `${client.firstName} ${client.lastName}`.trim() : "Client";
+  const professionalFullName = professional
+    ? `${professional.firstName} ${professional.lastName}`.trim()
+    : "Professional";
+  const formattedMessages = messages.map((m) => ({
+    ...m,
+    senderName:
+      m.senderRole === "ADMIN"
+        ? "Klick-Pro Dispute Team (Admin)"
+        : m.senderId === dispute.clientId || m.senderRole === "CLIENT"
+          ? clientFullName
+          : professionalFullName,
+  }));
+
   return NextResponse.json({
     dispute: {
       ...dispute,
@@ -654,7 +829,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     },
     disputeCount,
     disputeLimit: 3,
-    messages,
+    messages: formattedMessages,
     client,
     professional,
     job,

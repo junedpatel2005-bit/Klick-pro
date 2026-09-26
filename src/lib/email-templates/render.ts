@@ -32,9 +32,11 @@ export function interpolateVariables(
     }
     // Clean fallbacks so raw {{tokens}} are never sent to recipient inboxes
     if (key === "client_name") return String(variables["user_name"] || "Client");
-    if (key === "professional_name" || key === "prof_name") return String(variables["user_name"] || "Professional");
+    if (key === "professional_name" || key === "prof_name")
+      return String(variables["user_name"] || "Professional");
     if (key === "user_name") return "there";
-    if (key === "project_title" || key === "job_title") return String(variables["title"] || "your project");
+    if (key === "project_title" || key === "job_title")
+      return String(variables["title"] || "your project");
     if (key === "milestone_title") return "the project milestone";
     if (
       key === "milestone_amount" ||
@@ -221,4 +223,3 @@ export function renderEmailHtml(input: {
 </body>
 </html>`;
 }
-

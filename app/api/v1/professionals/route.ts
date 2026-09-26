@@ -19,6 +19,15 @@ const querySchema = z.object({
   originLat: z.coerce.number().optional(),
   originLng: z.coerce.number().optional(),
   sort: z.enum(["recommended", "rating", "distance", "most-reviewed", "price"]).optional(),
+  ids: z
+    .string()
+    .transform((val) =>
+      val
+        .split(",")
+        .map((id) => Number(id.trim()))
+        .filter((id) => Number.isSafeInteger(id) && id > 0),
+    )
+    .optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });

@@ -434,9 +434,7 @@ export async function POST(
     );
     const raw = await createEmailVerificationToken(user.id);
     const userName =
-      [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
-      user.firstName ||
-      "there";
+      [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.firstName || "there";
     enqueueBackgroundJob(
       "email.verification",
       () => sendEmailVerificationLink(user.email, raw, publicAppOrigin(request), userName),
@@ -771,9 +769,7 @@ export async function POST(
       },
     });
     const userName =
-      [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
-      user.firstName ||
-      "there";
+      [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || user.firstName || "there";
     const appOrigin = publicAppOrigin(request);
     const resetUrl = `${appOrigin}/reset-password?token=${encodeURIComponent(raw)}`;
     enqueueBackgroundJob(

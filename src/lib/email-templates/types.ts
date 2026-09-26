@@ -46,4 +46,3 @@ export interface HydratedEmailTemplate {
   variables: TemplateVariable[];
   sampleData: Record<string, string>;
 }
-

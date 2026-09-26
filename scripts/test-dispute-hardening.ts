@@ -47,17 +47,20 @@ async function main() {
 
   // Test 2: Unfunded milestone escrow protection simulation
   results.push(
-    await runTest("Escrow protection: Unfunded payment cannot release or refund funds", async () => {
-      const dummyPayment = { status: "PENDING", amount: 5000 };
-      const isFunded = dummyPayment.status === "FUNDED";
-      const escrowBalance = isFunded ? dummyPayment.amount : 0;
-      const refundAmount = isFunded ? dummyPayment.amount : 0;
-      const payoutAmount = isFunded ? dummyPayment.amount : 0;
+    await runTest(
+      "Escrow protection: Unfunded payment cannot release or refund funds",
+      async () => {
+        const dummyPayment = { status: "PENDING", amount: 5000 };
+        const isFunded = dummyPayment.status === "FUNDED";
+        const escrowBalance = isFunded ? dummyPayment.amount : 0;
+        const refundAmount = isFunded ? dummyPayment.amount : 0;
+        const payoutAmount = isFunded ? dummyPayment.amount : 0;
 
-      if (escrowBalance !== 0 || refundAmount !== 0 || payoutAmount !== 0) {
-        throw new Error("Escrow balance was not guarded for unfunded milestone!");
-      }
-    }),
+        if (escrowBalance !== 0 || refundAmount !== 0 || payoutAmount !== 0) {
+          throw new Error("Escrow balance was not guarded for unfunded milestone!");
+        }
+      },
+    ),
   );
 
   // Test 3: Partial settlement math validation
@@ -66,10 +69,10 @@ async function main() {
       const escrowBalance = 2500;
       const testCases = [
         { refund: 1500, payout: 1500, shouldPass: false }, // 3000 > 2500
-        { refund: 2000, payout: 500, shouldPass: true },   // 2500 == 2500
-        { refund: 1000, payout: 1000, shouldPass: true },  // 2000 < 2500
-        { refund: -100, payout: 500, shouldPass: false },  // negative
-        { refund: 0, payout: 0, shouldPass: false },       // zero total
+        { refund: 2000, payout: 500, shouldPass: true }, // 2500 == 2500
+        { refund: 1000, payout: 1000, shouldPass: true }, // 2000 < 2500
+        { refund: -100, payout: 500, shouldPass: false }, // negative
+        { refund: 0, payout: 0, shouldPass: false }, // zero total
       ];
 
       for (const tc of testCases) {
@@ -145,4 +148,3 @@ main()
     process.exit(1);
   })
   .finally(() => db.$disconnect());
-

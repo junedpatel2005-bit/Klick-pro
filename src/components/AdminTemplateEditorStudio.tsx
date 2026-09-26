@@ -372,9 +372,7 @@ export function AdminTemplateEditorStudio({ templateKey }: Props) {
       {/* Main Workspace: Full Width Canvas */}
       <div
         className={`grid gap-6 ${
-          viewMode === "split"
-            ? "grid-cols-1 lg:grid-cols-2"
-            : "grid-cols-1"
+          viewMode === "split" ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1"
         }`}
       >
         {/* PANE 1: Content Editor */}
@@ -402,13 +400,16 @@ export function AdminTemplateEditorStudio({ templateKey }: Props) {
                 className="text-sm font-semibold text-slate-900 rounded-xl h-11"
               />
               <p className="text-[11px] text-slate-400">
-                Supports merge tags like <code className="text-indigo-600 font-semibold">{`{{client_name}}`}</code>
+                Supports merge tags like{" "}
+                <code className="text-indigo-600 font-semibold">{`{{client_name}}`}</code>
               </p>
             </div>
 
             {/* Headline */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-800">Email Heading / Banner Title</label>
+              <label className="text-xs font-bold text-slate-800">
+                Email Heading / Banner Title
+              </label>
               <Input
                 value={formHeading}
                 onChange={(e) => setFormHeading(e.target.value)}
@@ -421,7 +422,9 @@ export function AdminTemplateEditorStudio({ templateKey }: Props) {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-800">Email Body Text</label>
-                <span className="text-xs font-mono text-slate-400">{formBodyText.length} characters</span>
+                <span className="text-xs font-mono text-slate-400">
+                  {formBodyText.length} characters
+                </span>
               </div>
               <Textarea
                 rows={9}
@@ -431,14 +434,17 @@ export function AdminTemplateEditorStudio({ templateKey }: Props) {
                 className="text-sm font-mono leading-relaxed resize-y rounded-xl p-3.5"
               />
               <p className="text-[11px] text-slate-500">
-                Separate paragraphs with double blank lines. HTML characters are safely escaped automatically.
+                Separate paragraphs with double blank lines. HTML characters are safely escaped
+                automatically.
               </p>
             </div>
 
             {/* Call to Action Button */}
             <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-800">Primary Call-to-Action Button</span>
+                <span className="text-xs font-bold text-slate-800">
+                  Primary Call-to-Action Button
+                </span>
                 <span className="text-[10px] text-slate-400 font-semibold uppercase">Optional</span>
               </div>
 
@@ -453,7 +459,9 @@ export function AdminTemplateEditorStudio({ templateKey }: Props) {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-600">Destination URL / Path</label>
+                  <label className="text-xs font-medium text-slate-600">
+                    Destination URL / Path
+                  </label>
                   <Input
                     value={formActionUrl}
                     onChange={(e) => setFormActionUrl(e.target.value)}
@@ -590,12 +598,15 @@ export function AdminTemplateEditorStudio({ templateKey }: Props) {
             </div>
 
             <p className="text-xs text-slate-600">
-              Dispatches a live preview of <strong>&quot;{template.name}&quot;</strong> to test email formatting in Gmail, Apple Mail, Outlook, etc.
+              Dispatches a live preview of <strong>&quot;{template.name}&quot;</strong> to test
+              email formatting in Gmail, Apple Mail, Outlook, etc.
             </p>
 
             <form onSubmit={handleSendTest} className="space-y-3">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700">Recipient Email Address</label>
+                <label className="text-xs font-semibold text-slate-700">
+                  Recipient Email Address
+                </label>
                 <Input
                   type="email"
                   required
@@ -633,4 +644,3 @@ export function AdminTemplateEditorStudio({ templateKey }: Props) {
     </div>
   );
 }
-

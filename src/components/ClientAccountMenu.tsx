@@ -17,19 +17,26 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChevronDown, LogOut, MapPin, User, Briefcase, LayoutDashboard } from "lucide-react";
 
-type AccountUser = {
-  id: string;
+export type AccountUser = {
+  id?: string | number;
   firstName: string;
   lastName: string;
-  email: string;
-  role: "CLIENT" | "PROFESSIONAL" | "ADMIN";
+  email?: string;
+  role: "CLIENT" | "PROFESSIONAL" | "ADMIN" | string;
   avatarUrl: string | null;
 };
 
-export function ClientAccountMenu() {
+export function ClientAccountMenu({ initialUser }: { initialUser?: AccountUser | null }) {
   const router = useRouter();
-  const [user, setUser] = useState<AccountUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<AccountUser | null>(initialUser ?? null);
+  const [loading, setLoading] = useState(!initialUser);
+
+  useEffect(() => {
+    if (initialUser) {
+      setUser(initialUser);
+      setLoading(false);
+    }
+  }, [initialUser]);
 
   useEffect(() => {
     let active = true;
@@ -37,16 +44,22 @@ export function ClientAccountMenu() {
       .then((data) => (data.user as AccountUser | null) ?? null)
       .then((account) => {
         if (!active) return;
-        setUser(account);
+        if (account) {
+          setUser(account);
+        } else if (!initialUser) {
+          setUser(null);
+        }
       })
-      .catch(() => setUser(null))
+      .catch(() => {
+        if (!initialUser) setUser(null);
+      })
       .finally(() => {
         if (active) setLoading(false);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [initialUser]);
 
   useEffect(() => {
     const refresh = () => window.location.reload();
@@ -112,16 +125,13 @@ export function ClientAccountMenu() {
         {isClient ? (
           <>
             <DropdownMenuItem asChild>
-              <Link href="/my-info">My Info</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/client-profile?from=dashboard">My Profile</Link>
+              <Link href="/my-info">My Info &amp; Profile</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/my-jobs">Projects</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/client-profile?from=dashboard">Saved Locations</Link>
+              <Link href="/discover?saved=true">Saved Professionals</Link>
             </DropdownMenuItem>
           </>
         ) : isProfessional ? (

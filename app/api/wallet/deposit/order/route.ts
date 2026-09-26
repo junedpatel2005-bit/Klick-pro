@@ -45,11 +45,25 @@ export async function POST(request: NextRequest) {
       idempotencyKey: `wallet-topup-${order.orderId}`,
     },
   });
+  const user = await db.user.findUnique({
+    where: { id: session.userId },
+    select: { firstName: true, lastName: true, email: true, phone: true },
+  });
+  const clientName = `${user?.firstName ?? "Client"} ${user?.lastName ?? "User"}`.trim();
+  const clientEmail = user?.email ?? "client@klick-pro.com";
+  const clientPhone = user?.phone ?? "9876543210";
+  const keyId = razorpayConfig().keyId;
+  const isTestMode = keyId.startsWith("rzp_test_");
+
   return NextResponse.json({
     enabled: true,
-    keyId: razorpayConfig().keyId,
+    keyId,
+    isTestMode,
     orderId: order.orderId,
     amount: transaction.amount * 100,
     currency: "INR",
+    clientName,
+    clientEmail,
+    clientPhone,
   });
 }

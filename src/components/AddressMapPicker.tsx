@@ -26,6 +26,7 @@ export function AddressMapPicker({
   coordinates,
   onLocationChange,
   onCurrentLocation,
+  radiusKm,
 }: {
   id: string;
   value: string;
@@ -34,6 +35,7 @@ export function AddressMapPicker({
   coordinates?: [number, number] | null;
   onLocationChange?: (state: string, district: string) => void;
   onCurrentLocation?: () => void;
+  radiusKm?: number | null;
 }) {
   const [results, setResults] = useState<Result[]>([]);
   const [point, setPoint] = useState<[number, number]>([20.5937, 78.9629]);
@@ -107,7 +109,7 @@ export function AddressMapPicker({
   return (
     <div className="flex flex-col gap-3">
       <div className="order-2">
-        <GoogleMapView point={point} onPointChange={resolve} />
+        <GoogleMapView point={point} onPointChange={resolve} radiusKm={radiusKm} />
       </div>
       <p className="order-2 text-sm text-muted-foreground">
         Click or drag the pin on the map to set the exact job location.

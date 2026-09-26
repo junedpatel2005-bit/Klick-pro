@@ -108,14 +108,14 @@ model ServiceCategory {
 }
 
 model User {
-  id                                  Int                   @id @default(autoincrement())
-  role                                UserRole              @default(CLIENT)
+  id                                  Int                       @id @default(autoincrement())
+  role                                UserRole                  @default(CLIENT)
   firstName                           String
   lastName                            String
-  email                               String                @unique
-  phone                               String?               @unique
+  email                               String                    @unique
+  phone                               String?                   @unique
   passwordHash                        String?
-  googleId                            String?               @unique
+  googleId                            String?                   @unique
   avatarUrl                           String?
   companyName                         String?
   companyWebsite                      String?
@@ -134,46 +134,48 @@ model User {
   certificationsJson                  String?
   tradeLicenseUrl                     String?
   serviceArea                         String?
-  workMode                            String                @default("both")
+  workMode                            String                    @default("both")
   serviceRadiusKm                     Int?
-  averageRating                       Float                 @default(0)
-  reviewCount                         Int                   @default(0)
-  isVerified                          Boolean               @default(false)
-  availabilityStatus                  String                @default("available")
+  averageRating                       Float                     @default(0)
+  reviewCount                         Int                       @default(0)
+  isVerified                          Boolean                   @default(false)
+  availabilityStatus                  String                    @default("available")
   savedLocationsJson                  String?
   hiringNeedsJson                     String?
-  authProvider                        String                @default("LOCAL")
-  isActive                            Boolean               @default(true)
+  authProvider                        String                    @default("LOCAL")
+  isActive                            Boolean                   @default(true)
   lastLoginAt                         DateTime?
-  createdAt                           DateTime              @default(now())
-  updatedAt                           DateTime              @updatedAt
+  createdAt                           DateTime                  @default(now())
+  updatedAt                           DateTime                  @updatedAt
   professionalLatitude                Float?
   professionalLongitude               Float?
-  biometricEnabled                    Boolean               @default(false)
+  biometricEnabled                    Boolean                   @default(false)
   biometricType                       String?
-  browserNotificationsEnabled         Boolean               @default(true)
-  emailNotificationsEnabled           Boolean               @default(true)
+  browserNotificationsEnabled         Boolean                   @default(true)
+  emailNotificationsEnabled           Boolean                   @default(true)
   emailVerifiedAt                     DateTime?
-  projectActivityNotificationsEnabled Boolean               @default(true)
+  projectActivityNotificationsEnabled Boolean                   @default(true)
   phoneVerifiedAt                     DateTime?
-  username                            String?               @unique
-  razorpayAccountId                   String?               @unique @map("razorpay_account_id")
+  username                            String?                   @unique
+  razorpayAccountId                   String?                   @unique @map("razorpay_account_id")
   professionalState                   String?
   professionalDistrict                String?
-  professionalCategoryId              Int?                  @map("professional_category_id")
+  professionalCategoryId              Int?                      @map("professional_category_id")
   clientJobs                          ClientJob[]
   clientProfiles                      ClientProfile?
   favoriteJobs                        FavoriteJob[]
-  clientPayments                      Payment[]             @relation("PaymentClient")
-  professionalPayments                Payment[]             @relation("PaymentProfessional")
-  clientProjectRequests               ProjectRequest[]      @relation("ProjectRequestClient")
-  professionalProjectRequests         ProjectRequest[]      @relation("ProjectRequestProfessional")
-  clientProjectTrackings              ProjectTracking[]     @relation("ProjectTrackingClient")
-  professionalProjectTrackings        ProjectTracking[]     @relation("ProjectTrackingProfessional")
-  professionalCategoryRecord          ServiceCategory?      @relation("ProfessionalPrimaryCategory", fields: [professionalCategoryId], references: [id])
-  services                            Service[]             @relation("ProfessionalServices")
+  savedProfessionals                  SavedProfessional[]       @relation("ClientSavedProfessionals")
+  savedByClients                      SavedProfessional[]       @relation("ProfessionalSavedByClients")
+  clientPayments                      Payment[]                 @relation("PaymentClient")
+  professionalPayments                Payment[]                 @relation("PaymentProfessional")
+  clientProjectRequests               ProjectRequest[]          @relation("ProjectRequestClient")
+  professionalProjectRequests         ProjectRequest[]          @relation("ProjectRequestProfessional")
+  clientProjectTrackings              ProjectTracking[]         @relation("ProjectTrackingClient")
+  professionalProjectTrackings        ProjectTracking[]         @relation("ProjectTrackingProfessional")
+  professionalCategoryRecord          ServiceCategory?          @relation("ProfessionalPrimaryCategory", fields: [professionalCategoryId], references: [id])
+  services                            Service[]                 @relation("ProfessionalServices")
   verification                        ProfessionalVerification?
-  auditLogs                           AuditLog[]            @relation("AuditActor")
+  auditLogs                           AuditLog[]                @relation("AuditActor")
   personaVerifications                PersonaVerification[]
   sessions                            Session[]
 
@@ -288,6 +290,19 @@ model FavoriteJob {
   @@index([jobId])
 }
 
+model SavedProfessional {
+  id             Int      @id @default(autoincrement())
+  userId         Int
+  professionalId Int
+  createdAt      DateTime @default(now())
+  user           User     @relation("ClientSavedProfessionals", fields: [userId], references: [id], onDelete: Cascade)
+  professional   User     @relation("ProfessionalSavedByClients", fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, professionalId])
+  @@index([userId])
+  @@index([professionalId])
+}
+
 model ClientJobAttachment {
   id         Int       @id @default(autoincrement())
   jobId      Int
@@ -340,24 +355,24 @@ model ProjectTransaction {
 }
 
 model ProjectNegotiation {
-  id                Int      @id @default(autoincrement())
-  requestId         Int
-  jobId             Int
-  clientId          Int
-  professionalId    Int
-  senderId          Int
-  senderRole        String
-  bidAmount         Int?
-  hourlyRate        Int?
-  totalJobHours     Int?
-  duration          String?
-  message           String
-  createdAt         DateTime @default(now())
-  previousBidAmount Int?
-  previousHourlyRate Int?
+  id                    Int      @id @default(autoincrement())
+  requestId             Int
+  jobId                 Int
+  clientId              Int
+  professionalId        Int
+  senderId              Int
+  senderRole            String
+  bidAmount             Int?
+  hourlyRate            Int?
+  totalJobHours         Int?
+  duration              String?
+  message               String
+  createdAt             DateTime @default(now())
+  previousBidAmount     Int?
+  previousHourlyRate    Int?
   previousTotalJobHours Int?
-  previousDuration  String?
-  previousMessage   String?
+  previousDuration      String?
+  previousMessage       String?
 
   @@index([requestId])
   @@index([clientId])
@@ -695,34 +710,34 @@ model UserNotificationState {
 }
 
 model Payment {
-  id                       Int              @id @default(autoincrement())
+  id                       Int               @id @default(autoincrement())
   clientId                 Int
   professionalId           Int
   jobId                    Int?
   amount                   Int
-  commissionAmount         Int              @default(0)
-  currency                 String           @default("INR")
+  commissionAmount         Int               @default(0)
+  currency                 String            @default("INR")
   provider                 String
   providerReference        String?
-  status                   String           @default("PENDING")
-  idempotencyKey           String           @unique
-  createdAt                DateTime         @default(now())
-  updatedAt                DateTime         @updatedAt
-  razorpayOrderId          String?          @unique @map("razorpay_order_id")
-  razorpayPaymentId        String?          @unique @map("razorpay_payment_id")
-  razorpaySignature        String?          @map("razorpay_signature")
-  projectTrackingId        Int?             @map("project_tracking_id")
-  milestoneId              Int?             @unique @map("milestone_id")
-  capturedAt               DateTime?        @map("captured_at")
-  failureReason            String?          @map("failure_reason")
-  baseAmount               Int              @default(0) @map("base_amount")
-  clientFeeAmount          Int              @default(0) @map("client_fee_amount")
-  professionalPayoutAmount Int              @default(0) @map("professional_payout_amount")
-  adminNetAmount           Int              @default(0) @map("admin_net_amount")
-  client                   User             @relation("PaymentClient", fields: [clientId], references: [id])
-  job                      ClientJob?       @relation("PaymentJob", fields: [jobId], references: [id], onDelete: Restrict)
-  professional             User             @relation("PaymentProfessional", fields: [professionalId], references: [id])
-  projectTracking          ProjectTracking? @relation("PaymentProjectTracking", fields: [projectTrackingId], references: [id], onDelete: Restrict, map: "Payment_projectTrackingId_fkey")
+  status                   String            @default("PENDING")
+  idempotencyKey           String            @unique
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  razorpayOrderId          String?           @unique @map("razorpay_order_id")
+  razorpayPaymentId        String?           @unique @map("razorpay_payment_id")
+  razorpaySignature        String?           @map("razorpay_signature")
+  projectTrackingId        Int?              @map("project_tracking_id")
+  milestoneId              Int?              @unique @map("milestone_id")
+  capturedAt               DateTime?         @map("captured_at")
+  failureReason            String?           @map("failure_reason")
+  baseAmount               Int               @default(0) @map("base_amount")
+  clientFeeAmount          Int               @default(0) @map("client_fee_amount")
+  professionalPayoutAmount Int               @default(0) @map("professional_payout_amount")
+  adminNetAmount           Int               @default(0) @map("admin_net_amount")
+  client                   User              @relation("PaymentClient", fields: [clientId], references: [id])
+  job                      ClientJob?        @relation("PaymentJob", fields: [jobId], references: [id], onDelete: Restrict)
+  professional             User              @relation("PaymentProfessional", fields: [professionalId], references: [id])
+  projectTracking          ProjectTracking?  @relation("PaymentProjectTracking", fields: [projectTrackingId], references: [id], onDelete: Restrict, map: "Payment_projectTrackingId_fkey")
   milestone                ProjectMilestone? @relation(fields: [milestoneId], references: [id])
 
   @@index([clientId])
@@ -1230,3 +1245,15 @@ model EmailTemplate {
   @@map("email_templates")
 }
 
+model PlatformSetting {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       String
+  description String?  @default("")
+  category    String   @default("GENERAL")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([category])
+  @@map("platform_settings")
+}

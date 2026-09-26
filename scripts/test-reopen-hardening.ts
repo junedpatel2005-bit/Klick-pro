@@ -25,7 +25,12 @@ async function main() {
   // Test 1: Project Reopen Eligibility (Only COMPLETED or CLOSED can reopen)
   results.push(
     await runTest("Eligibility: Reopen rejected on active/draft projects", () => {
-      const invalidStatuses = ["READY_TO_START", "IN_PROGRESS", "AWAITING_CLIENT_REVIEW", "REOPEN_REQUESTED"];
+      const invalidStatuses = [
+        "READY_TO_START",
+        "IN_PROGRESS",
+        "AWAITING_CLIENT_REVIEW",
+        "REOPEN_REQUESTED",
+      ];
       for (const status of invalidStatuses) {
         const canReopen = status === "COMPLETED" || status === "CLOSED";
         if (canReopen) {
@@ -60,16 +65,19 @@ async function main() {
 
   // Test 4: Zombie Job Prevention on Decline/Cancel
   results.push(
-    await runTest("State consistency: Job status resets to CLOSED on decline or cancellation", () => {
-      const jobStateOnReopen = "OPEN";
-      // On reject / cancel, both projectTracking and clientJob must be reconciled
-      const finalJobStatus = "CLOSED";
-      const finalProjectStatus = "COMPLETED";
+    await runTest(
+      "State consistency: Job status resets to CLOSED on decline or cancellation",
+      () => {
+        const jobStateOnReopen = "OPEN";
+        // On reject / cancel, both projectTracking and clientJob must be reconciled
+        const finalJobStatus = "CLOSED";
+        const finalProjectStatus = "COMPLETED";
 
-      if (finalJobStatus !== "CLOSED" || finalProjectStatus !== "COMPLETED") {
-        throw new Error("Job or project was left in inconsistent state after reopen rejection");
-      }
-    }),
+        if (finalJobStatus !== "CLOSED" || finalProjectStatus !== "COMPLETED") {
+          throw new Error("Job or project was left in inconsistent state after reopen rejection");
+        }
+      },
+    ),
   );
 
   // Test 5: Reopen Terms & Milestone Concession
@@ -99,4 +107,3 @@ main()
     process.exit(1);
   })
   .finally(() => db.$disconnect());
-

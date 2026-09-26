@@ -100,3 +100,13 @@ export function emitAdminUsersUpdate(payload: unknown = {}) {
   emitAdminEvent("admin:users-update", payload);
   emitAdminEvent("admin:overview-update", payload);
 }
+
+export function emitRealtimeDisputeMessage(
+  userIds: number[],
+  payload: { disputeId: number; message: unknown },
+) {
+  const io = globalThis.__servioIo;
+  if (!io) return;
+  for (const userId of userIds) io.to(`user:${userId}`).emit("dispute:message", payload);
+  io.to("admins").emit("dispute:message", payload);
+}

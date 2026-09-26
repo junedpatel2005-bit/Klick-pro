@@ -14,10 +14,7 @@ async function getAdminSession(request: NextRequest) {
   }
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ key: string }> },
-) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ key: string }> }) {
   const admin = await getAdminSession(request);
   if (!admin) {
     return NextResponse.json({ error: "Admin authorization required." }, { status: 403 });
@@ -62,4 +59,3 @@ export async function POST(
     );
   }
 }
-

@@ -19,6 +19,7 @@ const pageTitles: Record<string, string> = {
   "/admin/notifications": "Notifications & Alerts",
   "/admin/messages": "Admin Communications",
   "/admin/templates": "Email Template Library",
+  "/admin/settings": "Platform Configuration & Settings",
 };
 
 export function AdminHeader() {
@@ -71,8 +72,9 @@ export function AdminHeader() {
           <ExternalLink className="h-3 w-3 text-slate-400" />
         </a>
 
-        {/* Database Status Indicator */}
+        {/* System Server Status Indicator */}
         <div
+          title={`Platform System Server: ${dbStatus === "connected" ? "Operational & Live" : dbStatus === "disconnected" ? "Offline" : "Checking"}`}
           className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border ${
             dbStatus === "connected"
               ? "bg-emerald-50 text-emerald-700 border-emerald-200"

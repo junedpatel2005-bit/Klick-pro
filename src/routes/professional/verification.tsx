@@ -308,11 +308,14 @@ export default function Verification() {
                     <span className="text-xl">🌐</span>
                     <div>
                       <h3 className="font-semibold leading-tight">Photo ID & Selfie</h3>
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Powered by Persona</p>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                        Powered by Persona
+                      </p>
                     </div>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-                    Global passport, national ID, or driver’s license scan with 3D facial biometrics.
+                    Global passport, national ID, or driver’s license scan with 3D facial
+                    biometrics.
                   </p>
                   {persona?.providerStatus && (
                     <span className="mt-3 inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
@@ -340,7 +343,9 @@ export default function Verification() {
                       <span className="text-xl">🇮🇳</span>
                       <div>
                         <h3 className="font-semibold leading-tight">Government ID</h3>
-                        <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Powered by AuthBridge</p>
+                        <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                          Powered by AuthBridge
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -385,7 +390,9 @@ export default function Verification() {
                         Verified: {panResult.maskedPan}
                       </p>
                       {panResult.registeredName && (
-                        <p className="text-[11px] text-emerald-700 mt-0.5">Name: {panResult.registeredName}</p>
+                        <p className="text-[11px] text-emerald-700 mt-0.5">
+                          Name: {panResult.registeredName}
+                        </p>
                       )}
                     </div>
                   )}
@@ -398,7 +405,9 @@ export default function Verification() {
                         Verified: {aadhaarResult.maskedAadhaar}
                       </p>
                       {aadhaarResult.registeredName && (
-                        <p className="text-[11px] text-emerald-700 mt-0.5">Name: {aadhaarResult.registeredName}</p>
+                        <p className="text-[11px] text-emerald-700 mt-0.5">
+                          Name: {aadhaarResult.registeredName}
+                        </p>
                       )}
                     </div>
                   )}
@@ -437,7 +446,9 @@ export default function Verification() {
                         size="sm"
                         variant="outline"
                         className="w-full border-indigo-200 text-indigo-700 hover:bg-indigo-50"
-                        disabled={verifyingAadhaar || aadhaarNumber.replace(/[\s-]+/g, "").length !== 12}
+                        disabled={
+                          verifyingAadhaar || aadhaarNumber.replace(/[\s-]+/g, "").length !== 12
+                        }
                         onClick={() => void submitAadhaar()}
                       >
                         {verifyingAadhaar ? "Verifying Aadhaar…" : "Verify Aadhaar"}
@@ -454,7 +465,9 @@ export default function Verification() {
                     <span className="text-xl">🔍</span>
                     <div>
                       <h3 className="font-semibold leading-tight">Background & Police Check</h3>
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Powered by SpringVerify</p>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                        Powered by SpringVerify
+                      </p>
                     </div>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground leading-relaxed">

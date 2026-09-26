@@ -1,10 +1,11 @@
 "use client";
 
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { BadgeCheck, MapPin, Star, Sparkles } from "lucide-react";
+import { BadgeCheck, MapPin, Star, Sparkles, Heart } from "lucide-react";
+import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,11 +53,13 @@ const jobLabel = (job: ClientJob) =>
   `${job.title ?? `Job #${job.id}`} · ${job.timingType === "HOURLY" ? `${formatCurrency(job.hourlyRate)}/hr` : `${formatCurrency(job.budgetMin)} – ${formatCurrency(job.budgetMax)}`}`;
 
 function ProProfileContent() {
+  const router = useRouter();
   const { proId } = useParams<{ proId: string }>();
   const searchParams = useSearchParams();
   const requestedJobId = Number(searchParams.get("jobId"));
   const [professional, setProfessional] = useState<PublicProfessionalProfile | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading");
+  const [isSaved, setIsSaved] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [jobs, setJobs] = useState<ClientJob[]>([]);
   const [jobsStatus, setJobsStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -69,6 +72,62 @@ function ProProfileContent() {
     "idle",
   );
   const [requestMessage, setRequestMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!proId) return;
+    async function checkSaved() {
+      try {
+        const res = await fetch("/api/client/saved-professionals");
+        if (res.ok) {
+          const data = (await res.json()) as { savedIds?: number[] };
+          if (Array.isArray(data.savedIds) && data.savedIds.includes(Number(proId))) {
+            setIsSaved(true);
+          }
+        }
+      } catch {
+        // Silently ignore if not signed in as client
+      }
+    }
+    void checkSaved();
+  }, [proId]);
+
+  const handleToggleSave = async () => {
+    if (!proId) return;
+    const targetId = Number(proId);
+    if (!targetId) return;
+
+    const nextSaved = !isSaved;
+    setIsSaved(nextSaved);
+
+    try {
+      const res = await fetch(`/api/client/saved-professionals/${targetId}`, {
+        method: nextSaved ? "POST" : "DELETE",
+      });
+
+      if (!res.ok) {
+        setIsSaved(!nextSaved);
+        if (res.status === 401) {
+          toast.error("Please sign in as a client to save professionals.", {
+            action: {
+              label: "Sign in",
+              onClick: () =>
+                router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`),
+            },
+          });
+        } else {
+          toast.error("Unable to update saved professional.");
+        }
+        return;
+      }
+
+      toast.success(
+        nextSaved ? "Professional saved to favorites!" : "Professional removed from saved.",
+      );
+    } catch {
+      setIsSaved(!nextSaved);
+      toast.error("Network error. Please try again.");
+    }
+  };
 
   useEffect(() => {
     void fetch(`/api/v1/marketplace/professional-detail?id=${encodeURIComponent(proId)}`)
@@ -484,6 +543,24 @@ function ProProfileContent() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={handleToggleSave}
+                className={`w-full sm:w-auto gap-2 font-semibold transition-all ${
+                  isSaved
+                    ? "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-400"
+                    : "hover:border-rose-300 hover:text-rose-600"
+                }`}
+              >
+                <Heart
+                  className={`h-4 w-4 transition-transform active:scale-125 ${
+                    isSaved ? "fill-rose-500 text-rose-500" : ""
+                  }`}
+                />
+                <span>{isSaved ? "Saved" : "Save"}</span>
+              </Button>
             </div>
           </div>
 

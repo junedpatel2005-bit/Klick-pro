@@ -8,8 +8,7 @@ import type {
   VerificationUser,
 } from "../types";
 
-const SPRINGVERIFY_API_URL =
-  process.env.SPRINGVERIFY_API_URL ?? "https://api.springverify.com/v1";
+const SPRINGVERIFY_API_URL = process.env.SPRINGVERIFY_API_URL ?? "https://api.springverify.com/v1";
 const REQUEST_TIMEOUT_MS = 10000;
 const MAX_WEBHOOK_AGE_SECONDS = 300;
 
@@ -30,9 +29,9 @@ export class SpringVerifyAdapter {
   constructor(customConfig?: Partial<SpringVerifyConfig>) {
     this.config = {
       enabled: customConfig?.enabled ?? process.env.SPRINGVERIFY_ENABLED === "true",
-      apiKey: customConfig?.apiKey ?? (process.env.SPRINGVERIFY_API_KEY?.trim() ?? ""),
+      apiKey: customConfig?.apiKey ?? process.env.SPRINGVERIFY_API_KEY?.trim() ?? "",
       webhookSecret:
-        customConfig?.webhookSecret ?? (process.env.SPRINGVERIFY_WEBHOOK_SECRET?.trim() ?? ""),
+        customConfig?.webhookSecret ?? process.env.SPRINGVERIFY_WEBHOOK_SECRET?.trim() ?? "",
       isDevelopment: process.env.NODE_ENV !== "production",
     };
   }
@@ -76,7 +75,9 @@ export class SpringVerifyAdapter {
 
         if (!response.ok || !data?.id) {
           console.error("springverify.create_candidate.failed", { status: response.status });
-          throw new Error(data?.error ?? `SpringVerify candidate creation failed (${response.status}).`);
+          throw new Error(
+            data?.error ?? `SpringVerify candidate creation failed (${response.status}).`,
+          );
         }
 
         return {
@@ -112,13 +113,16 @@ export class SpringVerifyAdapter {
     if (!this.isConfigured()) return null;
 
     try {
-      const response = await fetch(`${SPRINGVERIFY_API_URL}/candidates/${encodeURIComponent(checkId)}`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
+      const response = await fetch(
+        `${SPRINGVERIFY_API_URL}/candidates/${encodeURIComponent(checkId)}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${this.config.apiKey}`,
+          },
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      });
+      );
 
       const data = (await response.json().catch(() => null)) as {
         id?: string;

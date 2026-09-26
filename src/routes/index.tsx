@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowRight, Briefcase, MapPin, Search, ShieldCheck, Users } from "lucide-react";
+import { toast } from "sonner";
 import { ProCard } from "@/components/ProCard";
 import { Button } from "@/components/ui/button";
 import dynamic from "next/dynamic";
@@ -100,8 +102,10 @@ export default function Landing({
   const content = homeContent ?? fallback;
   const edit = (hero: Partial<HomeContent["hero"]>) =>
     onHomeChange?.({ ...content, hero: { ...content.hero, ...hero } });
+  const router = useRouter();
   const [professionals, setProfessionals] = useState<MarketplaceProfessional[]>([]);
   const [failed, setFailed] = useState(false);
+  const [savedIds, setSavedIds] = useState<number[]>([]);
 
   useEffect(() => {
     if (cmsMode) return;
@@ -116,6 +120,65 @@ export default function Landing({
     }
     void loadHome();
   }, [cmsMode]);
+
+  useEffect(() => {
+    if (cmsMode || !isAuthenticated) return;
+    async function loadSaved() {
+      try {
+        const res = await fetch("/api/client/saved-professionals");
+        if (res.ok) {
+          const data = (await res.json()) as { savedIds?: number[] };
+          if (Array.isArray(data.savedIds)) setSavedIds(data.savedIds);
+        }
+      } catch {
+        // Ignore saved professionals fetch error
+      }
+    }
+    void loadSaved();
+  }, [cmsMode, isAuthenticated]);
+
+  const handleToggleSave = async (proId: string | number) => {
+    if (!isAuthenticated) {
+      toast.error("Please sign in as a client to save professionals.", {
+        action: {
+          label: "Sign in",
+          onClick: () => router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`),
+        },
+      });
+      return;
+    }
+
+    const numericId = Number(proId);
+    if (!numericId) return;
+
+    const isCurrentlySaved = savedIds.includes(numericId);
+    setSavedIds((prev) =>
+      isCurrentlySaved ? prev.filter((id) => id !== numericId) : [...prev, numericId],
+    );
+
+    try {
+      const res = await fetch(`/api/client/saved-professionals/${numericId}`, {
+        method: isCurrentlySaved ? "DELETE" : "POST",
+      });
+
+      if (!res.ok) {
+        setSavedIds((prev) =>
+          isCurrentlySaved ? [...prev, numericId] : prev.filter((id) => id !== numericId),
+        );
+        toast.error("Unable to update saved professional.");
+        return;
+      }
+
+      toast.success(
+        isCurrentlySaved ? "Professional removed from saved." : "Professional saved to favorites!",
+      );
+    } catch {
+      setSavedIds((prev) =>
+        isCurrentlySaved ? [...prev, numericId] : prev.filter((id) => id !== numericId),
+      );
+      toast.error("Network error. Please try again.");
+    }
+  };
 
   // Shared by the sortable (CMS) and plain (public) grids so both render
   // identical markup.
@@ -325,6 +388,8 @@ export default function Landing({
                     key={professional.id}
                     pro={professional}
                     requireLogin={!isAuthenticated}
+                    isSaved={savedIds.includes(Number(professional.id))}
+                    onToggleSave={handleToggleSave}
                   />
                 ))}
               </div>

@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { sendCustomEmail, isEmailConfigured } from "@/lib/email";
-import {
-  interpolateVariables,
-  renderEmailHtml,
-} from "@/lib/email-templates/render";
+import { interpolateVariables, renderEmailHtml } from "@/lib/email-templates/render";
 import { EMAIL_TEMPLATE_REGISTRY } from "@/lib/email-templates/registry";
 
 async function getAdminSession(request: NextRequest) {
@@ -28,10 +25,7 @@ const testSendSchema = z.object({
   actionUrl: z.string().nullable().optional(),
 });
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ key: string }> },
-) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ key: string }> }) {
   const admin = await getAdminSession(request);
   if (!admin) {
     return NextResponse.json({ error: "Admin authorization required." }, { status: 403 });
@@ -68,9 +62,7 @@ export async function POST(
   const renderedSubject = `[TEST PREVIEW] ${interpolateVariables(subject, def.sampleData)}`;
   const renderedHeading = interpolateVariables(heading, def.sampleData);
   const renderedBody = interpolateVariables(bodyText, def.sampleData);
-  const renderedActionUrl = actionUrl
-    ? interpolateVariables(actionUrl, def.sampleData)
-    : null;
+  const renderedActionUrl = actionUrl ? interpolateVariables(actionUrl, def.sampleData) : null;
 
   const appOrigin = process.env.APP_URL?.trim() || "https://klick-pro.com";
 
@@ -119,4 +111,3 @@ export async function POST(
     );
   }
 }
-

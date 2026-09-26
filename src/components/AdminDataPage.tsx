@@ -31,7 +31,7 @@ export function AdminDataPage({
       <p className="mt-2 text-slate-500">{description}</p>
       <section className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
         <div className="border-b border-slate-200 bg-slate-50/70 px-5 py-4 text-sm font-semibold text-slate-800">
-          Live database records · {rows.length}
+          Verified platform records · {rows.length}
         </div>
         {!data ? (
           <div className="h-52 animate-pulse bg-slate-100" />

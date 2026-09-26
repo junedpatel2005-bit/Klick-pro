@@ -86,6 +86,43 @@ export default function ClientEarnings() {
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawMessage, setWithdrawMessage] = useState("");
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [isTestMode, setIsTestMode] = useState(true);
+
+  async function simulateSandboxPayment(customAmount?: number) {
+    setActionBusy("topup");
+    try {
+      const depositAmount = customAmount || Number(topUpAmount) || 1000;
+      const orderRes = await fetch("/api/v1/wallet/deposit/order", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ amount: depositAmount }),
+      });
+      const orderData = await orderRes.json().catch(() => null);
+      if (!orderRes.ok || !orderData?.orderId) {
+        throw new Error(orderData?.error || "Failed to create deposit order.");
+      }
+      const verifyRes = await fetch("/api/v1/wallet/deposit/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          razorpayOrderId: orderData.orderId,
+          razorpayPaymentId: `pay_simulated_${Date.now()}`,
+          razorpaySignature: "sandbox_test_verified",
+        }),
+      });
+      const verifyData = await verifyRes.json().catch(() => null);
+      if (!verifyRes.ok) {
+        throw new Error(verifyData?.error || "Sandbox verification failed.");
+      }
+      setWalletMessage(`₹${depositAmount.toLocaleString()} added to your wallet (Sandbox Test).`);
+      loadWallet();
+      setTopUpAmount("");
+    } catch (err) {
+      setWalletMessage(err instanceof Error ? err.message : "Simulation failed.");
+    } finally {
+      setActionBusy(null);
+    }
+  }
   function loadWallet() {
     void fetch("/api/v1/wallet", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
@@ -156,6 +193,9 @@ export default function ClientEarnings() {
         setActionBusy(null);
         return setWalletMessage(result?.error ?? "Unable to start wallet top-up.");
       }
+      if (result.isTestMode !== undefined) {
+        setIsTestMode(Boolean(result.isTestMode));
+      }
       const openCheckout = () => {
         setActionBusy(null);
         const Razorpay = (
@@ -167,10 +207,16 @@ export default function ClientEarnings() {
         new Razorpay({
           key: result.keyId,
           amount: result.amount,
-          currency: result.currency,
+          currency: result.currency || "INR",
           name: "Klick-Pro",
           description: "Wallet top-up",
           order_id: result.orderId,
+          prefill: {
+            name: result.clientName || "Client User",
+            email: result.clientEmail || "client@klick-pro.com",
+            contact: result.clientPhone || "9876543210",
+          },
+          theme: { color: "#4f46e5" },
           handler: async (payment: {
             razorpay_payment_id: string;
             razorpay_order_id: string;
@@ -433,6 +479,45 @@ export default function ClientEarnings() {
                 {walletMessage ? (
                   <p className="mt-3 text-sm text-muted-foreground">{walletMessage}</p>
                 ) : null}
+
+                {isTestMode && (
+                  <div className="mt-4 rounded-xl border border-indigo-200/80 bg-indigo-50/70 p-3.5 text-xs text-indigo-950 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold flex items-center gap-1.5 text-indigo-900">
+                        <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                        Razorpay Sandbox Test Mode
+                      </span>
+                      <span className="rounded-md bg-indigo-200/70 px-2 py-0.5 font-mono text-[10px] font-bold text-indigo-800">
+                        DEMO READY
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-indigo-800/90 leading-relaxed">
+                      In Razorpay Test Mode, use standard domestic test card: <br />
+                      <span className="font-mono font-semibold bg-white/80 px-1.5 py-0.5 rounded border border-indigo-200">
+                        Card: 4111 1111 1111 1111
+                      </span>{" "}
+                      | Exp: <span className="font-mono">12/28</span> | CVV:{" "}
+                      <span className="font-mono">123</span> | OTP:{" "}
+                      <span className="font-mono">123456</span>
+                    </p>
+                    <div className="pt-1 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void simulateSandboxPayment()}
+                        disabled={actionBusy === "topup"}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-indigo-500 transition disabled:opacity-50"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        {actionBusy === "topup"
+                          ? "Simulating Payment…"
+                          : `Instant Test Deposit (₹${Number(topUpAmount) || 1000})`}
+                      </button>
+                      <span className="text-[10px] text-indigo-700">
+                        Bypasses popup card check for testing
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </section>

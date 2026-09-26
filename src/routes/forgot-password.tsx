@@ -402,12 +402,7 @@ function PhoneTab() {
           </div>
         </div>
       ) : (
-        <Button
-          type="button"
-          className="h-11 w-full"
-          onClick={requestCode}
-          disabled={sendingCode}
-        >
+        <Button type="button" className="h-11 w-full" onClick={requestCode} disabled={sendingCode}>
           {sendingCode ? (
             <span className="inline-flex items-center justify-center gap-2 text-sm font-semibold">
               <Loader2 className="h-4 w-4 animate-spin text-white" />

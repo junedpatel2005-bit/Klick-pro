@@ -14,6 +14,7 @@ import { PhoneVerification } from "@/components/PhoneVerification";
 import { Textarea } from "@/components/ui/textarea";
 import { getAllStates, getDistrictsByState } from "@/lib/india-locations";
 import type { MarketplaceCategory } from "@/lib/types/marketplace";
+import { toast } from "sonner";
 
 const serviceOptions = [
   ["RESIDENTIAL", "Residential"],
@@ -273,6 +274,7 @@ export function ProfessionalProfileSetup() {
       setError(result?.error ?? "Unable to save your professional profile.");
       return;
     }
+    toast.success(isEdit ? "Profile updated successfully!" : "Profile saved successfully!");
     router.push(isEdit ? "/professional-profile" : "/professional/dashboard");
   }
 
@@ -426,8 +428,78 @@ export function ProfessionalProfileSetup() {
                     if (newState) setState(newState);
                     if (newCity) setDistrict(newCity);
                   }}
+                  radiusKm={workMode !== "remote" ? Number(serviceRadiusKm) || 25 : null}
                 />
               </div>
+
+              {/* Service radius right after map */}
+              {workMode !== "remote" && (
+                <div className="rounded-xl border border-border bg-card p-4 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label
+                        htmlFor="serviceRadiusKm"
+                        className="text-sm font-semibold text-foreground"
+                      >
+                        Service radius
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Distance you're willing to travel. The circular coverage area on the map
+                        updates live.
+                      </p>
+                    </div>
+                    <span className="inline-flex items-center rounded-lg bg-primary/10 px-3 py-1 font-display text-sm font-bold text-primary">
+                      {serviceRadiusKm || 25} km
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min="1"
+                      max="100"
+                      step="1"
+                      value={serviceRadiusKm || "25"}
+                      onChange={(e) => setServiceRadiusKm(e.target.value)}
+                      className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-primary"
+                    />
+                    <div className="relative w-24 shrink-0">
+                      <Input
+                        id="serviceRadiusKm"
+                        type="number"
+                        min="1"
+                        max="500"
+                        value={serviceRadiusKm}
+                        onChange={(e) => setServiceRadiusKm(e.target.value)}
+                        placeholder="25"
+                        className="h-9 pr-7 text-right font-semibold"
+                      />
+                      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                        km
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Quick Preset Buttons */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[11px] text-muted-foreground mr-1">Quick set:</span>
+                    {[5, 10, 25, 50, 100].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setServiceRadiusKm(String(preset))}
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                          Number(serviceRadiusKm) === preset
+                            ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                            : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                        }`}
+                      >
+                        {preset} km
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -488,24 +560,6 @@ export function ProfessionalProfileSetup() {
                 <option value="on_site">On-site</option>
               </select>
             </div>
-            {workMode !== "remote" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="serviceRadiusKm">Service radius (km)</Label>
-                <Input
-                  id="serviceRadiusKm"
-                  type="number"
-                  min="1"
-                  max="500"
-                  value={serviceRadiusKm}
-                  onChange={(e) => setServiceRadiusKm(e.target.value)}
-                  placeholder="25"
-                  className="h-11"
-                />
-                <p className="text-xs text-muted-foreground">
-                  How far you're willing to travel or work. Defaults to 25 km.
-                </p>
-              </div>
-            )}
             <div className="space-y-2">
               <Label htmlFor="skill-entry">Skills</Label>
               <div className="flex min-h-12 flex-wrap items-center gap-2 rounded-xl border border-input bg-background px-3 py-2 shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring">

@@ -22,6 +22,7 @@ export type ProfessionalDiscoveryFilter = {
   sort?: "recommended" | "rating" | "distance" | "most-reviewed" | "price";
   page?: number;
   limit?: number;
+  ids?: number[];
 };
 
 const MAX_RESULTS_PER_PAGE = 50;
@@ -248,6 +249,10 @@ async function buildSearchWhere(filter: ProfessionalDiscoveryFilter) {
       { companyDescription: { contains: term, mode: "insensitive" } },
       { professionalSkillsJson: { contains: term, mode: "insensitive" } },
     ];
+  }
+
+  if (filter.ids !== undefined) {
+    where.id = { in: filter.ids };
   }
 
   return where;
