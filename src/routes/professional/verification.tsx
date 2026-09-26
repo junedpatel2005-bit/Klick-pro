@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   FileBadge,
   FileText,
+  Fingerprint,
   IdCard,
   Loader2,
   ShieldCheck,
@@ -14,6 +15,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { AppSkeleton } from "@/components/LoadingSkeleton";
 
 type Verification = {
@@ -167,6 +169,92 @@ export default function Verification() {
       setStartingPersona(false);
     }
   }
+
+  const [panNumber, setPanNumber] = useState("");
+  const [verifyingPan, setVerifyingPan] = useState(false);
+  const [panResult, setPanResult] = useState<{
+    maskedPan?: string;
+    registeredName?: string;
+    status?: string;
+    message?: string;
+  } | null>(null);
+
+  const [startingBgv, setStartingBgv] = useState(false);
+  const [bgvResult, setBgvResult] = useState<{
+    checkId?: string;
+    status?: string;
+    message?: string;
+  } | null>(null);
+
+  const [indianDocType, setIndianDocType] = useState<"PAN" | "AADHAAR">("PAN");
+  const [aadhaarNumber, setAadhaarNumber] = useState("");
+  const [verifyingAadhaar, setVerifyingAadhaar] = useState(false);
+  const [aadhaarResult, setAadhaarResult] = useState<{
+    maskedAadhaar?: string;
+    registeredName?: string;
+    status?: string;
+    message?: string;
+  } | null>(null);
+
+  async function submitPan() {
+    if (!panNumber.trim()) return;
+    setVerifyingPan(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/verification/indian/pan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ panNumber }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "PAN verification failed.");
+      setPanResult(data);
+      setMessage(data.message ?? "PAN submitted successfully.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "PAN verification failed.");
+    } finally {
+      setVerifyingPan(false);
+    }
+  }
+
+  async function submitAadhaar() {
+    if (!aadhaarNumber.trim()) return;
+    setVerifyingAadhaar(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/verification/indian/aadhaar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ aadhaarNumber }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Aadhaar verification failed.");
+      setAadhaarResult(data);
+      setMessage(data.message ?? "Aadhaar submitted successfully.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Aadhaar verification failed.");
+    } finally {
+      setVerifyingAadhaar(false);
+    }
+  }
+
+  async function startBgv() {
+    setStartingBgv(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/verification/springverify/start", {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Failed to start background check.");
+      setBgvResult(data);
+      setMessage(data.message ?? "SpringVerify background check initiated.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Unable to initiate background check.");
+    } finally {
+      setStartingBgv(false);
+    }
+  }
   return (
     <div className="space-y-7">
       <section className="relative overflow-hidden rounded-3xl bg-[linear-gradient(120deg,var(--color-ink),var(--color-primary))] px-6 py-7 text-white shadow-card sm:px-8">
@@ -201,31 +289,196 @@ export default function Verification() {
         </AppSkeleton>
       ) : (
         <>
-          <section className="rounded-2xl border border-border bg-card p-5 shadow-soft">
-            <h2 className="font-display text-xl font-semibold">Document Verification</h2>
-            {persona?.enabled ? (
-              <>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Complete your identity document verification securely with Persona.
-                </p>
-                <Button
-                  className="mt-4"
-                  disabled={startingPersona}
-                  onClick={() => void startPersona()}
-                >
-                  {startingPersona ? "Starting…" : "Start Verification"}
-                </Button>
-                {persona.providerStatus && (
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    Persona status: {persona.providerStatus}
-                  </p>
-                )}
-              </>
-            ) : (
+          <section className="space-y-4">
+            <div>
+              <h2 className="font-display text-xl font-semibold">
+                Automated Identity & Background Verification
+              </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Verification service is currently unavailable/configuration pending.
+                Verify your identity instantly with Persona, validate your PAN with AuthBridge, or
+                run a comprehensive background check with SpringVerify.
               </p>
-            )}
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {/* Card 1: Persona */}
+              <div className="rounded-2xl border border-border bg-card p-5 shadow-soft flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🌐</span>
+                    <div>
+                      <h3 className="font-semibold leading-tight">Photo ID & Selfie</h3>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Powered by Persona</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+                    Global passport, national ID, or driver’s license scan with 3D facial biometrics.
+                  </p>
+                  {persona?.providerStatus && (
+                    <span className="mt-3 inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                      Status: {persona.providerStatus}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-4">
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={startingPersona}
+                    onClick={() => void startPersona()}
+                  >
+                    {startingPersona ? "Starting…" : "Start Photo ID"}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Card 2: Government ID (PAN / Aadhaar) */}
+              <div className="rounded-2xl border border-border bg-card p-5 shadow-soft flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🇮🇳</span>
+                      <div>
+                        <h3 className="font-semibold leading-tight">Government ID</h3>
+                        <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Powered by AuthBridge</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Toggle between PAN and Aadhaar */}
+                  <div className="mt-3 flex rounded-lg bg-muted p-1 text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setIndianDocType("PAN")}
+                      className={`flex-1 rounded-md py-1 transition ${
+                        indianDocType === "PAN"
+                          ? "bg-white text-slate-900 shadow-2xs font-bold"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      PAN Card
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIndianDocType("AADHAAR")}
+                      className={`flex-1 rounded-md py-1 transition ${
+                        indianDocType === "AADHAAR"
+                          ? "bg-white text-slate-900 shadow-2xs font-bold"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Aadhaar Card
+                    </button>
+                  </div>
+
+                  <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+                    {indianDocType === "PAN"
+                      ? "Instant PAN card validation via NSDL / Income Tax Department."
+                      : "Direct Aadhaar verification with masked identity safeguard."}
+                  </p>
+
+                  {/* PAN Verification Result */}
+                  {indianDocType === "PAN" && panResult && (
+                    <div className="mt-3 rounded-lg bg-emerald-50 p-2 text-xs text-emerald-800 border border-emerald-200">
+                      <p className="font-bold flex items-center gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                        Verified: {panResult.maskedPan}
+                      </p>
+                      {panResult.registeredName && (
+                        <p className="text-[11px] text-emerald-700 mt-0.5">Name: {panResult.registeredName}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Aadhaar Verification Result */}
+                  {indianDocType === "AADHAAR" && aadhaarResult && (
+                    <div className="mt-3 rounded-lg bg-emerald-50 p-2 text-xs text-emerald-800 border border-emerald-200">
+                      <p className="font-bold flex items-center gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                        Verified: {aadhaarResult.maskedAadhaar}
+                      </p>
+                      {aadhaarResult.registeredName && (
+                        <p className="text-[11px] text-emerald-700 mt-0.5">Name: {aadhaarResult.registeredName}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {indianDocType === "PAN" ? (
+                    <>
+                      <Input
+                        placeholder="Enter PAN (e.g. ABCDE1234F)"
+                        value={panNumber}
+                        maxLength={10}
+                        onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                        className="text-xs font-mono uppercase"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                        disabled={verifyingPan || panNumber.trim().length !== 10}
+                        onClick={() => void submitPan()}
+                      >
+                        {verifyingPan ? "Verifying PAN…" : "Verify PAN"}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Input
+                        placeholder="Enter 12-digit Aadhaar (e.g. 1234 5678 9012)"
+                        value={aadhaarNumber}
+                        maxLength={14}
+                        onChange={(e) => setAadhaarNumber(e.target.value)}
+                        className="text-xs font-mono"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                        disabled={verifyingAadhaar || aadhaarNumber.replace(/[\s-]+/g, "").length !== 12}
+                        onClick={() => void submitAadhaar()}
+                      >
+                        {verifyingAadhaar ? "Verifying Aadhaar…" : "Verify Aadhaar"}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Card 3: SpringVerify */}
+              <div className="rounded-2xl border border-border bg-card p-5 shadow-soft flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🔍</span>
+                    <div>
+                      <h3 className="font-semibold leading-tight">Background & Police Check</h3>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Powered by SpringVerify</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+                    Court record verification, criminal background check, and police registry scan.
+                  </p>
+                  {bgvResult && (
+                    <span className="mt-3 inline-block rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-700 border border-indigo-200">
+                      Check ID: {bgvResult.checkId}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-4">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full border-slate-300 text-slate-700 hover:bg-slate-50"
+                    disabled={startingBgv}
+                    onClick={() => void startBgv()}
+                  >
+                    {startingBgv ? "Initiating BGV…" : "Initiate BGV Check"}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </section>
           <section className="rounded-2xl border border-border bg-card p-5 shadow-soft">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

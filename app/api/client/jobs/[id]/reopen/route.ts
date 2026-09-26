@@ -66,6 +66,28 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Job not found." }, { status: 404 });
     }
 
+    if (job.status === "OPEN") {
+      return NextResponse.json({ error: "This job is already open." }, { status: 409 });
+    }
+
+    // Check if an unresolved dispute exists on the job's project
+    const trackingIds = job.projectTrackings.map((t) => t.id);
+    const activeDispute =
+      trackingIds.length > 0
+        ? await db.projectDispute.findFirst({
+            where: {
+              trackingId: { in: trackingIds },
+              status: { not: "RESOLVED" },
+            },
+          })
+        : null;
+    if (activeDispute) {
+      return NextResponse.json(
+        { error: "Cannot reopen job while an active dispute is unresolved." },
+        { status: 409 },
+      );
+    }
+
     const reasonLabel = reason === "ISSUE" ? "Issue / Warranty Rework" : "Additional Work";
     const timestamp = new Date().toLocaleDateString("en-IN", {
       day: "numeric",
@@ -75,54 +97,60 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const appendNote = `\n\n--- [REOPENED: ${reasonLabel} (${timestamp})] ---\nWork Needed: ${workDescription}\nOffered Amount: ₹${amount.toLocaleString("en-IN")}`;
     const updatedDescription = (job.description ? job.description.trim() : "") + appendNote;
 
-    // 1. Update job status to OPEN and update budget
-    const updatedJob = await db.clientJob.update({
-      where: { id: jobId },
-      data: {
-        status: "OPEN",
-        budgetMin: amount,
-        budgetMax: amount,
-        description: updatedDescription,
-      },
-    });
-
-    // 2. Replace complex milestones with a SINGLE work milestone representing the reopened scope
-    await db.clientJobMilestone.deleteMany({ where: { jobId } });
-    const milestoneTitle =
-      reason === "ISSUE"
-        ? `Warranty Fix: ${workDescription.slice(0, 50)}`
-        : `Additional Work: ${workDescription.slice(0, 50)}`;
-
-    await db.clientJobMilestone.create({
-      data: {
-        jobId,
-        title: milestoneTitle,
-        description: workDescription,
-        percentage: 100,
-        amount,
-        sortOrder: 0,
-      },
-    });
-
-    // 3. If assignPreviousPro is true and a previous professional exists, create a direct hire request
-    let hireRequest = null;
     const previousTracking = job.projectTrackings[0];
     const previousPro = previousTracking?.professional;
 
-    if (assignPreviousPro && previousPro) {
-      hireRequest = await db.projectRequest.create({
+    const { updatedJob, hireRequest } = await db.$transaction(async (tx) => {
+      // 1. Update job status to OPEN and update budget
+      const updatedJob = await tx.clientJob.update({
+        where: { id: jobId },
         data: {
-          jobId,
-          clientId,
-          professionalId: previousPro.id,
-          bidAmount: amount,
-          duration: duration || "1-3 days",
-          coverLetter: `[${reasonLabel}] ${workDescription}`,
-          status: "PENDING",
-          origin: "CLIENT_HIRE",
+          status: "OPEN",
+          budgetMin: amount,
+          budgetMax: amount,
+          description: updatedDescription,
         },
       });
 
+      // 2. Replace complex milestones with a SINGLE work milestone representing the reopened scope
+      await tx.clientJobMilestone.deleteMany({ where: { jobId } });
+      const milestoneTitle =
+        reason === "ISSUE"
+          ? `Warranty Fix: ${workDescription.slice(0, 50)}`
+          : `Additional Work: ${workDescription.slice(0, 50)}`;
+
+      await tx.clientJobMilestone.create({
+        data: {
+          jobId,
+          title: milestoneTitle,
+          description: workDescription,
+          percentage: 100,
+          amount,
+          sortOrder: 0,
+        },
+      });
+
+      // 3. If assignPreviousPro is true and a previous professional exists, create a direct hire request
+      let hireRequest = null;
+      if (assignPreviousPro && previousPro) {
+        hireRequest = await tx.projectRequest.create({
+          data: {
+            jobId,
+            clientId,
+            professionalId: previousPro.id,
+            bidAmount: amount,
+            duration: duration || "1-3 days",
+            coverLetter: `[${reasonLabel}] ${workDescription}`,
+            status: "PENDING",
+            origin: "CLIENT_HIRE",
+          },
+        });
+      }
+
+      return { updatedJob, hireRequest };
+    });
+
+    if (assignPreviousPro && previousPro) {
       const jobTitle = job.title?.trim() || `Job #${job.id}`;
       await notifyUsers([previousPro.id], {
         type: "HIRE_OFFER_RECEIVED",

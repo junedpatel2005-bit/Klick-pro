@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { emitRealtimeNotification, emitAdminVerificationsUpdate } from "@/lib/realtime";
+import { verificationService } from "@/services/verification.service";
 
 async function admin(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -85,13 +86,10 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Invalid verification decision." }, { status: 400 });
   const currentAdmin = await admin(request);
   if (parsed.data.providerInquiryId) {
-    const result = await db.personaVerification.update({
-      where: { providerInquiryId: parsed.data.providerInquiryId },
-      data: {
-        adminStatus: parsed.data.status,
-        reviewedBy: currentAdmin!.userId,
-        reviewedAt: new Date(),
-      },
+    const result = await verificationService.reviewPersonaVerification({
+      providerInquiryId: parsed.data.providerInquiryId,
+      adminId: currentAdmin!.userId,
+      status: parsed.data.status,
     });
     return NextResponse.json({ personaVerification: result });
   }

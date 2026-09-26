@@ -1232,6 +1232,15 @@ export async function GET(
       const disputeCount = disputes.length;
       const canRaiseDispute = disputeCount < 3 && !activeDispute;
 
+      const disputeIds = disputes.map((d) => d.id);
+      const disputeMessages =
+        disputeIds.length > 0
+          ? await db.projectDisputeMessage.findMany({
+              where: { disputeId: { in: disputeIds } },
+              orderBy: { createdAt: "asc" },
+            })
+          : [];
+
       return NextResponse.json({
         project,
         milestones,
@@ -1251,6 +1260,7 @@ export async function GET(
         disputeCount,
         disputeLimit: 3,
         canRaiseDispute,
+        disputeMessages,
       });
     }
     return NextResponse.json({ error: "Not found." }, { status: 404 });

@@ -18,6 +18,8 @@ import {
   ShieldCheck,
   RotateCcw,
   Sparkles,
+  MessageSquare,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +30,16 @@ export type DisputeAttachment = {
   url: string;
   mimeType?: string;
   sizeBytes?: number;
+};
+
+export type DisputeMessage = {
+  id: number;
+  disputeId: number;
+  senderId: number;
+  senderRole: string;
+  recipientId?: number;
+  message: string;
+  createdAt: string;
 };
 
 export type DisputeData = {
@@ -79,6 +91,7 @@ interface ProjectDisputeCenterProps {
   projectStatus: string;
   milestones: Milestone[];
   dispute: DisputeData | null;
+  disputeMessages?: DisputeMessage[];
   disputeCount?: number;
   disputeLimit?: number;
   canRaiseDispute?: boolean;
@@ -133,6 +146,7 @@ export function ProjectDisputeCenter({
   projectStatus,
   milestones,
   dispute,
+  disputeMessages = [],
   disputeCount = 0,
   disputeLimit = 3,
   canRaiseDispute = false,
@@ -181,6 +195,14 @@ export function ProjectDisputeCenter({
   const [rejectError, setRejectError] = useState("");
   const [showAcceptConfirm, setShowAcceptConfirm] = useState(false);
 
+  // Complainant withdrawal state
+  const [showWithdrawConfirm, setShowWithdrawConfirm] = useState(false);
+  const [withdrawReason, setWithdrawReason] = useState("");
+
+  // Two-way messaging state
+  const [newDisputeMessage, setNewDisputeMessage] = useState("");
+  const [sendingDisputeMessage, setSendingDisputeMessage] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const rejectFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -215,7 +237,7 @@ export function ProjectDisputeCenter({
       formData.append("purpose", "dispute");
       Array.from(files).forEach((file) => formData.append("files", file));
 
-      const res = await fetch("/api/v1/portal/project-files", {
+      const res = await fetch("/api/portal/project-files", {
         method: "POST",
         body: formData,
       });
@@ -236,6 +258,36 @@ export function ProjectDisputeCenter({
     } finally {
       if (isCreate) setUploadingEvidence(false);
       else setUploadingRejectEvidence(false);
+    }
+  };
+
+  const handleWithdrawDispute = async () => {
+    if (!dispute) return;
+    try {
+      await onAction("withdraw-dispute", {
+        disputeId: dispute.id,
+        reason: withdrawReason.trim() || undefined,
+      });
+      setShowWithdrawConfirm(false);
+      setWithdrawReason("");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to withdraw dispute.");
+    }
+  };
+
+  const handleSendDisputeMessage = async () => {
+    if (!dispute || !newDisputeMessage.trim()) return;
+    setSendingDisputeMessage(true);
+    try {
+      await onAction("send-dispute-message", {
+        disputeId: dispute.id,
+        message: newDisputeMessage.trim(),
+      });
+      setNewDisputeMessage("");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to send message.");
+    } finally {
+      setSendingDisputeMessage(false);
     }
   };
 
@@ -471,6 +523,22 @@ export function ProjectDisputeCenter({
                   </Button>
                 </div>
               )}
+
+              {/* Complainant Withdraw button */}
+              {isReporter && isDisputeActive && (
+                <div className="flex flex-wrap items-center gap-2 pt-2 sm:pt-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowWithdrawConfirm(true)}
+                    disabled={busyAction !== null}
+                    className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-semibold"
+                  >
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                    Withdraw Dispute
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -692,22 +760,39 @@ export function ProjectDisputeCenter({
       {isUnderAdminReview && dispute && (
         <div className="mt-5 space-y-4">
           <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 dark:bg-indigo-950/30 p-5">
-            <div className="flex items-center gap-2">
-              <Badge className="bg-indigo-600 text-white font-bold uppercase tracking-wider text-[10px]">
-                Under Administrative Review
-              </Badge>
-              <span className="text-xs text-muted-foreground">
-                Case #{dispute.id} (Round {dispute.disputeRound} of {disputeLimit})
-              </span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-indigo-600 text-white font-bold uppercase tracking-wider text-[10px]">
+                    Under Administrative Review
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    Case #{dispute.id} (Round {dispute.disputeRound} of {disputeLimit})
+                  </span>
+                </div>
+                <h3 className="mt-2 text-base font-bold text-foreground">
+                  Official Admin Adjudication in Progress
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground max-w-2xl leading-relaxed">
+                  This dispute was contested and escalated. A Klick-Pro Trust & Safety Dispute Officer
+                  is reviewing project logs, milestones, and submitted evidence from both parties to
+                  deliver a binding ruling (Client Refund or Professional Payout).
+                </p>
+              </div>
+
+              {isReporter && isDisputeActive && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowWithdrawConfirm(true)}
+                  disabled={busyAction !== null}
+                  className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-semibold self-start sm:self-center shrink-0"
+                >
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                  Withdraw Dispute
+                </Button>
+              )}
             </div>
-            <h3 className="mt-2 text-base font-bold text-foreground">
-              Official Admin Adjudication in Progress
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground max-w-2xl leading-relaxed">
-              This dispute was contested and escalated. A Klick-Pro Trust & Safety Dispute Officer
-              is reviewing project logs, milestones, and submitted evidence from both parties to
-              deliver a binding ruling (Client Refund or Professional Payout).
-            </p>
 
             {/* Stepper */}
             <div className="mt-5 grid grid-cols-4 gap-2 text-center text-xs border-t border-indigo-200/60 pt-4">
@@ -950,6 +1035,117 @@ export function ProjectDisputeCenter({
         </div>
       )}
 
+      {/* DISPUTE DISCUSSION & ARBITRATION CHAT */}
+      {dispute && (
+        <div className="mt-5 rounded-2xl border bg-card p-5 space-y-4">
+          <div className="flex items-center justify-between border-b pb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600">
+                <MessageSquare className="h-4 w-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                  Dispute Communications & Arbitration Thread
+                </h4>
+                <p className="text-[11px] text-muted-foreground">
+                  Official communication between Client, Professional, and Klick-Pro Support.
+                </p>
+              </div>
+            </div>
+            <span className="text-xs text-muted-foreground font-semibold">
+              {disputeMessages.filter((m) => m.disputeId === dispute.id).length} message(s)
+            </span>
+          </div>
+
+          {/* Message list */}
+          <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+            {disputeMessages.filter((m) => m.disputeId === dispute.id).length === 0 ? (
+              <div className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground">
+                No official discussion messages yet. You can post clarifications or updates below.
+              </div>
+            ) : (
+              disputeMessages
+                .filter((m) => m.disputeId === dispute.id)
+                .map((msg) => {
+                  const isAdmin = msg.senderRole === "ADMIN";
+                  const isOwn = msg.senderId === viewerUserId;
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col ${
+                        isAdmin
+                          ? "items-center"
+                          : isOwn
+                            ? "items-end"
+                            : "items-start"
+                      }`}
+                    >
+                      <div
+                        className={`max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed ${
+                          isAdmin
+                            ? "border-2 border-indigo-300 bg-indigo-50/90 text-indigo-950 dark:bg-indigo-950/40 dark:text-indigo-200"
+                            : isOwn
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-foreground border"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 font-bold text-[10px] uppercase tracking-wider mb-1 opacity-90">
+                          {isAdmin ? (
+                            <>
+                              <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                              <span>Klick-Pro Dispute Team</span>
+                            </>
+                          ) : isOwn ? (
+                            <span>You ({msg.senderRole === "CLIENT" ? "Client" : "Professional"})</span>
+                          ) : (
+                            <span>{msg.senderRole === "CLIENT" ? "Client" : "Professional"}</span>
+                          )}
+                          <span className="opacity-60 text-[9px] font-normal lowercase">
+                            ·{" "}
+                            {new Date(msg.createdAt).toLocaleTimeString("en-IN", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        </div>
+                        <p className="whitespace-pre-wrap">{msg.message}</p>
+                      </div>
+                    </div>
+                  );
+                })
+            )}
+          </div>
+
+          {/* Send Message Box (active dispute only) */}
+          {isDisputeActive && (
+            <div className="flex items-center gap-2 pt-2 border-t">
+              <input
+                type="text"
+                placeholder="Type a message or clarification regarding this dispute..."
+                value={newDisputeMessage}
+                onChange={(e) => setNewDisputeMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void handleSendDisputeMessage();
+                  }
+                }}
+                className="flex-1 rounded-xl border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <Button
+                size="sm"
+                disabled={sendingDisputeMessage || !newDisputeMessage.trim()}
+                onClick={handleSendDisputeMessage}
+                className="shrink-0 text-xs font-semibold"
+              >
+                <Send className="mr-1 h-3.5 w-3.5" />
+                {sendingDisputeMessage ? "Sending…" : "Send"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* CREATE DISPUTE MODAL */}
       {showCreateModal && (
         <div
@@ -1182,6 +1378,65 @@ export function ProjectDisputeCenter({
                 className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
               >
                 Confirm Mutual Settlement
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* WITHDRAW DISPUTE CONFIRM MODAL */}
+      {showWithdrawConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-3xl border bg-background p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-100 text-rose-700">
+                <RotateCcw className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Withdraw This Dispute?</h3>
+                <p className="text-xs text-muted-foreground">Voluntary Dispute Cancellation</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              If you have reached an agreement with the other party or filed this dispute in error,
+              you can voluntarily withdraw it. This will close the case and allow normal project
+              milestones to resume.
+            </p>
+
+            <div>
+              <label className="text-xs font-semibold text-foreground block mb-1">
+                Reason for withdrawal (Optional)
+              </label>
+              <input
+                type="text"
+                value={withdrawReason}
+                onChange={(e) => setWithdrawReason(e.target.value)}
+                placeholder="e.g. Issue resolved directly with the other party"
+                className="w-full rounded-xl border border-input bg-background p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowWithdrawConfirm(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleWithdrawDispute}
+                disabled={busyAction !== null}
+                className="bg-rose-600 hover:bg-rose-500 text-white font-semibold"
+              >
+                Confirm Withdrawal
               </Button>
             </div>
           </div>

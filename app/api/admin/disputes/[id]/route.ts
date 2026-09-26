@@ -102,10 +102,34 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             orderBy: { createdAt: "desc" },
           });
 
+      const isFunded = payment?.status === "FUNDED";
+      const escrowBalance = isFunded ? (payment?.amount ?? 0) : 0;
+
+      if (decision === "PARTIAL_SETTLEMENT") {
+        if (!isFunded) {
+          return NextResponse.json(
+            { error: "Cannot execute partial escrow settlement on an unfunded milestone." },
+            { status: 400 },
+          );
+        }
+        const requestedTotal = (refundAmount ?? 0) + (payoutAmount ?? 0);
+        if (requestedTotal > escrowBalance) {
+          return NextResponse.json(
+            {
+              error: `Total split (₹${requestedTotal.toLocaleString("en-IN")}) exceeds the funded escrow amount (₹${escrowBalance.toLocaleString("en-IN")}).`,
+            },
+            { status: 400 },
+          );
+        }
+      }
+
       const updatedDispute = await db.$transaction(async (tx) => {
         if (decision === "CLIENT_WINS") {
-          const finalRefund =
-            refundAmount != null && refundAmount > 0 ? refundAmount : (payment?.amount ?? 0);
+          const finalRefund = isFunded
+            ? refundAmount != null && refundAmount > 0
+              ? Math.min(refundAmount, escrowBalance)
+              : escrowBalance
+            : 0;
 
           if (finalRefund > 0) {
             await refundDisputeToClient(tx, {
@@ -120,7 +144,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           if (payment) {
             await tx.payment.update({
               where: { id: payment.id },
-              data: { status: "REFUNDED" },
+              data: { status: isFunded ? "REFUNDED" : "CANCELLED" },
             });
           }
 
@@ -136,7 +160,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             data: {
               status: "RESOLVED",
               decision: "CLIENT_WINS",
-              decisionReason: reason || "Admin decided in favor of client. Full refund issued.",
+              decisionReason:
+                reason ||
+                (isFunded
+                  ? "Admin decided in favor of client. Full escrow refund issued."
+                  : "Admin decided in favor of client. Unfunded milestone cancelled."),
               refundAmount: finalRefund,
               payoutAmount: 0,
               decisionAt: new Date(),
@@ -157,12 +185,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
           return record;
         } else if (decision === "PROFESSIONAL_WINS") {
-          const finalPayout =
-            payoutAmount != null && payoutAmount > 0
-              ? payoutAmount
-              : payment?.professionalPayoutAmount || payment?.baseAmount || milestone?.amount || 0;
+          const defaultPayout =
+            payment?.professionalPayoutAmount || payment?.baseAmount || escrowBalance;
+          const finalPayout = isFunded
+            ? payoutAmount != null && payoutAmount > 0
+              ? Math.min(payoutAmount, defaultPayout)
+              : defaultPayout
+            : 0;
 
-          if (finalPayout > 0) {
+          if (finalPayout > 0 && isFunded) {
             await releaseDisputeToProfessional(tx, {
               disputeId,
               paymentId: payment?.id,
@@ -173,7 +204,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           }
 
           let resolvedPayment = payment;
-          if (resolvedPayment) {
+          if (resolvedPayment && isFunded) {
             resolvedPayment = await tx.payment.update({
               where: { id: resolvedPayment.id },
               data: {
@@ -182,7 +213,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
                 capturedAt: resolvedPayment.capturedAt || new Date(),
               },
             });
-          } else if (targetMilestoneId && milestone) {
+          } else if (targetMilestoneId && milestone && isFunded && finalPayout > 0) {
             resolvedPayment = await tx.payment.create({
               data: {
                 clientId: dispute.clientId,
@@ -280,7 +311,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             data: {
               status: "RESOLVED",
               decision: "PROFESSIONAL_WINS",
-              decisionReason: reason || "Admin decided in favor of professional. Payment released.",
+              decisionReason:
+                reason ||
+                (isFunded
+                  ? "Admin decided in favor of professional. Payment released."
+                  : "Admin decided in favor of professional. Milestone approved."),
               refundAmount: 0,
               payoutAmount: finalPayout,
               decisionAt: new Date(),
@@ -295,7 +330,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
               actorRole: "ADMIN",
               type: "DISPUTE_RESOLVED",
               title: "Dispute decided · Professional Wins",
-              description: `Admin decided case #${disputeId} in favor of professional. Payout released: ₹${finalPayout.toLocaleString("en-IN")}.${reason ? ` Note: ${reason}` : ""}`,
+              description: isFunded
+                ? `Admin decided case #${disputeId} in favor of professional. Payout released: ₹${finalPayout.toLocaleString("en-IN")}.${reason ? ` Note: ${reason}` : ""}`
+                : `Admin decided case #${disputeId} in favor of professional. Milestone approved.${reason ? ` Note: ${reason}` : ""}`,
             },
           });
 

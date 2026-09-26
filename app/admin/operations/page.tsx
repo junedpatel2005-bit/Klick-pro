@@ -527,7 +527,7 @@ export default function OperationsPage() {
 
   async function executeDisputeDecision(
     details: DisputeDetails,
-    decision: "CLIENT_WINS" | "PROFESSIONAL_WINS",
+    decision: "CLIENT_WINS" | "PROFESSIONAL_WINS" | "PARTIAL_SETTLEMENT",
     reason: string,
     refundAmount?: number,
     payoutAmount?: number,
@@ -571,9 +571,13 @@ export default function OperationsPage() {
           }
         : current,
     );
-    setMessage(
-      `Case #${details.dispute.id} decided: ${decision === "CLIENT_WINS" ? "Client Wins (Refunded)" : "Professional Wins (Released)"}.`,
-    );
+    const decisionText =
+      decision === "CLIENT_WINS"
+        ? "Client Wins (Refunded)"
+        : decision === "PROFESSIONAL_WINS"
+        ? "Professional Wins (Released)"
+        : `Partial Settlement (₹${(refundAmount ?? 0).toLocaleString()} refunded, ₹${(payoutAmount ?? 0).toLocaleString()} released)`;
+    setMessage(`Case #${details.dispute.id} decided: ${decisionText}.`);
   }
 
   async function toggleJobStatus(job: JobDetails) {
@@ -1609,7 +1613,7 @@ function DisputeDetailsPanel({
   onToggle: (details: DisputeDetails) => void;
   onDecide: (
     details: DisputeDetails,
-    decision: "CLIENT_WINS" | "PROFESSIONAL_WINS",
+    decision: "CLIENT_WINS" | "PROFESSIONAL_WINS" | "PARTIAL_SETTLEMENT",
     reason: string,
     refundAmount?: number,
     payoutAmount?: number,
@@ -1622,9 +1626,11 @@ function DisputeDetailsPanel({
   const [sending, setSending] = useState(false);
   const [sendMessage, setSendMessage] = useState("");
 
-  const [selectedDecision, setSelectedDecision] = useState<"CLIENT_WINS" | "PROFESSIONAL_WINS">(
-    "CLIENT_WINS",
-  );
+  const [selectedDecision, setSelectedDecision] = useState<
+    "CLIENT_WINS" | "PROFESSIONAL_WINS" | "PARTIAL_SETTLEMENT"
+  >("CLIENT_WINS");
+  const [partialRefund, setPartialRefund] = useState("");
+  const [partialPayout, setPartialPayout] = useState("");
   const [decisionNotes, setDecisionNotes] = useState("");
   const [executingDecision, setExecutingDecision] = useState(false);
 
@@ -1657,14 +1663,42 @@ function DisputeDetailsPanel({
 
   async function handleExecuteDecision() {
     if (!details || !decisionNotes.trim()) return;
+    const refNum = Number(partialRefund) || 0;
+    const payNum = Number(partialPayout) || 0;
+
+    if (selectedDecision === "PARTIAL_SETTLEMENT") {
+      if (!isMilestoneFunded) {
+        alert("Cannot execute partial settlement on an unfunded milestone.");
+        return;
+      }
+      if (refNum + payNum > refundableAmount) {
+        alert(
+          `Sum of refund (₹${refNum}) and payout (₹${payNum}) exceeds available escrow (₹${refundableAmount}).`,
+        );
+        return;
+      }
+      if (refNum + payNum <= 0) {
+        alert("Please enter a valid refund or payout amount for partial settlement.");
+        return;
+      }
+    }
+
     setExecutingDecision(true);
     try {
       await onDecide(
         details,
         selectedDecision,
         decisionNotes.trim(),
-        selectedDecision === "CLIENT_WINS" ? refundableAmount : 0,
-        selectedDecision === "PROFESSIONAL_WINS" ? disputeAmount : 0,
+        selectedDecision === "CLIENT_WINS"
+          ? refundableAmount
+          : selectedDecision === "PARTIAL_SETTLEMENT"
+            ? refNum
+            : 0,
+        selectedDecision === "PROFESSIONAL_WINS"
+          ? disputeAmount
+          : selectedDecision === "PARTIAL_SETTLEMENT"
+            ? payNum
+            : 0,
         targetMilestone?.id,
       );
       setDecisionNotes("");
@@ -2213,7 +2247,7 @@ function DisputeDetailsPanel({
                           milestone status.
                         </p>
 
-                        <div className="grid sm:grid-cols-2 gap-3">
+                        <div className="grid sm:grid-cols-3 gap-3">
                           <button
                             type="button"
                             onClick={() => setSelectedDecision("CLIENT_WINS")}
@@ -2252,7 +2286,82 @@ function DisputeDetailsPanel({
                               approve milestone.
                             </p>
                           </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedDecision("PARTIAL_SETTLEMENT");
+                              if (!partialRefund && !partialPayout && isMilestoneFunded) {
+                                const half = Math.floor(refundableAmount / 2);
+                                setPartialRefund(half.toString());
+                                setPartialPayout((refundableAmount - half).toString());
+                              }
+                            }}
+                            className={`p-3.5 rounded-xl border text-left transition ${
+                              selectedDecision === "PARTIAL_SETTLEMENT"
+                                ? "border-amber-500 bg-amber-50 ring-2 ring-amber-500 text-amber-900"
+                                : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
+                            }`}
+                          >
+                            <p className="font-bold text-xs flex items-center gap-1.5">
+                              <CheckCircle2 className="h-4 w-4 text-amber-600" />
+                              Partial Settlement
+                            </p>
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              {isMilestoneFunded
+                                ? `Custom split of ₹${refundableAmount.toLocaleString()} escrow between both parties.`
+                                : `Milestone is unpaid (cannot split escrow funds).`}
+                            </p>
+                          </button>
                         </div>
+
+                        {selectedDecision === "PARTIAL_SETTLEMENT" && (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-bold text-amber-900">
+                                Escrow Split Distribution
+                              </p>
+                              <span className="text-[11px] font-semibold text-amber-800">
+                                Total Available: ₹{refundableAmount.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="grid sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                                  Refund to Client (₹)
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={refundableAmount}
+                                  value={partialRefund}
+                                  onChange={(e) => setPartialRefund(e.target.value)}
+                                  placeholder="0"
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:ring-2 focus:ring-amber-300 outline-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                                  Release to Professional (₹)
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={refundableAmount}
+                                  value={partialPayout}
+                                  onChange={(e) => setPartialPayout(e.target.value)}
+                                  placeholder="0"
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:ring-2 focus:ring-amber-300 outline-none"
+                                />
+                              </div>
+                            </div>
+                            {Number(partialRefund) + Number(partialPayout) > refundableAmount && (
+                              <p className="text-[11px] font-bold text-rose-600">
+                                ⚠ Error: Combined amount (₹{(Number(partialRefund) + Number(partialPayout)).toLocaleString()}) exceeds total available escrow (₹{refundableAmount.toLocaleString()}).
+                              </p>
+                            )}
+                          </div>
+                        )}
 
                         <div>
                           <label className="text-xs font-semibold text-slate-800 block mb-1">

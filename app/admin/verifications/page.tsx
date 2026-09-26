@@ -288,7 +288,7 @@ export default function AdminVerificationsPage() {
       {personaItems.length > 0 && (
         <section className="mt-10">
           <h2 className="font-display text-2xl font-bold text-slate-900">
-            Persona document verification
+            Automated Provider Verifications (Persona / AuthBridge / SpringVerify)
           </h2>
           <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-xs">
             <table className="min-w-full text-left text-sm">
@@ -296,8 +296,8 @@ export default function AdminVerificationsPage() {
                 <tr>
                   <th className="p-4">User</th>
                   <th className="p-4">Provider</th>
-                  <th className="p-4">Persona Inquiry ID</th>
-                  <th className="p-4">Persona Status</th>
+                  <th className="p-4">Reference / Inquiry ID</th>
+                  <th className="p-4">Provider Status</th>
                   <th className="p-4">Admin Status</th>
                   <th className="p-4">Submitted At</th>
                   <th className="p-4">Reviewed At</th>
@@ -313,7 +313,19 @@ export default function AdminVerificationsPage() {
                     <td className="p-4 font-medium text-slate-900">
                       {item.user.firstName} {item.user.lastName}
                     </td>
-                    <td className="p-4">{item.provider}</td>
+                    <td className="p-4">
+                      <span
+                        className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider ${
+                          item.provider === "authbridge"
+                            ? "bg-amber-100 text-amber-800 border border-amber-200"
+                            : item.provider === "springverify"
+                              ? "bg-indigo-100 text-indigo-800 border border-indigo-200"
+                              : "bg-blue-100 text-blue-800 border border-blue-200"
+                        }`}
+                      >
+                        {item.provider}
+                      </span>
+                    </td>
                     <td className="p-4 font-mono text-xs text-slate-600">
                       {item.providerInquiryId}
                     </td>

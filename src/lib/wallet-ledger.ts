@@ -111,7 +111,11 @@ export async function fundMilestoneFromWallet(
     milestoneId: number;
   },
 ) {
-  const admin = await tx.user.findFirst({ where: { role: "ADMIN" }, select: { id: true } });
+  const admin = await tx.user.findFirst({
+    where: { role: "ADMIN" },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  });
   if (!admin) throw new Error("No admin account is configured for settlement.");
   const money = calculateMilestoneMoney(input.baseAmount);
   await recordTransaction(tx, {
@@ -145,7 +149,11 @@ export async function releaseMilestoneToProfessional(
     milestoneId: number;
   },
 ) {
-  const admin = await tx.user.findFirst({ where: { role: "ADMIN" }, select: { id: true } });
+  const admin = await tx.user.findFirst({
+    where: { role: "ADMIN" },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  });
   if (!admin) throw new Error("No admin account is configured for settlement.");
   const money = calculateMilestoneMoney(input.baseAmount);
   await recordTransaction(tx, {
@@ -196,7 +204,11 @@ export async function refundDisputeToClient(
   },
 ) {
   if (input.amount <= 0) return { refundAmount: 0 };
-  const admin = await tx.user.findFirst({ where: { role: "ADMIN" }, select: { id: true } });
+  const admin = await tx.user.findFirst({
+    where: { role: "ADMIN" },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  });
   if (!admin) throw new Error("No admin account is configured for settlement.");
   await recordTransaction(tx, {
     userId: admin.id,
@@ -230,7 +242,11 @@ export async function releaseDisputeToProfessional(
   },
 ) {
   if (input.amount <= 0) return { payoutAmount: 0 };
-  const admin = await tx.user.findFirst({ where: { role: "ADMIN" }, select: { id: true } });
+  const admin = await tx.user.findFirst({
+    where: { role: "ADMIN" },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  });
   if (!admin) throw new Error("No admin account is configured for settlement.");
   await recordTransaction(tx, {
     userId: admin.id,

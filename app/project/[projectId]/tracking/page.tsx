@@ -54,7 +54,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { calculateMilestoneMoney } from "@/lib/payment-fees";
-import { ProjectDisputeCenter, DisputeData } from "@/components/ProjectDisputeCenter";
+import { ProjectDisputeCenter, DisputeData, DisputeMessage } from "@/components/ProjectDisputeCenter";
 
 type Person = { firstName: string | null; lastName: string | null } | null;
 export type DraftMilestone = {
@@ -172,6 +172,7 @@ type Data = {
   } | null;
   dispute: DisputeData | null;
   disputes?: DisputeData[];
+  disputeMessages?: DisputeMessage[];
   disputeCount?: number;
   disputeLimit?: number;
   canRaiseDispute?: boolean;
@@ -1738,10 +1739,20 @@ export default function SharedProjectTrackingPage() {
                           </Button>
                         </>
                       ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Waiting for the professional to respond. You can also raise a dispute
-                          below if there is no response or an issue.
-                        </p>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Button
+                            variant="outline"
+                            disabled={busy === "respond-reopen"}
+                            onClick={() => void action("respond-reopen", { decision: "REJECT" })}
+                            className="text-destructive border-destructive/30 hover:bg-destructive/10 gap-1.5 font-medium"
+                          >
+                            <X className="h-4 w-4" />
+                            {busy === "respond-reopen" ? "Cancelling…" : "Cancel Reopen Request"}
+                          </Button>
+                          <p className="text-xs text-muted-foreground">
+                            Waiting for the professional to respond. You can cancel this request anytime.
+                          </p>
+                        </div>
                       )}
                       <Button
                         variant="outline"
@@ -2418,6 +2429,7 @@ export default function SharedProjectTrackingPage() {
                 projectStatus={data.project.status}
                 milestones={data.milestones}
                 dispute={data.dispute}
+                disputeMessages={data.disputeMessages}
                 disputeCount={data.disputeCount}
                 disputeLimit={data.disputeLimit ?? 3}
                 canRaiseDispute={data.canRaiseDispute}

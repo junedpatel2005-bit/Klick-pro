@@ -5,10 +5,12 @@ import { sessionCookie, verifySession } from "@/lib/auth";
 import {
   notifyDisputeAccepted,
   notifyDisputeContested,
+  notifyDisputeMessage,
   notifyDisputeRaised,
   notifyDisputeResolved,
   notifyUsers,
 } from "@/lib/marketplace-notifications";
+import { refundDisputeToClient, releaseDisputeToProfessional } from "@/lib/wallet-ledger";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 import { emitAdminEvent, emitRealtimeProjectUpdate } from "@/lib/realtime";
 
@@ -151,6 +153,18 @@ const bodySchema = z.discriminatedUnion("action", [
       .optional(),
   }),
   z.object({
+    action: z.literal("withdraw-dispute"),
+    projectId: z.number().int().positive(),
+    disputeId: z.number().int().positive(),
+    reason: z.string().trim().max(2000).optional(),
+  }),
+  z.object({
+    action: z.literal("send-dispute-message"),
+    projectId: z.number().int().positive(),
+    disputeId: z.number().int().positive(),
+    message: z.string().trim().min(1).max(4000),
+  }),
+  z.object({
     action: z.literal("reopen-project"),
     projectId: z.number().int().positive(),
     reason: z.enum(["ISSUE", "ADDITIONAL_WORK"]).default("ADDITIONAL_WORK"),
@@ -183,6 +197,8 @@ const sharedActions = new Set([
   "submit-review",
   "submit-dispute",
   "respond-dispute",
+  "withdraw-dispute",
+  "send-dispute-message",
   "respond-reopen",
 ]);
 
@@ -1040,87 +1056,103 @@ export async function POST(request: NextRequest) {
       });
     }
     if (input.action === "reopen-project") {
+      if (project.clientId !== session.userId) {
+        return NextResponse.json(
+          { error: "Only the project client can request to reopen this project." },
+          { status: 403 },
+        );
+      }
       if (project.status !== "COMPLETED" && project.status !== "CLOSED") {
         return NextResponse.json(
           { error: "Only completed or closed projects can be reopened." },
           { status: 409 },
         );
       }
+
+      // Check if an unresolved dispute exists
+      const activeDispute = await db.projectDispute.findFirst({
+        where: { trackingId: project.id, status: { not: "RESOLVED" } },
+      });
+      if (activeDispute) {
+        return NextResponse.json(
+          { error: "Cannot reopen project while a dispute is currently active or unresolved." },
+          { status: 409 },
+        );
+      }
+
       const reasonLabel = input.reason === "ISSUE" ? "Warranty Fix / Rework" : "Additional Work";
       const timestamp = new Date().toLocaleDateString("en-IN", {
         day: "numeric",
         month: "short",
         year: "numeric",
       });
-      const appendNote = `\n\n--- [REOPEN REQUESTED: ${reasonLabel} (${timestamp})] ---\nWork Needed: ${input.workDescription}\nOffered Amount: ₹${input.amount.toLocaleString("en-IN")}`;
 
-      // Update ProjectTracking to REOPEN_REQUESTED (awaits professional acceptance)
-      await db.projectTracking.update({
-        where: { id: project.id },
-        data: {
-          status: "REOPEN_REQUESTED",
-          progress: 0,
-          currentStage: `Reopen Requested (${reasonLabel})`,
-          completedAt: null,
-        },
-      });
-
-      // Update ClientJob
-      const currentJob = await db.clientJob.findUnique({ where: { id: project.jobId } });
-      const updatedDescription =
-        (currentJob?.description ? currentJob.description.trim() : "") + appendNote;
-      await db.clientJob.update({
-        where: { id: project.jobId },
-        data: {
-          status: "OPEN",
-          budgetMin: input.amount,
-          budgetMax: input.amount,
-          description: updatedDescription,
-        },
-      });
-
-      // Clean up any stale PENDING_CONFIRMATION milestones so only ONE milestone is created
-      await db.projectMilestone.deleteMany({
-        where: {
-          trackingId: project.id,
-          status: "PENDING_CONFIRMATION",
-        },
-      });
-
-      // Add single deliverable milestone for the reopened work in PENDING_CONFIRMATION status
-      const milestoneTitle =
-        input.reason === "ISSUE"
-          ? `Warranty Fix: ${input.workDescription.slice(0, 50)}`
-          : `Additional Work: ${input.workDescription.slice(0, 50)}`;
-
-      await db.projectMilestone.create({
-        data: {
-          trackingId: project.id,
-          clientId: project.clientId,
-          professionalId: project.professionalId,
-          title: milestoneTitle,
-          description: input.workDescription,
-          amount: input.amount,
-          status: "PENDING_CONFIRMATION",
-        },
-      });
-
-      // Create a negotiation entry so terms are recorded and professional can accept or counter
-      if (project.requestId) {
-        await db.projectNegotiation.create({
+      // Execute all reopen state updates atomically
+      await db.$transaction(async (tx) => {
+        // 1. Update ProjectTracking to REOPEN_REQUESTED (awaits professional acceptance)
+        await tx.projectTracking.update({
+          where: { id: project.id },
           data: {
-            requestId: project.requestId,
-            jobId: project.jobId,
-            clientId: project.clientId,
-            professionalId: project.professionalId,
-            senderId: session.userId,
-            senderRole: "CLIENT",
-            bidAmount: input.amount,
-            duration: input.duration || "1-3 days",
-            message: `[${reasonLabel}] ${input.workDescription}`,
+            status: "REOPEN_REQUESTED",
+            progress: 0,
+            currentStage: `Reopen Requested (${reasonLabel})`,
+            completedAt: null,
           },
         });
-      }
+
+        // 2. Update ClientJob budget for the reopened scope
+        await tx.clientJob.update({
+          where: { id: project.jobId },
+          data: {
+            status: "OPEN",
+            budgetMin: input.amount,
+            budgetMax: input.amount,
+          },
+        });
+
+        // 3. Clean up any stale PENDING_CONFIRMATION milestones so only ONE milestone is created
+        await tx.projectMilestone.deleteMany({
+          where: {
+            trackingId: project.id,
+            status: "PENDING_CONFIRMATION",
+          },
+        });
+
+        // 4. Add single deliverable milestone for the reopened work in PENDING_CONFIRMATION status
+        const milestoneTitle =
+          input.reason === "ISSUE"
+            ? `Warranty Fix: ${input.workDescription.slice(0, 50)}`
+            : `Additional Work: ${input.workDescription.slice(0, 50)}`;
+
+        await tx.projectMilestone.create({
+          data: {
+            trackingId: project.id,
+            clientId: project.clientId,
+            professionalId: project.professionalId,
+            title: milestoneTitle,
+            description: input.workDescription,
+            amount: input.amount,
+            status: "PENDING_CONFIRMATION",
+          },
+        });
+
+        // 5. Create a negotiation entry so terms are recorded and professional can accept or counter
+        if (project.requestId) {
+          await tx.projectNegotiation.create({
+            data: {
+              requestId: project.requestId,
+              jobId: project.jobId,
+              clientId: project.clientId,
+              professionalId: project.professionalId,
+              senderId: session.userId,
+              senderRole: "CLIENT",
+              bidAmount: input.amount,
+              duration: input.duration || "1-3 days",
+              message: `[${reasonLabel}] ${input.workDescription}`,
+            },
+          });
+        }
+      });
 
       await event(
         "REOPEN_REQUESTED",
@@ -1221,30 +1253,44 @@ export async function POST(request: NextRequest) {
           projectId: project.id,
         });
       } else if (input.decision === "REJECT") {
-        await db.projectTracking.update({
-          where: { id: project.id },
-          data: {
-            status: "COMPLETED",
-            currentStage: "Completed",
-            progress: 100,
-          },
-        });
-        if (pendingMilestone) {
-          await db.projectMilestone.delete({
-            where: { id: pendingMilestone.id },
+        await db.$transaction(async (tx) => {
+          await tx.projectTracking.update({
+            where: { id: project.id },
+            data: {
+              status: "COMPLETED",
+              currentStage: "Completed",
+              progress: 100,
+            },
           });
-        }
+          await tx.clientJob.update({
+            where: { id: project.jobId },
+            data: { status: "CLOSED" },
+          });
+          if (pendingMilestone) {
+            await tx.projectMilestone.delete({
+              where: { id: pendingMilestone.id },
+            });
+          }
+        });
+
+        const isCancelling = isClient && !isProfessional;
         await event(
-          "REOPEN_DECLINED",
-          "Reopen request declined",
-          `${isProfessional ? "Professional" : "Client"} declined the reopen request.`,
+          isCancelling ? "REOPEN_CANCELLED" : "REOPEN_DECLINED",
+          isCancelling ? "Reopen request cancelled" : "Reopen request declined",
+          isCancelling
+            ? "Client cancelled the reopen request. Project restored to Completed."
+            : `${isProfessional ? "Professional" : "Client"} declined the reopen request.`,
           { progress: 100, stage: "Completed" },
         );
         const notifyTarget = isProfessional ? project.clientId : project.professionalId;
         await notifyUsers([notifyTarget], {
-          type: "PROJECT_REOPEN_DECLINED",
-          title: `${jobTitle} · Reopen Request Declined`,
-          description: `The request to reopen was declined. You can discuss further or raise a dispute if needed.`,
+          type: isCancelling ? "PROJECT_REOPEN_DECLINED" : "PROJECT_REOPEN_DECLINED",
+          title: isCancelling
+            ? `${jobTitle} · Reopen Request Cancelled`
+            : `${jobTitle} · Reopen Request Declined`,
+          description: isCancelling
+            ? "The client cancelled their request to reopen this project."
+            : "The request to reopen was declined. You can discuss further or raise a dispute if needed.",
           href: `/project/${project.id}/tracking`,
         });
         emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
@@ -1442,26 +1488,60 @@ export async function POST(request: NextRequest) {
         );
 
       const attachmentsJson = input.evidence?.length ? JSON.stringify(input.evidence) : "[]";
-      const disputeRound = disputeCount + 1;
-      const dispute = await db.projectDispute.create({
-        data: {
-          trackingId: project.id,
-          reporterId: session.userId,
-          reporterRole: session.role,
-          clientId: project.clientId,
-          professionalId: project.professionalId,
-          issueType: input.issueType,
-          priority: input.priority ?? "MEDIUM",
-          message: input.message,
-          attachmentsJson,
-          status: "WAITING_RESPONSE",
-          disputeRound,
-          milestoneId: input.milestoneId ?? null,
-        },
-      });
+
+      let dispute: { id: number; disputeRound: number };
+      try {
+        dispute = await db.$transaction(async (tx) => {
+          const disputeCount = await tx.projectDispute.count({
+            where: { trackingId: project.id },
+          });
+          if (disputeCount >= 3) {
+            throw new Error("MAX_DISPUTE_LIMIT");
+          }
+          const existingActiveDispute = await tx.projectDispute.findFirst({
+            where: { trackingId: project.id, status: { not: "RESOLVED" } },
+          });
+          if (existingActiveDispute) {
+            throw new Error("ACTIVE_DISPUTE_EXISTS");
+          }
+          const disputeRound = disputeCount + 1;
+          const created = await tx.projectDispute.create({
+            data: {
+              trackingId: project.id,
+              reporterId: session.userId,
+              reporterRole: session.role,
+              clientId: project.clientId,
+              professionalId: project.professionalId,
+              issueType: input.issueType,
+              priority: input.priority ?? "MEDIUM",
+              message: input.message,
+              attachmentsJson,
+              status: "WAITING_RESPONSE",
+              disputeRound,
+              milestoneId: input.milestoneId ?? null,
+            },
+          });
+          return { id: created.id, disputeRound };
+        });
+      } catch (err) {
+        if (err instanceof Error && err.message === "MAX_DISPUTE_LIMIT") {
+          return NextResponse.json(
+            { error: "Maximum limit of 3 disputes reached for this contract." },
+            { status: 409 },
+          );
+        }
+        if (err instanceof Error && err.message === "ACTIVE_DISPUTE_EXISTS") {
+          return NextResponse.json(
+            { error: "This project already has an active dispute awaiting resolution." },
+            { status: 409 },
+          );
+        }
+        throw err;
+      }
+
       await event(
         "DISPUTE_RAISED",
-        `Dispute raised (Round ${disputeRound} of 3)`,
+        `Dispute raised (Round ${dispute.disputeRound} of 3)`,
         `Issue type: ${input.issueType}. ${input.message}`,
       );
       const [job, reporter] = await Promise.all([
@@ -1494,7 +1574,7 @@ export async function POST(request: NextRequest) {
         projectId: project.id,
       });
       emitAdminEvent("dispute:new", { disputeId: dispute.id, projectId: project.id });
-      return NextResponse.json({ ok: true, disputeId: dispute.id, disputeRound });
+      return NextResponse.json({ ok: true, disputeId: dispute.id, disputeRound: dispute.disputeRound });
     }
     if (input.action === "respond-dispute") {
       const dispute = await db.projectDispute.findUnique({
@@ -1527,23 +1607,117 @@ export async function POST(request: NextRequest) {
           : "The professional";
 
       if (input.responseAction === "ACCEPT") {
-        await db.projectDispute.update({
-          where: { id: dispute.id },
-          data: {
-            status: "RESOLVED",
-            respondentAction: "ACCEPTED",
-            decision: "MUTUAL_SETTLEMENT",
-            decisionReason:
-              input.message?.trim() || "Respondent accepted the dispute claim. Mutually settled.",
-            respondedAt: new Date(),
-            decisionAt: new Date(),
-            decidedBy: session.userId,
-          },
+        let targetMilestoneId = dispute.milestoneId;
+        if (!targetMilestoneId) {
+          const candidateMilestone = await db.projectMilestone.findFirst({
+            where: {
+              trackingId: project.id,
+              status: { in: ["AWAITING_CLIENT_REVIEW", "IN_PROGRESS", "REVISION_REQUESTED"] },
+            },
+            orderBy: { id: "asc" },
+          });
+          targetMilestoneId = candidateMilestone?.id ?? null;
+        }
+
+        const payment = targetMilestoneId
+          ? await db.payment.findFirst({
+              where: {
+                projectTrackingId: project.id,
+                milestoneId: targetMilestoneId,
+              },
+              orderBy: { createdAt: "desc" },
+            })
+          : await db.payment.findFirst({
+              where: {
+                projectTrackingId: project.id,
+                status: "FUNDED",
+              },
+              orderBy: { createdAt: "desc" },
+            });
+
+        const isFunded = payment?.status === "FUNDED";
+        let refundAmount = 0;
+        let payoutAmount = 0;
+
+        await db.$transaction(async (tx) => {
+          if (dispute.reporterRole === "CLIENT") {
+            // Client reported poor work/issue, Professional accepted: refund funded escrow to client
+            if (isFunded && payment) {
+              refundAmount = payment.amount;
+              await refundDisputeToClient(tx, {
+                disputeId: dispute.id,
+                paymentId: payment.id,
+                clientId: dispute.clientId,
+                amount: refundAmount,
+                reason: input.message?.trim() || "Professional accepted dispute claim (Mutual Refund)",
+              });
+              await tx.payment.update({
+                where: { id: payment.id },
+                data: { status: "REFUNDED" },
+              });
+            }
+            if (targetMilestoneId) {
+              await tx.projectMilestone.update({
+                where: { id: targetMilestoneId },
+                data: { status: "CANCELLED" },
+              });
+            }
+          } else {
+            // Professional reported payment issue, Client accepted: release funded escrow to professional
+            if (isFunded && payment) {
+              payoutAmount = payment.professionalPayoutAmount || payment.baseAmount;
+              await releaseDisputeToProfessional(tx, {
+                disputeId: dispute.id,
+                paymentId: payment.id,
+                professionalId: dispute.professionalId,
+                amount: payoutAmount,
+                reason: input.message?.trim() || "Client accepted dispute claim (Mutual Payment Release)",
+              });
+              await tx.payment.update({
+                where: { id: payment.id },
+                data: {
+                  status: "COMPLETED",
+                  professionalPayoutAmount: payoutAmount,
+                  capturedAt: payment.capturedAt || new Date(),
+                },
+              });
+            }
+            if (targetMilestoneId) {
+              await tx.projectMilestone.update({
+                where: { id: targetMilestoneId },
+                data: { status: "APPROVED", approvedAt: new Date() },
+              });
+            }
+          }
+
+          await tx.projectDispute.update({
+            where: { id: dispute.id },
+            data: {
+              status: "RESOLVED",
+              respondentAction: "ACCEPTED",
+              decision: "MUTUAL_SETTLEMENT",
+              decisionReason:
+                input.message?.trim() ||
+                `${respondentName} accepted the dispute claim. Mutually settled with ${
+                  refundAmount > 0
+                    ? `₹${refundAmount.toLocaleString("en-IN")} refunded to client`
+                    : payoutAmount > 0
+                      ? `₹${payoutAmount.toLocaleString("en-IN")} released to professional`
+                      : "contract milestone updated"
+                }.`,
+              refundAmount,
+              payoutAmount,
+              respondedAt: new Date(),
+              decisionAt: new Date(),
+              decidedBy: session.userId,
+            },
+          });
         });
+
         await event(
           "DISPUTE_ACCEPTED",
           `Dispute #${dispute.id} mutually settled`,
-          `${respondentName} accepted the dispute claim.`,
+          `${respondentName} accepted the dispute claim.${refundAmount > 0 ? ` Refunded: ₹${refundAmount.toLocaleString("en-IN")}.` : payoutAmount > 0 ? ` Released: ₹${payoutAmount.toLocaleString("en-IN")}.` : ""}`,
         );
         const job = await db.clientJob.findUnique({
           where: { id: project.jobId },
@@ -1609,6 +1783,113 @@ export async function POST(request: NextRequest) {
         emitAdminEvent("dispute:update", { disputeId: dispute.id, projectId: project.id });
         return NextResponse.json({ ok: true, escalated: true });
       }
+    }
+    if (input.action === "withdraw-dispute") {
+      const dispute = await db.projectDispute.findUnique({
+        where: { id: input.disputeId },
+      });
+      if (!dispute || dispute.trackingId !== project.id) {
+        return NextResponse.json({ error: "Dispute not found." }, { status: 404 });
+      }
+      if (dispute.status === "RESOLVED") {
+        return NextResponse.json(
+          { error: "This dispute has already been resolved." },
+          { status: 409 },
+        );
+      }
+      if (dispute.reporterId !== session.userId) {
+        return NextResponse.json(
+          { error: "Only the complainant who raised this dispute can withdraw it." },
+          { status: 403 },
+        );
+      }
+
+      await db.projectDispute.update({
+        where: { id: dispute.id },
+        data: {
+          status: "RESOLVED",
+          decision: "WITHDRAWN_BY_REPORTER",
+          decisionReason: input.reason?.trim() || "Dispute voluntarily withdrawn by the complainant.",
+          decisionAt: new Date(),
+          decidedBy: session.userId,
+        },
+      });
+
+      const reporter = await db.user.findUnique({
+        where: { id: session.userId },
+        select: { firstName: true, lastName: true },
+      });
+      const reporterName = reporter
+        ? `${reporter.firstName} ${reporter.lastName}`.trim()
+        : session.role === "CLIENT"
+          ? "The client"
+          : "The professional";
+
+      await event(
+        "DISPUTE_RESOLVED",
+        `Dispute #${dispute.id} withdrawn`,
+        `${reporterName} voluntarily withdrew dispute claim #${dispute.id}.${input.reason ? ` Reason: ${input.reason}` : ""}`,
+      );
+
+      emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
+        projectId: project.id,
+      });
+      emitAdminEvent("dispute:update", { disputeId: dispute.id, projectId: project.id });
+      return NextResponse.json({ ok: true, withdrawn: true });
+    }
+    if (input.action === "send-dispute-message") {
+      const dispute = await db.projectDispute.findUnique({
+        where: { id: input.disputeId },
+      });
+      if (!dispute || dispute.trackingId !== project.id) {
+        return NextResponse.json({ error: "Dispute not found." }, { status: 404 });
+      }
+      if (session.userId !== project.clientId && session.userId !== project.professionalId) {
+        return NextResponse.json({ error: "Access denied." }, { status: 403 });
+      }
+
+      const recipientId =
+        session.userId === project.clientId ? project.professionalId : project.clientId;
+
+      const sender = await db.user.findUnique({
+        where: { id: session.userId },
+        select: { firstName: true, lastName: true },
+      });
+      const senderName = sender
+        ? `${sender.firstName} ${sender.lastName}`.trim()
+        : session.role === "CLIENT"
+          ? "Client"
+          : "Professional";
+
+      const record = await db.projectDisputeMessage.create({
+        data: {
+          disputeId: dispute.id,
+          senderId: session.userId,
+          senderRole: session.role,
+          recipientId,
+          message: input.message.trim(),
+        },
+      });
+
+      enqueueBackgroundJob(
+        "dispute.message.notifications",
+        () =>
+          notifyDisputeMessage({
+            disputeId: dispute.id,
+            trackingId: project.id,
+            recipientId,
+            senderName,
+            message: input.message.trim(),
+          }),
+        { disputeId: dispute.id, trackingId: project.id },
+      );
+
+      emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
+        projectId: project.id,
+      });
+      emitAdminEvent("dispute:update", { disputeId: dispute.id, projectId: project.id });
+
+      return NextResponse.json({ ok: true, message: record });
     }
     return NextResponse.json({ ok: true });
   } catch (error) {

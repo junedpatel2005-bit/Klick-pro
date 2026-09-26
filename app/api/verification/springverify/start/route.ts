@@ -20,16 +20,23 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await verificationService.startVerification(current.userId);
-    return NextResponse.json(result);
+    const result = await verificationService.initiateSpringVerifyBgv(current.userId);
+    return NextResponse.json({
+      success: true,
+      checkId: result.checkId,
+      status: result.status,
+      candidatePortalUrl: result.candidatePortalUrl,
+      message: result.message,
+    });
   } catch (error) {
-    console.error("verification.persona.start.failed", {
+    console.error("verification.springverify.start.failed", {
       userId: current.userId,
       error: error instanceof Error ? error.message : "Unknown error",
     });
     return NextResponse.json(
-      { error: "Unable to start document verification. Please try again later." },
-      { status: 502 },
+      { error: error instanceof Error ? error.message : "Unable to initiate background check." },
+      { status: 500 },
     );
   }
 }
+
