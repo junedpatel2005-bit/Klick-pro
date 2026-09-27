@@ -50,11 +50,32 @@ export async function POST(request: NextRequest) {
       select: { id: true, status: true },
     });
     if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
-    // For normal work uploads, work or revision must be active
-    if (
-      !isDispute &&
-      !["READY_TO_START", "IN_PROGRESS", "REVISION_REQUESTED"].includes(project.status)
-    )
+    // For normal work uploads, work or revision must be active on the project or on any active milestone
+    let isWorkActive = ["READY_TO_START", "IN_PROGRESS", "REVISION_REQUESTED"].includes(
+      project.status,
+    );
+    if (!isDispute && !isWorkActive) {
+      const activeMilestone = await db.projectMilestone.findFirst({
+        where: {
+          trackingId: project.id,
+          status: { in: ["IN_PROGRESS", "REVISION_REQUESTED"] },
+        },
+        select: { id: true, title: true },
+      });
+      if (activeMilestone) {
+        isWorkActive = true;
+        await db.projectTracking.update({
+          where: { id: project.id },
+          data: {
+            status: "IN_PROGRESS",
+            currentStage: activeMilestone.title,
+            completedAt: null,
+          },
+        });
+      }
+    }
+
+    if (!isDispute && !isWorkActive)
       return NextResponse.json(
         { error: "Files can only be uploaded while work or a revision is in progress." },
         { status: 409 },

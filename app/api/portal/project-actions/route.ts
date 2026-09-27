@@ -436,6 +436,16 @@ export async function POST(request: NextRequest) {
           status: activeCount === 0 ? "IN_PROGRESS" : "UPCOMING",
         },
       });
+      if (milestone.status === "IN_PROGRESS") {
+        await db.projectTracking.update({
+          where: { id: project.id },
+          data: {
+            status: "IN_PROGRESS",
+            currentStage: milestone.title,
+            completedAt: null,
+          },
+        });
+      }
       const jobTitle = jobDates?.title?.trim() || `Project #${project.id}`;
       await event(
         "MILESTONE_CREATED",
@@ -488,10 +498,14 @@ export async function POST(request: NextRequest) {
         },
       });
       let currentlyActive = activeCount > 0;
+      let firstActiveTitle: string | null = null;
       const jobTitle = jobDates?.title?.trim() || `Project #${project.id}`;
       for (const m of input.milestones) {
         const status = !currentlyActive ? "IN_PROGRESS" : "UPCOMING";
-        if (status === "IN_PROGRESS") currentlyActive = true;
+        if (status === "IN_PROGRESS") {
+          currentlyActive = true;
+          firstActiveTitle = m.title;
+        }
         const created = await db.projectMilestone.create({
           data: {
             trackingId: project.id,
@@ -512,6 +526,16 @@ export async function POST(request: NextRequest) {
             milestoneId: created.id,
           },
         );
+      }
+      if (firstActiveTitle) {
+        await db.projectTracking.update({
+          where: { id: project.id },
+          data: {
+            status: "IN_PROGRESS",
+            currentStage: firstActiveTitle,
+            completedAt: null,
+          },
+        });
       }
     }
     if (input.action === "update-milestone") {
@@ -631,7 +655,28 @@ export async function POST(request: NextRequest) {
       await event("MILESTONE_DELETED", `Milestone removed · ${milestone.title}`);
     }
     if (input.action === "upload-work") {
-      if (!["IN_PROGRESS", "REVISION_REQUESTED"].includes(project.status))
+      let isWorkActive = ["IN_PROGRESS", "REVISION_REQUESTED"].includes(project.status);
+      if (!isWorkActive) {
+        const activeMilestone = await db.projectMilestone.findFirst({
+          where: {
+            trackingId: project.id,
+            status: { in: ["IN_PROGRESS", "REVISION_REQUESTED"] },
+          },
+          select: { id: true, title: true },
+        });
+        if (activeMilestone) {
+          isWorkActive = true;
+          await db.projectTracking.update({
+            where: { id: project.id },
+            data: {
+              status: "IN_PROGRESS",
+              currentStage: activeMilestone.title,
+              completedAt: null,
+            },
+          });
+        }
+      }
+      if (!isWorkActive)
         return NextResponse.json(
           { error: "Work can only be uploaded while the project is in progress." },
           { status: 409 },
@@ -742,7 +787,11 @@ export async function POST(request: NextRequest) {
       });
       await db.projectTracking.update({
         where: { id: project.id },
-        data: { status: "AWAITING_CLIENT_REVIEW", currentStage: milestone.title },
+        data: {
+          status: "AWAITING_CLIENT_REVIEW",
+          currentStage: milestone.title,
+          completedAt: null,
+        },
       });
       await event(
         isResubmission ? "REVISED_WORK_SUBMITTED" : "MILESTONE_SUBMITTED",
@@ -885,7 +934,7 @@ export async function POST(request: NextRequest) {
               if (remainingUnapproved === 0) {
                 await tx.projectTracking.update({
                   where: { id: project.id },
-                  data: { currentStage: null },
+                  data: { status: "IN_PROGRESS", currentStage: null },
                 });
               }
             }

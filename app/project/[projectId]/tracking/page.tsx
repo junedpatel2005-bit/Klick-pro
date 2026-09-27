@@ -3164,7 +3164,10 @@ export default function SharedProjectTrackingPage() {
           {/* Work Upload Tab */}
           <TabsContent value="uploads" className="space-y-6">
             {isProfessional &&
-              ["IN_PROGRESS", "REVISION_REQUESTED"].includes(data.project.status) && (
+              (["IN_PROGRESS", "REVISION_REQUESTED"].includes(data.project.status) ||
+                data.milestones.some((m) =>
+                  ["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status),
+                )) && (
                 <section className="rounded-2xl border bg-card p-5 shadow-soft">
                   <div>
                     <h2 className="text-lg font-semibold">Upload Work</h2>

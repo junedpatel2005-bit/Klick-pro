@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
           if (remainingUnapproved === 0) {
             await tx.projectTracking.update({
               where: { id: project.id },
-              data: { currentStage: null },
+              data: { status: "IN_PROGRESS", currentStage: null },
             });
           }
         }

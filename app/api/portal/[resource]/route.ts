@@ -1126,12 +1126,33 @@ export async function GET(
           });
           await db.projectTracking.update({
             where: { id: project.id },
-            data: { status: "IN_PROGRESS", currentStage: nextMilestone.title },
+            data: { status: "IN_PROGRESS", currentStage: nextMilestone.title, completedAt: null },
           });
           nextMilestone.status = "IN_PROGRESS";
           project.status = "IN_PROGRESS";
           project.currentStage = nextMilestone.title;
         }
+      }
+
+      // Self-healing: If a milestone is actively IN_PROGRESS or REVISION_REQUESTED, ensure project tracking status matches
+      const activeWorkMilestone = milestones.find((m) =>
+        ["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status),
+      );
+      if (
+        activeWorkMilestone &&
+        project.status !== "IN_PROGRESS" &&
+        project.status !== "REVISION_REQUESTED"
+      ) {
+        await db.projectTracking.update({
+          where: { id: project.id },
+          data: {
+            status: "IN_PROGRESS",
+            currentStage: activeWorkMilestone.title,
+            completedAt: null,
+          },
+        });
+        project.status = "IN_PROGRESS";
+        project.currentStage = activeWorkMilestone.title;
       }
       const [
         job,
