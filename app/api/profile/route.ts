@@ -10,9 +10,14 @@ const profileSchema = z.object({
   address: z.string().trim().min(1, "Address is required.").max(300),
   profilePhotoUrl: z
     .string()
-    .url("Enter a valid photo URL.")
     .max(2048)
+    .refine(
+      (val) =>
+        !val || val.startsWith("/") || val.startsWith("http://") || val.startsWith("https://"),
+      "Enter a valid photo URL.",
+    )
     .optional()
+    .nullable()
     .or(z.literal("")),
   phone: z.string().trim().min(7).max(25).optional().or(z.literal("")),
 });

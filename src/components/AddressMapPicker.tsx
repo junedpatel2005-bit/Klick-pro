@@ -27,6 +27,10 @@ export function AddressMapPicker({
   onLocationChange,
   onCurrentLocation,
   radiusKm,
+  mapFirst = true,
+  showManualAddress = false,
+  manualAddress,
+  onManualAddressChange,
 }: {
   id: string;
   value: string;
@@ -36,6 +40,10 @@ export function AddressMapPicker({
   onLocationChange?: (state: string, district: string) => void;
   onCurrentLocation?: () => void;
   radiusKm?: number | null;
+  mapFirst?: boolean;
+  showManualAddress?: boolean;
+  manualAddress?: string;
+  onManualAddressChange?: (value: string) => void;
 }) {
   const [results, setResults] = useState<Result[]>([]);
   const [point, setPoint] = useState<[number, number]>([20.5937, 78.9629]);
@@ -95,6 +103,7 @@ export function AddressMapPicker({
       const d = (await r.json()) as { results?: Result[]; error?: string };
       if (d.results?.[0]) {
         onChange(d.results[0].address);
+        if (onManualAddressChange) onManualAddressChange(d.results[0].address);
         const matched = matchIndiaLocation(d.results[0].state, d.results[0].district);
         onLocationChange?.(
           matched.state,
@@ -106,6 +115,133 @@ export function AddressMapPicker({
       setPinStatus("Could not look up that location. You can still enter an address manually.");
     }
   }
+
+  if (mapFirst) {
+    return (
+      <div className="flex flex-col gap-3">
+        {/* 1. Map comes FIRST */}
+        <div className="overflow-hidden rounded-xl border border-border">
+          <GoogleMapView point={point} onPointChange={resolve} radiusKm={radiusKm} />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            Click or drag the pin on the map to set your exact location.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              onCurrentLocation?.();
+              navigator.geolocation?.getCurrentPosition(
+                (p) => void resolve(p.coords.latitude, p.coords.longitude),
+                () => setPinStatus("Location permission was not granted."),
+              );
+            }}
+            className="gap-1.5 h-8 text-xs"
+          >
+            <MapPin className="h-3.5 w-3.5 text-primary" />
+            Use my current location
+          </Button>
+        </div>
+        {pinStatus && <p className="text-xs text-amber-600 dark:text-amber-400">{pinStatus}</p>}
+
+        {/* 2. Search address */}
+        <div className="space-y-1.5">
+          <Label htmlFor={id} className="text-xs font-semibold">
+            Search location or area
+          </Label>
+          <Input
+            id={id}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || !results[0]) return;
+              e.preventDefault();
+              const item = results[0];
+              onChange(item.address);
+              if (onManualAddressChange) onManualAddressChange(item.address);
+              setPoint([item.lat, item.lon]);
+              onCoordinatesChange?.(item.lat, item.lon);
+              const matched = matchIndiaLocation(item.state, item.district);
+              onLocationChange?.(matched.state, item.city || item.district || matched.district);
+              setResults([]);
+              setSearched(false);
+              setSearchStatus("");
+            }}
+            placeholder="Type area, landmark, or street to locate on map..."
+            maxLength={300}
+          />
+        </div>
+        {searching && <p className="text-xs text-muted-foreground">Searching…</p>}
+        {!searching && results.length > 0 && (
+          <ul className="max-h-56 overflow-y-auto rounded-lg border bg-card shadow-md">
+            {results.map((item) => (
+              <li key={`${item.lat}-${item.lon}`}>
+                <button
+                  type="button"
+                  className="flex w-full items-start gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-muted"
+                  onClick={() => {
+                    onChange(item.address);
+                    if (onManualAddressChange) onManualAddressChange(item.address);
+                    setPoint([item.lat, item.lon]);
+                    onCoordinatesChange?.(item.lat, item.lon);
+                    const matched = matchIndiaLocation(item.state, item.district);
+                    onLocationChange?.(
+                      matched.state,
+                      item.city || item.district || matched.district,
+                    );
+                    setResults([]);
+                    setSearched(false);
+                    setSearchStatus("");
+                  }}
+                >
+                  <MapPin className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
+                  <span className="min-w-0">
+                    <span className="block font-medium">Select this location</span>
+                    <span className="block truncate text-muted-foreground">{item.address}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {!searching && searched && results.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            {searchStatus || "No matches found. Drag the pin on the map or enter address manually."}
+          </p>
+        )}
+
+        {/* 3. Manual address input */}
+        {showManualAddress && (
+          <div className="space-y-1.5 pt-1">
+            <Label htmlFor={`${id}-manual`} className="text-xs font-semibold">
+              Complete address (Manual entry / edit)
+            </Label>
+            <Input
+              id={`${id}-manual`}
+              value={manualAddress !== undefined ? manualAddress : value}
+              onChange={(e) => {
+                if (onManualAddressChange) {
+                  onManualAddressChange(e.target.value);
+                } else {
+                  onChange(e.target.value);
+                }
+              }}
+              placeholder="Flat / House no., building, street, area, PIN code"
+              maxLength={300}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Add your flat/house number, building, floor, or landmark manually.
+            </p>
+          </div>
+        )}
+
+        <p className="text-[11px] text-muted-foreground">Map data © Google</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="order-2">
