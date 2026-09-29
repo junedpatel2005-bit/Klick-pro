@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { io } from "socket.io-client";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   BellRing,
@@ -68,16 +67,25 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"proposals" | "hireRequests">("proposals");
   const [phoneReminderDismissed, setPhoneReminderDismissed] = useState(false);
+  const inFlightRef = useRef(false);
+  const lastLoadedRef = useRef(0);
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (force = false) => {
+    const now = Date.now();
+    if (!force && inFlightRef.current) return;
+    if (!force && now - lastLoadedRef.current < 600) return;
+    inFlightRef.current = true;
     try {
       const response = await fetch("/api/v1/dashboard", { cache: "no-store" });
       if (!response.ok) throw new Error();
       const nextData = (await response.json()) as DashboardData;
       setData(nextData);
       setError(null);
+      lastLoadedRef.current = Date.now();
     } catch {
       setError("Sign in as a client to view your dashboard.");
+    } finally {
+      inFlightRef.current = false;
     }
   }, []);
 
@@ -89,30 +97,15 @@ export default function Dashboard() {
   }, [loadDashboard]);
 
   useEffect(() => {
-    const socket = io({
-      path: "/api/realtime",
-      withCredentials: true,
-      transports: ["websocket", "polling"],
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-    });
-    const onUpdate = () => void loadDashboard();
-    socket.on("proposal:new", onUpdate);
-    socket.on("project:updated", onUpdate);
-    socket.on("notification:new", onUpdate);
-
     const onCustomUpdate = () => void loadDashboard();
     window.addEventListener("servio:notification", onCustomUpdate);
     window.addEventListener("servio:project-update", onCustomUpdate);
+    window.addEventListener("servio:proposal", onCustomUpdate);
 
     return () => {
-      socket.off("proposal:new", onUpdate);
-      socket.off("project:updated", onUpdate);
-      socket.off("notification:new", onUpdate);
-      socket.disconnect();
       window.removeEventListener("servio:notification", onCustomUpdate);
       window.removeEventListener("servio:project-update", onCustomUpdate);
+      window.removeEventListener("servio:proposal", onCustomUpdate);
     };
   }, [loadDashboard]);
   return (
@@ -135,7 +128,7 @@ export default function Dashboard() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <Button asChild size="sm">
-                  <Link href="/client-profile?from=dashboard">Verify phone</Link>
+                  <Link href="/client/setup?from=dashboard">Verify phone</Link>
                 </Button>
                 <button
                   type="button"

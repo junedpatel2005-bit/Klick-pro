@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { fetchPortalNotifications, invalidateNotificationsCache } from "@/lib/notifications-client";
 import {
   Activity,
   AlertTriangle,
@@ -225,9 +226,7 @@ export function NotificationInbox({ admin: _isAdmin = false }: { admin?: boolean
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/portal/notifications", { cache: "no-store" });
-      if (!response.ok) throw new Error("Unable to load notifications");
-      const data = (await response.json()) as Notification[];
+      const data = (await fetchPortalNotifications({ force: true })) as Notification[];
       setItems(Array.isArray(data) ? data : []);
     } catch {
       // Ignored
@@ -425,6 +424,7 @@ export function NotificationInbox({ admin: _isAdmin = false }: { admin?: boolean
         ids.includes(i.id) ? { ...i, readAt: unread ? null : (i.readAt ?? now) } : i,
       ),
     );
+    invalidateNotificationsCache();
     try {
       await fetch("/api/portal/notifications", {
         method: "PATCH",
@@ -440,6 +440,8 @@ export function NotificationInbox({ admin: _isAdmin = false }: { admin?: boolean
   async function markAllRead() {
     const now = new Date().toISOString();
     setItems((curr) => curr.map((i) => ({ ...i, readAt: i.readAt ?? now })));
+    invalidateNotificationsCache();
+    window.dispatchEvent(new CustomEvent("servio:bell-ring"));
     try {
       await fetch("/api/portal/notifications", {
         method: "PATCH",
@@ -455,6 +457,7 @@ export function NotificationInbox({ admin: _isAdmin = false }: { admin?: boolean
   async function deleteNotification(id: number, e?: React.MouseEvent) {
     e?.stopPropagation();
     setItems((curr) => curr.filter((i) => i.id !== id));
+    invalidateNotificationsCache();
     try {
       await fetch("/api/portal/notifications", {
         method: "DELETE",

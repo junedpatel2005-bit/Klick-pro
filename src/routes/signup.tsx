@@ -126,7 +126,7 @@ function SignupContent() {
         setError(result.error ?? "Unable to create your account.");
       } else {
         invalidateCurrentUser();
-        router.push(result.redirect ?? "/my-info");
+        router.push(result.redirect ?? "/verify");
       }
     } catch {
       setError("Network error. Check your connection and try again.");
@@ -286,9 +286,29 @@ function SignupContent() {
               disabled={pending}
               checked={draft.terms}
               onChange={(event) => setDraft({ ...draft, terms: event.target.checked })}
-              className="mt-0.5 h-4 w-4 accent-primary"
+              className="mt-0.5 h-4 w-4 accent-primary cursor-pointer"
             />
-            I agree to the Terms and Privacy Policy.
+            <span>
+              I agree to the{" "}
+              <Link
+                href="/terms"
+                target="_blank"
+                onClick={(e) => e.stopPropagation()}
+                className="font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
+              >
+                Terms and Conditions
+              </Link>{" "}
+              and{" "}
+              <Link
+                href="/privacy-policy"
+                target="_blank"
+                onClick={(e) => e.stopPropagation()}
+                className="font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
+              >
+                Privacy Policy
+              </Link>
+              .
+            </span>
           </label>
           {fieldErrors.terms && <p className="text-sm text-destructive">{fieldErrors.terms}</p>}
           {error && <p className="text-sm text-destructive">{error}</p>}

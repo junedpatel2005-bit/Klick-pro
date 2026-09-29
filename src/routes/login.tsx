@@ -66,6 +66,7 @@ export default function Login() {
     if (
       params.get("profileSetup") === "1" ||
       requestedPath === "/professional/setup" ||
+      requestedPath === "/client/setup" ||
       requestedPath === "/client-profile"
     ) {
       setProfileSetupReminder(true);
@@ -423,16 +424,6 @@ export default function Login() {
                 </span>
               )}
             </Button>
-            <p className="text-center text-xs text-muted-foreground pt-1">
-              By continuing, you agree to our{" "}
-              <Link
-                href="/terms"
-                target="_blank"
-                className="font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
-              >
-                Terms and Conditions
-              </Link>
-            </p>
           </form>
         ) : (
           <form onSubmit={submitPhone} noValidate className="space-y-5">
@@ -513,16 +504,6 @@ export default function Login() {
                 "Send OTP"
               )}
             </Button>
-            <p className="text-center text-xs text-muted-foreground pt-1">
-              By continuing, you agree to our{" "}
-              <Link
-                href="/terms"
-                target="_blank"
-                className="font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
-              >
-                Terms and Conditions
-              </Link>
-            </p>
           </form>
         )}
       </AuthLayout>

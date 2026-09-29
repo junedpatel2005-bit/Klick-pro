@@ -9,6 +9,8 @@ import type {
   PublicProfessionalProfile,
   ProfessionalService,
   PublicReviewItem,
+  PublicClientProfile,
+  PublicClientJobItem,
 } from "@/lib/types/marketplace";
 
 function parseSkills(value: string | null): string[] {
@@ -712,3 +714,208 @@ export async function getOpenJob(id: number): Promise<MarketplaceJob | null> {
     milestones: job.milestones,
   };
 }
+
+/**
+ * Public client profile query.
+ * Exposes only safe information (name, avatar, company details, member since, rating,
+ * professional feedback reviews, total jobs count, completed project count, and open jobs).
+ * Contact information (email, phone, exact address) is strictly excluded.
+ */
+export async function getPublicClientProfile(
+  id: number,
+): Promise<PublicClientProfile | null> {
+  const user = await db.user.findFirst({
+    where: { id },
+    select: {
+      id: true,
+      role: true,
+      firstName: true,
+      lastName: true,
+      avatarUrl: true,
+      averageRating: true,
+      reviewCount: true,
+      isVerified: true,
+      createdAt: true,
+      companyName: true,
+      companyWebsite: true,
+      industry: true,
+      teamSize: true,
+      companyDescription: true,
+      address: true,
+      clientProfiles: {
+        select: {
+          fullName: true,
+          companyName: true,
+          companyWebsite: true,
+          industry: true,
+          teamSize: true,
+          companyDescription: true,
+          address: true,
+          profilePhotoUrl: true,
+        },
+      },
+    },
+  });
+
+  if (!user) return null;
+  // If user is exclusively a PROFESSIONAL without client profile or jobs, they shouldn't show as a client
+  if (user.role === "PROFESSIONAL" && !user.clientProfiles) {
+    const jobCount = await db.clientJob.count({ where: { userId: id } });
+    if (jobCount === 0) return null;
+  }
+
+  const [totalJobsPosted, completedProjectsCount, openJobsRaw, clientReviews] = await Promise.all([
+    db.clientJob.count({
+      where: { userId: id },
+    }),
+    db.projectTracking.count({
+      where: {
+        clientId: id,
+        status: "COMPLETED",
+      },
+    }),
+    db.clientJob.findMany({
+      where: {
+        userId: id,
+        status: "OPEN",
+        AND: [
+          { OR: [{ jobDate: null }, { jobDate: { lte: new Date() } }] },
+          { OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        budgetMin: true,
+        budgetMax: true,
+        timingType: true,
+        hourlyRate: true,
+        locationLabel: true,
+        workMode: true,
+        urgency: true,
+        createdAt: true,
+      },
+    }),
+    db.projectReview.findMany({
+      where: {
+        clientId: id,
+        professionalRating: { not: null },
+      },
+      orderBy: { professionalReviewedAt: "desc" },
+      take: 20,
+      select: {
+        id: true,
+        trackingId: true,
+        professionalId: true,
+        professionalRating: true,
+        professionalComment: true,
+        professionalReviewedAt: true,
+        createdAt: true,
+      },
+    }),
+  ]);
+
+  const clientTrackingIds = [...new Set(clientReviews.map((r) => r.trackingId))];
+  const proIds = [...new Set(clientReviews.map((r) => r.professionalId))];
+
+  const [clientTrackings, pros] = await Promise.all([
+    clientTrackingIds.length > 0
+      ? db.projectTracking.findMany({
+          where: { id: { in: clientTrackingIds } },
+          select: {
+            id: true,
+            job: { select: { title: true, category: true } },
+          },
+        })
+      : [],
+    proIds.length > 0
+      ? db.user.findMany({
+          where: { id: { in: proIds } },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            professionalCategory: true,
+          },
+        })
+      : [],
+  ]);
+
+  const clientTrackingMap = new Map(clientTrackings.map((t) => [t.id, t]));
+  const proMap = new Map(pros.map((p) => [p.id, p]));
+
+  const reviewsList: PublicReviewItem[] = clientReviews.map((r) => {
+    const t = clientTrackingMap.get(r.trackingId);
+    const p = proMap.get(r.professionalId);
+    return {
+      id: r.id,
+      rating: r.professionalRating ?? 0,
+      comment: r.professionalComment,
+      createdAt: (r.professionalReviewedAt ?? r.createdAt).toISOString(),
+      reviewerName: p ? `${p.firstName} ${p.lastName}`.trim() : "Professional",
+      reviewerAvatar: p?.avatarUrl ?? null,
+      projectTitle: t?.job?.title ?? null,
+      reviewerCategory: p?.professionalCategory ?? null,
+    };
+  });
+
+  const openJobs: PublicClientJobItem[] = openJobsRaw.map((job) => ({
+    id: job.id,
+    title: job.title ?? "Untitled Job",
+    category: job.category ?? "General",
+    budgetMin: job.budgetMin,
+    budgetMax: job.budgetMax,
+    timingType: job.timingType as "FIXED" | "HOURLY",
+    hourlyRate: job.hourlyRate,
+    location: job.locationLabel,
+    workMode: job.workMode,
+    urgency: job.urgency,
+    createdAt: job.createdAt.toISOString(),
+  }));
+
+  const rawAddress = user.clientProfiles?.address || user.address || null;
+  const location = approximateAddress(rawAddress);
+  const fullName =
+    user.clientProfiles?.fullName?.trim() || `${user.firstName} ${user.lastName}`.trim();
+  const avatar = user.avatarUrl || user.clientProfiles?.profilePhotoUrl || null;
+  const companyName = user.clientProfiles?.companyName || user.companyName || null;
+  const companyWebsite = user.clientProfiles?.companyWebsite || user.companyWebsite || null;
+  const industry = user.clientProfiles?.industry || user.industry || null;
+  const teamSize = user.clientProfiles?.teamSize || user.teamSize || null;
+  const companyDescription =
+    user.clientProfiles?.companyDescription || user.companyDescription || null;
+
+  const rating =
+    reviewsList.length > 0
+      ? reviewsList.reduce((acc, r) => acc + r.rating, 0) / reviewsList.length
+      : user.averageRating;
+  const reviewCount = reviewsList.length > 0 ? reviewsList.length : user.reviewCount;
+
+  return {
+    id: user.id,
+    name: fullName,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    avatar,
+    rating,
+    reviewCount,
+    verified: user.isVerified,
+    memberSince: user.createdAt.toISOString(),
+    companyName,
+    companyWebsite,
+    industry,
+    teamSize,
+    companyDescription,
+    location,
+    totalJobsPosted,
+    completedProjectsCount,
+    openJobsCount: openJobs.length,
+    openJobs,
+    reviewsList,
+  };
+}
+

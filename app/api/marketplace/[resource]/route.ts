@@ -4,6 +4,7 @@ import {
   getOpenJob,
   getProfessional,
   getPublicProfessionalProfile,
+  getPublicClientProfile,
   listCategories,
   listOpenJobs,
   listProfessionals,
@@ -40,6 +41,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
       return professional
         ? NextResponse.json(professional)
         : NextResponse.json({ error: "Professional not found." }, { status: 404 });
+    }
+    if (resource === "client-detail" || resource === "client") {
+      const id = idSchema.safeParse(new URL(request.url).searchParams.get("id"));
+      if (!id.success)
+        return NextResponse.json(
+          { error: "A valid client id is required." },
+          { status: 400 },
+        );
+      const client = await getPublicClientProfile(id.data);
+      return client
+        ? NextResponse.json(client)
+        : NextResponse.json({ error: "Client not found." }, { status: 404 });
     }
     if (resource === "job") {
       const id = idSchema.safeParse(new URL(request.url).searchParams.get("id"));

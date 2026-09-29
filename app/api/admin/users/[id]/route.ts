@@ -121,33 +121,67 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       },
     });
     if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });
-    const [jobsPosted, proposals, projects, completedPayments] = await Promise.all([
+    const userRoleFilter =
+      user.role === "CLIENT" ? { clientId: userId } : { professionalId: userId };
+    const [jobsPosted, proposals, allProjects, completedPayments] = await Promise.all([
       db.clientJob.count({ where: { userId } }),
-      db.projectRequest.count({
-        where: user.role === "CLIENT" ? { clientId: userId } : { professionalId: userId },
-      }),
-      db.projectTracking.count({
-        where: user.role === "CLIENT" ? { clientId: userId } : { professionalId: userId },
+      db.projectRequest.count({ where: userRoleFilter }),
+      db.projectTracking.findMany({
+        where: userRoleFilter,
+        select: {
+          id: true,
+          status: true,
+          progress: true,
+          createdAt: true,
+          updatedAt: true,
+          job: { select: { id: true, title: true, category: true } },
+          milestones: { select: { id: true, status: true } },
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 30,
       }),
       db.projectTransaction.aggregate({
         where: {
-          ...(user.role === "CLIENT" ? { clientId: userId } : { professionalId: userId }),
+          ...userRoleFilter,
           status: "COMPLETED",
         },
         _sum: { amount: true },
         _count: true,
       }),
     ]);
+    const completedProjects = allProjects.filter(
+      (p) => p.status === "COMPLETED" || p.status.toUpperCase().includes("COMPLETED"),
+    ).length;
+    const closedProjects = allProjects.filter(
+      (p) =>
+        p.status === "CLOSED" ||
+        p.status.toUpperCase().includes("CLOSED") ||
+        p.status.toUpperCase().includes("CANCELLED"),
+    ).length;
     return NextResponse.json({
       user,
       stats: {
         jobsPosted,
         proposals,
-        projects,
+        projects: allProjects.length,
+        completedProjects,
+        closedProjects,
         completedPayments: completedPayments._count,
         money: completedPayments._sum.amount ?? 0,
         services: user.services.length,
       },
+      projects: allProjects.map((p) => ({
+        id: p.id,
+        jobId: p.job.id,
+        title: p.job.title,
+        category: p.job.category,
+        status: p.status,
+        progress: p.progress,
+        totalMilestones: p.milestones.length,
+        completedMilestones: p.milestones.filter((m) => m.status === "APPROVED").length,
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString(),
+      })),
     });
   } catch {
     return NextResponse.json({ error: "Unable to load user details." }, { status: 500 });

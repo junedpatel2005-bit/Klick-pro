@@ -15,6 +15,12 @@ export async function GET(request: NextRequest) {
     const verificationsDate = seenVerifications ? new Date(seenVerifications) : null;
     const operationsDate = seenOperations ? new Date(seenOperations) : null;
 
+    const allAdmins = await db.user.findMany({
+      where: { role: "ADMIN" },
+      select: { id: true },
+    });
+    const adminIds = allAdmins.map((a) => a.id);
+
     const [newUsers, verification, jobs, notifications, messages] = await Promise.all([
       db.userNotification.count({
         where: { userId: session.userId, type: "NEW_ACCOUNT", readAt: null },
@@ -47,7 +53,7 @@ export async function GET(request: NextRequest) {
           NOT: [{ type: { startsWith: "HIRE_" } }],
         },
       }),
-      db.socketMessage.count({ where: { receiverId: session.userId, readAt: null } }),
+      db.socketMessage.count({ where: { receiverId: { in: adminIds }, readAt: null } }),
     ]);
     return NextResponse.json({ newUsers, verification, jobs, notifications, messages });
   } catch {

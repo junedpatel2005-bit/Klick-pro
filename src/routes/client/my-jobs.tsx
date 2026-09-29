@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { io } from "socket.io-client";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Archive,
@@ -142,35 +141,37 @@ export default function MyJobs() {
     checkPosted();
   }, []);
 
-  useEffect(() => {
-    const socket = io({
-      path: "/api/realtime",
-      withCredentials: true,
-      transports: ["websocket", "polling"],
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-    });
-    const refresh = () => {
-      void fetch("/api/v1/client/jobs", { cache: "no-store" })
-        .then((response) => (response.ok ? response.json() : Promise.reject()))
-        .then((data: { jobs: Job[] }) => setJobs(data.jobs))
-        .catch(() => undefined);
-    };
-    socket.on("proposal:new", refresh);
-    socket.on("project:updated", refresh);
-    socket.on("notification:new", refresh);
+  const inFlightRef = useRef(false);
+  const lastLoadedRef = useRef(0);
 
-    window.addEventListener("servio:notification", refresh);
-    window.addEventListener("servio:project-update", refresh);
+  const refresh = (force = false) => {
+    const now = Date.now();
+    if (!force && inFlightRef.current) return;
+    if (!force && now - lastLoadedRef.current < 600) return;
+    inFlightRef.current = true;
+
+    void fetch("/api/v1/client/jobs", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((data: { jobs: Job[] }) => {
+        setJobs(data.jobs);
+        lastLoadedRef.current = Date.now();
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        inFlightRef.current = false;
+      });
+  };
+
+  useEffect(() => {
+    const onUpdate = () => refresh(true);
+    window.addEventListener("servio:notification", onUpdate);
+    window.addEventListener("servio:project-update", onUpdate);
+    window.addEventListener("servio:proposal", onUpdate);
 
     return () => {
-      socket.off("proposal:new", refresh);
-      socket.off("project:updated", refresh);
-      socket.off("notification:new", refresh);
-      socket.disconnect();
-      window.removeEventListener("servio:notification", refresh);
-      window.removeEventListener("servio:project-update", refresh);
+      window.removeEventListener("servio:notification", onUpdate);
+      window.removeEventListener("servio:project-update", onUpdate);
+      window.removeEventListener("servio:proposal", onUpdate);
     };
   }, []);
 

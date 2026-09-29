@@ -246,12 +246,16 @@ export function ProjectDisputeCenter({
   dispute,
   disputeMessages = [],
   disputeCount = 0,
-  disputeLimit = 3,
+  disputeLimit = 5,
   canRaiseDispute = false,
   onAction,
   busyAction,
   onPayMilestone,
 }: ProjectDisputeCenterProps) {
+  // TEMPORARY HIDDEN (Dispute System): To unhide, set to true
+  const SHOW_DISPUTE_CENTER = false as boolean;
+  if (!SHOW_DISPUTE_CENTER) return null;
+
   const isClient = viewerRole === "CLIENT";
   const isReporter = dispute ? dispute.reporterId === viewerUserId : false;
   const isRespondent = dispute && !isReporter;
@@ -516,6 +520,10 @@ export function ProjectDisputeCenter({
   const isResolved = dispute?.status === "RESOLVED";
 
   const totalUsed = disputeCount || (dispute ? dispute.disputeRound : 0);
+  // Cap the displayed limit: if a project already used more disputes than the current disputeLimit
+  // (e.g. 4 disputes were raised when limit was 5, now admin lowered to 3),
+  // show totalUsed (4) as the denominator so it cleanly displays "4 of 4 Used" instead of "4 of 3 Used".
+  const effectiveLimit = Math.max(disputeLimit, totalUsed);
   const remainingAllowance = Math.max(0, disputeLimit - totalUsed);
 
   return (
@@ -542,7 +550,7 @@ export function ProjectDisputeCenter({
                         : ""
                     }`}
                   >
-                    {isResolved ? "Resolved" : `Round ${dispute.disputeRound} of ${disputeLimit}`}
+                    {isResolved ? "Resolved" : `Round ${dispute.disputeRound} of ${effectiveLimit}`}
                   </Badge>
                 )}
               </h2>
@@ -560,7 +568,7 @@ export function ProjectDisputeCenter({
               Dispute Allowance
             </p>
             <p className="text-xs font-bold text-foreground">
-              {totalUsed} of {disputeLimit} Used{" "}
+              {totalUsed} of {effectiveLimit} Used{" "}
               <span className="text-muted-foreground font-normal">
                 ({remainingAllowance} remaining)
               </span>
@@ -588,7 +596,7 @@ export function ProjectDisputeCenter({
           <ShieldAlert className="mx-auto h-8 w-8 text-muted-foreground" />
           <h3 className="mt-2 text-sm font-semibold text-foreground">Dispute Limit Reached</h3>
           <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
-            The maximum allowance of {disputeLimit} disputes has been reached for this project
+            The maximum allowance of {effectiveLimit} disputes has been reached for this project
             contract. Please reach out directly to customer support if you need further help.
           </p>
         </div>
@@ -643,7 +651,7 @@ export function ProjectDisputeCenter({
                     {isRespondent ? "Action Required" : "Awaiting Other Party"}
                   </Badge>
                   <span className="text-xs text-muted-foreground">
-                    Dispute #{dispute.id} (Round {dispute.disputeRound} of {disputeLimit})
+                    Dispute #{dispute.id} (Round {dispute.disputeRound} of {effectiveLimit})
                   </span>
                 </div>
                 <h3 className="mt-1.5 text-base font-bold text-foreground">
@@ -929,7 +937,7 @@ export function ProjectDisputeCenter({
                     Under Administrative Review
                   </Badge>
                   <span className="text-xs text-muted-foreground">
-                    Case #{dispute.id} (Round {dispute.disputeRound} of {disputeLimit})
+                    Case #{dispute.id} (Round {dispute.disputeRound} of {effectiveLimit})
                   </span>
                 </div>
                 <h3 className="mt-2 text-base font-bold text-foreground">

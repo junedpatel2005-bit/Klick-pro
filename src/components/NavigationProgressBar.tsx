@@ -65,12 +65,14 @@ function NavigationProgressBarInner() {
     return () => window.removeEventListener("click", handleClick, { capture: true });
   }, []);
 
-  if (!navigating && progress === 0) return null;
+  const isVisible = navigating || progress > 0;
 
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none fixed top-0 left-0 right-0 z-[99999] h-1 overflow-hidden bg-transparent"
+      className={`pointer-events-none fixed top-0 left-0 right-0 z-[99999] h-1 overflow-hidden bg-transparent transition-opacity duration-300 ${
+        isVisible ? "opacity-100" : "opacity-0"
+      }`}
     >
       <div
         className="h-full bg-gradient-to-r from-indigo-500 via-primary to-cyan-400 shadow-[0_0_12px_rgba(99,102,241,0.8)] transition-all duration-300 ease-out"

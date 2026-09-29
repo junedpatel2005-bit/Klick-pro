@@ -147,3 +147,40 @@ export type MarketplaceJob = {
   }[];
   milestones?: MarketplaceJobMilestone[];
 };
+
+export type PublicClientJobItem = {
+  id: number;
+  title: string;
+  category: string;
+  budgetMin: number | null;
+  budgetMax: number | null;
+  timingType: "FIXED" | "HOURLY";
+  hourlyRate: number | null;
+  location: string | null;
+  workMode: string;
+  urgency: string;
+  createdAt: string;
+};
+
+export type PublicClientProfile = {
+  id: number;
+  name: string;
+  firstName: string;
+  lastName: string;
+  avatar: string | null;
+  rating: number;
+  reviewCount: number;
+  verified: boolean;
+  memberSince: string;
+  companyName: string | null;
+  companyWebsite: string | null;
+  industry: string | null;
+  teamSize: string | null;
+  companyDescription: string | null;
+  location: string | null;
+  totalJobsPosted: number;
+  completedProjectsCount: number;
+  openJobsCount: number;
+  openJobs: PublicClientJobItem[];
+  reviewsList: PublicReviewItem[];
+};

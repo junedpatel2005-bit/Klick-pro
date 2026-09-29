@@ -51,11 +51,11 @@ export const clientMobileItems: NavigationItem[] = [
 
 export const professionalMobileItems: NavigationItem[] = [
   { to: "/professional/dashboard", icon: Home, label: "Home" },
-  { to: "/professional/my-jobs", icon: Briefcase, label: "Find Jobs" },
+  { to: "/professional/my-jobs", icon: Briefcase, label: "Jobs" },
   { to: "/professional/running-projects", icon: Briefcase, label: "Active" },
   { to: "/professional/reviews", icon: Star, label: "Reviews" },
   { to: "/professional/messages", icon: MessageSquare, label: "Messages" },
   { to: "/earnings", icon: Wallet, label: "Earnings" },
-  { to: "/notifications", icon: BellRing, label: "Notifications" },
+  { to: "/notifications", icon: BellRing, label: "Alerts" },
   { to: "/professional-profile?from=dashboard", icon: User, label: "Profile" },
 ];

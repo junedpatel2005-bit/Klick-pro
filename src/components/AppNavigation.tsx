@@ -15,6 +15,9 @@ export type NavigationUser = {
   avatarUrl: string | null;
 };
 
+import { fetchUnreadMessagesCount } from "@/lib/messages-client";
+import { fetchPortalNotifications, invalidateNotificationsCache } from "@/lib/notifications-client";
+
 function useUnreadMessages(pathname: string) {
   const [count, setCount] = useState(0);
   useEffect(() => {
@@ -22,61 +25,66 @@ function useUnreadMessages(pathname: string) {
       setCount(0);
       return;
     }
-    const load = () => {
-      void fetch("/api/v1/messages", { cache: "no-store" })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((data: { contacts?: { unreadCount?: number }[] } | null) =>
-          setCount(
-            data?.contacts?.reduce((total, contact) => total + (contact.unreadCount ?? 0), 0) ?? 0,
-          ),
-        )
-        .catch(() => setCount(0));
+    let active = true;
+    const load = (force = false) => {
+      void fetchUnreadMessagesCount({ force }).then((unread) => {
+        if (active) setCount(unread);
+      });
     };
     load();
-    window.addEventListener("servio:message", load);
-    window.addEventListener("servio:message-read", load);
-    window.addEventListener("servio:notifications-read", load);
+    const onMessage = () => load(true);
+    window.addEventListener("servio:message", onMessage);
+    window.addEventListener("servio:message-read", onMessage);
     return () => {
-      window.removeEventListener("servio:message", load);
-      window.removeEventListener("servio:message-read", load);
-      window.removeEventListener("servio:notifications-read", load);
+      active = false;
+      window.removeEventListener("servio:message", onMessage);
+      window.removeEventListener("servio:message-read", onMessage);
     };
   }, [pathname]);
   return count;
 }
+
+let lastNotificationPatchTime = 0;
 
 function useUnreadNotifications(pathname: string) {
   const [count, setCount] = useState(0);
   useEffect(() => {
     if (pathname.startsWith("/notifications")) {
       setCount(0);
-      void fetch("/api/portal/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ all: true }),
-      }).then(() => window.dispatchEvent(new CustomEvent("servio:notifications-read")));
+      const now = Date.now();
+      if (now - lastNotificationPatchTime > 3000) {
+        lastNotificationPatchTime = now;
+        void fetch("/api/portal/notifications", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ all: true }),
+        }).then(() => {
+          invalidateNotificationsCache();
+          window.dispatchEvent(new CustomEvent("servio:notifications-read"));
+        });
+      }
       return;
     }
-    const load = () => {
-      void fetch("/api/portal/notifications", { cache: "no-store" })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((data: { readAt?: string | null }[] | null) =>
-          setCount(data?.filter((notification) => !notification.readAt).length ?? 0),
-        )
-        .catch(() => setCount(0));
+    let active = true;
+    const load = (force = false) => {
+      void fetchPortalNotifications({ force }).then((notifications) => {
+        if (active) {
+          setCount(notifications.filter((notification) => !notification.readAt).length);
+        }
+      });
     };
     load();
-    window.addEventListener("servio:notification", load);
-    window.addEventListener("servio:notifications-read", load);
-    window.addEventListener("servio:message", load);
-    window.addEventListener("servio:message-read", load);
-    window.addEventListener("focus", load);
+    const onNotification = () => load(true);
+    const onNotificationsRead = () => {
+      setCount(0);
+      invalidateNotificationsCache();
+    };
+    window.addEventListener("servio:notification", onNotification);
+    window.addEventListener("servio:notifications-read", onNotificationsRead);
     return () => {
-      window.removeEventListener("servio:notification", load);
-      window.removeEventListener("servio:notifications-read", load);
-      window.removeEventListener("servio:message", load);
-      window.removeEventListener("servio:message-read", load);
-      window.removeEventListener("focus", load);
+      active = false;
+      window.removeEventListener("servio:notification", onNotification);
+      window.removeEventListener("servio:notifications-read", onNotificationsRead);
     };
   }, [pathname]);
   return count;
@@ -184,17 +192,19 @@ export function AppSidebar({
                   {unreadMessages > 99 ? "99+" : unreadMessages}
                 </span>
               )}
-              {item.label === "Notifications" && unreadNotifications > 0 && !active && (
-                <span
-                  className={
-                    collapsed
-                      ? "absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-cta px-1 text-[9px] font-bold text-cta-foreground"
-                      : "ml-auto mr-3 grid h-5 min-w-5 place-items-center rounded-full bg-cta px-1 text-[10px] font-bold text-cta-foreground"
-                  }
-                >
-                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                </span>
-              )}
+              {(item.label === "Notifications" || item.label === "Alerts") &&
+                unreadNotifications > 0 &&
+                !active && (
+                  <span
+                    className={
+                      collapsed
+                        ? "absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-cta px-1 text-[9px] font-bold text-cta-foreground"
+                        : "ml-auto mr-3 grid h-5 min-w-5 place-items-center rounded-full bg-cta px-1 text-[10px] font-bold text-cta-foreground"
+                    }
+                  >
+                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                  </span>
+                )}
             </Link>
           );
         })}
@@ -249,28 +259,42 @@ export function AppMobileNavigation({
   const unreadNotifications = useUnreadNotifications(pathname);
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur-md lg:hidden">
-      <div className="grid grid-cols-6">
+      <div className="flex items-center justify-around w-full px-1 py-1.5 overflow-x-auto no-scrollbar">
         {items.map((item) => {
           const itemPath = item.to.split("?")[0];
           const active = pathname === itemPath || pathname.startsWith(`${itemPath}/`);
+          const isMessages = item.label === "Messages" || item.to.includes("/messages");
+          const isNotifications =
+            item.label === "Notifications" ||
+            item.label === "Alerts" ||
+            item.to.includes("/notifications");
+          const badgeCount = isMessages
+            ? unreadMessages
+            : isNotifications
+              ? unreadNotifications
+              : 0;
+
           return (
             <Link
               key={item.label}
               href={item.to}
-              className={`flex flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] transition-colors ${active ? "text-primary" : "text-muted-foreground"}`}
+              className={`group flex flex-1 min-w-0 flex-col items-center justify-center gap-1 py-1 px-0.5 text-center transition-colors ${
+                active
+                  ? "text-primary font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
-              <item.icon className="h-5 w-5" />
-              {item.label === "Messages" && unreadMessages > 0 && !active && (
-                <span className="absolute ml-5 mt-[-18px] grid h-4 min-w-4 place-items-center rounded-full bg-cta px-1 text-[9px] font-bold text-cta-foreground">
-                  {unreadMessages > 99 ? "99+" : unreadMessages}
-                </span>
-              )}
-              {item.label === "Notifications" && unreadNotifications > 0 && !active && (
-                <span className="absolute ml-5 mt-[-18px] grid h-4 min-w-4 place-items-center rounded-full bg-cta px-1 text-[9px] font-bold text-cta-foreground">
-                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                </span>
-              )}
-              {item.label}
+              <div className="relative grid place-items-center">
+                <item.icon className="h-4.5 w-4.5 sm:h-5 sm:w-5 shrink-0 transition-transform group-active:scale-90" />
+                {badgeCount > 0 && !active && (
+                  <span className="absolute -top-1 -right-2 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-cta px-0.5 text-[8px] font-bold text-cta-foreground leading-none shadow-xs">
+                    {badgeCount > 99 ? "99+" : badgeCount}
+                  </span>
+                )}
+              </div>
+              <span className="w-full truncate text-[9.5px] sm:text-[10px] leading-tight tracking-tight text-center">
+                {item.label}
+              </span>
             </Link>
           );
         })}

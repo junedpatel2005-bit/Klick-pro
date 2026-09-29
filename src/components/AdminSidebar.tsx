@@ -20,6 +20,7 @@ import {
   UsersRound,
   Wrench,
   Sliders,
+  Smartphone,
 } from "lucide-react";
 
 const linkGroups = [
@@ -36,7 +37,7 @@ const linkGroups = [
       },
       {
         href: "/admin/operations",
-        label: "Jobs & disputes",
+        label: "Jobs",
         icon: BriefcaseBusiness,
         badge: "jobs",
       },
@@ -54,6 +55,7 @@ const linkGroups = [
     group: "PLATFORM & CONTENT",
     items: [
       { href: "/admin/templates", label: "Email templates", icon: Mail },
+      { href: "/admin/sms-templates", label: "SMS templates", icon: Smartphone },
       { href: "/admin/support", label: "Support & FAQs", icon: FileText },
       { href: "/admin/cms", label: "Website content", icon: FileText },
       { href: "/admin/settings", label: "Platform settings", icon: Sliders },
@@ -72,11 +74,22 @@ export function AdminSidebar() {
   const [counts, setCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
+    let inflight = false;
+    let lastLoaded = 0;
     const load = () => {
+      const now = Date.now();
+      if (inflight || now - lastLoaded < 600) return;
+      inflight = true;
       void fetch("/api/admin/sidebar-counts", { cache: "no-store" })
         .then((response) => (response.ok ? response.json() : null))
-        .then((data: Record<string, number> | null) => setCounts(data ?? {}))
-        .catch(() => setCounts({}));
+        .then((data: Record<string, number> | null) => {
+          setCounts(data ?? {});
+          lastLoaded = Date.now();
+        })
+        .catch(() => setCounts({}))
+        .finally(() => {
+          inflight = false;
+        });
     };
     load();
     window.addEventListener("servio:notification", load);

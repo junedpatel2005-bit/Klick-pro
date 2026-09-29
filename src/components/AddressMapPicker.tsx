@@ -1,15 +1,18 @@
 "use client";
+
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { matchIndiaLocation } from "@/lib/india-locations";
+
 const GoogleMapView = dynamic(() => import("@/components/GoogleAddressMap"), {
   ssr: false,
   loading: () => <div className="h-64 animate-pulse rounded-lg bg-muted" />,
 });
+
 type Result = {
   address: string;
   lat: number;
@@ -18,6 +21,7 @@ type Result = {
   city?: string | null;
   district?: string | null;
 };
+
 export function AddressMapPicker({
   id,
   value,
@@ -51,19 +55,56 @@ export function AddressMapPicker({
   const [pinStatus, setPinStatus] = useState("");
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  // Track the address that was selected by user or resolved from pin to prevent unwanted dropdowns
+  const lastSelectedAddressRef = useRef<string>(value);
+  const autoHideTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearAutoHideTimer = useCallback(() => {
+    if (autoHideTimerRef.current) {
+      clearTimeout(autoHideTimerRef.current);
+      autoHideTimerRef.current = null;
+    }
+  }, []);
+
+  const startAutoHideTimer = useCallback(() => {
+    clearAutoHideTimer();
+    autoHideTimerRef.current = setTimeout(() => {
+      setShowDropdown(false);
+    }, 3500);
+  }, [clearAutoHideTimer]);
+
+  useEffect(() => {
+    return () => clearAutoHideTimer();
+  }, [clearAutoHideTimer]);
+
   useEffect(() => {
     if (coordinates && Number.isFinite(coordinates[0]) && Number.isFinite(coordinates[1])) {
       setPoint(coordinates);
     }
   }, [coordinates]);
+
   useEffect(() => {
+    // If the value matches the address that was just selected or resolved from pin, do NOT search or show dropdown
+    if (value && value === lastSelectedAddressRef.current) {
+      setResults([]);
+      setShowDropdown(false);
+      clearAutoHideTimer();
+      setSearching(false);
+      return;
+    }
+
     if (value.trim().length < 3) {
       setResults([]);
+      setShowDropdown(false);
+      clearAutoHideTimer();
       setSearching(false);
       setSearched(false);
       setSearchStatus("");
       return;
     }
+
     setSearching(true);
     const t = setTimeout(async () => {
       const controller = new AbortController();
@@ -73,14 +114,20 @@ export function AddressMapPicker({
           signal: controller.signal,
         });
         const d = (await r.json()) as { results?: Result[]; error?: string };
-        setResults(
-          (d.results ?? []).filter(
-            (item) => Number.isFinite(item.lat) && Number.isFinite(item.lon),
-          ),
+        const valid = (d.results ?? []).filter(
+          (item) => Number.isFinite(item.lat) && Number.isFinite(item.lon),
         );
+        setResults(valid);
+        if (valid.length > 0) {
+          setShowDropdown(true);
+          startAutoHideTimer();
+        } else {
+          setShowDropdown(false);
+        }
         setSearchStatus(d.error ?? "");
       } catch (error) {
         setResults([]);
+        setShowDropdown(false);
         setSearchStatus(
           error instanceof Error && error.name === "AbortError"
             ? "Address search timed out. You can still enter an address manually."
@@ -91,9 +138,52 @@ export function AddressMapPicker({
         setSearching(false);
         setSearched(true);
       }
-    }, 650);
+    }, 500);
     return () => clearTimeout(t);
-  }, [value]);
+  }, [value, startAutoHideTimer, clearAutoHideTimer]);
+
+  const handleSelectLocation = useCallback(
+    (item: Result) => {
+      lastSelectedAddressRef.current = item.address;
+      onChange(item.address);
+      if (onManualAddressChange) onManualAddressChange(item.address);
+      setPoint([item.lat, item.lon]);
+      onCoordinatesChange?.(item.lat, item.lon);
+      const matched = matchIndiaLocation(item.state, item.district);
+      onLocationChange?.(matched.state, item.city || item.district || matched.district);
+      setResults([]);
+      setShowDropdown(false);
+      clearAutoHideTimer();
+      setSearched(false);
+      setSearchStatus("");
+    },
+    [onChange, onManualAddressChange, onCoordinatesChange, onLocationChange, clearAutoHideTimer],
+  );
+
+  const handleInputFocusOrClick = useCallback(async () => {
+    if (results.length > 0) {
+      setShowDropdown(true);
+      startAutoHideTimer();
+      return;
+    }
+    if (value.trim().length >= 3) {
+      try {
+        const r = await fetch(`/api/geocode?q=${encodeURIComponent(value)}`);
+        const d = (await r.json()) as { results?: Result[] };
+        const valid = (d.results ?? []).filter(
+          (item) => Number.isFinite(item.lat) && Number.isFinite(item.lon),
+        );
+        if (valid.length > 0) {
+          setResults(valid);
+          setShowDropdown(true);
+          startAutoHideTimer();
+        }
+      } catch {
+        // Ignored
+      }
+    }
+  }, [results.length, value, startAutoHideTimer]);
+
   async function resolve(lat: number, lon: number) {
     setPoint([lat, lon]);
     onCoordinatesChange?.(lat, lon);
@@ -102,6 +192,7 @@ export function AddressMapPicker({
       const r = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
       const d = (await r.json()) as { results?: Result[]; error?: string };
       if (d.results?.[0]) {
+        lastSelectedAddressRef.current = d.results[0].address;
         onChange(d.results[0].address);
         if (onManualAddressChange) onManualAddressChange(d.results[0].address);
         const matched = matchIndiaLocation(d.results[0].state, d.results[0].district);
@@ -109,8 +200,13 @@ export function AddressMapPicker({
           matched.state,
           d.results[0].city || d.results[0].district || matched.district,
         );
+        setResults([]);
+        setShowDropdown(false);
+        clearAutoHideTimer();
         setPinStatus("");
-      } else setPinStatus(d.error ?? "Address not found for that point.");
+      } else {
+        setPinStatus(d.error ?? "Address not found for that point.");
+      }
     } catch {
       setPinStatus("Could not look up that location. You can still enter an address manually.");
     }
@@ -138,7 +234,7 @@ export function AddressMapPicker({
                 () => setPinStatus("Location permission was not granted."),
               );
             }}
-            className="gap-1.5 h-8 text-xs"
+            className="gap-1.5 h-8 text-xs cursor-pointer"
           >
             <MapPin className="h-3.5 w-3.5 text-primary" />
             Use my current location
@@ -155,46 +251,30 @@ export function AddressMapPicker({
             id={id}
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            onClick={handleInputFocusOrClick}
+            onFocus={handleInputFocusOrClick}
             onKeyDown={(e) => {
               if (e.key !== "Enter" || !results[0]) return;
               e.preventDefault();
-              const item = results[0];
-              onChange(item.address);
-              if (onManualAddressChange) onManualAddressChange(item.address);
-              setPoint([item.lat, item.lon]);
-              onCoordinatesChange?.(item.lat, item.lon);
-              const matched = matchIndiaLocation(item.state, item.district);
-              onLocationChange?.(matched.state, item.city || item.district || matched.district);
-              setResults([]);
-              setSearched(false);
-              setSearchStatus("");
+              handleSelectLocation(results[0]);
             }}
             placeholder="Type area, landmark, or street to locate on map..."
             maxLength={300}
           />
         </div>
         {searching && <p className="text-xs text-muted-foreground">Searching…</p>}
-        {!searching && results.length > 0 && (
-          <ul className="max-h-56 overflow-y-auto rounded-lg border bg-card shadow-md">
+        {!searching && showDropdown && results.length > 0 && (
+          <ul
+            onMouseEnter={clearAutoHideTimer}
+            onMouseLeave={startAutoHideTimer}
+            className="max-h-56 overflow-y-auto rounded-lg border bg-card shadow-md animate-in fade-in-50 duration-150"
+          >
             {results.map((item) => (
               <li key={`${item.lat}-${item.lon}`}>
                 <button
                   type="button"
-                  className="flex w-full items-start gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-muted"
-                  onClick={() => {
-                    onChange(item.address);
-                    if (onManualAddressChange) onManualAddressChange(item.address);
-                    setPoint([item.lat, item.lon]);
-                    onCoordinatesChange?.(item.lat, item.lon);
-                    const matched = matchIndiaLocation(item.state, item.district);
-                    onLocationChange?.(
-                      matched.state,
-                      item.city || item.district || matched.district,
-                    );
-                    setResults([]);
-                    setSearched(false);
-                    setSearchStatus("");
-                  }}
+                  className="flex w-full items-start gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-muted cursor-pointer"
+                  onClick={() => handleSelectLocation(item)}
                 >
                   <MapPin className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
                   <span className="min-w-0">
@@ -261,6 +341,7 @@ export function AddressMapPicker({
               () => setPinStatus("Location permission was not granted."),
             );
           }}
+          className="cursor-pointer"
         >
           Use my current location
         </Button>
@@ -272,41 +353,30 @@ export function AddressMapPicker({
           id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onClick={handleInputFocusOrClick}
+          onFocus={handleInputFocusOrClick}
           onKeyDown={(e) => {
             if (e.key !== "Enter" || !results[0]) return;
             e.preventDefault();
-            const item = results[0];
-            onChange(item.address);
-            setPoint([item.lat, item.lon]);
-            onCoordinatesChange?.(item.lat, item.lon);
-            const matched = matchIndiaLocation(item.state, item.district);
-            onLocationChange?.(matched.state, item.city || item.district || matched.district);
-            setResults([]);
-            setSearched(false);
-            setSearchStatus("");
+            handleSelectLocation(results[0]);
           }}
           placeholder="Enter complete address: house no., street, area, city, state and PIN code"
           maxLength={300}
         />
       </div>
       {searching && <p className="text-sm text-muted-foreground">Searching…</p>}
-      {!searching && results.length > 0 && (
-        <ul className="max-h-72 overflow-y-auto rounded-lg border bg-card shadow-md">
+      {!searching && showDropdown && results.length > 0 && (
+        <ul
+          onMouseEnter={clearAutoHideTimer}
+          onMouseLeave={startAutoHideTimer}
+          className="max-h-72 overflow-y-auto rounded-lg border bg-card shadow-md animate-in fade-in-50 duration-150"
+        >
           {results.map((item) => (
             <li key={`${item.lat}-${item.lon}`}>
               <button
                 type="button"
-                className="flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted"
-                onClick={() => {
-                  onChange(item.address);
-                  setPoint([item.lat, item.lon]);
-                  onCoordinatesChange?.(item.lat, item.lon);
-                  const matched = matchIndiaLocation(item.state, item.district);
-                  onLocationChange?.(matched.state, item.city || item.district || matched.district);
-                  setResults([]);
-                  setSearched(false);
-                  setSearchStatus("");
-                }}
+                className="flex w-full items-start gap-2 px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted cursor-pointer"
+                onClick={() => handleSelectLocation(item)}
               >
                 <MapPin className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
                 <span className="min-w-0">

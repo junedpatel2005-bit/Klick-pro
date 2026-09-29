@@ -11,6 +11,7 @@ import {
   emitAdminVerificationsUpdate,
 } from "@/lib/realtime";
 import { sendNotificationEmail } from "@/lib/email";
+import { sendSms, resolveSmsTemplate } from "@/lib/sms/engine";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
 
 type BroadcastNotification = {
@@ -72,6 +73,72 @@ async function sendEmails(
       logServerError("marketplace.notification.email.failed", result.reason, {
         type: notification.type,
       });
+  });
+}
+
+async function sendSmsNotifications(
+  recipients: Array<{
+    id: number;
+    phone?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    role?: string | null;
+  }>,
+  notification: BroadcastNotification,
+) {
+  const validRecipients = recipients.filter(
+    (recipient) => recipient.phone && recipient.phone.trim().length >= 8,
+  );
+  if (!validRecipients.length) return;
+
+  const results = await Promise.allSettled(
+    validRecipients.map((recipient) => {
+      const recipientName =
+        [recipient.firstName, recipient.lastName].filter(Boolean).join(" ").trim() ||
+        recipient.firstName ||
+        "";
+
+      const audience =
+        (recipient.role as "CLIENT" | "PROFESSIONAL" | "ADMIN" | "SYSTEM") || undefined;
+      const templateKey = resolveSmsTemplate(notification.type, audience);
+      if (!templateKey) return Promise.resolve({ ok: true, provider: "noop" as const });
+
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://klickpro.in";
+      const shortUrl = notification.href.startsWith("http")
+        ? notification.href
+        : `${appUrl}${notification.href}`;
+
+      return sendSms({
+        to: recipient.phone!.trim(),
+        templateKey,
+        variables: {
+          ...notification.templateVariables,
+          user_name: recipientName || "there",
+          client_name:
+            recipient.role === "CLIENT"
+              ? recipientName || "Client"
+              : (notification.templateVariables?.client_name ?? "Client"),
+          professional_name:
+            recipient.role === "PROFESSIONAL"
+              ? recipientName || "Professional"
+              : (notification.templateVariables?.professional_name ?? "Professional"),
+          prof_name:
+            recipient.role === "PROFESSIONAL"
+              ? recipientName || "Professional"
+              : (notification.templateVariables?.prof_name ?? "Professional"),
+          short_url: shortUrl,
+          site_url: appUrl,
+        },
+      });
+    }),
+  );
+
+  results.forEach((result) => {
+    if (result.status === "rejected") {
+      logServerError("marketplace.notification.sms.failed", result.reason, {
+        type: notification.type,
+      });
+    }
   });
 }
 
@@ -261,6 +328,7 @@ async function notifyRole(
         lastName: true,
         role: true,
         email: true,
+        phone: true,
         emailNotificationsEnabled: true,
       },
     });
@@ -301,6 +369,19 @@ async function notifyRole(
         type: notification.type,
       },
     );
+    // SMS notification
+    enqueueBackgroundJob(
+      "notification.sms.role",
+      () =>
+        sendSmsNotifications(recipients, {
+          ...storedNotification,
+          emailDetails,
+          templateVariables,
+        }),
+      {
+        type: notification.type,
+      },
+    );
   } catch (error) {
     // A failed notification must never block account creation or job publishing.
     logServerError("marketplace.notification.broadcast.failed", error, {
@@ -322,7 +403,7 @@ export function notifyAdminsOfNewAccount(user: {
     type: "NEW_ACCOUNT",
     title: `New ${roleLabel} registration`,
     description: `${name} registered as a ${roleLabel}.`,
-    href: `/admin/users?id=${user.id}`,
+    href: `/admin/users/${user.id}`,
     templateVariables: {
       user_name: name,
       client_name: name,
@@ -362,6 +443,7 @@ export async function notifyUsers(userIds: number[], notification: BroadcastNoti
         lastName: true,
         role: true,
         email: true,
+        phone: true,
         emailNotificationsEnabled: true,
       },
     });
@@ -378,6 +460,16 @@ export async function notifyUsers(userIds: number[], notification: BroadcastNoti
     enqueueBackgroundJob(
       "notification.email.direct",
       () => sendEmails(recipients, { ...storedNotification, emailDetails, templateVariables }),
+      { type: notification.type },
+    );
+    enqueueBackgroundJob(
+      "notification.sms.direct",
+      () =>
+        sendSmsNotifications(recipients, {
+          ...storedNotification,
+          emailDetails,
+          templateVariables,
+        }),
       { type: notification.type },
     );
   } catch (error) {

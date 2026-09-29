@@ -2,8 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import { calculateMilestoneMoney, fundMilestoneFromWallet } from "@/lib/wallet-ledger";
-import { notifyDisputeResolved, notifyMilestoneFunded } from "@/lib/marketplace-notifications";
+import {
+  calculateMilestoneMoney,
+  fundMilestoneFromWallet,
+  releaseMilestoneToProfessional,
+} from "@/lib/wallet-ledger";
+import { getPlatformCommissionRate, isAutopayEnabled } from "@/lib/platform-settings";
+import {
+  notifyDisputeResolved,
+  notifyMilestoneFunded,
+  notifyMilestonePayoutApproved,
+} from "@/lib/marketplace-notifications";
 import { emitAdminEvent, emitRealtimeProjectUpdate } from "@/lib/realtime";
 
 const schema = z.object({
@@ -43,7 +52,8 @@ export async function POST(request: NextRequest) {
       { error: "This milestone is not ready for payment." },
       { status: 409 },
     );
-  const money = calculateMilestoneMoney(milestone.amount);
+  const commissionRate = await getPlatformCommissionRate();
+  const money = calculateMilestoneMoney(milestone.amount, commissionRate);
   try {
     const result = await db.$transaction(
       async (tx) => {
@@ -71,7 +81,7 @@ export async function POST(request: NextRequest) {
             clientFeeAmount: money.clientFeeAmount,
             professionalPayoutAmount: money.professionalPayoutAmount,
             adminNetAmount: money.adminNetAmount,
-            commissionAmount: money.baseAmount - money.professionalPayoutAmount,
+            commissionAmount: money.professionalFeeAmount,
             currency: "INR",
             provider: "wallet",
             projectTrackingId: project.id,
@@ -82,19 +92,107 @@ export async function POST(request: NextRequest) {
           },
           update: {},
         });
-        if (payment.status === "COMPLETED" || payment.status === "FUNDED")
-          throw new Error("This milestone has already been funded.");
-        await fundMilestoneFromWallet(tx, {
-          paymentId: payment.id,
-          clientId: project.clientId,
-          professionalId: project.professionalId,
-          baseAmount: milestone.amount,
-          milestoneId: milestone.id,
-        });
-        await tx.payment.update({
-          where: { id: payment.id },
-          data: { status: "FUNDED", capturedAt: new Date() },
-        });
+        if (
+          payment.status === "COMPLETED" ||
+          payment.status === "FUNDED" ||
+          payment.status === "AWAITING_ADMIN_APPROVAL"
+        )
+          throw new Error("This milestone is already being processed or has already been funded.");
+
+        const autopay = await isAutopayEnabled();
+        if (autopay) {
+          // Instant Auto-Pay:
+          // Immediately cut from client wallet and add to professional wallet directly without admin clicking approve button!
+          await fundMilestoneFromWallet(tx, {
+            paymentId: payment.id,
+            clientId: project.clientId,
+            professionalId: project.professionalId,
+            baseAmount: milestone.amount,
+            milestoneId: milestone.id,
+            customCommissionRate: commissionRate,
+          });
+          await releaseMilestoneToProfessional(tx, {
+            paymentId: payment.id,
+            clientId: project.clientId,
+            professionalId: project.professionalId,
+            baseAmount: milestone.amount,
+            milestoneId: milestone.id,
+            customCommissionRate: commissionRate,
+          });
+          await tx.payment.update({
+            where: { id: payment.id },
+            data: {
+              status: "COMPLETED",
+              capturedAt: new Date(),
+              professionalPayoutAmount: money.professionalPayoutAmount,
+              commissionAmount: money.professionalFeeAmount,
+              adminNetAmount: money.adminNetAmount,
+            },
+          });
+          await tx.projectMilestone.update({
+            where: { id: milestone.id },
+            data: { status: "APPROVED", approvedAt: new Date() },
+          });
+
+          // Automatically start the next upcoming milestone so work can continue seamlessly
+          const nextMilestone = await tx.projectMilestone.findFirst({
+            where: {
+              trackingId: project.id,
+              id: { not: milestone.id },
+              status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+            },
+            orderBy: [{ id: "asc" }],
+          });
+          if (nextMilestone) {
+            await tx.projectMilestone.update({
+              where: { id: nextMilestone.id },
+              data: { status: "IN_PROGRESS" },
+            });
+            await tx.projectTracking.update({
+              where: { id: project.id },
+              data: { status: "IN_PROGRESS", currentStage: nextMilestone.title },
+            });
+          } else {
+            const remainingUnapproved = await tx.projectMilestone.count({
+              where: {
+                trackingId: project.id,
+                status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+              },
+            });
+            if (remainingUnapproved === 0) {
+              await tx.projectTracking.update({
+                where: { id: project.id },
+                data: { status: "IN_PROGRESS", currentStage: null },
+              });
+            }
+          }
+        } else {
+          // When Auto-Pay is OFF:
+          // Verify client has sufficient wallet balance, but do NOT cut from client yet!
+          // Put in AWAITING_ADMIN_APPROVAL status so admin can review.
+          // When admin clicks "Approve" at the earning/finance page, it will cut from client and add to professional!
+          const clientWallet = await tx.wallet.findUnique({
+            where: { userId: project.clientId },
+            select: { balance: true },
+          });
+          if (!clientWallet || clientWallet.balance < money.clientChargeAmount) {
+            throw new Error("Insufficient wallet balance.");
+          }
+          await tx.payment.update({
+            where: { id: payment.id },
+            data: {
+              status: "AWAITING_ADMIN_APPROVAL",
+              professionalPayoutAmount: money.professionalPayoutAmount,
+              commissionAmount: money.professionalFeeAmount,
+              adminNetAmount: money.adminNetAmount,
+            },
+          });
+          await tx.projectMilestone.update({
+            where: { id: milestone.id },
+            data: { status: "AWAITING_ADMIN_APPROVAL" },
+          });
+        }
+
         await tx.invoice.upsert({
           where: { paymentId: payment.id },
           create: {
@@ -109,44 +207,8 @@ export async function POST(request: NextRequest) {
           },
           update: {},
         });
-        await tx.projectMilestone.update({
-          where: { id: milestone.id },
-          data: { status: "APPROVED", approvedAt: new Date() },
-        });
 
-        // Automatically start the next upcoming milestone so work can continue seamlessly
-        const nextMilestone = await tx.projectMilestone.findFirst({
-          where: {
-            trackingId: project.id,
-            id: { not: milestone.id },
-            status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
-          },
-          orderBy: [{ id: "asc" }],
-        });
-        if (nextMilestone) {
-          await tx.projectMilestone.update({
-            where: { id: nextMilestone.id },
-            data: { status: "IN_PROGRESS" },
-          });
-          await tx.projectTracking.update({
-            where: { id: project.id },
-            data: { status: "IN_PROGRESS", currentStage: nextMilestone.title },
-          });
-        } else {
-          const remainingUnapproved = await tx.projectMilestone.count({
-            where: {
-              trackingId: project.id,
-              status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
-            },
-          });
-          if (remainingUnapproved === 0) {
-            await tx.projectTracking.update({
-              where: { id: project.id },
-              data: { status: "IN_PROGRESS", currentStage: null },
-            });
-          }
-        }
-
+        // 1. Entry 1: Milestone money transaction
         await tx.projectTransaction.create({
           data: {
             trackingId: project.id,
@@ -155,11 +217,31 @@ export async function POST(request: NextRequest) {
             professionalId: project.professionalId,
             amount: milestone.amount,
             currency: "INR",
-            type: "WALLET_MILESTONE_FUNDED",
-            status: "FUNDED",
-            description: `Milestone funded and completed: ${milestone.title}`,
+            type: autopay ? "WALLET_MILESTONE_COMPLETED" : "WALLET_MILESTONE_PENDING_APPROVAL",
+            status: autopay ? "COMPLETED" : "PENDING",
+            description: autopay
+              ? `Milestone payment: ${milestone.title}`
+              : `Milestone payment (pending approval): ${milestone.title}`,
           },
         });
+
+        // 2. Entry 2: Platform commission transaction
+        const feeAmount = money.professionalFeeAmount || money.clientFeeAmount;
+        if (feeAmount > 0) {
+          await tx.projectTransaction.create({
+            data: {
+              trackingId: project.id,
+              milestoneId: milestone.id,
+              clientId: project.clientId,
+              professionalId: project.professionalId,
+              amount: feeAmount,
+              currency: "INR",
+              type: "PLATFORM_COMMISSION",
+              status: autopay ? "COMPLETED" : "PENDING",
+              description: `Platform commission (10%): ${milestone.title}`,
+            },
+          });
+        }
 
         // Automatically resolve any active disputes for this contract upon client milestone payment
         const activeDisputes = await tx.projectDispute.findMany({
@@ -204,6 +286,7 @@ export async function POST(request: NextRequest) {
         return {
           remainingBalance: clientWallet?.balance ?? 0,
           resolvedDisputes: activeDisputes.map((d) => ({ id: d.id })),
+          autopay,
         };
       },
       { maxWait: 10000, timeout: 30000 },
@@ -227,14 +310,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    void notifyMilestoneFunded({
-      projectId: project.id,
-      milestoneId: milestone.id,
-      milestoneTitle: milestone.title,
-      amount: money.baseAmount,
-      clientId: project.clientId,
-      professionalId: project.professionalId,
-    }).catch(() => undefined);
+    if (result.autopay) {
+      void notifyMilestonePayoutApproved({
+        projectId: project.id,
+        milestoneTitle: milestone.title,
+        payoutAmount: money.professionalPayoutAmount,
+        platformEarnings: money.adminNetAmount,
+        clientId: project.clientId,
+        professionalId: project.professionalId,
+      }).catch(() => undefined);
+    } else {
+      void notifyMilestoneFunded({
+        projectId: project.id,
+        milestoneId: milestone.id,
+        milestoneTitle: milestone.title,
+        amount: money.baseAmount,
+        clientId: project.clientId,
+        professionalId: project.professionalId,
+      }).catch(() => undefined);
+    }
+
     emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
       projectId: project.id,
     });
@@ -242,14 +337,17 @@ export async function POST(request: NextRequest) {
       ok: true,
       charged: money.clientChargeAmount,
       milestoneAmount: money.baseAmount,
-      professionalReceives: money.baseAmount,
+      professionalReceives: money.professionalPayoutAmount,
       remainingBalance: result.remainingBalance,
       status: "APPROVED",
+      autopay: result.autopay,
       disputeResolved: result.resolvedDisputes.length > 0,
       message:
         result.resolvedDisputes.length > 0
           ? `Milestone paid with ₹${money.baseAmount.toLocaleString("en-IN")}. Dispute was automatically resolved and next stage started.`
-          : `Milestone paid with ₹${money.baseAmount.toLocaleString("en-IN")}. Milestone completed and next stage started.`,
+          : result.autopay
+            ? `Milestone paid with ₹${money.baseAmount.toLocaleString("en-IN")}. ₹${money.professionalPayoutAmount.toLocaleString("en-IN")} was instantly credited to the professional.`
+            : `Milestone paid with ₹${money.baseAmount.toLocaleString("en-IN")}. Funds held in escrow awaiting admin release.`,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "Insufficient wallet balance.")

@@ -39,6 +39,12 @@ export const DEFAULT_PLATFORM_SETTINGS: Record<
     description: "Days of inactivity before an unresolved dispute can be auto-escalated or settled",
     category: "DISPUTES",
   },
+  autopay_enabled: {
+    value: "true",
+    description:
+      "When ON, client milestone approvals automatically release net earnings to professional wallet after deducting admin commission. When OFF, payments remain held in admin review.",
+    category: "FINANCE",
+  },
 };
 
 export async function getPlatformSetting(key: string, fallback?: string): Promise<string> {
@@ -49,6 +55,36 @@ export async function getPlatformSetting(key: string, fallback?: string): Promis
     console.error("platform-settings.get.failed", { key, error });
   }
   return fallback ?? DEFAULT_PLATFORM_SETTINGS[key]?.value ?? "";
+}
+
+export async function getPlatformCommissionRate(): Promise<number> {
+  try {
+    const raw = await getPlatformSetting("commission_rate", "10");
+    const parsed = parseFloat(raw);
+    if (isNaN(parsed) || parsed < 0) return 0.1;
+    return parsed > 1 ? parsed / 100 : parsed;
+  } catch {
+    return 0.1;
+  }
+}
+
+export async function getMinWithdrawalAmount(): Promise<number> {
+  try {
+    const raw = await getPlatformSetting("min_withdrawal_amount", "500");
+    const parsed = parseInt(raw, 10);
+    return isNaN(parsed) || parsed <= 0 ? 500 : parsed;
+  } catch {
+    return 500;
+  }
+}
+
+export async function isAutopayEnabled(): Promise<boolean> {
+  try {
+    const raw = await getPlatformSetting("autopay_enabled", "true");
+    return raw === "true" || raw === "1" || raw === "on";
+  } catch {
+    return true;
+  }
 }
 
 export async function getPlatformSettings(): Promise<PlatformSettingItem[]> {

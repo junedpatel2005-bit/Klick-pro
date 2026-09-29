@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -413,8 +413,12 @@ const adminAction = (details: DisputeDetails) => {
 };
 
 function OperationsContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const disputeQueryId = searchParams.get("dispute");
+  const lastDisputeIdRef = useRef<number | null>(null);
+  // TEMPORARY HIDDEN (Dispute System): To unhide, set to true
+  const SHOW_DISPUTE_OPERATIONS = false as boolean;
   const [data, setData] = useState<OperationsData | null>(null);
   const [view, setView] = useState<"jobs" | "disputes">("jobs");
   const [query, setQuery] = useState("");
@@ -462,13 +466,20 @@ function OperationsContent() {
   }, []);
 
   useEffect(() => {
-    if (disputeQueryId) {
-      const id = Number(disputeQueryId);
-      if (id && !Number.isNaN(id) && (!selectedDispute || selectedDispute.dispute.id !== id)) {
+    const id = disputeQueryId ? Number(disputeQueryId) : null;
+    if (id && !Number.isNaN(id)) {
+      if (lastDisputeIdRef.current !== id) {
+        lastDisputeIdRef.current = id;
         void openDispute(id);
       }
+    } else {
+      if (lastDisputeIdRef.current !== null) {
+        lastDisputeIdRef.current = null;
+        setSelectedDispute(null);
+        setDisputeDetailsStatus("idle");
+      }
     }
-  }, [disputeQueryId, selectedDispute]);
+  }, [disputeQueryId]);
 
   const jobs = useMemo(
     () =>
@@ -516,11 +527,8 @@ function OperationsContent() {
   async function openDispute(id: number) {
     setDisputeDetailsStatus("loading");
     setSelectedDispute(null);
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.set("dispute", String(id));
-      window.history.pushState({}, "", url.toString());
-    }
+    lastDisputeIdRef.current = id;
+    router.replace(`/admin/operations?dispute=${id}`, { scroll: false });
     try {
       const response = await fetch(`/api/v1/admin/disputes/${id}`, { cache: "no-store" });
       if (!response.ok) throw new Error("Unable to load dispute details");
@@ -533,14 +541,10 @@ function OperationsContent() {
   }
 
   function closeDispute() {
+    lastDisputeIdRef.current = null;
     setSelectedDispute(null);
     setDisputeDetailsStatus("idle");
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("dispute");
-      url.searchParams.delete("project");
-      window.history.pushState({}, "", url.toString());
-    }
+    router.replace("/admin/operations", { scroll: false });
   }
 
   async function toggleDisputeStatus(details: DisputeDetails) {
@@ -666,7 +670,7 @@ function OperationsContent() {
 
   if (selectedDispute || disputeDetailsStatus !== "idle") {
     return (
-      <div className="pb-8 space-y-6">
+      <div key="operations-dispute-view" className="pb-8 space-y-6">
         {message ? (
           <div className="flex items-center justify-between rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 text-sm text-indigo-900 shadow-xs">
             <p>{message}</p>
@@ -743,7 +747,7 @@ function OperationsContent() {
   }
 
   return (
-    <div className="pb-5">
+    <div key="operations-queue-view" className="pb-5">
       <div className="relative overflow-hidden rounded-3xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50 via-white to-indigo-50/30 px-6 py-7 sm:px-8 shadow-xs">
         <div className="relative flex flex-wrap items-end justify-between gap-5">
           <div>
@@ -751,10 +755,10 @@ function OperationsContent() {
               Marketplace operations
             </p>
             <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-              Jobs & disputes
+              {SHOW_DISPUTE_OPERATIONS ? "Jobs & disputes" : "Operations & Jobs"}
             </h1>
             <p className="mt-1.5 max-w-xl text-sm leading-6 text-slate-500">
-              Monitor marketplace demand and keep service issues moving to resolution.
+              Monitor marketplace demand and keep operations running smoothly.
             </p>
           </div>
           <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
@@ -779,7 +783,11 @@ function OperationsContent() {
         <div className="mt-6 h-80 animate-pulse rounded-3xl bg-slate-100" />
       ) : (
         <>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <div
+            className={`mt-6 grid gap-4 sm:grid-cols-2 ${
+              SHOW_DISPUTE_OPERATIONS ? "xl:grid-cols-5" : "xl:grid-cols-4"
+            }`}
+          >
             <Metric
               icon={BriefcaseBusiness}
               label="Total jobs"
@@ -802,17 +810,19 @@ function OperationsContent() {
                 setFilter("ALL");
               }}
             />
-            <Metric
-              icon={Clock3}
-              label="Open disputes"
-              value={openDisputes}
-              detail="Need team attention"
-              color="amber"
-              onClick={() => {
-                setView("disputes");
-                setFilter("OPEN");
-              }}
-            />
+            {SHOW_DISPUTE_OPERATIONS ? (
+              <Metric
+                icon={Clock3}
+                label="Open disputes"
+                value={openDisputes}
+                detail="Need team attention"
+                color="amber"
+                onClick={() => {
+                  setView("disputes");
+                  setFilter("OPEN");
+                }}
+              />
+            ) : null}
             <Metric
               icon={BriefcaseBusiness}
               label="Running projects"
@@ -863,16 +873,18 @@ function OperationsContent() {
                   label="Jobs"
                   count={data.jobs.length}
                 />
-                <Tab
-                  active={view === "disputes"}
-                  onClick={() => {
-                    setView("disputes");
-                    setFilter("ALL");
-                  }}
-                  icon={CircleAlert}
-                  label="Disputes"
-                  count={data.disputes.length}
-                />
+                {SHOW_DISPUTE_OPERATIONS ? (
+                  <Tab
+                    active={view === "disputes"}
+                    onClick={() => {
+                      setView("disputes");
+                      setFilter("ALL");
+                    }}
+                    icon={CircleAlert}
+                    label="Disputes"
+                    count={data.disputes.length}
+                  />
+                ) : null}
               </div>
             </div>
             <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/50 p-4 sm:flex-row sm:items-center sm:px-6">
@@ -908,11 +920,17 @@ function OperationsContent() {
             </div>
             <div className="divide-y divide-slate-100">
               {view === "jobs"
-                ? jobs.map((job) => <JobRow key={job.id} job={job} onOpen={openJob} />)
+                ? jobs.map((job) => <JobRow key={`job-${job.id}`} job={job} onOpen={openJob} />)
                 : disputes.map((dispute) => (
-                    <DisputeRow key={dispute.id} dispute={dispute} onOpen={openDispute} />
+                    <DisputeRow
+                      key={`dispute-${dispute.id}`}
+                      dispute={dispute}
+                      onOpen={openDispute}
+                    />
                   ))}
-              {(view === "jobs" ? jobs : disputes).length === 0 && <Empty view={view} />}
+              {(view === "jobs" ? jobs : disputes).length === 0 && (
+                <Empty key={`empty-${view}`} view={view} />
+              )}
             </div>
           </section>
         </>
@@ -1720,6 +1738,8 @@ function DisputeDetailsPanel({
   const [partialPayout, setPartialPayout] = useState("");
   const [decisionNotes, setDecisionNotes] = useState("");
   const [executingDecision, setExecutingDecision] = useState(false);
+  // TEMPORARY HIDDEN (Dispute System Adjudication Suite): To unhide, set to true
+  const SHOW_DISPUTE_ADJUDICATION = false as boolean;
 
   // Target the specific disputed milestone instead of the entire contract budget
   const targetMilestone = details
@@ -1886,14 +1906,13 @@ function DisputeDetailsPanel({
             )}
           </div>
         </div>
-        {status === "loading" ? <div className="h-72 animate-pulse bg-slate-100" /> : null}
-        {status === "error" ? (
-          <p className="p-6 text-sm text-rose-700">
+        {status === "loading" ? (
+          <div key="loading-pulse" className="h-72 animate-pulse bg-slate-100" />
+        ) : status === "error" ? (
+          <p key="error-message" className="p-6 text-sm text-rose-700">
             Dispute details could not be loaded. Please try again.
           </p>
-        ) : null}
-        {details && dispute
-          ? (() => {
+        ) : details && dispute ? (() => {
               const milestoneUploads =
                 details.workUploads?.filter(
                   (u) => targetMilestone && u.milestoneId === targetMilestone.id,
@@ -1942,7 +1961,10 @@ function DisputeDetailsPanel({
               const respondentRole = dispute.reporterRole === "CLIENT" ? "PROFESSIONAL" : "CLIENT";
 
               return (
-                <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <div
+                  key="dispute-content"
+                  className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_340px]"
+                >
                   <div className="space-y-6">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge value={dispute.status} />
@@ -2374,7 +2396,9 @@ function DisputeDetailsPanel({
                     </div>
 
                     {/* 4. ADJUDICATION DECISION SUITE */}
-                    {details.dispute.status !== "RESOLVED" && (
+                    {SHOW_DISPUTE_ADJUDICATION &&
+                    details &&
+                    details.dispute.status !== "RESOLVED" ? (
                       <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50/50 p-5 space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
@@ -2463,7 +2487,6 @@ function DisputeDetailsPanel({
                           </button>
                         </div>
 
-                        {/* CLIENT WINS SPECIFIC ACTION SELECTOR */}
                         {selectedDecision === "CLIENT_WINS" && (
                           <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-3">
                             <p className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
@@ -2543,7 +2566,6 @@ function DisputeDetailsPanel({
                           </div>
                         )}
 
-                        {/* PROFESSIONAL WINS OUTCOME EXPLANATION */}
                         {selectedDecision === "PROFESSIONAL_WINS" && (
                           <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-2">
                             <p className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
@@ -2651,7 +2673,7 @@ function DisputeDetailsPanel({
                           </Button>
                         </div>
                       </div>
-                    )}
+                    ) : null}
 
                     {/* 5. DISPUTE COMMUNICATIONS & ARBITRATION THREAD */}
                     <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs">

@@ -308,6 +308,8 @@ export default function JobDetails({
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const [selectError, setSelectError] = useState<string | null>(null);
   const [hireTarget, setHireTarget] = useState<ProfessionalDiscoveryResult | null>(null);
+  // TEMPORARY HIDDEN (Dispute System): To unhide, set to true
+  const SHOW_DISPUTE_BUTTONS = false as boolean;
   const [hireBidAmount, setHireBidAmount] = useState("");
   const [hireDuration, setHireDuration] = useState("1 week");
   const [hireCoverLetter, setHireCoverLetter] = useState("");
@@ -1056,7 +1058,17 @@ export default function JobDetails({
                 <Briefcase className="h-3 w-3" />
                 Client rating
               </dt>
-              <dd className="mt-1 font-semibold">{job.client.rating.toFixed(1)} / 5</dd>
+              <dd className="mt-1 font-semibold flex items-center justify-between">
+                <span>{job.client.rating.toFixed(1)} / 5</span>
+                {job.client.id ? (
+                  <Link
+                    href={`/client/${job.client.id}`}
+                    className="text-xs font-normal text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    Profile <ExternalLink className="h-3 w-3" />
+                  </Link>
+                ) : null}
+              </dd>
             </div>
           )}
           {job.locationAddress && (
@@ -1195,7 +1207,17 @@ export default function JobDetails({
           <section className="mt-8 rounded-2xl border border-border bg-card p-6 shadow-xs">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
               <div>
-                <h2 className="text-xl font-bold flex items-center gap-2">About the Client</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-bold">About the Client</h2>
+                  {job.client.id ? (
+                    <Button variant="ghost" size="sm" asChild className="h-7 text-xs text-primary hover:text-primary gap-1 px-2">
+                      <Link href={`/client/${job.client.id}`}>
+                        View Profile
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    </Button>
+                  ) : null}
+                </div>
                 <p className="mt-0.5 text-sm text-muted-foreground">
                   Feedback from professionals who previously worked with this client
                 </p>
@@ -2191,7 +2213,43 @@ export default function JobDetails({
         {/* Actions - Footer Section */}
         <div className="mt-8 border-t border-border pt-6">
           {job.client ? (
-            <p className="font-medium text-slate-700">Posted by {job.client.name}</p>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-bold text-primary overflow-hidden">
+                  {job.client.avatar ? (
+                    <img
+                      src={job.client.avatar}
+                      alt={job.client.name}
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <span>{job.client.name.charAt(0).toUpperCase()}</span>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Posted by</p>
+                  {job.client.id ? (
+                    <Link
+                      href={`/client/${job.client.id}`}
+                      className="group inline-flex items-center gap-1.5 font-semibold text-foreground hover:text-primary transition-colors"
+                    >
+                      <span className="underline-offset-4 group-hover:underline">{job.client.name}</span>
+                      <ExternalLink className="h-3.5 w-3.5 opacity-60 transition-opacity group-hover:opacity-100" />
+                    </Link>
+                  ) : (
+                    <p className="font-semibold text-foreground">{job.client.name}</p>
+                  )}
+                </div>
+              </div>
+              {job.client.id ? (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/client/${job.client.id}`} className="inline-flex items-center gap-1.5 font-medium">
+                    View Client Profile
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
           ) : (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <p className="font-medium text-muted-foreground">This is your job posting.</p>
@@ -2207,16 +2265,18 @@ export default function JobDetails({
                       </Link>
                     </Button>
                   )}
-                  <Button
-                    variant="outline"
-                    className="w-full sm:w-auto text-destructive border-destructive/30 hover:bg-destructive/10"
-                    asChild
-                  >
-                    <Link href={`/project/${job.projectId}/tracking#project-dispute-center`}>
-                      <ShieldAlert className="h-4 w-4 mr-1.5" />
-                      Raise Dispute
-                    </Link>
-                  </Button>
+                  {SHOW_DISPUTE_BUTTONS && job && job.projectId ? (
+                    <Button
+                      variant="outline"
+                      className="w-full sm:w-auto text-destructive border-destructive/30 hover:bg-destructive/10"
+                      asChild
+                    >
+                      <Link href={`/project/${job.projectId}/tracking#project-dispute-center`}>
+                        <ShieldAlert className="h-4 w-4 mr-1.5" />
+                        Raise Dispute
+                      </Link>
+                    </Button>
+                  ) : null}
                 </div>
               ) : (
                 job.status === "OPEN" && (
@@ -3135,13 +3195,12 @@ export default function JobDetails({
               </div>
             )}
 
-            {/* Dispute Escalation Notice */}
-            <div className="rounded-xl border border-border/80 bg-muted/20 p-3 text-xs text-muted-foreground flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 text-destructive shrink-0" />
-                <span>Having a dispute or unresolved conflict with the professional?</span>
-              </div>
-              {job.projectId && (
+            {SHOW_DISPUTE_BUTTONS && job && job.projectId ? (
+              <div className="rounded-xl border border-border/80 bg-muted/20 p-3 text-xs text-muted-foreground flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-destructive shrink-0" />
+                  <span>Having a dispute or unresolved conflict with the professional?</span>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -3152,8 +3211,8 @@ export default function JobDetails({
                     Raise Dispute
                   </Link>
                 </Button>
-              )}
-            </div>
+              </div>
+            ) : null}
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">

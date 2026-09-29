@@ -12,6 +12,7 @@ import {
   Info,
   Clock,
   ArrowRight,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -62,10 +63,11 @@ export default function AdminSettingsPage() {
   function handleValueChange(key: string, value: string) {
     setFormValues((prev) => {
       const next = { ...prev, [key]: value };
-      const original = settings.find((s) => s.key === key)?.value;
-      if (original !== value) {
-        setHasChanges(true);
-      }
+      const hasAnyDiff = Object.entries(next).some(([k, v]) => {
+        const orig = settings.find((s) => s.key === k)?.value;
+        return orig !== undefined ? orig !== v : true;
+      });
+      setHasChanges(hasAnyDiff);
       return next;
     });
   }
@@ -83,6 +85,7 @@ export default function AdminSettingsPage() {
 
       setSettings(data.settings);
       setHasChanges(false);
+      window.dispatchEvent(new CustomEvent("servio:settings-update"));
       toast.success("Platform configuration updated successfully!");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to update configuration");
@@ -106,6 +109,10 @@ export default function AdminSettingsPage() {
   const maxDisputeRounds = formValues["max_dispute_rounds"] || "5";
   const minWithdrawal = formValues["min_withdrawal_amount"] || "500";
   const autoResolveDays = formValues["auto_resolve_days"] || "7";
+  const isAutopay =
+    (formValues["autopay_enabled"] ?? "true") === "true" ||
+    formValues["autopay_enabled"] === "1" ||
+    formValues["autopay_enabled"] === "on";
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
@@ -165,13 +172,51 @@ export default function AdminSettingsPage() {
       ) : (
         <div className="grid gap-6">
           {/* Quick Stat Pill Preview */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div className="rounded-xl border border-indigo-200/80 bg-indigo-50/50 p-3.5">
               <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">
                 Platform Commission
               </p>
               <p className="mt-1 text-2xl font-black text-indigo-900">{commissionRate}%</p>
               <p className="text-[10px] text-indigo-600 mt-0.5">Applied on milestone releases</p>
+            </div>
+            <div
+              className={`rounded-xl border p-3.5 ${
+                isAutopay
+                  ? "border-emerald-200/80 bg-emerald-50/50"
+                  : "border-amber-200/80 bg-amber-50/50"
+              }`}
+            >
+              <p
+                className={`text-[11px] font-bold uppercase tracking-wider ${
+                  isAutopay ? "text-emerald-700" : "text-amber-700"
+                }`}
+              >
+                Auto-Pay
+              </p>
+              <p
+                className={`mt-1 text-2xl font-black ${
+                  isAutopay ? "text-emerald-900" : "text-amber-900"
+                }`}
+              >
+                {isAutopay ? "ON" : "OFF"}
+              </p>
+              <p
+                className={`text-[10px] mt-0.5 ${
+                  isAutopay ? "text-emerald-600" : "text-amber-600"
+                }`}
+              >
+                {isAutopay ? "Instant pro payout" : "Manual admin review"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-3.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+                Min Withdrawal
+              </p>
+              <p className="mt-1 text-2xl font-black text-emerald-900">
+                ₹{Number(minWithdrawal).toLocaleString()}
+              </p>
+              <p className="text-[10px] text-emerald-600 mt-0.5">Professional payout minimum</p>
             </div>
             <div className="rounded-xl border border-rose-200/80 bg-rose-50/50 p-3.5">
               <p className="text-[11px] font-bold uppercase tracking-wider text-rose-700">
@@ -186,15 +231,6 @@ export default function AdminSettingsPage() {
               </p>
               <p className="mt-1 text-2xl font-black text-amber-900">{maxDisputeRounds}</p>
               <p className="text-[10px] text-amber-600 mt-0.5">Rounds per dispute case</p>
-            </div>
-            <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-3.5">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">
-                Min Withdrawal
-              </p>
-              <p className="mt-1 text-2xl font-black text-emerald-900">
-                ₹{Number(minWithdrawal).toLocaleString()}
-              </p>
-              <p className="text-[10px] text-emerald-600 mt-0.5">Professional payout minimum</p>
             </div>
           </div>
 
@@ -302,6 +338,61 @@ export default function AdminSettingsPage() {
                   The minimum wallet balance required for a professional to submit a bank withdrawal
                   request.
                 </p>
+              </div>
+
+              {/* Auto-Pay Instant Milestone Release */}
+              <div className="space-y-3 md:col-span-2 border-t border-slate-100 pt-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Label
+                        htmlFor="autopay_enabled"
+                        className="text-xs font-semibold text-slate-800"
+                      >
+                        Instant Auto-Pay (Milestone Release)
+                      </Label>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          isAutopay
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {isAutopay ? "AUTO-PAY ON" : "AUTO-PAY OFF"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                      {isAutopay
+                        ? "When client pays for a milestone, platform commission is credited to admin and net earnings automatically transfer to the professional's wallet instantly."
+                        : "When client pays for a milestone, funds are held in escrow. Payouts require manual approval by an admin in Finance & Payouts."}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleValueChange("autopay_enabled", "true")}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-1.5 text-xs font-bold transition ${
+                        isAutopay
+                          ? "border-emerald-600 bg-emerald-600 text-white shadow-xs"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <Zap className="h-3.5 w-3.5" />
+                      Auto-Pay ON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleValueChange("autopay_enabled", "false")}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-1.5 text-xs font-bold transition ${
+                        !isAutopay
+                          ? "border-rose-600 bg-rose-600 text-white shadow-xs"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      Auto-Pay OFF
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

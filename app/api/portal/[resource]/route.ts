@@ -11,6 +11,7 @@ import {
 } from "@/lib/geo";
 import { attachLastActorRole } from "@/lib/project-request-actions";
 import { inferLocationFromAddress } from "@/lib/india-locations";
+import { getPlatformSetting } from "@/lib/platform-settings";
 
 async function sessionFromRequest(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -320,7 +321,7 @@ export async function GET(
             ? { professionalId: session.userId, status: "COMPLETED" }
             : { clientId: session.userId },
         orderBy: { createdAt: "desc" },
-        take: 50,
+        take: 100,
       });
       const payments = await db.payment.findMany({
         where: {
@@ -329,21 +330,88 @@ export async function GET(
               .map((transaction) => transaction.milestoneId)
               .filter((id): id is number => id !== null),
           },
-          status: { in: ["FUNDED", "COMPLETED"] },
+          status: { in: ["FUNDED", "COMPLETED", "AWAITING_ADMIN_APPROVAL"] },
         },
-        select: { id: true, milestoneId: true },
+        select: {
+          id: true,
+          milestoneId: true,
+          baseAmount: true,
+          clientFeeAmount: true,
+          commissionAmount: true,
+          amount: true,
+        },
       });
-      const paymentByMilestone = new Map(
-        payments.map((payment) => [payment.milestoneId, payment.id]),
+      const paymentByMilestone = new Map(payments.map((payment) => [payment.milestoneId, payment]));
+
+      // Track milestone IDs that already have a PLATFORM_COMMISSION row
+      const commissionMilestoneIds = new Set(
+        transactions
+          .filter((t) => t.type === "PLATFORM_COMMISSION" && t.milestoneId !== null)
+          .map((t) => t.milestoneId as number),
       );
-      return NextResponse.json(
-        transactions.map((transaction) => ({
-          ...transaction,
-          invoicePaymentId: transaction.milestoneId
-            ? (paymentByMilestone.get(transaction.milestoneId) ?? null)
-            : null,
-        })),
-      );
+
+      const resultTransactions: Array<{
+        id: number;
+        trackingId: number;
+        milestoneId: number | null;
+        completionId: number | null;
+        clientId: number;
+        professionalId: number;
+        amount: number;
+        currency: string;
+        type: string;
+        status: string;
+        description: string;
+        createdAt: Date;
+        updatedAt: Date;
+        invoicePaymentId: number | null;
+      }> = [];
+
+      for (const tx of transactions) {
+        const payment = tx.milestoneId ? paymentByMilestone.get(tx.milestoneId) : null;
+        resultTransactions.push({
+          ...tx,
+          invoicePaymentId: payment?.id ?? null,
+        });
+
+        // If this is a milestone payment and there is no separate commission row for it in DB yet,
+        // dynamically generate the second entry (commission entry) so each payment shows 2 entries!
+        if (
+          tx.milestoneId &&
+          tx.type !== "PLATFORM_COMMISSION" &&
+          !commissionMilestoneIds.has(tx.milestoneId)
+        ) {
+          const commissionAmount =
+            session.role === "PROFESSIONAL"
+              ? payment?.commissionAmount || Math.round(tx.amount * 0.1)
+              : payment?.clientFeeAmount || Math.round(tx.amount * 0.1);
+
+          if (commissionAmount > 0) {
+            const cleanTitle = tx.description.replace(
+              /^Milestone (?:paid and instantly credited to professional|payment approved by client · Awaiting admin release|payout approved|payment): /i,
+              "",
+            );
+            resultTransactions.push({
+              id: -(tx.id * 1000 + 1),
+              trackingId: tx.trackingId,
+              milestoneId: tx.milestoneId,
+              completionId: tx.completionId,
+              clientId: tx.clientId,
+              professionalId: tx.professionalId,
+              amount: commissionAmount,
+              currency: tx.currency || "INR",
+              type: "PLATFORM_COMMISSION",
+              status: tx.status,
+              description: `Platform commission (10%): ${cleanTitle}`,
+              createdAt: tx.createdAt,
+              updatedAt: tx.updatedAt,
+              invoicePaymentId: payment?.id ?? null,
+            });
+          }
+        }
+      }
+
+      return NextResponse.json(resultTransactions);
     }
     if (resource === "messages")
       return NextResponse.json(
@@ -1278,8 +1346,15 @@ export async function GET(
       );
       const activeDispute = disputes.find((d) => d.status !== "RESOLVED") ?? null;
       const dispute = activeDispute ?? disputes[0] ?? null;
+      const disputeLimitStr = await getPlatformSetting("dispute_limit", "5");
+      const configuredDisputeLimit = Math.max(1, parseInt(disputeLimitStr, 10) || 5);
       const disputeCount = disputes.length;
-      const canRaiseDispute = disputeCount < 3 && !activeDispute;
+      // If this specific contract already has more disputes than the global limit
+      // (e.g. 4 disputes were raised when limit was 5, but admin lowered limit to 3),
+      // we show disputeCount (4) so it displays "4 of 4 Used" instead of "4 of 3 Used",
+      // while canRaiseDispute is false because disputeCount >= configuredDisputeLimit.
+      const effectiveDisputeLimit = Math.max(configuredDisputeLimit, disputeCount);
+      const canRaiseDispute = disputeCount < configuredDisputeLimit && !activeDispute;
 
       const disputeIds = disputes.map((d) => d.id);
       const rawDisputeMessages =
@@ -1320,7 +1395,7 @@ export async function GET(
         dispute,
         disputes,
         disputeCount,
-        disputeLimit: 3,
+        disputeLimit: effectiveDisputeLimit,
         canRaiseDispute,
         disputeMessages,
       });

@@ -50,6 +50,7 @@ type Wallet = {
   reserved: number;
   transactions: WalletTransaction[];
   withdrawals: Withdrawal[];
+  minWithdrawalAmount?: number;
 };
 type PaymentDetail = {
   id: number;
@@ -87,6 +88,7 @@ export default function ClientEarnings() {
   const [withdrawMessage, setWithdrawMessage] = useState("");
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [isTestMode, setIsTestMode] = useState(true);
+  const [sandboxAmount, setSandboxAmount] = useState("");
 
   async function simulateSandboxPayment(customAmount?: number) {
     setActionBusy("topup");
@@ -134,6 +136,7 @@ export default function ClientEarnings() {
             reserved?: number;
             transactions?: WalletTransaction[];
             withdrawals?: Withdrawal[];
+            minWithdrawalAmount?: number;
           } | null,
         ) =>
           setWallet(
@@ -143,6 +146,7 @@ export default function ClientEarnings() {
               reserved: data.reserved ?? 0,
               transactions: data.transactions ?? [],
               withdrawals: data.withdrawals ?? [],
+              minWithdrawalAmount: data.minWithdrawalAmount,
             },
           ),
       );
@@ -425,7 +429,7 @@ export default function ClientEarnings() {
             />
             <Stat
               icon={ReceiptText}
-              value={String(paidPayments.length)}
+              value={String(paidPayments.filter((p) => p.type !== "PLATFORM_COMMISSION").length)}
               label="Funded milestones"
             />
           </div>
@@ -481,7 +485,7 @@ export default function ClientEarnings() {
                 ) : null}
 
                 {isTestMode && (
-                  <div className="mt-4 rounded-xl border border-indigo-200/80 bg-indigo-50/70 p-3.5 text-xs text-indigo-950 space-y-2">
+                  <div className="mt-4 rounded-xl border border-indigo-200/80 bg-indigo-50/70 p-3.5 text-xs text-indigo-950 space-y-2.5">
                     <div className="flex items-center justify-between">
                       <span className="font-bold flex items-center gap-1.5 text-indigo-900">
                         <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
@@ -500,21 +504,66 @@ export default function ClientEarnings() {
                       <span className="font-mono">123</span> | OTP:{" "}
                       <span className="font-mono">123456</span>
                     </p>
-                    <div className="pt-1 flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void simulateSandboxPayment()}
-                        disabled={actionBusy === "topup"}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-indigo-500 transition disabled:opacity-50"
-                      >
-                        <Sparkles className="h-3.5 w-3.5" />
-                        {actionBusy === "topup"
-                          ? "Simulating Payment…"
-                          : `Instant Test Deposit (₹${Number(topUpAmount) || 1000})`}
-                      </button>
-                      <span className="text-[10px] text-indigo-700">
-                        Bypasses popup card check for testing
-                      </span>
+
+                    {/* Quick Choose Money Shortcuts & Custom Input */}
+                    <div className="pt-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-bold text-indigo-900 mr-1">
+                          Choose amount:
+                        </span>
+                        {[500, 1000, 2500, 5000, 10000].map((amt) => (
+                          <button
+                            key={amt}
+                            type="button"
+                            onClick={() => setSandboxAmount(String(amt))}
+                            className={`rounded-md border px-2 py-1 text-[11px] font-semibold transition ${
+                              sandboxAmount === String(amt)
+                                ? "border-indigo-600 bg-indigo-600 text-white shadow-2xs"
+                                : "border-indigo-200/80 bg-white text-indigo-800 hover:bg-indigo-100/60 hover:border-indigo-300"
+                            }`}
+                          >
+                            ₹{amt.toLocaleString("en-IN")}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex h-9 w-40 items-center rounded-lg border border-indigo-300 bg-white px-2.5 shadow-2xs focus-within:border-indigo-600 focus-within:ring-2 focus-within:ring-indigo-200">
+                          <span className="mr-1 text-xs font-bold text-indigo-600">₹</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={sandboxAmount}
+                            onChange={(e) => setSandboxAmount(e.target.value)}
+                            placeholder="Enter test amount"
+                            className="h-full w-full bg-transparent text-xs font-semibold text-slate-800 outline-none placeholder:text-slate-400"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void simulateSandboxPayment(
+                              Number(sandboxAmount) || Number(topUpAmount) || 1000,
+                            )
+                          }
+                          disabled={actionBusy === "topup"}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 text-xs font-semibold text-white shadow-xs hover:bg-indigo-500 transition disabled:opacity-50"
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                          {actionBusy === "topup"
+                            ? "Simulating Payment…"
+                            : `Instant Test Deposit (₹${(
+                                Number(sandboxAmount) ||
+                                Number(topUpAmount) ||
+                                1000
+                              ).toLocaleString("en-IN")})`}
+                        </button>
+                      </div>
+
+                      <p className="text-[10px] text-indigo-700">
+                        Bypasses popup card check for testing · Instantly adds funds to your wallet
+                      </p>
                     </div>
                   </div>
                 )}
@@ -576,11 +625,11 @@ export default function ClientEarnings() {
                     <input
                       className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none"
                       type="number"
-                      min="1"
+                      min={wallet?.minWithdrawalAmount ?? 500}
                       max={wallet?.available ?? 0}
                       value={withdrawAmount}
                       onChange={(event) => setWithdrawAmount(event.target.value)}
-                      placeholder="Enter amount"
+                      placeholder={`Min ₹${(wallet?.minWithdrawalAmount ?? 500).toLocaleString("en-IN")}`}
                     />
                   </div>
                   <button
@@ -589,7 +638,7 @@ export default function ClientEarnings() {
                     onClick={() => void requestWithdrawal()}
                     disabled={
                       !Number(withdrawAmount) ||
-                      Number(withdrawAmount) <= 0 ||
+                      Number(withdrawAmount) < (wallet?.minWithdrawalAmount ?? 500) ||
                       Number(withdrawAmount) > (wallet?.available ?? 0) ||
                       !withdrawDestination.trim()
                     }
@@ -597,6 +646,13 @@ export default function ClientEarnings() {
                     Withdraw
                   </button>
                 </div>
+                {withdrawAmount &&
+                  Number(withdrawAmount) < (wallet?.minWithdrawalAmount ?? 500) && (
+                    <p className="mt-1.5 text-xs font-medium text-amber-600">
+                      Minimum withdrawal amount is ₹
+                      {(wallet?.minWithdrawalAmount ?? 500).toLocaleString("en-IN")}.
+                    </p>
+                  )}
                 {withdrawMessage ? (
                   <p className="mt-3 text-sm text-muted-foreground">{withdrawMessage}</p>
                 ) : null}
@@ -672,8 +728,19 @@ export default function ClientEarnings() {
                     }}
                     className="flex cursor-pointer items-center justify-between gap-4 border-b border-border p-5 transition hover:bg-muted/40 last:border-0"
                   >
-                    <div>
-                      <p className="font-semibold">{item.payment.description}</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold truncate">{item.payment.description}</p>
+                        {item.payment.type === "PLATFORM_COMMISSION" ? (
+                          <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                            Commission fee (10%)
+                          </span>
+                        ) : (
+                          <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                            Milestone payment
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-1 text-sm text-muted-foreground">
                         {new Date(item.payment.createdAt).toLocaleDateString(undefined, {
                           year: "numeric",
@@ -682,8 +749,10 @@ export default function ClientEarnings() {
                         })}
                       </p>
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold">
+                    <div className="text-right shrink-0">
+                      <p
+                        className={`font-bold ${item.payment.type === "PLATFORM_COMMISSION" ? "text-amber-600 dark:text-amber-400" : ""}`}
+                      >
                         ₹{item.payment.amount.toLocaleString()} {item.payment.currency}
                       </p>
                       <p

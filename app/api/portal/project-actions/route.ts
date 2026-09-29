@@ -23,6 +23,7 @@ import {
   emitRealtimeDisputeMessage,
   emitRealtimeProjectUpdate,
 } from "@/lib/realtime";
+import { getPlatformCommissionRate, getPlatformSetting } from "@/lib/platform-settings";
 
 const attachmentIds = z.array(z.number().int().positive()).min(1).max(10);
 
@@ -1592,12 +1593,14 @@ export async function POST(request: NextRequest) {
       const attachmentsJson = input.evidence?.length ? JSON.stringify(input.evidence) : "[]";
 
       let dispute: { id: number; disputeRound: number };
+      const disputeLimitStr = await getPlatformSetting("dispute_limit", "5");
+      const configuredDisputeLimit = Math.max(1, parseInt(disputeLimitStr, 10) || 5);
       try {
         dispute = await db.$transaction(async (tx) => {
           const disputeCount = await tx.projectDispute.count({
             where: { trackingId: project.id },
           });
-          if (disputeCount >= 3) {
+          if (disputeCount >= configuredDisputeLimit) {
             throw new Error("MAX_DISPUTE_LIMIT");
           }
           const existingActiveDispute = await tx.projectDispute.findFirst({
@@ -1628,7 +1631,9 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         if (err instanceof Error && err.message === "MAX_DISPUTE_LIMIT") {
           return NextResponse.json(
-            { error: "Maximum limit of 3 disputes reached for this contract." },
+            {
+              error: `Maximum limit of ${configuredDisputeLimit} disputes reached for this contract.`,
+            },
             { status: 409 },
           );
         }
@@ -1858,7 +1863,8 @@ export async function POST(request: NextRequest) {
                   });
                 } else {
                   // Online Wallet Payment: verify client has sufficient wallet balance!
-                  const money = calculateMilestoneMoney(targetMilestone.amount);
+                  const commissionRate = await getPlatformCommissionRate();
+                  const money = calculateMilestoneMoney(targetMilestone.amount, commissionRate);
                   const clientWallet = await tx.wallet.findUnique({
                     where: { userId: dispute.clientId },
                   });
@@ -1879,7 +1885,7 @@ export async function POST(request: NextRequest) {
                       clientFeeAmount: money.clientFeeAmount,
                       professionalPayoutAmount: money.professionalPayoutAmount,
                       adminNetAmount: money.adminNetAmount,
-                      commissionAmount: money.baseAmount - money.professionalPayoutAmount,
+                      commissionAmount: money.professionalFeeAmount,
                       currency: "INR",
                       provider: "wallet",
                       projectTrackingId: project.id,
@@ -1894,7 +1900,7 @@ export async function POST(request: NextRequest) {
                       clientFeeAmount: money.clientFeeAmount,
                       professionalPayoutAmount: money.professionalPayoutAmount,
                       adminNetAmount: money.adminNetAmount,
-                      commissionAmount: money.baseAmount - money.professionalPayoutAmount,
+                      commissionAmount: money.professionalFeeAmount,
                     },
                   });
                   await fundMilestoneFromWallet(tx, {
@@ -1903,6 +1909,7 @@ export async function POST(request: NextRequest) {
                     professionalId: dispute.professionalId,
                     baseAmount: targetMilestone.amount,
                     milestoneId: targetMilestone.id,
+                    customCommissionRate: commissionRate,
                   });
                   await releaseMilestoneToProfessional(tx, {
                     paymentId: resolvedPayment.id,
@@ -1910,6 +1917,7 @@ export async function POST(request: NextRequest) {
                     professionalId: dispute.professionalId,
                     baseAmount: targetMilestone.amount,
                     milestoneId: targetMilestone.id,
+                    customCommissionRate: commissionRate,
                   });
                   await tx.payment.update({
                     where: { id: resolvedPayment.id },

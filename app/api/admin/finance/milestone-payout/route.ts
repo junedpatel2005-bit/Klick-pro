@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db, releaseMilestoneToProfessional } from "@/lib/wallet-ledger";
+import {
+  calculateMilestoneMoney,
+  db,
+  fundMilestoneFromWallet,
+  releaseMilestoneToProfessional,
+} from "@/lib/wallet-ledger";
+import { getPlatformCommissionRate } from "@/lib/platform-settings";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { notifyMilestonePayoutApproved } from "@/lib/marketplace-notifications";
 import { emitRealtimeProjectUpdate } from "@/lib/realtime";
@@ -40,7 +46,7 @@ export async function POST(request: NextRequest) {
     : null;
   if (
     !payment ||
-    payment.status !== "FUNDED" ||
+    !["FUNDED", "AWAITING_ADMIN_APPROVAL"].includes(payment.status) ||
     !payment.projectTrackingId ||
     !milestone ||
     !["AWAITING_ADMIN_APPROVAL", "APPROVED", "COMPLETED"].includes(milestone.status)
@@ -54,21 +60,53 @@ export async function POST(request: NextRequest) {
     const result = await db.$transaction(
       async (tx) => {
         const claim = await tx.payment.updateMany({
-          where: { id: payment.id, status: "FUNDED" },
+          where: { id: payment.id, status: { in: ["FUNDED", "AWAITING_ADMIN_APPROVAL"] } },
           data: { status: "PAYOUT_PROCESSING" },
         });
         if (claim.count !== 1) throw new Error("This payout is already being processed.");
 
+        const commissionRate = await getPlatformCommissionRate();
+
+        // If not already funded (Auto-Pay was OFF), cut from client wallet now!
+        if (payment.status === "AWAITING_ADMIN_APPROVAL") {
+          const clientWallet = await tx.wallet.findUnique({
+            where: { userId: payment.clientId },
+            select: { balance: true },
+          });
+          const neededMoney = calculateMilestoneMoney(milestone.amount, commissionRate);
+          if (!clientWallet || clientWallet.balance < neededMoney.clientChargeAmount) {
+            throw new Error(
+              "Client has insufficient wallet balance to complete this milestone payout.",
+            );
+          }
+          await fundMilestoneFromWallet(tx, {
+            paymentId: payment.id,
+            clientId: payment.clientId,
+            professionalId: payment.professionalId,
+            baseAmount: milestone.amount,
+            milestoneId: milestone.id,
+            customCommissionRate: commissionRate,
+          });
+        }
+
+        // Add to professional wallet (admin keeps commission cut)!
         const money = await releaseMilestoneToProfessional(tx, {
           paymentId: payment.id,
           clientId: payment.clientId,
           professionalId: payment.professionalId,
           baseAmount: milestone.amount,
           milestoneId: milestone.id,
+          customCommissionRate: commissionRate,
         });
         await tx.payment.update({
           where: { id: payment.id },
-          data: { status: "COMPLETED" },
+          data: {
+            status: "COMPLETED",
+            capturedAt: new Date(),
+            professionalPayoutAmount: money.professionalPayoutAmount,
+            commissionAmount: money.professionalFeeAmount,
+            adminNetAmount: money.adminNetAmount,
+          },
         });
         await tx.projectMilestone.update({
           where: { id: milestone.id },
@@ -78,11 +116,21 @@ export async function POST(request: NextRequest) {
           where: {
             trackingId: payment.projectTrackingId!,
             milestoneId: milestone.id,
-            type: "WALLET_MILESTONE_FUNDED",
+            type: { in: ["WALLET_MILESTONE_FUNDED", "WALLET_MILESTONE_PENDING_APPROVAL"] },
           },
           data: {
             status: "COMPLETED",
             description: `Milestone payout approved: ${milestone.title}`,
+          },
+        });
+        await tx.projectTransaction.updateMany({
+          where: {
+            trackingId: payment.projectTrackingId!,
+            milestoneId: milestone.id,
+            type: "PLATFORM_COMMISSION",
+          },
+          data: {
+            status: "COMPLETED",
           },
         });
 
@@ -141,6 +189,8 @@ export async function POST(request: NextRequest) {
       status: "COMPLETED",
     });
   } catch (error) {
+    if (error instanceof Error && error.message.includes("Client has insufficient wallet balance"))
+      return NextResponse.json({ error: error.message }, { status: 402 });
     if (error instanceof Error && error.message === "Insufficient wallet balance.")
       return NextResponse.json(
         { error: "The admin wallet does not have enough balance for this payout." },

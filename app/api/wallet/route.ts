@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { ensureWallet } from "@/lib/wallet-ledger";
+import { getMinWithdrawalAmount } from "@/lib/platform-settings";
 import { Prisma } from "@generated/prisma/client";
 
 async function sessionFrom(request: NextRequest) {
@@ -31,13 +32,30 @@ export async function GET(request: NextRequest) {
     },
     _sum: { amount: true },
   });
-  const commission = await db.payment.aggregate({
+  const commissionDebits = await db.walletTransaction.aggregate({
+    where: {
+      walletId: wallet.id,
+      type: "PLATFORM_COMMISSION",
+      status: "COMPLETED",
+    },
+    _sum: { amount: true },
+  });
+  const paymentCommission = await db.payment.aggregate({
     where: { professionalId: session.userId, status: "COMPLETED" },
     _sum: { commissionAmount: true },
   });
+
   const canWithdraw = session.role === "PROFESSIONAL" || session.role === "CLIENT";
-  const totalEarned = earned._sum.amount ?? 0;
-  const totalCommission = commission?._sum.commissionAmount ?? 0;
+  const rawEarned = earned._sum.amount ?? 0;
+  const rawCommissionDebits = Math.abs(commissionDebits._sum.amount ?? 0);
+  const totalCommission =
+    rawCommissionDebits > 0 ? rawCommissionDebits : (paymentCommission?._sum.commissionAmount ?? 0);
+
+  // If commission was debited as a separate wallet transaction, rawEarned is the gross milestone amount
+  const isGrossEarned = rawCommissionDebits > 0;
+  const totalEarned = isGrossEarned ? Math.max(0, rawEarned - totalCommission) : rawEarned;
+  const grossTotal = isGrossEarned ? rawEarned : totalEarned + totalCommission;
+
   const withdrawals = canWithdraw ? wallet.pendingBalance : 0;
   const withdrawalHistory = canWithdraw
     ? await db.projectWithdrawal.findMany({
@@ -47,15 +65,17 @@ export async function GET(request: NextRequest) {
       })
     : [];
   const available = canWithdraw ? Math.max(0, wallet.balance - withdrawals) : wallet.balance;
+  const minWithdrawalAmount = await getMinWithdrawalAmount();
   return NextResponse.json({
     wallet,
     total: totalEarned,
-    grossTotal: totalEarned + totalCommission,
+    grossTotal,
     commission: totalCommission,
     available,
     reserved: withdrawals,
     withdrawals: withdrawalHistory,
     transactions,
+    minWithdrawalAmount,
   });
 }
 export async function POST(request: NextRequest) {
@@ -74,6 +94,15 @@ export async function POST(request: NextRequest) {
       { error: "Enter a valid withdrawal amount and payout destination." },
       { status: 400 },
     );
+  const minWithdrawalAmount = await getMinWithdrawalAmount();
+  if (parsed.data.amount < minWithdrawalAmount) {
+    return NextResponse.json(
+      {
+        error: `Minimum withdrawal amount is ₹${minWithdrawalAmount.toLocaleString("en-IN")}.`,
+      },
+      { status: 400 },
+    );
+  }
   const wallet = await ensureWallet(session.userId);
   let withdrawal;
   try {

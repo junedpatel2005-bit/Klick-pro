@@ -18,8 +18,59 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" className="notranslate" translate="no">
+      <head>
+        <meta name="google" content="notranslate" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                if (typeof window !== 'undefined' && typeof Node === 'function' && Node.prototype) {
+                  var origRemove = Node.prototype.removeChild;
+                  Node.prototype.removeChild = function(child) {
+                    try {
+                      if (child && child.parentNode !== this) {
+                        if (child.parentNode) {
+                          return child.parentNode.removeChild(child);
+                        }
+                        return child;
+                      }
+                      return origRemove.apply(this, arguments);
+                    } catch (e) {
+                      try {
+                        if (child && child.parentNode) {
+                          return child.parentNode.removeChild(child);
+                        }
+                      } catch (_) {}
+                      return child;
+                    }
+                  };
+
+                  var origInsert = Node.prototype.insertBefore;
+                  Node.prototype.insertBefore = function(newNode, refNode) {
+                    try {
+                      if (refNode && refNode.parentNode !== this) {
+                        if (refNode.parentNode) {
+                          return refNode.parentNode.insertBefore(newNode, refNode);
+                        }
+                        return this.appendChild(newNode);
+                      }
+                      return origInsert.apply(this, arguments);
+                    } catch (e) {
+                      try {
+                        return this.appendChild(newNode);
+                      } catch (_) {
+                        return newNode;
+                      }
+                    }
+                  };
+                }
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>

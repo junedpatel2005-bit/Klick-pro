@@ -379,7 +379,12 @@ function ProProfileContent() {
                                 <SelectTrigger id="selectedJob" className="mt-2">
                                   <SelectValue placeholder="Choose a job" />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent
+                                  position="popper"
+                                  side="bottom"
+                                  sideOffset={4}
+                                  className="z-[9999] max-h-60"
+                                >
                                   {openJobs.map((job: ClientJob) => (
                                     <SelectItem key={job.id} value={job.id.toString()}>
                                       {jobLabel(job)}

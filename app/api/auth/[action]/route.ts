@@ -208,7 +208,7 @@ export async function GET(
         saved.nextPath?.startsWith("/") && !saved.nextPath.startsWith("//")
           ? saved.nextPath
           : user.role === "CLIENT"
-            ? "/client-profile"
+            ? "/client/setup"
             : user.role === "PROFESSIONAL"
               ? "/professional-home"
               : "/admin";
@@ -443,9 +443,15 @@ export async function POST(
     const response = NextResponse.json(
       {
         success: true,
-        redirect: "/verify",
+        redirect: `/verify?email=${encodeURIComponent(user.email)}`,
+        email: user.email,
       },
       { status: 201 },
+    );
+    response.cookies.set(
+      sessionCookie,
+      await createSession({ userId: user.id, role: user.role }),
+      sessionOptions,
     );
     response.cookies.set(phoneProofCookie, "", { ...phoneProofCookieOptions, maxAge: 0 });
     return response;
@@ -481,7 +487,7 @@ export async function POST(
               : "/professional/setup?profileSetup=1"
             : hasClientProfile
               ? "/dashboard"
-              : "/client-profile?profileSetup=1";
+              : "/client/setup?profileSetup=1";
 
     if (!user.emailVerifiedAt) {
       const response = NextResponse.json(
@@ -588,7 +594,7 @@ export async function POST(
           : "/professional/setup?profileSetup=1"
         : hasClientProfile
           ? "/dashboard"
-          : "/client-profile?profileSetup=1";
+          : "/client/setup?profileSetup=1";
     if (!user.emailVerifiedAt)
       return NextResponse.json(
         {
@@ -640,7 +646,7 @@ export async function POST(
           : "/professional/setup?profileSetup=1"
         : hasClientProfile
           ? "/dashboard"
-          : "/client-profile?profileSetup=1";
+          : "/client/setup?profileSetup=1";
     const response = NextResponse.json(
       !user.emailVerifiedAt
         ? {
@@ -729,20 +735,49 @@ export async function POST(
 
   if (action === "resend-verification") {
     const token = request.cookies.get(sessionCookie)?.value;
-    if (!token) return safe("Please sign in again.", 401);
+    let targetUser: {
+      id: number;
+      email: string;
+      firstName: string | null;
+      lastName: string | null;
+      emailVerifiedAt: Date | null;
+    } | null = null;
+    if (token) {
+      try {
+        const session = await verifySession(token);
+        targetUser = await db.user.findUnique({
+          where: { id: session.userId },
+          select: { id: true, email: true, firstName: true, lastName: true, emailVerifiedAt: true },
+        });
+      } catch {
+        // Fall back to body.email below
+      }
+    }
+    if (
+      !targetUser &&
+      typeof body === "object" &&
+      body !== null &&
+      "email" in body &&
+      typeof body.email === "string"
+    ) {
+      const email = body.email.trim().toLowerCase();
+      targetUser = await db.user.findFirst({
+        where: { email: { equals: email, mode: "insensitive" } },
+        select: { id: true, email: true, firstName: true, lastName: true, emailVerifiedAt: true },
+      });
+    }
+    if (!targetUser) return safe("Please sign in or enter your registered email.", 401);
     try {
-      const session = await verifySession(token);
-      const user = await db.user.findUniqueOrThrow({ where: { id: session.userId } });
-      if (user.emailVerifiedAt) return NextResponse.json({ success: true });
-      const raw = await createEmailVerificationToken(user.id);
+      if (targetUser.emailVerifiedAt) return NextResponse.json({ success: true });
+      const raw = await createEmailVerificationToken(targetUser.id);
       const userName =
-        [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
-        user.firstName ||
+        [targetUser.firstName, targetUser.lastName].filter(Boolean).join(" ").trim() ||
+        targetUser.firstName ||
         "there";
       enqueueBackgroundJob(
         "email.verification.resend",
-        () => sendEmailVerificationLink(user.email, raw, publicAppOrigin(request), userName),
-        { userId: user.id },
+        () => sendEmailVerificationLink(targetUser!.email, raw, publicAppOrigin(request), userName),
+        { userId: targetUser.id },
       );
       return NextResponse.json({ success: true });
     } catch {
@@ -857,7 +892,7 @@ export async function POST(
         success: true,
         redirect:
           user.role === "CLIENT"
-            ? "/client-profile?profileSetup=1"
+            ? "/client/setup?profileSetup=1"
             : user.professionalCategory &&
                 user.professionalLatitude !== null &&
                 user.professionalLongitude !== null

@@ -477,9 +477,9 @@ export function ClientMyInfoPage({ data }: { data: ClientAccountSummaryResponse 
           </div>
 
           <CardContent className="relative px-6 pb-6 pt-0">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 -mt-12 sm:-mt-14 mb-4">
-              <div className="flex items-end gap-4">
-                <div className="relative group">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                <div className="relative group shrink-0 -mt-12 sm:-mt-14">
                   <Avatar className="h-24 w-24 sm:h-28 sm:w-28 rounded-2xl border-4 border-background bg-card shadow-md">
                     <AvatarImage
                       src={avatarUrl ?? undefined}
@@ -501,16 +501,18 @@ export function ClientMyInfoPage({ data }: { data: ClientAccountSummaryResponse 
                   </button>
                 </div>
 
-                <div className="mb-1">
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-xl sm:text-2xl font-bold text-foreground">{profileName}</h1>
+                <div className="pt-2 sm:pt-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-xl sm:text-2xl font-bold text-foreground leading-tight">
+                      {profileName}
+                    </h1>
                     <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                       Verified Client
                     </span>
                   </div>
                   {companyName && (
-                    <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5 font-medium">
-                      <Building2 className="h-3.5 w-3.5 text-primary" />
+                    <p className="text-xs sm:text-sm text-muted-foreground flex items-center gap-1.5 mt-1 font-medium">
+                      <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
                       <span>{companyName}</span>
                     </p>
                   )}
@@ -518,7 +520,7 @@ export function ClientMyInfoPage({ data }: { data: ClientAccountSummaryResponse 
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 pt-2 sm:pt-3">
                 <Button asChild variant="outline" size="sm" className="h-9">
                   <Link href="/dashboard">Dashboard</Link>
                 </Button>

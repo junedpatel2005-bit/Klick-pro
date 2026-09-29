@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { io } from "socket.io-client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { fetchPortalNotifications } from "@/lib/notifications-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,56 +59,48 @@ export default function ProfessionalDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  useEffect(() => {
-    void fetch("/api/v1/portal/professional-jobs")
+  const inFlightRef = useRef(false);
+  const lastLoadedRef = useRef(0);
+
+  const loadData = (force = false) => {
+    const now = Date.now();
+    if (!force && inFlightRef.current) return;
+    if (!force && now - lastLoadedRef.current < 600) return;
+    inFlightRef.current = true;
+
+    void fetch("/api/v1/portal/professional-jobs", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error();
         return response.json() as Promise<DashboardData>;
       })
-      .then(setData)
-      .catch(() => setError("Unable to load your professional dashboard."));
-    void fetch("/api/portal/notifications")
-      .then((response) => (response.ok ? response.json() : []))
-      .then((items: Notification[]) => setNotifications(items))
+      .then((res) => {
+        setData(res);
+        lastLoadedRef.current = Date.now();
+      })
+      .catch(() => setError("Unable to load your professional dashboard."))
+      .finally(() => {
+        inFlightRef.current = false;
+      });
+
+    void fetchPortalNotifications({ force })
+      .then((items) => setNotifications(items as Notification[]))
       .catch(() => setNotifications([]));
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
   useEffect(() => {
-    const socket = io({
-      path: "/api/realtime",
-      withCredentials: true,
-      transports: ["websocket", "polling"],
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-    });
-    const refreshDashboard = () => {
-      void fetch("/api/v1/portal/professional-jobs", { cache: "no-store" })
-        .then(async (response) => {
-          if (!response.ok) throw new Error();
-          return response.json() as Promise<DashboardData>;
-        })
-        .then(setData)
-        .catch(() => undefined);
-      void fetch("/api/portal/notifications", { cache: "no-store" })
-        .then((response) => (response.ok ? response.json() : []))
-        .then((items: Notification[]) => setNotifications(items))
-        .catch(() => setNotifications([]));
-    };
-    socket.on("notification:new", refreshDashboard);
-    socket.on("project:updated", refreshDashboard);
-    socket.on("proposal:new", refreshDashboard);
-
-    window.addEventListener("servio:notification", refreshDashboard);
-    window.addEventListener("servio:project-update", refreshDashboard);
+    const onUpdate = () => loadData(true);
+    window.addEventListener("servio:notification", onUpdate);
+    window.addEventListener("servio:project-update", onUpdate);
+    window.addEventListener("servio:proposal", onUpdate);
 
     return () => {
-      socket.off("notification:new", refreshDashboard);
-      socket.off("project:updated", refreshDashboard);
-      socket.off("proposal:new", refreshDashboard);
-      socket.disconnect();
-      window.removeEventListener("servio:notification", refreshDashboard);
-      window.removeEventListener("servio:project-update", refreshDashboard);
+      window.removeEventListener("servio:notification", onUpdate);
+      window.removeEventListener("servio:project-update", onUpdate);
+      window.removeEventListener("servio:proposal", onUpdate);
     };
   }, []);
 

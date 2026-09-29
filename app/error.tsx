@@ -13,6 +13,19 @@ export default function Error({
   useEffect(() => {
     console.error("App boundary error:", error);
     Sentry.captureException(error);
+    if (typeof window !== "undefined") {
+      void fetch("/api/debug-client-error", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: error?.message,
+          stack: error?.stack,
+          digest: error?.digest,
+          name: error?.name,
+          href: window.location.href,
+        }),
+      }).catch(() => {});
+    }
   }, [error]);
 
   return (

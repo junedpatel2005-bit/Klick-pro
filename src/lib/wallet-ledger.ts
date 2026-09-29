@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { calculateMilestoneMoney } from "@/lib/payment-fees";
+import { getPlatformCommissionRate } from "@/lib/platform-settings";
 import { Prisma } from "@generated/prisma/client";
 
 export {
@@ -109,6 +110,7 @@ export async function fundMilestoneFromWallet(
     professionalId: number;
     baseAmount: number;
     milestoneId: number;
+    customCommissionRate?: number;
   },
 ) {
   const admin = await tx.user.findFirst({
@@ -117,25 +119,58 @@ export async function fundMilestoneFromWallet(
     select: { id: true },
   });
   if (!admin) throw new Error("No admin account is configured for settlement.");
-  const money = calculateMilestoneMoney(input.baseAmount);
+  const rate =
+    input.customCommissionRate !== undefined
+      ? input.customCommissionRate
+      : await getPlatformCommissionRate();
+  const money = calculateMilestoneMoney(input.baseAmount, rate);
+
+  // 1. Client Entry 1: Milestone money debit
   await recordTransaction(tx, {
     userId: input.clientId,
-    amount: -money.clientChargeAmount,
+    amount: -money.baseAmount,
     type: "MILESTONE_PAYMENT",
-    description: `Milestone payment debited: ${money.baseAmount}`,
-    idempotencyKey: `payment-${input.paymentId}-client-debit`,
+    description: `Milestone payment: ₹${money.baseAmount.toLocaleString("en-IN")}`,
+    idempotencyKey: `payment-${input.paymentId}-client-milestone-debit`,
     paymentId: input.paymentId,
     metadata: { milestoneId: input.milestoneId, baseAmount: money.baseAmount },
   });
+
+  // 2. Client Entry 2: Platform commission fee debit
+  if (money.clientFeeAmount > 0) {
+    await recordTransaction(tx, {
+      userId: input.clientId,
+      amount: -money.clientFeeAmount,
+      type: "PLATFORM_COMMISSION",
+      description: `Platform commission fee (10%): ₹${money.clientFeeAmount.toLocaleString("en-IN")}`,
+      idempotencyKey: `payment-${input.paymentId}-client-commission-debit`,
+      paymentId: input.paymentId,
+      metadata: { milestoneId: input.milestoneId, feeAmount: money.clientFeeAmount },
+    });
+  }
+
+  // 3. Admin receipt entries: 2 entries (milestone receipt + commission receipt)
   await recordTransaction(tx, {
     userId: admin.id,
-    amount: money.clientChargeAmount,
+    amount: money.baseAmount,
     type: "ADMIN_MILESTONE_RECEIPT",
-    description: `Client milestone receipt: ${money.clientChargeAmount}`,
-    idempotencyKey: `payment-${input.paymentId}-admin-credit`,
+    description: `Milestone receipt: ₹${money.baseAmount.toLocaleString("en-IN")}`,
+    idempotencyKey: `payment-${input.paymentId}-admin-milestone-credit`,
     paymentId: input.paymentId,
     metadata: { milestoneId: input.milestoneId, baseAmount: money.baseAmount },
   });
+
+  if (money.clientFeeAmount > 0) {
+    await recordTransaction(tx, {
+      userId: admin.id,
+      amount: money.clientFeeAmount,
+      type: "PLATFORM_COMMISSION",
+      description: `Platform commission: ₹${money.clientFeeAmount.toLocaleString("en-IN")}`,
+      idempotencyKey: `payment-${input.paymentId}-admin-commission-credit`,
+      paymentId: input.paymentId,
+      metadata: { milestoneId: input.milestoneId, feeAmount: money.clientFeeAmount },
+    });
+  }
   return money;
 }
 
@@ -147,6 +182,7 @@ export async function releaseMilestoneToProfessional(
     professionalId: number;
     baseAmount: number;
     milestoneId: number;
+    customCommissionRate?: number;
   },
 ) {
   const admin = await tx.user.findFirst({
@@ -155,25 +191,48 @@ export async function releaseMilestoneToProfessional(
     select: { id: true },
   });
   if (!admin) throw new Error("No admin account is configured for settlement.");
-  const money = calculateMilestoneMoney(input.baseAmount);
+
+  const rate =
+    input.customCommissionRate !== undefined
+      ? input.customCommissionRate
+      : await getPlatformCommissionRate();
+
+  const money = calculateMilestoneMoney(input.baseAmount, rate);
+
   await recordTransaction(tx, {
     userId: admin.id,
     amount: -money.professionalPayoutAmount,
     type: "PROFESSIONAL_PAYOUT",
-    description: `Professional payout: ${money.professionalPayoutAmount}`,
+    description: `Professional payout: ₹${money.professionalPayoutAmount.toLocaleString("en-IN")}`,
     idempotencyKey: `payment-${input.paymentId}-admin-debit`,
     paymentId: input.paymentId,
     metadata: { milestoneId: input.milestoneId, baseAmount: money.baseAmount },
   });
+
+  // 1. Professional Entry 1: Gross milestone earning credit
   await recordTransaction(tx, {
     userId: input.professionalId,
-    amount: money.professionalPayoutAmount,
+    amount: money.baseAmount,
     type: "MILESTONE_EARNING",
-    description: `Milestone earning: ${money.professionalPayoutAmount}`,
-    idempotencyKey: `payment-${input.paymentId}-professional-credit`,
+    description: `Milestone earning: ₹${money.baseAmount.toLocaleString("en-IN")}`,
+    idempotencyKey: `payment-${input.paymentId}-professional-gross-credit`,
     paymentId: input.paymentId,
     metadata: { milestoneId: input.milestoneId, baseAmount: money.baseAmount },
   });
+
+  // 2. Professional Entry 2: Platform commission fee deduction
+  if (money.professionalFeeAmount > 0) {
+    await recordTransaction(tx, {
+      userId: input.professionalId,
+      amount: -money.professionalFeeAmount,
+      type: "PLATFORM_COMMISSION",
+      description: `Platform commission (10%): -₹${money.professionalFeeAmount.toLocaleString("en-IN")}`,
+      idempotencyKey: `payment-${input.paymentId}-professional-commission-debit`,
+      paymentId: input.paymentId,
+      metadata: { milestoneId: input.milestoneId, feeAmount: money.professionalFeeAmount },
+    });
+  }
+
   return money;
 }
 

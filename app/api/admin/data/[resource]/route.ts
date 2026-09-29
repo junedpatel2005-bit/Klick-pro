@@ -81,23 +81,111 @@ export async function GET(
       newDisputes,
     });
   }
-  if (resource === "users")
-    return NextResponse.json({
-      users: await db.user.findMany({
+  if (resource === "users") {
+    try {
+      let allTrackings: { clientId: number; professionalId: number; status: string }[] = [];
+      try {
+        allTrackings = await db.projectTracking.findMany({
+          select: { clientId: true, professionalId: true, status: true },
+        });
+      } catch (trackErr) {
+        console.error("Failed to load project trackings for user stats:", trackErr);
+      }
+
+      const trackingsByClient = new Map<
+        number,
+        { completed: number; closed: number; total: number }
+      >();
+      const trackingsByPro = new Map<
+        number,
+        { completed: number; closed: number; total: number }
+      >();
+
+      for (const t of allTrackings) {
+        const isCompleted =
+          t.status === "COMPLETED" || t.status.toUpperCase().includes("COMPLETED");
+        const isClosed =
+          t.status === "CLOSED" ||
+          t.status.toUpperCase().includes("CLOSED") ||
+          t.status.toUpperCase().includes("CANCELLED");
+
+        if (t.clientId) {
+          const c = trackingsByClient.get(t.clientId) ?? { completed: 0, closed: 0, total: 0 };
+          c.total += 1;
+          if (isCompleted) c.completed += 1;
+          if (isClosed) c.closed += 1;
+          trackingsByClient.set(t.clientId, c);
+        }
+
+        if (t.professionalId) {
+          const p = trackingsByPro.get(t.professionalId) ?? { completed: 0, closed: 0, total: 0 };
+          p.total += 1;
+          if (isCompleted) p.completed += 1;
+          if (isClosed) p.closed += 1;
+          trackingsByPro.set(t.professionalId, p);
+        }
+      }
+
+      const rawUsers = await db.user.findMany({
         select: {
           id: true,
           firstName: true,
           lastName: true,
           email: true,
+          phone: true,
           role: true,
           isActive: true,
           isVerified: true,
           emailVerifiedAt: true,
           createdAt: true,
+          averageRating: true,
+          reviewCount: true,
+          professionalCity: true,
+          address: true,
+          serviceArea: true,
+          companyName: true,
         },
         orderBy: { createdAt: "desc" },
-      }),
-    });
+      });
+
+      const users = rawUsers.map((u) => {
+        const isClient = u.role === "CLIENT";
+        const stats = (isClient ? trackingsByClient.get(u.id) : trackingsByPro.get(u.id)) ?? {
+          completed: 0,
+          closed: 0,
+          total: 0,
+        };
+
+        const location =
+          u.professionalCity?.trim() || u.address?.trim() || u.serviceArea?.trim() || "";
+
+        return {
+          id: u.id,
+          firstName: u.firstName ?? "",
+          lastName: u.lastName ?? "",
+          email: u.email ?? "",
+          phone: u.phone ?? null,
+          role: u.role,
+          isActive: u.isActive,
+          isVerified: Boolean(u.isVerified),
+          emailVerifiedAt: u.emailVerifiedAt ? u.emailVerifiedAt.toISOString() : null,
+          createdAt: u.createdAt ? u.createdAt.toISOString() : new Date().toISOString(),
+          averageRating: Number(u.averageRating) || 0,
+          reviewCount: Number(u.reviewCount) || 0,
+          completedProjects: stats.completed,
+          closedProjects: stats.closed,
+          totalProjects: stats.total,
+          location,
+          companyName: u.companyName || null,
+        };
+      });
+
+      return NextResponse.json({ users });
+    } catch (err) {
+      console.error("Failed to load admin users:", err);
+      return NextResponse.json({ error: "Failed to load users", users: [] }, { status: 500 });
+    }
+  }
   if (resource === "jobs") {
     const now = new Date();
     const [jobs, disputes, totalJobs, scheduledJobs, openJobs] = await Promise.all([
@@ -274,7 +362,26 @@ export async function GET(
         : [];
     const ledgerPaymentMap = new Map(ledgerPayments.map((p) => [p.id, p]));
 
-    const platformWalletTransactions = platformWalletTransactionsRaw.map((item) => {
+    const commissionPaymentIds = new Set(
+      platformWalletTransactionsRaw
+        .filter((tx) => tx.type === "PLATFORM_COMMISSION" && tx.paymentId)
+        .map((tx) => tx.paymentId as number),
+    );
+
+    const platformWalletTransactions: Array<{
+      id: number;
+      type: string;
+      amount: number;
+      status: string;
+      description: string;
+      createdAt: Date;
+      clientName: string | null;
+      professionalName: string | null;
+      projectTitle: string | null;
+      milestoneTitle: string | null;
+    }> = [];
+
+    for (const item of platformWalletTransactionsRaw) {
       const relPayment = item.paymentId ? ledgerPaymentMap.get(item.paymentId) : null;
       const clientName = relPayment?.client
         ? `${relPayment.client.firstName} ${relPayment.client.lastName}`.trim()
@@ -285,22 +392,62 @@ export async function GET(
       const projectTitle = relPayment?.job?.title ?? null;
       const milestoneTitle = relPayment?.milestone?.title ?? null;
 
-      return {
-        id: item.id,
-        type: item.type,
-        amount: item.amount,
-        status: item.status,
-        description:
-          adminWallets.length > 1
-            ? `${item.description} (${adminNameByUserId[item.wallet.userId] ?? `#${item.wallet.userId}`})`
-            : item.description,
-        createdAt: item.createdAt,
-        clientName,
-        professionalName,
-        projectTitle,
-        milestoneTitle,
-      };
-    });
+      // If legacy ADMIN_MILESTONE_RECEIPT has total client charge and no separate commission entry:
+      if (
+        item.type === "ADMIN_MILESTONE_RECEIPT" &&
+        item.paymentId &&
+        relPayment &&
+        !commissionPaymentIds.has(item.paymentId) &&
+        (relPayment.clientFeeAmount > 0 || relPayment.commissionAmount > 0)
+      ) {
+        const base = relPayment.baseAmount || Math.round(item.amount / 1.1);
+        const fee = relPayment.clientFeeAmount || relPayment.commissionAmount || item.amount - base;
+
+        // Entry 1: Milestone receipt
+        platformWalletTransactions.push({
+          id: item.id,
+          type: "ADMIN_MILESTONE_RECEIPT",
+          amount: base,
+          status: item.status,
+          description: `Milestone receipt: ₹${base.toLocaleString("en-IN")}`,
+          createdAt: item.createdAt,
+          clientName,
+          professionalName,
+          projectTitle,
+          milestoneTitle,
+        });
+
+        // Entry 2: Platform commission
+        platformWalletTransactions.push({
+          id: -(item.id * 1000 + 1),
+          type: "PLATFORM_COMMISSION",
+          amount: fee,
+          status: item.status,
+          description: `Platform commission: ₹${fee.toLocaleString("en-IN")}`,
+          createdAt: item.createdAt,
+          clientName,
+          professionalName,
+          projectTitle,
+          milestoneTitle,
+        });
+      } else {
+        platformWalletTransactions.push({
+          id: item.id,
+          type: item.type,
+          amount: item.amount,
+          status: item.status,
+          description:
+            adminWallets.length > 1
+              ? `${item.description} (${adminNameByUserId[item.wallet.userId] ?? `#${item.wallet.userId}`})`
+              : item.description,
+          createdAt: item.createdAt,
+          clientName,
+          professionalName,
+          projectTitle,
+          milestoneTitle,
+        });
+      }
+    }
     const platformTotalReceived = platformWalletTransactionsRaw
       .filter((item) => item.type === "ADMIN_MILESTONE_RECEIPT" && item.amount > 0)
       .reduce((sum, item) => sum + item.amount, 0);

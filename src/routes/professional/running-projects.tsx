@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { io } from "socket.io-client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   BriefcaseBusiness,
@@ -81,7 +80,16 @@ export default function RunningProjectsPage() {
   const [search, setSearch] = useState("");
   const [filterTab, setFilterTab] = useState<FilterTab>("all_active");
 
+  const inFlightRef = useRef(false);
+  const lastLoadedRef = useRef(0);
+
   const loadProjects = useCallback(async (silent = false) => {
+    const now = Date.now();
+    if (silent) {
+      if (inFlightRef.current) return;
+      if (now - lastLoadedRef.current < 600) return;
+    }
+    inFlightRef.current = true;
     if (!silent) setLoading(true);
     try {
       const response = await fetch("/api/v1/portal/professional-jobs", { cache: "no-store" });
@@ -96,10 +104,12 @@ export default function RunningProjectsPage() {
       setCompletedProjects(data.completedProjects ?? []);
       setClosedProjects(data.closedProjects ?? []);
       setSavedJobsCount(data.savedJobs?.length ?? 0);
+      lastLoadedRef.current = Date.now();
       setError("");
     } catch {
       if (!silent) setError("Your active projects could not be loaded.");
     } finally {
+      inFlightRef.current = false;
       if (!silent) setLoading(false);
     }
   }, []);
@@ -109,30 +119,15 @@ export default function RunningProjectsPage() {
   }, [loadProjects]);
 
   useEffect(() => {
-    const socket = io({
-      path: "/api/realtime",
-      withCredentials: true,
-      transports: ["websocket", "polling"],
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-    });
     const onUpdate = () => void loadProjects(true);
-    socket.on("project:updated", onUpdate);
-    socket.on("notification:new", onUpdate);
-    socket.on("proposal:new", onUpdate);
-
-    const onCustomUpdate = () => void loadProjects(true);
-    window.addEventListener("servio:notification", onCustomUpdate);
-    window.addEventListener("servio:project-update", onCustomUpdate);
+    window.addEventListener("servio:notification", onUpdate);
+    window.addEventListener("servio:project-update", onUpdate);
+    window.addEventListener("servio:proposal", onUpdate);
 
     return () => {
-      socket.off("project:updated", onUpdate);
-      socket.off("notification:new", onUpdate);
-      socket.off("proposal:new", onUpdate);
-      socket.disconnect();
-      window.removeEventListener("servio:notification", onCustomUpdate);
-      window.removeEventListener("servio:project-update", onCustomUpdate);
+      window.removeEventListener("servio:notification", onUpdate);
+      window.removeEventListener("servio:project-update", onUpdate);
+      window.removeEventListener("servio:proposal", onUpdate);
     };
   }, [loadProjects]);
 

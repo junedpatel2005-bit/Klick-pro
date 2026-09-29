@@ -11,6 +11,7 @@ import {
   releaseMilestoneToProfessional,
   settlePartialDispute,
 } from "@/lib/wallet-ledger";
+import { getPlatformCommissionRate } from "@/lib/platform-settings";
 import { emitRealtimeProjectUpdate } from "@/lib/realtime";
 
 async function getAdminSession(request: NextRequest) {
@@ -289,7 +290,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             }
           } else if (targetMilestoneId && milestone && !isFunded) {
             // Milestone is NOT funded! Check if client has sufficient wallet balance to pay professional immediately
-            const money = calculateMilestoneMoney(milestone.amount);
+            const commissionRate = await getPlatformCommissionRate();
+            const money = calculateMilestoneMoney(milestone.amount, commissionRate);
             const clientWallet = await tx.wallet.findUnique({
               where: { userId: dispute.clientId },
             });
@@ -305,7 +307,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
                   clientFeeAmount: money.clientFeeAmount,
                   professionalPayoutAmount: money.professionalPayoutAmount,
                   adminNetAmount: money.adminNetAmount,
-                  commissionAmount: money.baseAmount - money.professionalPayoutAmount,
+                  commissionAmount: money.professionalFeeAmount,
                   currency: "INR",
                   provider: "wallet",
                   projectTrackingId: dispute.trackingId,
@@ -322,6 +324,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
                 professionalId: dispute.professionalId,
                 baseAmount: milestone.amount,
                 milestoneId: milestone.id,
+                customCommissionRate: commissionRate,
               });
               await releaseMilestoneToProfessional(tx, {
                 paymentId: resolvedPayment.id,
@@ -329,6 +332,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
                 professionalId: dispute.professionalId,
                 baseAmount: milestone.amount,
                 milestoneId: milestone.id,
+                customCommissionRate: commissionRate,
               });
               resolvedPayment = await tx.payment.update({
                 where: { id: resolvedPayment.id },

@@ -281,7 +281,7 @@ export default function AdminFinancePage() {
       }, 0);
 
     const inEscrow = data.payments
-      .filter((p) => p.status === "FUNDED")
+      .filter((p) => p.status === "FUNDED" || p.status === "AWAITING_ADMIN_APPROVAL")
       .reduce((sum, p) => sum + p.amount, 0);
 
     const adminBalance = data.platformWallet?.balance ?? 0;
@@ -301,7 +301,7 @@ export default function AdminFinancePage() {
     if (!data) return [];
     const items: UnifiedItem[] = [];
 
-    // 1. Milestone Payments
+    // 1. Milestone Payments: 2 entries (1. Milestone Money, 2. Platform Commission)
     for (const p of data.payments) {
       const clientName = getUserDisplayName(
         p.client,
@@ -316,8 +316,9 @@ export default function AdminFinancePage() {
       const adminNet = p.adminNetAmount || clientFee + proComm;
       const proPayout = p.professionalPayoutAmount || Math.max(0, p.baseAmount - proComm);
 
+      // Entry 1: Milestone Money
       items.push({
-        id: `payment-${p.id}`,
+        id: `payment-${p.id}-milestone`,
         kind: "PAYMENT",
         refId: p.id,
         date: p.createdAt,
@@ -332,14 +333,41 @@ export default function AdminFinancePage() {
         clientEmail: p.client?.email,
         proName,
         proEmail: p.professional?.email,
-        clientPaid: p.amount,
+        clientPaid: p.baseAmount || p.amount,
         baseAmount: p.baseAmount,
-        adminNet,
+        adminNet: null,
         proPayout,
         status: p.status,
         provider: p.provider,
         paymentRaw: p,
       });
+
+      // Entry 2: Platform Commission (10%)
+      if (adminNet > 0 || clientFee > 0) {
+        items.push({
+          id: `payment-${p.id}-commission`,
+          kind: "PAYMENT",
+          refId: p.id,
+          date: p.createdAt,
+          title: `Platform Commission · ${p.jobTitle || "Direct Milestone Project"}`,
+          categoryOrRef: "Platform Commission (10%)",
+          milestoneInfo: p.milestoneTitle
+            ? `Commission: ${p.milestoneTitle}`
+            : "Platform Commission (10%)",
+          remainingAmount: null,
+          clientName,
+          clientEmail: p.client?.email,
+          proName,
+          proEmail: p.professional?.email,
+          clientPaid: clientFee,
+          baseAmount: null,
+          adminNet,
+          proPayout: null,
+          status: p.status,
+          provider: p.provider,
+          paymentRaw: p,
+        });
+      }
     }
 
     // 2. Client Top-ups
@@ -438,7 +466,10 @@ export default function AdminFinancePage() {
     if (activeTab === "payments") {
       list = list.filter((i) => i.kind === "PAYMENT");
     } else if (activeTab === "escrow") {
-      list = list.filter((i) => i.kind === "PAYMENT" && i.status === "FUNDED");
+      list = list.filter(
+        (i) =>
+          i.kind === "PAYMENT" && (i.status === "FUNDED" || i.status === "AWAITING_ADMIN_APPROVAL"),
+      );
     } else if (activeTab === "topups") {
       list = list.filter((i) => i.kind === "TOP_UP");
     } else if (activeTab === "withdrawals") {
@@ -701,7 +732,11 @@ export default function AdminFinancePage() {
             active={activeTab === "escrow"}
             onClick={() => setActiveTab("escrow")}
             label="Escrow Approvals"
-            badge={data?.payments.filter((p) => p.status === "FUNDED").length}
+            badge={
+              data?.payments.filter(
+                (p) => p.status === "FUNDED" || p.status === "AWAITING_ADMIN_APPROVAL",
+              ).length
+            }
             badgeTone="amber"
           />
           <TabButton
@@ -760,6 +795,7 @@ export default function AdminFinancePage() {
               <option value="ALL">All Statuses</option>
               <option value="COMPLETED">Completed</option>
               <option value="FUNDED">Funded (Escrow)</option>
+              <option value="AWAITING_ADMIN_APPROVAL">Awaiting Approval</option>
               <option value="PENDING">Pending</option>
               <option value="FAILED">Failed</option>
             </select>
@@ -787,7 +823,9 @@ export default function AdminFinancePage() {
             <tbody className="divide-y divide-slate-100">
               {filteredItems.map((item) => {
                 const isPayment = item.kind === "PAYMENT";
-                const isFundedPayment = isPayment && item.status === "FUNDED";
+                const isFundedPayment =
+                  isPayment &&
+                  (item.status === "FUNDED" || item.status === "AWAITING_ADMIN_APPROVAL");
                 const isPendingWithdrawal = item.kind === "WITHDRAWAL" && item.status === "PENDING";
 
                 return (
@@ -817,6 +855,17 @@ export default function AdminFinancePage() {
                         {item.title}
                       </p>
                       <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                        {item.id.endsWith("-commission") ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200">
+                            <Percent className="h-2.5 w-2.5 text-amber-500" />
+                            Platform Commission
+                          </span>
+                        ) : item.id.endsWith("-milestone") ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 border border-indigo-200">
+                            <Briefcase className="h-2.5 w-2.5 text-indigo-500" />
+                            Milestone Money
+                          </span>
+                        ) : null}
                         {item.milestoneInfo && (
                           <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">
                             <Layers className="h-2.5 w-2.5 text-slate-400" />
@@ -1139,6 +1188,14 @@ function StatusBadge({ status }: { status: string }) {
       </span>
     );
   }
+  if (status === "AWAITING_ADMIN_APPROVAL") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700 border border-amber-200">
+        <Clock className="h-3 w-3" />
+        Awaiting Approval
+      </span>
+    );
+  }
   if (status === "FAILED") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 border border-rose-200">
@@ -1441,7 +1498,7 @@ function TransactionDrawer({
             Close
           </button>
 
-          {payment.status === "FUNDED" && (
+          {(payment.status === "FUNDED" || payment.status === "AWAITING_ADMIN_APPROVAL") && (
             <button
               type="button"
               disabled={isBusy}

@@ -10,7 +10,7 @@ const pageTitles: Record<string, string> = {
   "/admin": "Command Center",
   "/admin/users": "Users & Accounts",
   "/admin/verifications": "Verification & Compliance",
-  "/admin/operations": "Operations & Disputes",
+  "/admin/operations": "Operations & Jobs",
   "/admin/services": "Services Catalog",
   "/admin/finance": "Finance & Payouts",
   "/admin/reports": "Reports & Analytics",

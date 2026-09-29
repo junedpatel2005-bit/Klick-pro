@@ -5,6 +5,11 @@ import { io } from "socket.io-client";
 import { toast } from "sonner";
 import { CircleCheck } from "lucide-react";
 
+import {
+  dismissAllNotificationsWithAnimation,
+  dismissSingleNotificationWithAnimation,
+} from "@/lib/notification-dismiss";
+
 type AdminRealtimeNotification = {
   id?: number;
   type?: string;
@@ -26,7 +31,11 @@ export function AdminRealtime() {
 
     toast.custom(
       (t) => (
-        <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 shadow-xl ring-1 ring-black/5 dark:border-slate-800 dark:bg-slate-900 space-y-3">
+        <div
+          data-notification-toast="true"
+          data-notification-id={String(t)}
+          className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 shadow-xl ring-1 ring-black/5 dark:border-slate-800 dark:bg-slate-900 space-y-3 animate-in fade-in-50 slide-in-from-top-3 duration-200"
+        >
           <div className="flex items-start gap-3">
             <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
               <CircleCheck className="h-4 w-4" />
@@ -47,8 +56,8 @@ export function AdminRealtime() {
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
-              onClick={() => toast.dismiss(t)}
-              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors"
+              onClick={() => void dismissAllNotificationsWithAnimation()}
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
             >
               Dismiss All
             </button>
@@ -56,17 +65,13 @@ export function AdminRealtime() {
               <button
                 type="button"
                 onClick={() => {
-                  if (notification.id != null) {
-                    void fetch("/api/portal/notifications", {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ id: notification.id }),
-                    });
-                  }
-                  toast.dismiss(t);
-                  window.location.assign(notification.href!);
+                  void dismissSingleNotificationWithAnimation(
+                    t,
+                    notification.id,
+                    notification.href,
+                  );
                 }}
-                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 transition-colors"
+                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 transition-colors cursor-pointer"
               >
                 {actionLabel}
               </button>
@@ -74,7 +79,7 @@ export function AdminRealtime() {
           </div>
         </div>
       ),
-      { duration: 6000 },
+      { duration: 6500 },
     );
   }, []);
 

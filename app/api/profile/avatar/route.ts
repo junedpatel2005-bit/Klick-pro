@@ -58,22 +58,27 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await getSession(request);
-  if (!session) return new NextResponse("Unauthorized", { status: 401 });
-  const user = await db.user.findUnique({
-    where: { id: session.userId },
-    select: { avatarUrl: true },
-  });
   const key = new URL(request.url).searchParams.get("key");
-  if (!key || !key.startsWith(`avatars/${session.userId}/`))
+  if (!key || !key.startsWith("avatars/") || key.includes("..")) {
     return new NextResponse(null, { status: 404 });
+  }
+
+  // Ensure key conforms to avatars/{userId}/{filename}
+  const keyParts = key.split("/");
+  if (keyParts.length !== 3 || !keyParts[1] || !/^\d+$/.test(keyParts[1])) {
+    return new NextResponse(null, { status: 404 });
+  }
+
   try {
     const bytes = await readProjectFile(key);
     const extension = key.slice(key.lastIndexOf(".")).toLowerCase();
     const contentType =
       extension === ".png" ? "image/png" : extension === ".webp" ? "image/webp" : "image/jpeg";
     return new NextResponse(bytes as BodyInit, {
-      headers: { "content-type": contentType, "cache-control": "private, max-age=3600" },
+      headers: {
+        "content-type": contentType,
+        "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
+      },
     });
   } catch (error) {
     if (isProjectFileNotFound(error)) return new NextResponse(null, { status: 404 });

@@ -1257,3 +1257,24 @@ model PlatformSetting {
   @@index([category])
   @@map("platform_settings")
 }
+
+model SmsTemplate {
+  id            Int           @id @default(autoincrement())
+  key           String        @unique
+  name          String
+  description   String        @default("")
+  audience      EmailAudience @default(CLIENT)
+  category      String        @default("General")
+  bodyText      String
+  dltTemplateId String?       @map("dlt_template_id")
+  senderId      String?       @map("sender_id")
+  isActive      Boolean       @default(true)
+  isCustomized  Boolean       @default(false)
+  updatedBy     Int?          @map("updated_by")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  @@index([audience])
+  @@index([category])
+  @@map("sms_templates")
+}

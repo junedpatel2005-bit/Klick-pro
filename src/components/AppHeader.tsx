@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { ClientAccountMenu, type AccountUser } from "@/components/ClientAccountMenu";
 import { Button } from "@/components/ui/button";
+import { fetchPortalNotifications, invalidateNotificationsCache } from "@/lib/notifications-client";
 
 type DashboardNotification = {
   id: number;
@@ -127,22 +128,23 @@ export function AppHeader({
     setNotificationOpen(false);
   }, [pathname]);
 
-  const loadNotifications = useCallback(async () => {
-    try {
-      const response = await fetch("/api/portal/notifications", { cache: "no-store" });
-      if (!response.ok) return;
-      const data = (await response.json()) as DashboardNotification[];
-      setNotifications(data);
-      if (pathname.startsWith("/notifications")) {
+  const loadNotifications = useCallback(
+    async (force = false) => {
+      try {
+        const data = (await fetchPortalNotifications({ force })) as DashboardNotification[];
+        setNotifications(data);
+        if (pathname.startsWith("/notifications")) {
+          setUnreadNotifications(0);
+        } else {
+          setUnreadNotifications(data.filter((notification) => !notification.readAt).length);
+        }
+      } catch {
+        setNotifications([]);
         setUnreadNotifications(0);
-      } else {
-        setUnreadNotifications(data.filter((notification) => !notification.readAt).length);
       }
-    } catch {
-      setNotifications([]);
-      setUnreadNotifications(0);
-    }
-  }, [pathname]);
+    },
+    [pathname],
+  );
 
   const handleNotificationClick = async (item: DashboardNotification) => {
     setNotificationOpen(false);
@@ -150,6 +152,7 @@ export function AppHeader({
       const now = new Date().toISOString();
       setNotifications((prev) => prev.map((n) => (n.id === item.id ? { ...n, readAt: now } : n)));
       setUnreadNotifications((prev) => Math.max(0, prev - 1));
+      invalidateNotificationsCache();
       try {
         await fetch("/api/portal/notifications", {
           method: "PATCH",
@@ -169,10 +172,23 @@ export function AppHeader({
     }
   };
 
+  const [isBellRinging, setIsBellRinging] = useState(false);
+
+  useEffect(() => {
+    const onBellRing = () => {
+      setIsBellRinging(true);
+      setTimeout(() => setIsBellRinging(false), 800);
+    };
+    window.addEventListener("servio:bell-ring", onBellRing);
+    return () => window.removeEventListener("servio:bell-ring", onBellRing);
+  }, []);
+
   const handleMarkAllRead = async () => {
     const now = new Date().toISOString();
     setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt ?? now })));
     setUnreadNotifications(0);
+    invalidateNotificationsCache();
+    window.dispatchEvent(new CustomEvent("servio:bell-ring"));
     try {
       await fetch("/api/portal/notifications", {
         method: "PATCH",
@@ -187,13 +203,19 @@ export function AppHeader({
 
   useEffect(() => {
     void loadNotifications();
-    window.addEventListener("servio:notification", loadNotifications);
-    window.addEventListener("servio:message-read", loadNotifications);
-    window.addEventListener("servio:notifications-read", loadNotifications);
+    const onNotification = () => void loadNotifications(true);
+    const onRead = () => {
+      setUnreadNotifications(0);
+      setNotifications((prev) => {
+        const now = new Date().toISOString();
+        return prev.map((n) => ({ ...n, readAt: n.readAt ?? now }));
+      });
+    };
+    window.addEventListener("servio:notification", onNotification);
+    window.addEventListener("servio:notifications-read", onRead);
     return () => {
-      window.removeEventListener("servio:message-read", loadNotifications);
-      window.removeEventListener("servio:notification", loadNotifications);
-      window.removeEventListener("servio:notifications-read", loadNotifications);
+      window.removeEventListener("servio:notification", onNotification);
+      window.removeEventListener("servio:notifications-read", onRead);
     };
   }, [loadNotifications]);
 
@@ -283,6 +305,7 @@ export function AppHeader({
       <div ref={notificationRef} className="relative">
         <button
           type="button"
+          id="header-notification-bell"
           onClick={() => setNotificationOpen((prev) => !prev)}
           className={`relative grid h-9 w-9 place-items-center rounded-lg transition-colors ${
             notificationOpen
@@ -292,7 +315,11 @@ export function AppHeader({
           aria-label="Notifications"
           aria-expanded={notificationOpen}
         >
-          <Bell className="h-4 w-4" />
+          <Bell
+            className={`h-4 w-4 transition-transform duration-200 ${
+              isBellRinging ? "animate-bell-ring text-primary" : ""
+            }`}
+          />
           {unreadNotifications > 0 && !pathname.startsWith("/notifications") && (
             <span className="absolute right-2 top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-cta px-1 text-[10px] font-bold text-cta-foreground shadow-sm">
               {unreadNotifications > 9 ? "9+" : unreadNotifications}

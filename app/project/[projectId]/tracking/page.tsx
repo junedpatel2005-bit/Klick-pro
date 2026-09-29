@@ -354,6 +354,8 @@ export default function SharedProjectTrackingPage() {
     if (queryTab === "uploads") return "uploads";
     return "overview";
   });
+  // TEMPORARY HIDDEN (Dispute System): To unhide, set to true
+  const SHOW_DISPUTE_BUTTONS = false as boolean;
 
   const hasAutoScrolledMilestone = useRef<string | null>(null);
 
@@ -1733,18 +1735,20 @@ export default function SharedProjectTrackingPage() {
                           <X className="h-4 w-4" />
                           Decline Reopen
                         </Button>
-                        <Button
-                          variant="outline"
-                          className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 ml-auto"
-                          onClick={() => {
-                            document
-                              .getElementById("project-dispute-center")
-                              ?.scrollIntoView({ behavior: "smooth" });
-                          }}
-                        >
-                          <ShieldAlert className="h-4 w-4" />
-                          Raise Dispute
-                        </Button>
+                        {SHOW_DISPUTE_BUTTONS ? (
+                          <Button
+                            variant="outline"
+                            className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 ml-auto"
+                            onClick={() => {
+                              document
+                                .getElementById("project-dispute-center")
+                                ?.scrollIntoView({ behavior: "smooth" });
+                            }}
+                          >
+                            <ShieldAlert className="h-4 w-4" />
+                            Raise Dispute
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   ) : (
@@ -1803,18 +1807,20 @@ export default function SharedProjectTrackingPage() {
                           <X className="h-4 w-4" />
                           Decline
                         </Button>
-                        <Button
-                          variant="outline"
-                          className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 ml-auto"
-                          onClick={() => {
-                            document
-                              .getElementById("project-dispute-center")
-                              ?.scrollIntoView({ behavior: "smooth" });
-                          }}
-                        >
-                          <ShieldAlert className="h-4 w-4" />
-                          Raise Dispute
-                        </Button>
+                        {SHOW_DISPUTE_BUTTONS ? (
+                          <Button
+                            variant="outline"
+                            className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 ml-auto"
+                            onClick={() => {
+                              document
+                                .getElementById("project-dispute-center")
+                                ?.scrollIntoView({ behavior: "smooth" });
+                            }}
+                          >
+                            <ShieldAlert className="h-4 w-4" />
+                            Raise Dispute
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   )
@@ -1906,18 +1912,20 @@ export default function SharedProjectTrackingPage() {
                           </p>
                         </div>
                       )}
-                      <Button
-                        variant="outline"
-                        className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 ml-auto"
-                        onClick={() => {
-                          document
-                            .getElementById("project-dispute-center")
-                            ?.scrollIntoView({ behavior: "smooth" });
-                        }}
-                      >
-                        <ShieldAlert className="h-4 w-4" />
-                        Raise Dispute
-                      </Button>
+                      {SHOW_DISPUTE_BUTTONS ? (
+                        <Button
+                          variant="outline"
+                          className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10 ml-auto"
+                          onClick={() => {
+                            document
+                              .getElementById("project-dispute-center")
+                              ?.scrollIntoView({ behavior: "smooth" });
+                          }}
+                        >
+                          <ShieldAlert className="h-4 w-4" />
+                          Raise Dispute
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                 )
@@ -1973,18 +1981,20 @@ export default function SharedProjectTrackingPage() {
                         Reopen Project for Work
                       </Button>
                     )}
-                    <Button
-                      variant="outline"
-                      className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
-                      onClick={() => {
-                        document
-                          .getElementById("project-dispute-center")
-                          ?.scrollIntoView({ behavior: "smooth" });
-                      }}
-                    >
-                      <ShieldAlert className="h-4 w-4" />
-                      Raise Dispute
-                    </Button>
+                    {SHOW_DISPUTE_BUTTONS ? (
+                      <Button
+                        variant="outline"
+                        className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+                        onClick={() => {
+                          document
+                            .getElementById("project-dispute-center")
+                            ?.scrollIntoView({ behavior: "smooth" });
+                        }}
+                      >
+                        <ShieldAlert className="h-4 w-4" />
+                        Raise Dispute
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               ) : isClient ? (
@@ -2199,18 +2209,20 @@ export default function SharedProjectTrackingPage() {
                         Download full project PDF
                       </a>
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        document.getElementById("project-dispute-center")?.scrollIntoView({
-                          behavior: "smooth",
-                          block: "start",
-                        });
-                      }}
-                    >
-                      Report issue / Raise dispute
-                    </Button>
+                    {SHOW_DISPUTE_BUTTONS ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          document.getElementById("project-dispute-center")?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start",
+                          });
+                        }}
+                      >
+                        Report issue / Raise dispute
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
 
@@ -2584,7 +2596,6 @@ export default function SharedProjectTrackingPage() {
                 </Dialog>
               </section>
             )}
-
             {disputeEligibleStatuses.includes(data.project.status) && (
               <ProjectDisputeCenter
                 projectId={Number(projectId)}
@@ -2599,7 +2610,7 @@ export default function SharedProjectTrackingPage() {
                 dispute={data.dispute}
                 disputeMessages={data.disputeMessages}
                 disputeCount={data.disputeCount}
-                disputeLimit={data.disputeLimit ?? 3}
+                disputeLimit={data.disputeLimit ?? 5}
                 canRaiseDispute={data.canRaiseDispute}
                 onAction={async (actionKey, payload) => {
                   await action(actionKey, payload);
@@ -3645,26 +3656,27 @@ export default function SharedProjectTrackingPage() {
               </p>
             </div>
 
-            {/* Dispute Escalation Notice */}
-            <div className="rounded-xl border border-border/80 bg-muted/20 p-3 text-xs text-muted-foreground flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 text-destructive shrink-0" />
-                <span>Having a dispute or unresolved conflict with the professional?</span>
+            {SHOW_DISPUTE_BUTTONS ? (
+              <div className="rounded-xl border border-border/80 bg-muted/20 p-3 text-xs text-muted-foreground flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-destructive shrink-0" />
+                  <span>Having a dispute or unresolved conflict with the professional?</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    setShowReopenModal(false);
+                    document
+                      .getElementById("project-dispute-center")
+                      ?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                >
+                  Raise Dispute
+                </Button>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive/10"
-                onClick={() => {
-                  setShowReopenModal(false);
-                  document
-                    .getElementById("project-dispute-center")
-                    ?.scrollIntoView({ behavior: "smooth" });
-                }}
-              >
-                Raise Dispute
-              </Button>
-            </div>
+            ) : null}
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">

@@ -59,6 +59,7 @@ type Wallet = {
   available: number;
   reserved: number;
   withdrawals: Withdrawal[];
+  minWithdrawalAmount?: number;
 };
 type CompletedJob = {
   id: number;
@@ -111,7 +112,10 @@ export default function Earnings() {
             new Date(i.createdAt).getMonth() === new Date().getMonth() &&
             new Date(i.createdAt).getFullYear() === new Date().getFullYear(),
         )
-        .reduce((sum, i) => sum + i.amount, 0) ?? 0,
+        .reduce(
+          (sum, i) => sum + (i.type === "PLATFORM_COMMISSION" ? -Math.abs(i.amount) : i.amount),
+          0,
+        ) ?? 0,
     [items],
   );
   async function withdraw() {
@@ -331,8 +335,19 @@ export default function Earnings() {
                     }
                   }}
                 >
-                  <div>
-                    <p className="font-semibold">{i.description}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold truncate">{i.description}</p>
+                      {i.type === "PLATFORM_COMMISSION" ? (
+                        <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                          Commission cut (10%)
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                          Milestone money
+                        </span>
+                      )}
+                    </div>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {new Date(i.createdAt).toLocaleDateString(undefined, {
                         year: "numeric",
@@ -342,14 +357,24 @@ export default function Earnings() {
                       · {i.status}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-foreground">
-                      ₹{i.amount.toLocaleString()} <span className="text-xs">{i.currency}</span>
+                  <div className="text-right shrink-0">
+                    <p
+                      className={`font-bold ${
+                        i.type === "PLATFORM_COMMISSION"
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-foreground"
+                      }`}
+                    >
+                      {i.type === "PLATFORM_COMMISSION" ? "-" : "+"}₹
+                      {Math.abs(i.amount).toLocaleString()}{" "}
+                      <span className="text-xs">{i.currency}</span>
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {i.type === "DISPUTE_PAYOUT"
-                        ? "Dispute settlement payment"
-                        : "Client milestone payment"}
+                      {i.type === "PLATFORM_COMMISSION"
+                        ? "Platform commission (10%)"
+                        : i.type === "DISPUTE_PAYOUT"
+                          ? "Dispute settlement payment"
+                          : "Client milestone payment"}
                     </p>
                   </div>
                 </div>
@@ -382,7 +407,12 @@ export default function Earnings() {
                 </Button>
               </section>
               <section className="rounded-2xl border border-border bg-card p-5 shadow-soft">
-                <h2 className="font-display text-xl font-semibold">Request withdrawal</h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="font-display text-xl font-semibold">Request withdrawal</h2>
+                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                    Min ₹{(wallet.minWithdrawalAmount ?? 500).toLocaleString("en-IN")}
+                  </span>
+                </div>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Available: ₹{wallet.available.toLocaleString("en-IN")}
                 </p>
@@ -391,13 +421,19 @@ export default function Earnings() {
                   <input
                     className="mt-2 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
                     type="number"
-                    min="1"
+                    min={wallet.minWithdrawalAmount ?? 500}
                     max={wallet.available}
-                    placeholder="0"
+                    placeholder={`Min ₹${(wallet.minWithdrawalAmount ?? 500).toLocaleString("en-IN")}`}
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                   />
                 </label>
+                {amount && Number(amount) < (wallet.minWithdrawalAmount ?? 500) && (
+                  <p className="mt-1.5 text-xs font-medium text-amber-600">
+                    Minimum withdrawal amount is ₹
+                    {(wallet.minWithdrawalAmount ?? 500).toLocaleString("en-IN")}.
+                  </p>
+                )}
                 <label className="mt-3 block text-sm font-medium">
                   Payout destination
                   <input
@@ -410,7 +446,12 @@ export default function Earnings() {
                 {message && <p className="mt-3 text-sm text-muted-foreground">{message}</p>}
                 <Button
                   className="mt-5 w-full"
-                  disabled={!amount || !destination || Number(amount) > wallet.available}
+                  disabled={
+                    !amount ||
+                    !destination ||
+                    Number(amount) > wallet.available ||
+                    Number(amount) < (wallet.minWithdrawalAmount ?? 500)
+                  }
                   onClick={() => void withdraw()}
                 >
                   Request withdrawal <ArrowUpRight className="ml-2 h-4 w-4" />
