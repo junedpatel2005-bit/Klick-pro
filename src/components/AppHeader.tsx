@@ -321,8 +321,8 @@ export function AppHeader({
             }`}
           />
           {unreadNotifications > 0 && !pathname.startsWith("/notifications") && (
-            <span className="absolute right-2 top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-cta px-1 text-[10px] font-bold text-cta-foreground shadow-sm">
-              {unreadNotifications > 9 ? "9+" : unreadNotifications}
+            <span className="absolute -top-1 -right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-cta px-1 text-[9.5px] font-bold text-cta-foreground shadow-sm ring-2 ring-background">
+              {unreadNotifications > 99 ? "99+" : unreadNotifications}
             </span>
           )}
         </button>

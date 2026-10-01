@@ -130,6 +130,9 @@ export function AdminSidebar() {
     } else if (pathname === "/admin/messages") {
       section = "messages";
       badgeKey = "messages";
+    } else if (pathname === "/admin/notifications") {
+      section = "notifications";
+      badgeKey = "notifications";
     }
 
     if (!section) return;
@@ -227,8 +230,8 @@ export function AdminSidebar() {
                       {badgeCount > 0 &&
                         !active &&
                         (collapsed ? (
-                          <span className="absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-indigo-600 px-1 text-[9px] font-bold text-white shadow-xs">
-                            {badgeCount > 9 ? "9+" : badgeCount}
+                          <span className="absolute -top-1 -right-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-indigo-600 px-1 text-[9px] font-bold text-white shadow-xs">
+                            {badgeCount > 99 ? "99+" : badgeCount}
                           </span>
                         ) : (
                           <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-indigo-100 px-1.5 text-[10px] font-bold text-indigo-700">

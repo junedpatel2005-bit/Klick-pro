@@ -3,8 +3,9 @@ import { AdminPageSkeleton } from "@/components/LoadingSkeleton";
 export default function Loading() {
   return (
     <AdminPageSkeleton
-      title="Loading Admin Console…"
-      subtitle="Fetching enterprise metrics and records…"
+      title="Loading System Settings…"
+      subtitle="Fetching global configurations and integrations…"
     />
   );
 }
+

@@ -73,6 +73,8 @@ type PaymentDetail = {
 export default function ClientEarnings() {
   const [payments, setPayments] = useState<Payment[] | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [walletLoading, setWalletLoading] = useState(true);
+  const [paymentsLoading, setPaymentsLoading] = useState(true);
   const [topUpAmount, setTopUpAmount] = useState("");
   const [walletMessage, setWalletMessage] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState<

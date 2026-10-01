@@ -79,12 +79,17 @@ function useUnreadNotifications(pathname: string) {
       setCount(0);
       invalidateNotificationsCache();
     };
+    const onFocus = () => load(true);
     window.addEventListener("servio:notification", onNotification);
     window.addEventListener("servio:notifications-read", onNotificationsRead);
+    window.addEventListener("focus", onFocus);
+    const interval = setInterval(() => load(false), 20000);
     return () => {
       active = false;
       window.removeEventListener("servio:notification", onNotification);
       window.removeEventListener("servio:notifications-read", onNotificationsRead);
+      window.removeEventListener("focus", onFocus);
+      clearInterval(interval);
     };
   }, [pathname]);
   return count;

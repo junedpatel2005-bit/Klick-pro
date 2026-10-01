@@ -511,7 +511,14 @@ export function NotificationInbox({ admin: _isAdmin = false }: { admin?: boolean
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Notifications</h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Notifications</h1>
+            {totalUnreadCount > 0 && (
+              <span className="rounded-full bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-xs font-bold text-indigo-700">
+                {totalUnreadCount} unread
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-sm text-slate-500">
             Real-time updates on your jobs, proposals, milestones, and account.
           </p>
@@ -568,7 +575,11 @@ export function NotificationInbox({ admin: _isAdmin = false }: { admin?: boolean
                   {projectItems.length}
                 </span>
               )}
-              {projectUnreadCount > 0 && <span className="h-2 w-2 rounded-full bg-indigo-600" />}
+              {projectUnreadCount > 0 && (
+                <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-xs">
+                  {projectUnreadCount}
+                </span>
+              )}
             </button>
 
             <button
@@ -593,7 +604,11 @@ export function NotificationInbox({ admin: _isAdmin = false }: { admin?: boolean
                   {otherItems.length}
                 </span>
               )}
-              {otherUnreadCount > 0 && <span className="h-2 w-2 rounded-full bg-indigo-600" />}
+              {otherUnreadCount > 0 && (
+                <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-xs">
+                  {otherUnreadCount}
+                </span>
+              )}
             </button>
           </div>
 

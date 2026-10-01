@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import { toast } from "sonner";
-import { CircleCheck } from "lucide-react";
+import { ArrowRight, CircleCheck, X } from "lucide-react";
 
 import {
   dismissAllNotificationsWithAnimation,
@@ -34,48 +34,65 @@ export function AdminRealtime() {
         <div
           data-notification-toast="true"
           data-notification-id={String(t)}
-          className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 shadow-xl ring-1 ring-black/5 dark:border-slate-800 dark:bg-slate-900 space-y-3 animate-in fade-in-50 slide-in-from-top-3 duration-200"
+          className="group relative w-full max-w-sm rounded-2xl border border-slate-200/90 bg-white/95 p-4 shadow-[0_12px_36px_-6px_rgba(0,0,0,0.16)] backdrop-blur-xl ring-1 ring-black/5 dark:border-slate-800 dark:bg-slate-900/95 space-y-2.5 animate-in fade-in-50 slide-in-from-top-3 duration-200"
         >
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-              <CircleCheck className="h-4 w-4" />
+          {/* Top subtle indigo glow accent bar */}
+          <div className="absolute top-0 inset-x-5 h-0.5 rounded-full bg-gradient-to-r from-indigo-500/40 via-indigo-600 to-indigo-500/40 opacity-80" />
+
+          {/* Close button at top-right */}
+          <button
+            type="button"
+            onClick={() => void dismissSingleNotificationWithAnimation(t, notification.id)}
+            className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
+            aria-label="Dismiss notification"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+
+          <div className="flex items-start gap-3 pr-5">
+            <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shadow-2xs">
+              <CircleCheck className="h-4.5 w-4.5" />
             </div>
             <div className="min-w-0 flex-1">
               <h5 className="text-sm font-bold text-slate-900 dark:text-white leading-snug">
                 {notification.title || "New Admin Notification"}
               </h5>
               {notification.description && (
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                <p className="mt-1 line-clamp-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                   {notification.description}
                 </p>
               )}
             </div>
           </div>
 
-          {/* 2 Buttons placed below */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={() => void dismissAllNotificationsWithAnimation()}
-              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
-            >
-              Dismiss All
-            </button>
-            {notification.href && (
+          {/* Action Row */}
+          <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+            <span className="text-[10.5px] font-medium text-slate-400">Admin Alert</span>
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => {
-                  void dismissSingleNotificationWithAnimation(
-                    t,
-                    notification.id,
-                    notification.href,
-                  );
-                }}
-                className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 transition-colors cursor-pointer"
+                onClick={() => void dismissAllNotificationsWithAnimation()}
+                className="rounded-lg px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
               >
-                {actionLabel}
+                Dismiss all
               </button>
-            )}
+              {notification.href && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void dismissSingleNotificationWithAnimation(
+                      t,
+                      notification.id,
+                      notification.href,
+                    );
+                  }}
+                  className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1 font-semibold text-white shadow-xs hover:bg-indigo-700 transition-all cursor-pointer active:scale-95"
+                >
+                  <span>{actionLabel}</span>
+                  <ArrowRight className="h-3 w-3" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       ),

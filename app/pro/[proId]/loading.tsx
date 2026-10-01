@@ -1,5 +1,10 @@
 import { PageSkeleton } from "@/components/LoadingSkeleton";
 
 export default function Loading() {
-  return <PageSkeleton />;
+  return (
+    <PageSkeleton
+      title="Loading Professional Profile…"
+      subtitle="Fetching portfolio, verified reviews, and availability…"
+    />
+  );
 }

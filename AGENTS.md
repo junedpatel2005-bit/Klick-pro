@@ -35,3 +35,10 @@ Whenever any schema change is requested:
 6. Regenerate Prisma client: `npx prisma generate`.
 7. Verify migration status: `npx prisma migrate status`.
 8. Run TypeScript check: `npm run typecheck`.
+
+# Communication & Transparency Rules
+
+## Rule 4: Always Explain What You Are Doing Before Execution
+- **TRANSPARENCY FIRST**: Before executing multi-file edits, batch updates, or structural changes, always explain to the user what you are about to do, why, and how it will be implemented.
+- **NEVER WORK IN SILENCE**: Keep the user fully in the loop with a clear breakdown of the planned steps and affected files so the user has complete visibility and control over all modifications.
+

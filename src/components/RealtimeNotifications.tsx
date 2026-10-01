@@ -6,12 +6,14 @@ import { io } from "socket.io-client";
 import { toast } from "sonner";
 import {
   AlertTriangle,
+  ArrowRight,
   BellRing,
   CircleCheck,
   FileText,
   Flag,
   ShieldCheck,
   Wallet,
+  X,
 } from "lucide-react";
 import {
   dismissAllNotificationsWithAnimation,
@@ -107,48 +109,65 @@ export function RealtimeNotifications() {
         <div
           data-notification-toast="true"
           data-notification-id={String(t)}
-          className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl ring-1 ring-black/5 dark:ring-white/10 space-y-3 animate-in fade-in-50 slide-in-from-top-3 duration-200"
+          className="group relative w-full max-w-sm rounded-2xl border border-border/80 bg-background/95 p-4 shadow-[0_12px_36px_-6px_rgba(0,0,0,0.16)] backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/10 transition-all duration-200 animate-in fade-in-50 slide-in-from-top-3"
         >
-          <div className="flex items-start gap-3">
+          {/* Subtle top indicator bar */}
+          <div className="absolute top-0 inset-x-5 h-0.5 rounded-full bg-gradient-to-r from-primary/40 via-primary to-primary/40 opacity-70" />
+
+          {/* Close button at top-right */}
+          <button
+            type="button"
+            onClick={() => void dismissSingleNotificationWithAnimation(t, notification.id)}
+            className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-lg text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+            aria-label="Dismiss notification"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+
+          <div className="flex items-start gap-3 pr-5">
             <div
-              className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl ${iconClass}`}
+              className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-xs ${iconClass}`}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4.5 w-4.5" />
             </div>
             <div className="min-w-0 flex-1">
               {titleContent}
               {notification.description && (
-                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground leading-relaxed">
                   {notification.description}
                 </p>
               )}
             </div>
           </div>
 
-          {/* 2 Buttons placed below */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
-            <button
-              type="button"
-              onClick={() => void dismissAllNotificationsWithAnimation()}
-              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-            >
-              Dismiss All
-            </button>
-            {notification.href && (
+          {/* Action Row */}
+          <div className="mt-3 flex items-center justify-between pt-2.5 border-t border-border/50 text-xs">
+            <span className="text-[10.5px] font-medium text-muted-foreground/70">Just now</span>
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => {
-                  void dismissSingleNotificationWithAnimation(
-                    t,
-                    notification.id,
-                    notification.href,
-                  );
-                }}
-                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground shadow-xs hover:bg-primary/90 transition-colors cursor-pointer"
+                onClick={() => void dismissAllNotificationsWithAnimation()}
+                className="rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
               >
-                {actionLabel}
+                Dismiss all
               </button>
-            )}
+              {notification.href && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void dismissSingleNotificationWithAnimation(
+                      t,
+                      notification.id,
+                      notification.href,
+                    );
+                  }}
+                  className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1 font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition-all cursor-pointer active:scale-95"
+                >
+                  <span>{actionLabel}</span>
+                  <ArrowRight className="h-3 w-3" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       ),
@@ -174,22 +193,33 @@ export function RealtimeNotifications() {
           <div
             data-notification-toast="true"
             data-notification-id={String(t)}
-            className="w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-xl ring-1 ring-black/5 dark:ring-white/10 space-y-3 animate-in fade-in-50 slide-in-from-top-3 duration-200"
+            className="group relative w-full max-w-sm rounded-2xl border border-border/80 bg-background/95 p-4 shadow-[0_12px_36px_-6px_rgba(0,0,0,0.16)] backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/10 transition-all duration-200 animate-in fade-in-50 slide-in-from-top-3"
           >
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-                <BellRing className="h-4 w-4" />
+            <div className="absolute top-0 inset-x-5 h-0.5 rounded-full bg-gradient-to-r from-primary/40 via-primary to-primary/40 opacity-70" />
+
+            <button
+              type="button"
+              onClick={() => void dismissSingleNotificationWithAnimation(t)}
+              className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-lg text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+              aria-label="Dismiss"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+
+            <div className="flex items-start gap-3 pr-5">
+              <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary shadow-xs">
+                <BellRing className="h-4.5 w-4.5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
                   <span className="font-bold text-foreground text-sm leading-snug">
                     Notifications
                   </span>
-                  <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary shrink-0">
+                  <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary">
                     {totalCount} new
                   </span>
                 </div>
-                <div className="mt-1.5 rounded-xl bg-muted/50 p-2.5 border border-border/50">
+                <div className="mt-1.5 rounded-xl bg-muted/40 p-2.5 border border-border/50">
                   <p className="text-xs font-semibold text-foreground truncate">{latest.title}</p>
                   {latest.description && (
                     <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
@@ -203,23 +233,23 @@ export function RealtimeNotifications() {
               </div>
             </div>
 
-            {/* 2 Buttons placed below */}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
+            <div className="mt-3 flex items-center justify-between pt-2.5 border-t border-border/50 text-xs">
               <button
                 type="button"
                 onClick={() => void dismissAllNotificationsWithAnimation()}
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                className="rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
               >
-                Dismiss All
+                Dismiss all
               </button>
               <button
                 type="button"
                 onClick={() => {
                   void dismissSingleNotificationWithAnimation(t, undefined, "/notifications");
                 }}
-                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground shadow-xs hover:bg-primary/90 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1 font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition-all cursor-pointer active:scale-95"
               >
-                View All ({totalCount})
+                <span>View all ({totalCount})</span>
+                <ArrowRight className="h-3 w-3" />
               </button>
             </div>
           </div>

@@ -1,0 +1,17 @@
+import { CardListSkeleton } from "@/components/LoadingSkeleton";
+
+export default function Loading() {
+  return (
+    <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-2">
+          <div className="h-8 w-48 rounded-xl bg-muted/60 animate-pulse" />
+          <div className="h-4 w-72 rounded-lg bg-muted/40 animate-pulse" />
+        </div>
+        <div className="h-10 w-36 rounded-xl bg-muted/60 animate-pulse" />
+      </div>
+      <CardListSkeleton count={4} />
+    </main>
+  );
+}
+
