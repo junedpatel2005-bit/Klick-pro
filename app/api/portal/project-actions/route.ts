@@ -605,19 +605,21 @@ export async function POST(request: NextRequest) {
         where: { id: project.requestId },
         select: { bidAmount: true },
       });
-      if (projectRequest?.bidAmount != null) {
-        const allMilestones = await db.projectMilestone.findMany({
-          where: { trackingId: project.id },
-          select: { id: true, amount: true },
-        });
+      const allMilestones = await db.projectMilestone.findMany({
+        where: { trackingId: project.id },
+        select: { id: true, amount: true },
+      });
+      const currentMilestoneTotal = allMilestones.reduce((sum, m) => sum + m.amount, 0);
+      const budgetCeiling = Math.max(projectRequest?.bidAmount ?? 0, currentMilestoneTotal);
+      if (budgetCeiling > 0) {
         const otherTotal = allMilestones
           .filter((m) => m.id !== input.milestoneId)
           .reduce((sum, m) => sum + m.amount, 0);
-        if (otherTotal + input.amount > projectRequest.bidAmount) {
-          const maxAllowed = Math.max(0, projectRequest.bidAmount - otherTotal);
+        if (otherTotal + input.amount > budgetCeiling) {
+          const maxAllowed = Math.max(0, budgetCeiling - otherTotal);
           return NextResponse.json(
             {
-              error: `Milestone total cannot exceed the agreed project amount of ₹${projectRequest.bidAmount.toLocaleString("en-IN")}. Max allowed for this milestone is ₹${maxAllowed.toLocaleString("en-IN")}.`,
+              error: `Milestone total cannot exceed the agreed project amount of ₹${budgetCeiling.toLocaleString("en-IN")}. Max allowed for this milestone is ₹${maxAllowed.toLocaleString("en-IN")}.`,
             },
             { status: 400 },
           );

@@ -807,7 +807,9 @@ export default function SharedProjectTrackingPage() {
     0,
   );
   const totalAgreed =
-    data.agreedAmount && data.agreedAmount > 0 ? data.agreedAmount : totalMilestoneValue;
+    data.agreedAmount && data.agreedAmount > 0
+      ? Math.max(data.agreedAmount, totalMilestoneValue)
+      : totalMilestoneValue;
   const unassignedMilestoneAmount = Math.max(0, totalAgreed - totalMilestoneValue);
   const remainingMilestoneAmount = unassignedMilestoneAmount;
 
