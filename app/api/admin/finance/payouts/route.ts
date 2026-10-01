@@ -34,8 +34,7 @@ export async function POST(request: NextRequest) {
     where: { id: parsed.data.withdrawalId },
   });
   const payment = await db.payment.findUnique({ where: { id: parsed.data.paymentId } });
-  if (!withdrawal)
-    return NextResponse.json({ error: "Withdrawal not found." }, { status: 404 });
+  if (!withdrawal) return NextResponse.json({ error: "Withdrawal not found." }, { status: 404 });
   if (withdrawal.status !== "PENDING")
     return NextResponse.json({ error: "Withdrawal is no longer pending." }, { status: 409 });
   if (
@@ -65,10 +64,7 @@ export async function POST(request: NextRequest) {
     data: { status: "PROCESSING" },
   });
   if (claimed.count !== 1)
-    return NextResponse.json(
-      { error: "Withdrawal is already being processed." },
-      { status: 409 },
-    );
+    return NextResponse.json({ error: "Withdrawal is already being processed." }, { status: 409 });
   try {
     const transferId = await createRazorpayPaymentTransfer({
       paymentId: payment.razorpayPaymentId,

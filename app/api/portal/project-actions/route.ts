@@ -7,7 +7,6 @@ import {
   notifyDisputeContested,
   notifyDisputeMessage,
   notifyDisputeRaised,
-  notifyDisputeResolved,
   notifyUsers,
 } from "@/lib/marketplace-notifications";
 import {
@@ -26,6 +25,22 @@ import {
 import { getPlatformCommissionRate, getPlatformSetting } from "@/lib/platform-settings";
 
 const attachmentIds = z.array(z.number().int().positive()).min(1).max(10);
+
+// Evidence is rendered as links by admins reviewing a dispute. Without a scheme
+// check a stored "javascript:" URL would run in the admin's browser, so only
+// ordinary web URLs are accepted.
+const safeEvidenceUrl = z
+  .string()
+  .trim()
+  .max(2000)
+  .refine((value) => {
+    try {
+      const { protocol } = new URL(value);
+      return protocol === "http:" || protocol === "https:";
+    } catch {
+      return false;
+    }
+  }, "Evidence must be a valid http or https URL.");
 
 const bodySchema = z.discriminatedUnion("action", [
   z.object({
@@ -137,7 +152,7 @@ const bodySchema = z.discriminatedUnion("action", [
         z.object({
           id: z.number().optional(),
           name: z.string(),
-          url: z.string(),
+          url: safeEvidenceUrl,
           mimeType: z.string().optional(),
           sizeBytes: z.number().optional(),
         }),
@@ -156,7 +171,7 @@ const bodySchema = z.discriminatedUnion("action", [
         z.object({
           id: z.number().optional(),
           name: z.string(),
-          url: z.string(),
+          url: safeEvidenceUrl,
           mimeType: z.string().optional(),
           sizeBytes: z.number().optional(),
         }),
@@ -192,6 +207,10 @@ const bodySchema = z.discriminatedUnion("action", [
     duration: z.string().trim().max(100).optional(),
   }),
 ]);
+
+// Once a project reaches one of these it is finished and must not be pushed
+// back into an active state by a late or replayed request.
+const TERMINAL_PROJECT_STATUSES = new Set(["COMPLETED", "CLOSED", "CANCELLED", "REOPEN_REQUESTED"]);
 
 const clientActions = new Set([
   "create-milestone",
@@ -372,6 +391,13 @@ export async function POST(request: NextRequest) {
       await event("WORK_STARTED", "Work started", "The client started work on this project.");
     }
     if (input.action === "update-progress") {
+      if (TERMINAL_PROJECT_STATUSES.has(project.status))
+        return NextResponse.json(
+          {
+            error: `This project is ${project.status.toLowerCase().replace(/_/g, " ")} and no longer accepts progress updates.`,
+          },
+          { status: 409 },
+        );
       const stageText = input.stage?.trim() || project.currentStage || "In Progress";
       const noteText = input.note?.trim() || `Progress updated to ${input.progress}%`;
       await db.projectTracking.update({
@@ -852,7 +878,7 @@ export async function POST(request: NextRequest) {
             { status: 409 },
           );
         try {
-          const { payment, activeDisputes } = await db.$transaction(async (tx) => {
+          const { payment, openDisputeCount } = await db.$transaction(async (tx) => {
             const claim = await tx.projectMilestone.updateMany({
               where: {
                 id: milestone.id,
@@ -940,43 +966,17 @@ export async function POST(request: NextRequest) {
               }
             }
 
-            // Automatically resolve any active disputes for this contract upon client offline payment
-            const activeDisputes = await tx.projectDispute.findMany({
+            // Disputes are never settled by paying a milestone. Paying one milestone
+            // must not let the client close every open dispute on the project with a
+            // settlement attributed to themselves and no ledger entries backing it.
+            const openDisputeCount = await tx.projectDispute.count({
               where: {
                 trackingId: project.id,
                 status: { not: "RESOLVED" },
               },
             });
 
-            for (const activeDispute of activeDisputes) {
-              await tx.projectDispute.update({
-                where: { id: activeDispute.id },
-                data: {
-                  status: "RESOLVED",
-                  respondentAction: "ACCEPTED",
-                  decision: "MUTUAL_SETTLEMENT",
-                  decisionReason: `Client confirmed offline payment of ₹${milestone.amount.toLocaleString("en-IN")} for milestone "${milestone.title}". Dispute automatically resolved and closed.`,
-                  decisionAt: new Date(),
-                  decidedBy: session.userId,
-                  payoutAmount: milestone.amount,
-                  refundAmount: 0,
-                },
-              });
-
-              await tx.projectTimelineEvent.create({
-                data: {
-                  trackingId: project.id,
-                  actorId: session.userId,
-                  actorRole: "CLIENT",
-                  milestoneId: milestone.id,
-                  type: "DISPUTE_RESOLVED",
-                  title: "Dispute closed · Payment received",
-                  description: `Dispute #${activeDispute.id} was automatically closed after client confirmed payment for milestone "${milestone.title}".`,
-                },
-              });
-            }
-
-            return { payment, activeDisputes };
+            return { payment, openDisputeCount };
           });
           await event(
             "MILESTONE_PAID",
@@ -984,22 +984,11 @@ export async function POST(request: NextRequest) {
             `The client confirmed offline payment for ${milestone.title}.`,
             { milestoneId: milestone.id },
           );
-          if (activeDisputes.length > 0) {
-            void notifyDisputeResolved({
-              trackingId: project.id,
-              jobTitle: project.job?.title ?? null,
-              status: "RESOLVED",
-              clientId: project.clientId,
-              professionalId: project.professionalId,
-            }).catch(() => undefined);
-
-            for (const d of activeDisputes) {
-              emitAdminEvent("dispute:update", {
-                disputeId: d.id,
-                projectId: project.id,
-                status: "RESOLVED",
-              });
-            }
+          if (openDisputeCount > 0) {
+            emitAdminEvent("dispute:update", {
+              projectId: project.id,
+              openDisputeCount,
+            });
           }
           emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
             projectId: project.id,
@@ -1012,10 +1001,10 @@ export async function POST(request: NextRequest) {
             adminReceives: 0,
             platformEarnings: 0,
             status: "COMPLETED",
-            disputeResolved: activeDisputes.length > 0,
+            disputeOpen: openDisputeCount > 0,
             message:
-              activeDisputes.length > 0
-                ? "Offline payment recorded. Dispute was automatically resolved and closed."
+              openDisputeCount > 0
+                ? `Offline payment recorded. ${openDisputeCount} dispute${openDisputeCount === 1 ? " is" : "s are"} still open and must be settled by an admin.`
                 : "Offline payment recorded. The professional was marked as paid.",
           });
         } catch (error) {
@@ -1034,6 +1023,13 @@ export async function POST(request: NextRequest) {
       );
     }
     if (input.action === "submit-final-work") {
+      if (TERMINAL_PROJECT_STATUSES.has(project.status))
+        return NextResponse.json(
+          {
+            error: `This project is ${project.status.toLowerCase().replace(/_/g, " ")} and no longer accepts final work.`,
+          },
+          { status: 409 },
+        );
       const milestones = await db.projectMilestone.findMany({ where: { trackingId: project.id } });
       if (milestones.length === 0 || !milestones.every((item) => item.status === "APPROVED"))
         return NextResponse.json(
