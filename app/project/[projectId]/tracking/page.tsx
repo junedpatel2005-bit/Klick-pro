@@ -354,8 +354,8 @@ export default function SharedProjectTrackingPage() {
     if (queryTab === "uploads") return "uploads";
     return "overview";
   });
-  // TEMPORARY HIDDEN (Dispute System): To unhide, set to true
-  const SHOW_DISPUTE_BUTTONS = false as boolean;
+  // Dispute System Active
+  const SHOW_DISPUTE_BUTTONS = true;
 
   const hasAutoScrolledMilestone = useRef<string | null>(null);
 

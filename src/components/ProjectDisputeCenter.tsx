@@ -252,8 +252,8 @@ export function ProjectDisputeCenter({
   busyAction,
   onPayMilestone,
 }: ProjectDisputeCenterProps) {
-  // TEMPORARY HIDDEN (Dispute System): To unhide, set to true
-  const SHOW_DISPUTE_CENTER = false as boolean;
+  // Dispute System Active
+  const SHOW_DISPUTE_CENTER = true;
 
   const isClient = viewerRole === "CLIENT";
   const isReporter = dispute ? dispute.reporterId === viewerUserId : false;

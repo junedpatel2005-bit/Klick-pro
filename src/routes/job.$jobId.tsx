@@ -308,8 +308,8 @@ export default function JobDetails({
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const [selectError, setSelectError] = useState<string | null>(null);
   const [hireTarget, setHireTarget] = useState<ProfessionalDiscoveryResult | null>(null);
-  // TEMPORARY HIDDEN (Dispute System): To unhide, set to true
-  const SHOW_DISPUTE_BUTTONS = false as boolean;
+  // Dispute System Active
+  const SHOW_DISPUTE_BUTTONS = true;
   const [hireBidAmount, setHireBidAmount] = useState("");
   const [hireDuration, setHireDuration] = useState("1 week");
   const [hireCoverLetter, setHireCoverLetter] = useState("");

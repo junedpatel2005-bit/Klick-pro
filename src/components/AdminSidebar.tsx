@@ -37,7 +37,7 @@ const linkGroups = [
       },
       {
         href: "/admin/operations",
-        label: "Jobs",
+        label: "Jobs & disputes",
         icon: BriefcaseBusiness,
         badge: "jobs",
       },

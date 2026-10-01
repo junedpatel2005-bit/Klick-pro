@@ -1310,6 +1310,18 @@ export async function POST(request: NextRequest) {
             })
           : null;
 
+        // Whoever sent the most recent counter-offer cannot be the one who
+        // accepts it. Without this the sender could raise their own terms and
+        // immediately self-approve, so the other party never consented.
+        if (latestNegotiation && latestNegotiation.senderId === session.userId)
+          return NextResponse.json(
+            {
+              error:
+                "You sent the latest counter-offer, so the other party must accept or decline it. You cannot accept your own terms.",
+            },
+            { status: 409 },
+          );
+
         const finalAmount = latestNegotiation?.bidAmount ?? pendingMilestone?.amount ?? 0;
         const finalTitle = pendingMilestone?.title ?? "Reopened Work";
 

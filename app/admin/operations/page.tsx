@@ -417,8 +417,8 @@ function OperationsContent() {
   const searchParams = useSearchParams();
   const disputeQueryId = searchParams.get("dispute");
   const lastDisputeIdRef = useRef<number | null>(null);
-  // TEMPORARY HIDDEN (Dispute System): To unhide, set to true
-  const SHOW_DISPUTE_OPERATIONS = false as boolean;
+  // Dispute System Active
+  const SHOW_DISPUTE_OPERATIONS = true;
   const [data, setData] = useState<OperationsData | null>(null);
   const [view, setView] = useState<"jobs" | "disputes">("jobs");
   const [query, setQuery] = useState("");
@@ -1745,8 +1745,8 @@ function DisputeDetailsPanel({
   const [partialPayout, setPartialPayout] = useState("");
   const [decisionNotes, setDecisionNotes] = useState("");
   const [executingDecision, setExecutingDecision] = useState(false);
-  // TEMPORARY HIDDEN (Dispute System Adjudication Suite): To unhide, set to true
-  const SHOW_DISPUTE_ADJUDICATION = false as boolean;
+  // Dispute System Active
+  const SHOW_DISPUTE_ADJUDICATION = true;
 
   // Target the specific disputed milestone instead of the entire contract budget
   const targetMilestone = details
