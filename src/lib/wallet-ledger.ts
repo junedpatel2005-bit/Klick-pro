@@ -87,19 +87,28 @@ export async function creditWalletFromVerifiedProvider(
   const transaction = await tx.walletTransaction.findUnique({
     where: { providerReference: input.providerReference },
   });
-  if (!transaction || transaction.walletId !== wallet.id || transaction.status !== "PENDING")
+  if (!transaction || transaction.walletId !== wallet.id)
     throw new Error("Wallet top-up is invalid or already processed.");
-  await tx.wallet.update({
-    where: { id: wallet.id },
-    data: { balance: { increment: input.amount } },
-  });
-  return tx.walletTransaction.update({
-    where: { id: transaction.id },
+
+  // The top-up must be claimed before the balance moves. A plain read-then-write
+  // lets two concurrent verifications of the same payment both observe PENDING
+  // and both credit, because the transaction only sees READ COMMITTED snapshots.
+  // updateMany applies its condition to the row lock itself, so exactly one caller
+  // can win and the losers throw instead of inflating the balance.
+  const claimed = await tx.walletTransaction.updateMany({
+    where: { id: transaction.id, status: "PENDING" },
     data: {
       status: "COMPLETED",
       metadataJson: JSON.stringify({ providerPaymentId: input.providerPaymentId }),
     },
   });
+  if (claimed.count !== 1) throw new Error("Wallet top-up is invalid or already processed.");
+
+  await tx.wallet.update({
+    where: { id: wallet.id },
+    data: { balance: { increment: input.amount } },
+  });
+  return tx.walletTransaction.findUniqueOrThrow({ where: { id: transaction.id } });
 }
 
 export async function fundMilestoneFromWallet(
@@ -197,6 +206,7 @@ export async function releaseMilestoneToProfessional(
       ? input.customCommissionRate
       : await getPlatformCommissionRate();
 
+  const feePercentage = Math.round(rate * 100);
   const money = calculateMilestoneMoney(input.baseAmount, rate);
 
   await recordTransaction(tx, {
@@ -226,7 +236,7 @@ export async function releaseMilestoneToProfessional(
       userId: input.professionalId,
       amount: -money.professionalFeeAmount,
       type: "PLATFORM_COMMISSION",
-      description: `Platform commission (10%): -₹${money.professionalFeeAmount.toLocaleString("en-IN")}`,
+      description: `Platform commission (${feePercentage}%): -₹${money.professionalFeeAmount.toLocaleString("en-IN")}`,
       idempotencyKey: `payment-${input.paymentId}-professional-commission-debit`,
       paymentId: input.paymentId,
       metadata: { milestoneId: input.milestoneId, feeAmount: money.professionalFeeAmount },

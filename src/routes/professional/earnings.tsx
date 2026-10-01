@@ -87,7 +87,8 @@ export default function Earnings() {
   const load = () => {
     void fetch("/api/v1/portal/earnings", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : []))
-      .then(setItems);
+      .then(setItems)
+      .catch(() => setItems([]));
     void fetch("/api/v1/portal/professional-jobs", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { completedProjects?: CompletedJob[] } | null) =>
@@ -96,12 +97,14 @@ export default function Earnings() {
       .catch(() => setCompletedJobs([]));
     void fetch("/api/v1/wallet", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then(setWallet);
+      .then(setWallet)
+      .catch(() => setWallet(null));
     void fetch("/api/professional/razorpay-account", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { razorpayAccountId?: string | null } | null) =>
         setRazorpayAccountId(d?.razorpayAccountId ?? ""),
-      );
+      )
+      .catch(() => setRazorpayAccountId(""));
   };
   useEffect(load, []);
   const thisMonth = useMemo(

@@ -34,6 +34,7 @@ function isAuthenticatedPage(pathname: string) {
     "/my-info",
     "/project",
     "/reviews",
+    "/verification",
   ];
 
   return protectedPrefixes.some(

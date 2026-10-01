@@ -8,12 +8,15 @@ import {
   CircleDollarSign,
   CreditCard,
   Landmark,
+  Loader2,
   LockKeyhole,
+  Plus,
   ReceiptText,
   ShieldCheck,
   Smartphone,
   Sparkles,
   WalletCards,
+  Zap,
 } from "lucide-react";
 import { CardListSkeleton } from "@/components/LoadingSkeleton";
 import { PageActionLoading } from "@/components/PageActionLoading";
@@ -86,48 +89,42 @@ export default function ClientEarnings() {
   const [historyFilter, setHistoryFilter] = useState<"all" | "successful" | "failed">("all");
   const [withdrawMethod, setWithdrawMethod] = useState<"BANK" | "CARD" | "UPI">("BANK");
   const [withdrawDestination, setWithdrawDestination] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
+  const [bankIfsc, setBankIfsc] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawMessage, setWithdrawMessage] = useState("");
   const [actionBusy, setActionBusy] = useState<string | null>(null);
-  const [isTestMode, setIsTestMode] = useState(true);
-  const [sandboxAmount, setSandboxAmount] = useState("");
+  const [shortcutAmount, setShortcutAmount] = useState("");
 
-  async function simulateSandboxPayment(customAmount?: number) {
-    setActionBusy("topup");
+  async function runShortcutTopUp() {
+    const amt = Number(shortcutAmount) || Number(topUpAmount);
+    if (!amt || amt <= 0) return;
+    setActionBusy("shortcut");
+    setWalletMessage("");
     try {
-      const depositAmount = customAmount || Number(topUpAmount) || 1000;
-      const orderRes = await fetch("/api/v1/wallet/deposit/order", {
+      const response = await fetch("/api/v1/wallet/deposit/quick", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ amount: depositAmount }),
+        body: JSON.stringify({ amount: amt }),
       });
-      const orderData = await orderRes.json().catch(() => null);
-      if (!orderRes.ok || !orderData?.orderId) {
-        throw new Error(orderData?.error || "Failed to create deposit order.");
+      const data = await response.json().catch(() => null);
+      if (response.ok) {
+        setWalletMessage(`✓ ₹${amt.toLocaleString("en-IN")} added to your wallet successfully!`);
+        setShortcutAmount("");
+        setTopUpAmount("");
+        loadWallet();
+      } else {
+        setWalletMessage(data?.error ?? "Unable to complete quick deposit.");
       }
-      const verifyRes = await fetch("/api/v1/wallet/deposit/verify", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          razorpayOrderId: orderData.orderId,
-          razorpayPaymentId: `pay_simulated_${Date.now()}`,
-          razorpaySignature: "sandbox_test_verified",
-        }),
-      });
-      const verifyData = await verifyRes.json().catch(() => null);
-      if (!verifyRes.ok) {
-        throw new Error(verifyData?.error || "Sandbox verification failed.");
-      }
-      setWalletMessage(`₹${depositAmount.toLocaleString()} added to your wallet (Sandbox Test).`);
-      loadWallet();
-      setTopUpAmount("");
-    } catch (err) {
-      setWalletMessage(err instanceof Error ? err.message : "Simulation failed.");
+    } catch {
+      setWalletMessage("Request timed out. Please try again.");
     } finally {
       setActionBusy(null);
     }
   }
+
   function loadWallet() {
+    setWalletLoading(true);
     void fetch("/api/v1/wallet", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then(
@@ -151,15 +148,32 @@ export default function ClientEarnings() {
               minWithdrawalAmount: data.minWithdrawalAmount,
             },
           ),
-      );
+      )
+      .catch(() => setWallet(null))
+      .finally(() => setWalletLoading(false));
   }
   useEffect(() => {
+    setPaymentsLoading(true);
     void fetch("/api/v1/portal/earnings", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : []))
-      .then(setPayments);
+      .then(setPayments)
+      .catch(() => setPayments([]))
+      .finally(() => setPaymentsLoading(false));
     loadWallet();
   }, []);
   async function requestWithdrawal() {
+    const destination =
+      withdrawMethod === "BANK"
+        ? `${bankAccount.trim()} (IFSC: ${bankIfsc.trim().toUpperCase()})`
+        : withdrawDestination.trim();
+
+    if (withdrawMethod === "BANK" && (!bankAccount.trim() || !bankIfsc.trim())) {
+      return setWithdrawMessage("Please enter both bank account number and IFSC code.");
+    }
+    if (withdrawMethod !== "BANK" && !destination) {
+      return setWithdrawMessage("Please enter payout destination details.");
+    }
+
     setActionBusy("withdraw");
     try {
       const response = await fetch("/api/v1/wallet", {
@@ -168,7 +182,7 @@ export default function ClientEarnings() {
         body: JSON.stringify({
           amount: Number(withdrawAmount),
           destinationType: withdrawMethod,
-          destinationLabel: withdrawDestination.trim(),
+          destinationLabel: destination,
         }),
       });
       const result = await response.json().catch(() => null);
@@ -180,6 +194,8 @@ export default function ClientEarnings() {
       if (response.ok) {
         setWithdrawAmount("");
         setWithdrawDestination("");
+        setBankAccount("");
+        setBankIfsc("");
         loadWallet();
       }
     } finally {
@@ -199,23 +215,24 @@ export default function ClientEarnings() {
         setActionBusy(null);
         return setWalletMessage(result?.error ?? "Unable to start wallet top-up.");
       }
-      if (result.isTestMode !== undefined) {
-        setIsTestMode(Boolean(result.isTestMode));
-      }
       const openCheckout = () => {
         setActionBusy(null);
         const Razorpay = (
           window as Window & {
-            Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+            Razorpay?: new (options: Record<string, unknown>) => {
+              open: () => void;
+              on: (event: string, callback: (response: unknown) => void) => void;
+            };
           }
         ).Razorpay;
         if (!Razorpay) return setWalletMessage("Payment checkout could not be loaded.");
-        new Razorpay({
+        const rzp = new Razorpay({
           key: result.keyId,
           amount: result.amount,
           currency: result.currency || "INR",
           name: "Klick-Pro",
-          description: "Wallet top-up",
+          description: "Wallet balance top-up",
+          image: "/icon.png",
           order_id: result.orderId,
           prefill: {
             name: result.clientName || "Client User",
@@ -228,31 +245,51 @@ export default function ClientEarnings() {
             razorpay_order_id: string;
             razorpay_signature: string;
           }) => {
-            const verified = await fetch("/api/v1/wallet/deposit/verify", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                razorpayOrderId: payment.razorpay_order_id,
-                razorpayPaymentId: payment.razorpay_payment_id,
-                razorpaySignature: payment.razorpay_signature,
-              }),
-            });
-            setWalletMessage(
-              verified.ok ? "Wallet funded successfully." : "Wallet funding verification failed.",
-            );
-            if (verified.ok) window.location.reload();
+            setActionBusy("topup");
+            setWalletMessage("Verifying payment with bank…");
+            try {
+              const verified = await fetch("/api/v1/wallet/deposit/verify", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  razorpayOrderId: payment.razorpay_order_id,
+                  razorpayPaymentId: payment.razorpay_payment_id,
+                  razorpaySignature: payment.razorpay_signature,
+                }),
+              });
+              const data = await verified.json().catch(() => null);
+              if (verified.ok) {
+                setWalletMessage(
+                  `✓ ₹${(data?.amount ?? Number(topUpAmount)).toLocaleString("en-IN")} added to your wallet successfully!`,
+                );
+                setTopUpAmount("");
+                loadWallet();
+              } else {
+                setWalletMessage(data?.error ?? "Wallet funding verification failed.");
+              }
+            } catch {
+              setWalletMessage("Payment verification timed out. Your balance will update shortly.");
+            } finally {
+              setActionBusy(null);
+            }
           },
           modal: {
             ondismiss: () => {
+              setActionBusy(null);
               void fetch("/api/v1/wallet/deposit/fail", {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({ orderId: result.orderId, reason: "Checkout cancelled." }),
               });
-              setWalletMessage("Payment was cancelled. No money was added to your wallet.");
+              setWalletMessage("Payment cancelled. No funds were debited.");
             },
           },
-        }).open();
+        });
+        rzp.on("payment.failed", (response: unknown) => {
+          const res = response as { error?: { description?: string; reason?: string } };
+          setWalletMessage(res.error?.description || "Payment could not be completed.");
+        });
+        rzp.open();
       };
       const existingScript = document.querySelector<HTMLScriptElement>(
         'script[src="https://checkout.razorpay.com/v1/checkout.js"]',
@@ -395,7 +432,7 @@ export default function ClientEarnings() {
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" /> Secure wallet
                 </span>
               </div>
-              {wallet ? (
+              {wallet && !walletLoading ? (
                 <p className="mt-3 font-display text-4xl font-bold tracking-tight">
                   ₹{wallet.available.toLocaleString("en-IN")}
                 </p>
@@ -413,7 +450,7 @@ export default function ClientEarnings() {
           </div>
         </div>
       </section>
-      {!payments ? (
+      {paymentsLoading && !payments ? (
         <CardListSkeleton count={3} />
       ) : (
         <>
@@ -422,17 +459,25 @@ export default function ClientEarnings() {
               icon={CircleDollarSign}
               value={`₹${(wallet?.available ?? 0).toLocaleString()}`}
               label="Wallet balance"
+              loading={walletLoading}
             />
-            <Stat icon={CircleDollarSign} value={`₹${total.toLocaleString()}`} label="Total paid" />
+            <Stat
+              icon={CircleDollarSign}
+              value={`₹${total.toLocaleString()}`}
+              label="Total paid"
+              loading={paymentsLoading}
+            />
             <Stat
               icon={CalendarDays}
               value={`₹${thisMonth.toLocaleString()}`}
               label="Paid this month"
+              loading={paymentsLoading}
             />
             <Stat
               icon={ReceiptText}
               value={String(paidPayments.filter((p) => p.type !== "PLATFORM_COMMISSION").length)}
               label="Funded milestones"
+              loading={paymentsLoading}
             />
           </div>
           <section className="relative overflow-hidden rounded-2xl border border-primary/15 bg-card p-6 shadow-soft">
@@ -450,14 +495,18 @@ export default function ClientEarnings() {
               </div>
               <div className="w-full max-w-md">
                 <div className="flex flex-wrap gap-2">
-                  {[500, 1000, 2500].map((amount) => (
+                  {[500, 1000, 2500, 5000, 10000].map((amount) => (
                     <button
                       key={amount}
                       type="button"
                       onClick={() => setTopUpAmount(String(amount))}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${topUpAmount === String(amount) ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-primary"}`}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                        topUpAmount === String(amount)
+                          ? "border-primary bg-primary text-primary-foreground shadow-xs"
+                          : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-primary"
+                      }`}
                     >
-                      ₹{amount.toLocaleString()}
+                      ₹{amount.toLocaleString("en-IN")}
                     </button>
                   ))}
                 </div>
@@ -465,7 +514,7 @@ export default function ClientEarnings() {
                   <div className="flex h-12 min-w-0 flex-1 items-center rounded-xl border border-input bg-background px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
                     <span className="mr-2 text-sm font-semibold text-muted-foreground">₹</span>
                     <input
-                      className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none"
+                      className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
                       type="number"
                       min="1"
                       value={topUpAmount}
@@ -477,98 +526,86 @@ export default function ClientEarnings() {
                     type="button"
                     className="inline-flex h-12 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => void startTopUp()}
-                    disabled={!Number(topUpAmount) || Number(topUpAmount) <= 0}
+                    disabled={
+                      !Number(topUpAmount) || Number(topUpAmount) <= 0 || actionBusy === "topup"
+                    }
                   >
-                    Add money <ArrowUpRight className="h-4 w-4" />
+                    {actionBusy === "topup" ? (
+                      "Connecting…"
+                    ) : (
+                      <>
+                        Add money <ArrowUpRight className="h-4 w-4" />
+                      </>
+                    )}
                   </button>
                 </div>
                 {walletMessage ? (
-                  <p className="mt-3 text-sm text-muted-foreground">{walletMessage}</p>
+                  <p
+                    className={`mt-3 text-sm font-medium ${
+                      walletMessage.startsWith("✓") ? "text-emerald-600" : "text-destructive"
+                    }`}
+                  >
+                    {walletMessage}
+                  </p>
                 ) : null}
 
-                {isTestMode && (
-                  <div className="mt-4 rounded-xl border border-indigo-200/80 bg-indigo-50/70 p-3.5 text-xs text-indigo-950 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold flex items-center gap-1.5 text-indigo-900">
-                        <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
-                        Razorpay Sandbox Test Mode
-                      </span>
-                      <span className="rounded-md bg-indigo-200/70 px-2 py-0.5 font-mono text-[10px] font-bold text-indigo-800">
-                        DEMO READY
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-indigo-800/90 leading-relaxed">
-                      In Razorpay Test Mode, use standard domestic test card: <br />
-                      <span className="font-mono font-semibold bg-white/80 px-1.5 py-0.5 rounded border border-indigo-200">
-                        Card: 4111 1111 1111 1111
-                      </span>{" "}
-                      | Exp: <span className="font-mono">12/28</span> | CVV:{" "}
-                      <span className="font-mono">123</span> | OTP:{" "}
-                      <span className="font-mono">123456</span>
-                    </p>
+                {/* Professional Trust & Compliance Badges */}
+                <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/70 pt-3.5 text-[11px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1 font-medium">
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> 256-bit bank encryption
+                  </span>
+                  <span className="inline-flex items-center gap-1 font-medium">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Instant wallet balance
+                  </span>
+                  <span className="inline-flex items-center gap-1 font-medium">
+                    <LockKeyhole className="h-3.5 w-3.5 text-indigo-600" /> UPI, Netbanking &amp; Cards
+                  </span>
+                </div>
 
-                    {/* Quick Choose Money Shortcuts & Custom Input */}
-                    <div className="pt-1 space-y-2">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11px] font-bold text-indigo-900 mr-1">
-                          Choose amount:
-                        </span>
-                        {[500, 1000, 2500, 5000, 10000].map((amt) => (
-                          <button
-                            key={amt}
-                            type="button"
-                            onClick={() => setSandboxAmount(String(amt))}
-                            className={`rounded-md border px-2 py-1 text-[11px] font-semibold transition ${
-                              sandboxAmount === String(amt)
-                                ? "border-indigo-600 bg-indigo-600 text-white shadow-2xs"
-                                : "border-indigo-200/80 bg-white text-indigo-800 hover:bg-indigo-100/60 hover:border-indigo-300"
-                            }`}
-                          >
-                            ₹{amt.toLocaleString("en-IN")}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex h-9 w-40 items-center rounded-lg border border-indigo-300 bg-white px-2.5 shadow-2xs focus-within:border-indigo-600 focus-within:ring-2 focus-within:ring-indigo-200">
-                          <span className="mr-1 text-xs font-bold text-indigo-600">₹</span>
-                          <input
-                            type="number"
-                            min="1"
-                            value={sandboxAmount}
-                            onChange={(e) => setSandboxAmount(e.target.value)}
-                            placeholder="Enter test amount"
-                            className="h-full w-full bg-transparent text-xs font-semibold text-slate-800 outline-none placeholder:text-slate-400"
-                          />
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void simulateSandboxPayment(
-                              Number(sandboxAmount) || Number(topUpAmount) || 1000,
-                            )
-                          }
-                          disabled={actionBusy === "topup"}
-                          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 text-xs font-semibold text-white shadow-xs hover:bg-indigo-500 transition disabled:opacity-50"
-                        >
-                          <Sparkles className="h-3.5 w-3.5" />
-                          {actionBusy === "topup"
-                            ? "Simulating Payment…"
-                            : `Instant Test Deposit (₹${(
-                                Number(sandboxAmount) ||
-                                Number(topUpAmount) ||
-                                1000
-                              ).toLocaleString("en-IN")})`}
-                        </button>
-                      </div>
-
-                      <p className="text-[10px] text-indigo-700">
-                        Bypasses popup card check for testing · Instantly adds funds to your wallet
-                      </p>
-                    </div>
+                {/* Shortcuts Box */}
+                <div className="mt-3.5 rounded-xl border border-border/80 bg-muted/30 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                      <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+                      Shortcuts
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-medium">
+                      Direct Razorpay Process
+                    </span>
                   </div>
-                )}
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="flex h-9 min-w-0 flex-1 items-center rounded-lg border border-input bg-background px-2.5 focus-within:border-primary">
+                      <span className="mr-1.5 text-xs font-medium text-muted-foreground">₹</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={shortcutAmount}
+                        onChange={(e) => setShortcutAmount(e.target.value)}
+                        placeholder={topUpAmount ? `Use ₹${Number(topUpAmount).toLocaleString("en-IN")}` : "Enter amount"}
+                        className="h-full w-full bg-transparent text-xs font-medium outline-none placeholder:text-muted-foreground/60"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void runShortcutTopUp()}
+                      disabled={
+                        (!Number(shortcutAmount) && !Number(topUpAmount)) ||
+                        actionBusy === "shortcut"
+                      }
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-3.5 text-xs font-semibold text-background shadow-xs hover:bg-foreground/90 transition disabled:opacity-50"
+                    >
+                      {actionBusy === "shortcut" ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin" /> Adding…
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-3.5 w-3.5" /> Add
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
@@ -896,12 +933,16 @@ export default function ClientEarnings() {
       <PageActionLoading
         active={actionBusy !== null}
         title={
-          actionBusy === "topup"
+          actionBusy === "shortcut"
+            ? "Adding Funds to Wallet…"
+            : actionBusy === "topup"
             ? "Connecting to payment gateway…"
             : "Submitting withdrawal request…"
         }
         description={
-          actionBusy === "topup"
+          actionBusy === "shortcut"
+            ? "Processing Razorpay transaction and crediting your wallet balance."
+            : actionBusy === "topup"
             ? "Preparing secure checkout with Razorpay."
             : "Sending your withdrawal request to admin review."
         }
@@ -988,11 +1029,25 @@ function DetailRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-function Stat({ icon: Icon, value, label }: { icon: LucideIcon; value: string; label: string }) {
+function Stat({
+  icon: Icon,
+  value,
+  label,
+  loading = false,
+}: {
+  icon: LucideIcon;
+  value: string;
+  label: string;
+  loading?: boolean;
+}) {
   return (
     <div className="rounded-2xl border border-border bg-card p-5 shadow-soft">
       <Icon className="h-5 w-5 text-primary" />
-      <p className="mt-4 text-3xl font-bold">{value}</p>
+      {loading ? (
+        <div className="mt-4 h-9 w-28 animate-pulse rounded-lg bg-muted" />
+      ) : (
+        <p className="mt-4 text-3xl font-bold">{value}</p>
+      )}
       <p className="text-sm text-muted-foreground">{label}</p>
     </div>
   );

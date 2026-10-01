@@ -243,41 +243,12 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // Automatically resolve any active disputes for this contract upon client milestone payment
-        const activeDisputes = await tx.projectDispute.findMany({
-          where: {
-            trackingId: project.id,
-            status: { not: "RESOLVED" },
-          },
+        // Disputes are never settled by paying a milestone. Paying one milestone
+        // must not let the client close every open dispute on the project with a
+        // settlement attributed to themselves and no ledger entries backing it.
+        const openDisputes = await tx.projectDispute.count({
+          where: { trackingId: project.id, status: { not: "RESOLVED" } },
         });
-
-        for (const activeDispute of activeDisputes) {
-          await tx.projectDispute.update({
-            where: { id: activeDispute.id },
-            data: {
-              status: "RESOLVED",
-              respondentAction: "ACCEPTED",
-              decision: "MUTUAL_SETTLEMENT",
-              decisionReason: `Client completed payment of ₹${milestone.amount.toLocaleString("en-IN")} for milestone "${milestone.title}". Dispute automatically resolved and closed.`,
-              decisionAt: new Date(),
-              decidedBy: session.userId,
-              payoutAmount: milestone.amount,
-              refundAmount: 0,
-            },
-          });
-
-          await tx.projectTimelineEvent.create({
-            data: {
-              trackingId: project.id,
-              actorId: session.userId,
-              actorRole: "CLIENT",
-              milestoneId: milestone.id,
-              type: "DISPUTE_RESOLVED",
-              title: "Dispute closed · Payment received",
-              description: `Dispute #${activeDispute.id} was automatically closed after client completed payment of ₹${milestone.amount.toLocaleString("en-IN")} for milestone "${milestone.title}".`,
-            },
-          });
-        }
 
         const clientWallet = await tx.wallet.findUnique({
           where: { userId: project.clientId },
@@ -285,30 +256,12 @@ export async function POST(request: NextRequest) {
         });
         return {
           remainingBalance: clientWallet?.balance ?? 0,
-          resolvedDisputes: activeDisputes.map((d) => ({ id: d.id })),
+          openDisputes,
           autopay,
         };
       },
       { maxWait: 10000, timeout: 30000 },
     );
-
-    if (result.resolvedDisputes.length > 0) {
-      void notifyDisputeResolved({
-        trackingId: project.id,
-        jobTitle: project.job?.title ?? null,
-        status: "RESOLVED",
-        clientId: project.clientId,
-        professionalId: project.professionalId,
-      }).catch(() => undefined);
-
-      for (const d of result.resolvedDisputes) {
-        emitAdminEvent("dispute:update", {
-          disputeId: d.id,
-          projectId: project.id,
-          status: "RESOLVED",
-        });
-      }
-    }
 
     if (result.autopay) {
       void notifyMilestonePayoutApproved({
@@ -341,10 +294,10 @@ export async function POST(request: NextRequest) {
       remainingBalance: result.remainingBalance,
       status: "APPROVED",
       autopay: result.autopay,
-      disputeResolved: result.resolvedDisputes.length > 0,
+      disputeOpen: result.openDisputes > 0,
       message:
-        result.resolvedDisputes.length > 0
-          ? `Milestone paid with ₹${money.baseAmount.toLocaleString("en-IN")}. Dispute was automatically resolved and next stage started.`
+        result.openDisputes > 0
+          ? `Milestone paid with ₹${money.baseAmount.toLocaleString("en-IN")}. ${result.openDisputes} dispute${result.openDisputes === 1 ? " is" : "s are"} still open and must be settled by an admin.`
           : result.autopay
             ? `Milestone paid with ₹${money.baseAmount.toLocaleString("en-IN")}. ₹${money.professionalPayoutAmount.toLocaleString("en-IN")} was instantly credited to the professional.`
             : `Milestone paid with ₹${money.baseAmount.toLocaleString("en-IN")}. Funds held in escrow awaiting admin release.`,

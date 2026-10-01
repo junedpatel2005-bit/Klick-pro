@@ -192,6 +192,7 @@ export async function GET(
       db.clientJob.findMany({
         include: { user: { select: { firstName: true, lastName: true, email: true } } },
         orderBy: { createdAt: "desc" },
+        take: 200,
       }),
       db.projectDispute.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
       db.clientJob.count(),
@@ -218,7 +219,8 @@ export async function GET(
     });
   }
   if (resource === "finance") {
-    const [transactions, withdrawals, payments, walletTransactions, adminUsers] = await Promise.all(
+    try {
+      const [transactions, withdrawals, payments, walletTransactions, adminUsers] = await Promise.all(
       [
         db.projectTransaction.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
         db.projectWithdrawal.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
@@ -479,7 +481,7 @@ export async function GET(
       db.legacyUserProfile.findMany({
         where: { userId: { in: ids.map(String) } },
         select: { userId: true, fullName: true },
-      }),
+      }).catch(() => []),
     ]);
     const names = Object.fromEntries(
       users.map((user) => [user.id, `${user.firstName} ${user.lastName}`.trim()]),
@@ -572,6 +574,10 @@ export async function GET(
       names,
       usersById,
     });
+  } catch (err) {
+    console.error("Failed to load admin finance data:", err);
+    return NextResponse.json({ error: "Failed to load finance data" }, { status: 500 });
+  }
   }
   if (resource === "support") {
     const [faqs, contactRequests] = await Promise.all([

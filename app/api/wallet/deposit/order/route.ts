@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Enter a valid amount." }, { status: 400 });
   const order = await createRazorpayOrder({
     amountRupees: parsed.data.amount,
-    receipt: `servio_wallet_${session.userId}_${Date.now()}`,
+    receipt: `wtop_${session.userId}_${Date.now()}`,
     notes: { purpose: "wallet_top_up", clientId: String(session.userId) },
   });
   if (!order)
@@ -51,7 +51,8 @@ export async function POST(request: NextRequest) {
   });
   const clientName = `${user?.firstName ?? "Client"} ${user?.lastName ?? "User"}`.trim();
   const clientEmail = user?.email ?? "client@klick-pro.com";
-  const clientPhone = user?.phone ?? "9876543210";
+  const rawPhone = (user?.phone ?? "").replace(/\D/g, "");
+  const clientPhone = rawPhone.length >= 10 ? rawPhone.slice(-10) : "9876543210";
   const keyId = razorpayConfig().keyId;
   const isTestMode = keyId.startsWith("rzp_test_");
 

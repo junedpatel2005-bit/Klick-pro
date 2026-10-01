@@ -2346,28 +2346,38 @@ export default function JobDetails({
             {job.timingType === "HOURLY" ? (
               <>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={proposalHourlyRate}
-                    onChange={(event) => {
-                      setProposalHourlyRate(event.target.value);
-                      setProposalError(null);
-                    }}
-                    placeholder="Your hourly rate (₹)"
-                  />
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={proposalTotalJobHours}
-                    onChange={(event) => {
-                      setProposalTotalJobHours(event.target.value);
-                      setProposalError(null);
-                    }}
-                    placeholder="Total job hours"
-                  />
+                  <div>
+                    <label className="text-xs font-semibold text-foreground block mb-1">
+                      Your Hourly Rate (₹) <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={proposalHourlyRate}
+                      onChange={(event) => {
+                        setProposalHourlyRate(event.target.value);
+                        setProposalError(null);
+                      }}
+                      placeholder="e.g. 500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-foreground block mb-1">
+                      Total Job Hours <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={proposalTotalJobHours}
+                      onChange={(event) => {
+                        setProposalTotalJobHours(event.target.value);
+                        setProposalError(null);
+                      }}
+                      placeholder="e.g. 20"
+                    />
+                  </div>
                 </div>
                 <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm font-semibold">
                   Project total: ₹
@@ -2382,26 +2392,34 @@ export default function JobDetails({
                 </p>
               </>
             ) : (
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={proposalPrice}
-                onChange={(event) => {
-                  setProposalPrice(event.target.value);
-                  setProposalError(null);
-                }}
-                placeholder="Your price"
-              />
+              <div>
+                <label className="text-xs font-semibold text-foreground block mb-1">
+                  Your Price (₹) <span className="text-destructive">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={proposalPrice}
+                  onChange={(event) => {
+                    setProposalPrice(event.target.value);
+                    setProposalError(null);
+                  }}
+                  placeholder="e.g. 10000"
+                />
+              </div>
             )}
             <div>
+              <label className="text-xs font-semibold text-foreground block mb-1">
+                Estimated Delivery <span className="text-destructive">*</span>
+              </label>
               <input
                 value={proposalDuration}
                 onChange={(event) => {
                   setProposalDuration(event.target.value);
                   setProposalError(null);
                 }}
-                placeholder="Estimated delivery (for example, 14 days)"
+                placeholder="e.g. 14 days"
                 className="w-full"
               />
               {deadlineFormatted && (
@@ -2416,16 +2434,21 @@ export default function JobDetails({
                 </p>
               )}
             </div>
-            <textarea
-              value={proposalMessage}
-              minLength={10}
-              onChange={(event) => {
-                setProposalMessage(event.target.value);
-                setProposalError(null);
-              }}
-              placeholder="Message to Client"
-              rows={5}
-            />
+            <div>
+              <label className="text-xs font-semibold text-foreground block mb-1">
+                Message to Client <span className="text-destructive">*</span>
+              </label>
+              <textarea
+                value={proposalMessage}
+                minLength={10}
+                onChange={(event) => {
+                  setProposalMessage(event.target.value);
+                  setProposalError(null);
+                }}
+                placeholder="Explain your approach, experience, and why you are a good fit..."
+                rows={5}
+              />
+            </div>
             {proposalError && <p className="text-sm text-destructive">{proposalError}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="outline" onClick={() => setShowProposalForm(false)}>
@@ -2993,24 +3016,39 @@ export default function JobDetails({
           )}
 
           <div className="mt-1 grid gap-3 [&_input]:rounded-xl [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_textarea]:rounded-xl [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
-            <input
-              type="number"
-              min="1"
-              value={hireBidAmount}
-              onChange={(event) => setHireBidAmount(event.target.value)}
-              placeholder="Your offer"
-            />
-            <input
-              value={hireDuration}
-              onChange={(event) => setHireDuration(event.target.value)}
-              placeholder="Timeline (for example, 1 week)"
-            />
-            <textarea
-              value={hireCoverLetter}
-              onChange={(event) => setHireCoverLetter(event.target.value)}
-              placeholder="Add a short note (optional)"
-              rows={3}
-            />
+            <div>
+              <label className="text-xs font-semibold text-foreground block mb-1">
+                Your Offer (₹) <span className="text-destructive">*</span>
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={hireBidAmount}
+                onChange={(event) => setHireBidAmount(event.target.value)}
+                placeholder="e.g. 10000"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground block mb-1">
+                Timeline <span className="text-destructive">*</span>
+              </label>
+              <input
+                value={hireDuration}
+                onChange={(event) => setHireDuration(event.target.value)}
+                placeholder="e.g. 1 week"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground block mb-1">
+                Note to Professional <span className="text-muted-foreground">(optional)</span>
+              </label>
+              <textarea
+                value={hireCoverLetter}
+                onChange={(event) => setHireCoverLetter(event.target.value)}
+                placeholder="Add a short note about the work or your requirements..."
+                rows={3}
+              />
+            </div>
           </div>
           {selectError && <p className="mt-3 text-sm text-destructive">{selectError}</p>}
           {hireMessage && (
