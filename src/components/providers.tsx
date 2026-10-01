@@ -30,7 +30,10 @@ if (typeof window !== "undefined" && typeof Node === "function" && Node.prototyp
   };
 
   const originalInsertBefore = Node.prototype.insertBefore;
-  Node.prototype.insertBefore = function <T extends Node>(newNode: T, referenceNode: Node | null): T {
+  Node.prototype.insertBefore = function <T extends Node>(
+    newNode: T,
+    referenceNode: Node | null,
+  ): T {
     try {
       if (referenceNode && referenceNode.parentNode !== this) {
         if (referenceNode.parentNode) {
@@ -80,8 +83,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
               "!border-emerald-500/30 !bg-emerald-50/95 dark:!bg-emerald-950/40 !text-emerald-900 dark:!text-emerald-200",
             error:
               "!border-rose-500/30 !bg-rose-50/95 dark:!bg-rose-950/40 !text-rose-900 dark:!text-rose-200",
-            info:
-              "!border-indigo-500/30 !bg-indigo-50/95 dark:!bg-indigo-950/40 !text-indigo-900 dark:!text-indigo-200",
+            info: "!border-indigo-500/30 !bg-indigo-50/95 dark:!bg-indigo-950/40 !text-indigo-900 dark:!text-indigo-200",
             warning:
               "!border-amber-500/30 !bg-amber-50/95 dark:!bg-amber-950/40 !text-amber-900 dark:!text-amber-200",
           },

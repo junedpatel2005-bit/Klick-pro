@@ -220,364 +220,368 @@ export async function GET(
   }
   if (resource === "finance") {
     try {
-      const [transactions, withdrawals, payments, walletTransactions, adminUsers] = await Promise.all(
-      [
-        db.projectTransaction.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
-        db.projectWithdrawal.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
-        db.payment.findMany({
-          orderBy: { createdAt: "desc" },
-          take: 200,
-          include: {
-            client: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                phone: true,
-                avatarUrl: true,
-                companyName: true,
-              },
-            },
-            professional: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                phone: true,
-                avatarUrl: true,
-              },
-            },
-            job: {
-              select: {
-                id: true,
-                title: true,
-                category: true,
-                budgetMin: true,
-                budgetMax: true,
-                status: true,
-              },
-            },
-            milestone: {
-              select: {
-                id: true,
-                title: true,
-                amount: true,
-                status: true,
-                dueDate: true,
-                submittedAt: true,
-                approvedAt: true,
-              },
-            },
-            projectTracking: {
-              select: {
-                id: true,
-                status: true,
-                progress: true,
-                currentStage: true,
-                job: {
-                  select: {
-                    id: true,
-                    title: true,
-                    category: true,
-                    budgetMin: true,
-                    budgetMax: true,
-                    status: true,
-                  },
-                },
-                milestones: {
-                  select: {
-                    id: true,
-                    title: true,
-                    amount: true,
-                    status: true,
-                    dueDate: true,
-                    submittedAt: true,
-                    approvedAt: true,
-                  },
-                  orderBy: { createdAt: "asc" },
-                },
-              },
-            },
-          },
-        }),
-        db.walletTransaction.findMany({
-          where: { type: "WALLET_TOP_UP" },
-          orderBy: { createdAt: "desc" },
-          take: 100,
-          include: { wallet: { select: { userId: true } } },
-        }),
-        db.user.findMany({
-          where: { role: "ADMIN" },
-          orderBy: { id: "asc" },
-          select: { id: true, firstName: true, lastName: true },
-        }),
-      ],
-    );
-    // Milestone settlements credit whichever ADMIN row `findFirst` happens to resolve first
-    // (src/lib/wallet-ledger.ts has no deterministic tie-breaker), so with multiple admin
-    // accounts the platform's fee wallet isn't necessarily any single one of them — aggregate
-    // across every admin wallet rather than guessing which one is "the" platform account.
-    const adminWallets = await Promise.all(adminUsers.map((admin) => ensureWallet(admin.id)));
-    const adminNameByUserId = Object.fromEntries(
-      adminUsers.map((admin) => [admin.id, `${admin.firstName} ${admin.lastName}`.trim()]),
-    );
-    const platformWallet =
-      adminWallets.length > 0
-        ? {
-            balance: adminWallets.reduce((sum, wallet) => sum + wallet.balance, 0),
-            currency: adminWallets[0]!.currency,
-            ownerName:
-              adminWallets.length === 1
-                ? (adminNameByUserId[adminWallets[0]!.userId] ?? null)
-                : `${adminWallets.length} admin wallets combined`,
-          }
-        : null;
-    const platformWalletTransactionsRaw =
-      adminWallets.length > 0
-        ? await db.walletTransaction.findMany({
-            where: { walletId: { in: adminWallets.map((wallet) => wallet.id) } },
+      const [transactions, withdrawals, payments, walletTransactions, adminUsers] =
+        await Promise.all([
+          db.projectTransaction.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
+          db.projectWithdrawal.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
+          db.payment.findMany({
             orderBy: { createdAt: "desc" },
             take: 200,
-            include: { wallet: { select: { userId: true } } },
-          })
-        : [];
-    const paymentIdsFromLedger = [
-      ...new Set(
-        platformWalletTransactionsRaw
-          .map((tx) => tx.paymentId)
-          .filter((id): id is number => typeof id === "number" && id > 0),
-      ),
-    ];
-    const ledgerPayments =
-      paymentIdsFromLedger.length > 0
-        ? await db.payment.findMany({
-            where: { id: { in: paymentIdsFromLedger } },
             include: {
-              client: { select: { id: true, firstName: true, lastName: true } },
-              professional: { select: { id: true, firstName: true, lastName: true } },
-              job: { select: { id: true, title: true } },
-              milestone: { select: { id: true, title: true } },
+              client: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                  phone: true,
+                  avatarUrl: true,
+                  companyName: true,
+                },
+              },
+              professional: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                  phone: true,
+                  avatarUrl: true,
+                },
+              },
+              job: {
+                select: {
+                  id: true,
+                  title: true,
+                  category: true,
+                  budgetMin: true,
+                  budgetMax: true,
+                  status: true,
+                },
+              },
+              milestone: {
+                select: {
+                  id: true,
+                  title: true,
+                  amount: true,
+                  status: true,
+                  dueDate: true,
+                  submittedAt: true,
+                  approvedAt: true,
+                },
+              },
+              projectTracking: {
+                select: {
+                  id: true,
+                  status: true,
+                  progress: true,
+                  currentStage: true,
+                  job: {
+                    select: {
+                      id: true,
+                      title: true,
+                      category: true,
+                      budgetMin: true,
+                      budgetMax: true,
+                      status: true,
+                    },
+                  },
+                  milestones: {
+                    select: {
+                      id: true,
+                      title: true,
+                      amount: true,
+                      status: true,
+                      dueDate: true,
+                      submittedAt: true,
+                      approvedAt: true,
+                    },
+                    orderBy: { createdAt: "asc" },
+                  },
+                },
+              },
             },
-          })
-        : [];
-    const ledgerPaymentMap = new Map(ledgerPayments.map((p) => [p.id, p]));
+          }),
+          db.walletTransaction.findMany({
+            where: { type: "WALLET_TOP_UP" },
+            orderBy: { createdAt: "desc" },
+            take: 100,
+            include: { wallet: { select: { userId: true } } },
+          }),
+          db.user.findMany({
+            where: { role: "ADMIN" },
+            orderBy: { id: "asc" },
+            select: { id: true, firstName: true, lastName: true },
+          }),
+        ]);
+      // Milestone settlements credit whichever ADMIN row `findFirst` happens to resolve first
+      // (src/lib/wallet-ledger.ts has no deterministic tie-breaker), so with multiple admin
+      // accounts the platform's fee wallet isn't necessarily any single one of them — aggregate
+      // across every admin wallet rather than guessing which one is "the" platform account.
+      const adminWallets = await Promise.all(adminUsers.map((admin) => ensureWallet(admin.id)));
+      const adminNameByUserId = Object.fromEntries(
+        adminUsers.map((admin) => [admin.id, `${admin.firstName} ${admin.lastName}`.trim()]),
+      );
+      const platformWallet =
+        adminWallets.length > 0
+          ? {
+              balance: adminWallets.reduce((sum, wallet) => sum + wallet.balance, 0),
+              currency: adminWallets[0]!.currency,
+              ownerName:
+                adminWallets.length === 1
+                  ? (adminNameByUserId[adminWallets[0]!.userId] ?? null)
+                  : `${adminWallets.length} admin wallets combined`,
+            }
+          : null;
+      const platformWalletTransactionsRaw =
+        adminWallets.length > 0
+          ? await db.walletTransaction.findMany({
+              where: { walletId: { in: adminWallets.map((wallet) => wallet.id) } },
+              orderBy: { createdAt: "desc" },
+              take: 200,
+              include: { wallet: { select: { userId: true } } },
+            })
+          : [];
+      const paymentIdsFromLedger = [
+        ...new Set(
+          platformWalletTransactionsRaw
+            .map((tx) => tx.paymentId)
+            .filter((id): id is number => typeof id === "number" && id > 0),
+        ),
+      ];
+      const ledgerPayments =
+        paymentIdsFromLedger.length > 0
+          ? await db.payment.findMany({
+              where: { id: { in: paymentIdsFromLedger } },
+              include: {
+                client: { select: { id: true, firstName: true, lastName: true } },
+                professional: { select: { id: true, firstName: true, lastName: true } },
+                job: { select: { id: true, title: true } },
+                milestone: { select: { id: true, title: true } },
+              },
+            })
+          : [];
+      const ledgerPaymentMap = new Map(ledgerPayments.map((p) => [p.id, p]));
 
-    const commissionPaymentIds = new Set(
-      platformWalletTransactionsRaw
-        .filter((tx) => tx.type === "PLATFORM_COMMISSION" && tx.paymentId)
-        .map((tx) => tx.paymentId as number),
-    );
+      const commissionPaymentIds = new Set(
+        platformWalletTransactionsRaw
+          .filter((tx) => tx.type === "PLATFORM_COMMISSION" && tx.paymentId)
+          .map((tx) => tx.paymentId as number),
+      );
 
-    const platformWalletTransactions: Array<{
-      id: number;
-      type: string;
-      amount: number;
-      status: string;
-      description: string;
-      createdAt: Date;
-      clientName: string | null;
-      professionalName: string | null;
-      projectTitle: string | null;
-      milestoneTitle: string | null;
-    }> = [];
+      const platformWalletTransactions: Array<{
+        id: number;
+        type: string;
+        amount: number;
+        status: string;
+        description: string;
+        createdAt: Date;
+        clientName: string | null;
+        professionalName: string | null;
+        projectTitle: string | null;
+        milestoneTitle: string | null;
+      }> = [];
 
-    for (const item of platformWalletTransactionsRaw) {
-      const relPayment = item.paymentId ? ledgerPaymentMap.get(item.paymentId) : null;
-      const clientName = relPayment?.client
-        ? `${relPayment.client.firstName} ${relPayment.client.lastName}`.trim()
-        : null;
-      const professionalName = relPayment?.professional
-        ? `${relPayment.professional.firstName} ${relPayment.professional.lastName}`.trim()
-        : null;
-      const projectTitle = relPayment?.job?.title ?? null;
-      const milestoneTitle = relPayment?.milestone?.title ?? null;
+      for (const item of platformWalletTransactionsRaw) {
+        const relPayment = item.paymentId ? ledgerPaymentMap.get(item.paymentId) : null;
+        const clientName = relPayment?.client
+          ? `${relPayment.client.firstName} ${relPayment.client.lastName}`.trim()
+          : null;
+        const professionalName = relPayment?.professional
+          ? `${relPayment.professional.firstName} ${relPayment.professional.lastName}`.trim()
+          : null;
+        const projectTitle = relPayment?.job?.title ?? null;
+        const milestoneTitle = relPayment?.milestone?.title ?? null;
 
-      // If legacy ADMIN_MILESTONE_RECEIPT has total client charge and no separate commission entry:
-      if (
-        item.type === "ADMIN_MILESTONE_RECEIPT" &&
-        item.paymentId &&
-        relPayment &&
-        !commissionPaymentIds.has(item.paymentId) &&
-        (relPayment.clientFeeAmount > 0 || relPayment.commissionAmount > 0)
-      ) {
-        const base = relPayment.baseAmount || Math.round(item.amount / 1.1);
-        const fee = relPayment.clientFeeAmount || relPayment.commissionAmount || item.amount - base;
+        // If legacy ADMIN_MILESTONE_RECEIPT has total client charge and no separate commission entry:
+        if (
+          item.type === "ADMIN_MILESTONE_RECEIPT" &&
+          item.paymentId &&
+          relPayment &&
+          !commissionPaymentIds.has(item.paymentId) &&
+          (relPayment.clientFeeAmount > 0 || relPayment.commissionAmount > 0)
+        ) {
+          const base = relPayment.baseAmount || Math.round(item.amount / 1.1);
+          const fee =
+            relPayment.clientFeeAmount || relPayment.commissionAmount || item.amount - base;
 
-        // Entry 1: Milestone receipt
-        platformWalletTransactions.push({
-          id: item.id,
-          type: "ADMIN_MILESTONE_RECEIPT",
-          amount: base,
-          status: item.status,
-          description: `Milestone receipt: ₹${base.toLocaleString("en-IN")}`,
-          createdAt: item.createdAt,
-          clientName,
-          professionalName,
-          projectTitle,
-          milestoneTitle,
-        });
+          // Entry 1: Milestone receipt
+          platformWalletTransactions.push({
+            id: item.id,
+            type: "ADMIN_MILESTONE_RECEIPT",
+            amount: base,
+            status: item.status,
+            description: `Milestone receipt: ₹${base.toLocaleString("en-IN")}`,
+            createdAt: item.createdAt,
+            clientName,
+            professionalName,
+            projectTitle,
+            milestoneTitle,
+          });
 
-        // Entry 2: Platform commission
-        platformWalletTransactions.push({
-          id: -(item.id * 1000 + 1),
-          type: "PLATFORM_COMMISSION",
-          amount: fee,
-          status: item.status,
-          description: `Platform commission: ₹${fee.toLocaleString("en-IN")}`,
-          createdAt: item.createdAt,
-          clientName,
-          professionalName,
-          projectTitle,
-          milestoneTitle,
-        });
-      } else {
-        platformWalletTransactions.push({
-          id: item.id,
-          type: item.type,
-          amount: item.amount,
-          status: item.status,
-          description:
-            adminWallets.length > 1
-              ? `${item.description} (${adminNameByUserId[item.wallet.userId] ?? `#${item.wallet.userId}`})`
-              : item.description,
-          createdAt: item.createdAt,
-          clientName,
-          professionalName,
-          projectTitle,
-          milestoneTitle,
-        });
+          // Entry 2: Platform commission
+          platformWalletTransactions.push({
+            id: -(item.id * 1000 + 1),
+            type: "PLATFORM_COMMISSION",
+            amount: fee,
+            status: item.status,
+            description: `Platform commission: ₹${fee.toLocaleString("en-IN")}`,
+            createdAt: item.createdAt,
+            clientName,
+            professionalName,
+            projectTitle,
+            milestoneTitle,
+          });
+        } else {
+          platformWalletTransactions.push({
+            id: item.id,
+            type: item.type,
+            amount: item.amount,
+            status: item.status,
+            description:
+              adminWallets.length > 1
+                ? `${item.description} (${adminNameByUserId[item.wallet.userId] ?? `#${item.wallet.userId}`})`
+                : item.description,
+            createdAt: item.createdAt,
+            clientName,
+            professionalName,
+            projectTitle,
+            milestoneTitle,
+          });
+        }
       }
+      const platformTotalReceived = platformWalletTransactionsRaw
+        .filter((item) => item.type === "ADMIN_MILESTONE_RECEIPT" && item.amount > 0)
+        .reduce((sum, item) => sum + item.amount, 0);
+      const platformTotalPaid = platformWalletTransactionsRaw
+        .filter((item) => item.type === "PROFESSIONAL_PAYOUT" && item.amount < 0)
+        .reduce((sum, item) => sum + Math.abs(item.amount), 0);
+      const ids = [
+        ...new Set([
+          ...transactions.flatMap((item) => [item.clientId, item.professionalId]),
+          ...withdrawals.map((item) => item.professionalId),
+          ...payments.flatMap((item) => [item.clientId, item.professionalId]),
+          ...walletTransactions.map((item) => item.wallet.userId),
+        ]),
+      ];
+      const [users, legacyProfiles] = await Promise.all([
+        db.user.findMany({
+          where: { id: { in: ids } },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            avatarUrl: true,
+            role: true,
+            companyName: true,
+          },
+        }),
+        db.legacyUserProfile
+          .findMany({
+            where: { userId: { in: ids.map(String) } },
+            select: { userId: true, fullName: true },
+          })
+          .catch(() => []),
+      ]);
+      const names = Object.fromEntries(
+        users.map((user) => [user.id, `${user.firstName} ${user.lastName}`.trim()]),
+      );
+      for (const profile of legacyProfiles)
+        if (profile.fullName && !names[profile.userId]) names[profile.userId] = profile.fullName;
+
+      const usersById = Object.fromEntries(
+        users.map((u) => [
+          u.id,
+          {
+            id: u.id,
+            name: `${u.firstName} ${u.lastName}`.trim(),
+            email: u.email,
+            phone: u.phone,
+            avatarUrl: u.avatarUrl,
+            role: u.role,
+            companyName: u.companyName,
+          },
+        ]),
+      );
+
+      const enrichedPayments = payments.map((p) => {
+        const job = p.job ?? p.projectTracking?.job ?? null;
+        const tracking = p.projectTracking;
+        const allMilestones = tracking?.milestones ?? (p.milestone ? [p.milestone] : []);
+
+        const milestoneIndex = p.milestoneId
+          ? allMilestones.findIndex((m) => m.id === p.milestoneId)
+          : -1;
+        const milestoneNumber = milestoneIndex >= 0 ? milestoneIndex + 1 : null;
+        const totalMilestonesCount = allMilestones.length;
+
+        const projectTotalMilestonesAmount = allMilestones.reduce((sum, m) => sum + m.amount, 0);
+        const projectTotalBudget =
+          projectTotalMilestonesAmount > 0
+            ? projectTotalMilestonesAmount
+            : (job?.budgetMax ?? job?.budgetMin ?? p.baseAmount);
+
+        const approvedMilestones = allMilestones.filter((m) => m.status === "APPROVED");
+        const projectPaidAmount = approvedMilestones.reduce((sum, m) => sum + m.amount, 0);
+        const projectRemainingAmount = Math.max(0, projectTotalBudget - projectPaidAmount);
+        const remainingMilestonesCount = allMilestones.filter(
+          (m) => m.status !== "APPROVED",
+        ).length;
+
+        const clientFee = p.clientFeeAmount || Math.ceil(p.baseAmount * 0.1);
+        const proCommission = p.commissionAmount || Math.ceil(p.baseAmount * 0.1);
+        const adminNet = p.adminNetAmount || clientFee + proCommission;
+        const proPayout = p.professionalPayoutAmount || Math.max(0, p.baseAmount - proCommission);
+
+        return {
+          ...p,
+          jobTitle: job?.title ?? (p.jobId ? `Job #${p.jobId}` : "Direct Milestone Project"),
+          jobCategory: job?.category ?? null,
+          milestoneTitle:
+            p.milestone?.title ??
+            (p.milestoneId ? `Milestone #${p.milestoneId}` : "Milestone Payment"),
+          milestoneStatus: p.milestone?.status ?? p.status,
+          milestoneNumber,
+          totalMilestonesCount,
+          projectTotalBudget,
+          projectPaidAmount,
+          projectRemainingAmount,
+          remainingMilestonesCount,
+          milestonesList: allMilestones,
+          financials: {
+            grossClientAmount: p.amount,
+            baseAmount: p.baseAmount,
+            clientFeeAmount: clientFee,
+            commissionAmount: proCommission,
+            professionalPayoutAmount: proPayout,
+            adminNetAmount: adminNet,
+          },
+        };
+      });
+
+      return NextResponse.json({
+        transactions,
+        withdrawals,
+        payments: enrichedPayments,
+        walletTransactions,
+        platformWallet: platformWallet
+          ? {
+              ...platformWallet,
+              totalReceived: platformTotalReceived,
+              totalPaidToProfessionals: platformTotalPaid,
+              retainedEarnings: platformTotalReceived - platformTotalPaid,
+            }
+          : null,
+        platformWalletTransactions,
+        names,
+        usersById,
+      });
+    } catch (err) {
+      console.error("Failed to load admin finance data:", err);
+      return NextResponse.json({ error: "Failed to load finance data" }, { status: 500 });
     }
-    const platformTotalReceived = platformWalletTransactionsRaw
-      .filter((item) => item.type === "ADMIN_MILESTONE_RECEIPT" && item.amount > 0)
-      .reduce((sum, item) => sum + item.amount, 0);
-    const platformTotalPaid = platformWalletTransactionsRaw
-      .filter((item) => item.type === "PROFESSIONAL_PAYOUT" && item.amount < 0)
-      .reduce((sum, item) => sum + Math.abs(item.amount), 0);
-    const ids = [
-      ...new Set([
-        ...transactions.flatMap((item) => [item.clientId, item.professionalId]),
-        ...withdrawals.map((item) => item.professionalId),
-        ...payments.flatMap((item) => [item.clientId, item.professionalId]),
-        ...walletTransactions.map((item) => item.wallet.userId),
-      ]),
-    ];
-    const [users, legacyProfiles] = await Promise.all([
-      db.user.findMany({
-        where: { id: { in: ids } },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          phone: true,
-          avatarUrl: true,
-          role: true,
-          companyName: true,
-        },
-      }),
-      db.legacyUserProfile.findMany({
-        where: { userId: { in: ids.map(String) } },
-        select: { userId: true, fullName: true },
-      }).catch(() => []),
-    ]);
-    const names = Object.fromEntries(
-      users.map((user) => [user.id, `${user.firstName} ${user.lastName}`.trim()]),
-    );
-    for (const profile of legacyProfiles)
-      if (profile.fullName && !names[profile.userId]) names[profile.userId] = profile.fullName;
-
-    const usersById = Object.fromEntries(
-      users.map((u) => [
-        u.id,
-        {
-          id: u.id,
-          name: `${u.firstName} ${u.lastName}`.trim(),
-          email: u.email,
-          phone: u.phone,
-          avatarUrl: u.avatarUrl,
-          role: u.role,
-          companyName: u.companyName,
-        },
-      ]),
-    );
-
-    const enrichedPayments = payments.map((p) => {
-      const job = p.job ?? p.projectTracking?.job ?? null;
-      const tracking = p.projectTracking;
-      const allMilestones = tracking?.milestones ?? (p.milestone ? [p.milestone] : []);
-
-      const milestoneIndex = p.milestoneId
-        ? allMilestones.findIndex((m) => m.id === p.milestoneId)
-        : -1;
-      const milestoneNumber = milestoneIndex >= 0 ? milestoneIndex + 1 : null;
-      const totalMilestonesCount = allMilestones.length;
-
-      const projectTotalMilestonesAmount = allMilestones.reduce((sum, m) => sum + m.amount, 0);
-      const projectTotalBudget =
-        projectTotalMilestonesAmount > 0
-          ? projectTotalMilestonesAmount
-          : (job?.budgetMax ?? job?.budgetMin ?? p.baseAmount);
-
-      const approvedMilestones = allMilestones.filter((m) => m.status === "APPROVED");
-      const projectPaidAmount = approvedMilestones.reduce((sum, m) => sum + m.amount, 0);
-      const projectRemainingAmount = Math.max(0, projectTotalBudget - projectPaidAmount);
-      const remainingMilestonesCount = allMilestones.filter((m) => m.status !== "APPROVED").length;
-
-      const clientFee = p.clientFeeAmount || Math.ceil(p.baseAmount * 0.1);
-      const proCommission = p.commissionAmount || Math.ceil(p.baseAmount * 0.1);
-      const adminNet = p.adminNetAmount || clientFee + proCommission;
-      const proPayout = p.professionalPayoutAmount || Math.max(0, p.baseAmount - proCommission);
-
-      return {
-        ...p,
-        jobTitle: job?.title ?? (p.jobId ? `Job #${p.jobId}` : "Direct Milestone Project"),
-        jobCategory: job?.category ?? null,
-        milestoneTitle:
-          p.milestone?.title ??
-          (p.milestoneId ? `Milestone #${p.milestoneId}` : "Milestone Payment"),
-        milestoneStatus: p.milestone?.status ?? p.status,
-        milestoneNumber,
-        totalMilestonesCount,
-        projectTotalBudget,
-        projectPaidAmount,
-        projectRemainingAmount,
-        remainingMilestonesCount,
-        milestonesList: allMilestones,
-        financials: {
-          grossClientAmount: p.amount,
-          baseAmount: p.baseAmount,
-          clientFeeAmount: clientFee,
-          commissionAmount: proCommission,
-          professionalPayoutAmount: proPayout,
-          adminNetAmount: adminNet,
-        },
-      };
-    });
-
-    return NextResponse.json({
-      transactions,
-      withdrawals,
-      payments: enrichedPayments,
-      walletTransactions,
-      platformWallet: platformWallet
-        ? {
-            ...platformWallet,
-            totalReceived: platformTotalReceived,
-            totalPaidToProfessionals: platformTotalPaid,
-            retainedEarnings: platformTotalReceived - platformTotalPaid,
-          }
-        : null,
-      platformWalletTransactions,
-      names,
-      usersById,
-    });
-  } catch (err) {
-    console.error("Failed to load admin finance data:", err);
-    return NextResponse.json({ error: "Failed to load finance data" }, { status: 500 });
-  }
   }
   if (resource === "support") {
     const [faqs, contactRequests] = await Promise.all([

@@ -90,7 +90,9 @@ function isWithinDateRange(dateString: string, filter: DateFilter): boolean {
   }
   if (filter === "last_month") {
     const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    return date.getMonth() === prevMonth.getMonth() && date.getFullYear() === prevMonth.getFullYear();
+    return (
+      date.getMonth() === prevMonth.getMonth() && date.getFullYear() === prevMonth.getFullYear()
+    );
   }
   if (filter === "last_90_days") {
     const ninetyDaysAgo = new Date();
@@ -106,7 +108,9 @@ function isWithinDateRange(dateString: string, filter: DateFilter): boolean {
 function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
   const csvContent = [
     headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(","),
-    ...rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")),
+    ...rows.map((row) =>
+      row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","),
+    ),
   ].join("\r\n");
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -152,19 +156,22 @@ function ProjectsReport() {
     });
   }, [jobs, search, statusFilter, dateFilter]);
 
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } = useRowSelection(filteredJobs);
+  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
+    useRowSelection(filteredJobs);
   const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
 
   // Financial and KPI computations
   const totalJobs = filteredJobs.length;
   const runningJobs = filteredJobs.filter((j) => j.status === "RUNNING").length;
   const completedJobs = filteredJobs.filter((j) => j.status === "COMPLETED").length;
-  const totalBudgetEst = filteredJobs.reduce((sum, j) => sum + (j.budgetMax || j.budgetMin || 0), 0);
+  const totalBudgetEst = filteredJobs.reduce(
+    (sum, j) => sum + (j.budgetMax || j.budgetMin || 0),
+    0,
+  );
 
   const handleExportCsv = () => {
-    const rowsToExport = selectedList.length > 0
-      ? filteredJobs.filter((j) => selectedIds.has(j.id))
-      : filteredJobs;
+    const rowsToExport =
+      selectedList.length > 0 ? filteredJobs.filter((j) => selectedIds.has(j.id)) : filteredJobs;
     downloadCsv(
       "klick-pro-client-projects",
       ["Job ID", "Title", "Status", "Budget Estimate", "Location", "Last Updated"],
@@ -175,7 +182,7 @@ function ProjectsReport() {
         jobBudget(j),
         j.locationAddress ?? "Remote",
         new Date(j.updatedAt).toLocaleDateString(),
-      ])
+      ]),
     );
   };
 
@@ -355,7 +362,7 @@ function ProjectsReport() {
               render: (job) => (
                 <span
                   className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(
-                    job.status
+                    job.status,
                   )}`}
                 >
                   <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -392,7 +399,8 @@ function ProjectsReport() {
       <div className="flex flex-col gap-2 rounded-2xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground">
         <div>
           Showing <span className="font-semibold text-foreground">{filteredJobs.length}</span> of{" "}
-          <span className="font-semibold text-foreground">{jobs.length}</span> total project records.
+          <span className="font-semibold text-foreground">{jobs.length}</span> total project
+          records.
           {selectedList.length > 0 && (
             <span className="ml-2 font-semibold text-primary">
               ({selectedList.length} rows selected for export)
@@ -400,7 +408,8 @@ function ProjectsReport() {
           )}
         </div>
         <div className="font-mono">
-          Est. Scope Value: <span className="font-bold text-foreground">₹{totalBudgetEst.toLocaleString()}</span>
+          Est. Scope Value:{" "}
+          <span className="font-bold text-foreground">₹{totalBudgetEst.toLocaleString()}</span>
         </div>
       </div>
     </div>
@@ -440,24 +449,26 @@ function PaymentsReport() {
     });
   }, [payments, search, statusFilter, dateFilter]);
 
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } = useRowSelection(filteredPayments);
+  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
+    useRowSelection(filteredPayments);
   const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
 
   // Statement calculations
   const totalAmount = filteredPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
   const clearedPayments = filteredPayments.filter(
-    (p) => p.status.toUpperCase() === "COMPLETED" || p.status.toUpperCase() === "PAID"
+    (p) => p.status.toUpperCase() === "COMPLETED" || p.status.toUpperCase() === "PAID",
   );
   const clearedTotal = clearedPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
   const pendingPayments = filteredPayments.filter(
-    (p) => p.status.toUpperCase() === "PENDING" || p.status.toUpperCase() === "FUNDED"
+    (p) => p.status.toUpperCase() === "PENDING" || p.status.toUpperCase() === "FUNDED",
   );
   const pendingTotal = pendingPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
   const handleExportCsv = () => {
-    const rowsToExport = selectedList.length > 0
-      ? filteredPayments.filter((p) => selectedIds.has(p.id))
-      : filteredPayments;
+    const rowsToExport =
+      selectedList.length > 0
+        ? filteredPayments.filter((p) => selectedIds.has(p.id))
+        : filteredPayments;
     downloadCsv(
       "klick-pro-client-payments",
       ["Invoice / Txn ID", "Description", "Type", "Status", "Amount (INR)", "Date"],
@@ -468,7 +479,7 @@ function PaymentsReport() {
         p.status,
         p.amount,
         new Date(p.createdAt).toLocaleDateString(),
-      ])
+      ]),
     );
   };
 
@@ -488,12 +499,16 @@ function PaymentsReport() {
               ₹{totalAmount.toLocaleString()}
             </div>
           )}
-          <p className="mt-1 text-xs text-muted-foreground">{filteredPayments.length} transactions</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {filteredPayments.length} transactions
+          </p>
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Cleared & Settled</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">
+              Cleared & Settled
+            </span>
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
           </div>
           {loading ? (
@@ -503,7 +518,9 @@ function PaymentsReport() {
               ₹{clearedTotal.toLocaleString()}
             </div>
           )}
-          <p className="mt-1 text-xs text-muted-foreground">{clearedPayments.length} paid milestones</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {clearedPayments.length} paid milestones
+          </p>
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
@@ -530,7 +547,10 @@ function PaymentsReport() {
             <div className="mt-2 h-8 w-24 rounded-lg bg-muted animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-              ₹{filteredPayments.length > 0 ? Math.round(totalAmount / filteredPayments.length).toLocaleString() : "0"}
+              ₹
+              {filteredPayments.length > 0
+                ? Math.round(totalAmount / filteredPayments.length).toLocaleString()
+                : "0"}
             </div>
           )}
           <p className="mt-1 text-xs text-muted-foreground">Per milestone release</p>
@@ -646,7 +666,7 @@ function PaymentsReport() {
               render: (payment) => (
                 <span
                   className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(
-                    payment.status
+                    payment.status,
                   )}`}
                 >
                   <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -685,8 +705,8 @@ function PaymentsReport() {
       {/* Period Reconciliation Summary */}
       <div className="flex flex-col gap-2 rounded-2xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground">
         <div>
-          Showing <span className="font-semibold text-foreground">{filteredPayments.length}</span> of{" "}
-          <span className="font-semibold text-foreground">{payments.length}</span> total entries.
+          Showing <span className="font-semibold text-foreground">{filteredPayments.length}</span>{" "}
+          of <span className="font-semibold text-foreground">{payments.length}</span> total entries.
           {selectedList.length > 0 && (
             <span className="ml-2 font-semibold text-primary">
               ({selectedList.length} rows selected for export)
@@ -694,7 +714,8 @@ function PaymentsReport() {
           )}
         </div>
         <div className="font-mono">
-          Period Settlement Total: <span className="font-bold text-foreground">₹{totalAmount.toLocaleString()} INR</span>
+          Period Settlement Total:{" "}
+          <span className="font-bold text-foreground">₹{totalAmount.toLocaleString()} INR</span>
         </div>
       </div>
     </div>
@@ -718,7 +739,8 @@ export default function ClientReports() {
               Reports & Statements
             </h1>
             <p className="mt-2 text-sm text-slate-300 sm:text-base leading-relaxed">
-              Official audit records of your project allocations, escrow deposits, and payment settlements. Download itemized statements in PDF or Excel format.
+              Official audit records of your project allocations, escrow deposits, and payment
+              settlements. Download itemized statements in PDF or Excel format.
             </p>
           </div>
 

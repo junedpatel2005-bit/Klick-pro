@@ -179,7 +179,11 @@ export function AdminPageSkeleton({
 } = {}) {
   return (
     <AppSkeleton>
-      <main className="relative space-y-6 p-5 sm:p-8 min-h-[500px]" aria-label="Loading administration page" role="status">
+      <main
+        className="relative space-y-6 p-5 sm:p-8 min-h-[500px]"
+        aria-label="Loading administration page"
+        role="status"
+      >
         {showLogo && <BrandedLogoBadge title={title} subtitle={subtitle} />}
         <div className={`space-y-6 ${showLogo ? "opacity-35" : ""}`}>
           <div className="space-y-3">
@@ -212,7 +216,11 @@ export function TableSkeleton({
 } = {}) {
   return (
     <AppSkeleton>
-      <div className="relative min-h-[420px] rounded-2xl border border-border bg-card p-4 sm:p-6" aria-label="Loading table" role="status">
+      <div
+        className="relative min-h-[420px] rounded-2xl border border-border bg-card p-4 sm:p-6"
+        aria-label="Loading table"
+        role="status"
+      >
         {showLogo && <BrandedLogoBadge title={title} subtitle={subtitle} />}
         <div className={`space-y-4 ${showLogo ? "opacity-35" : ""}`}>
           <div className="flex justify-between items-center pb-3 border-b border-border">
@@ -221,7 +229,10 @@ export function TableSkeleton({
           </div>
           <div className="space-y-3">
             {Array.from({ length: rows }, (_, index) => (
-              <div key={index} className="flex items-center justify-between gap-4 py-2 border-b border-border/50">
+              <div
+                key={index}
+                className="flex items-center justify-between gap-4 py-2 border-b border-border/50"
+              >
                 <Skeleton width="25%" height={18} />
                 <Skeleton width="20%" height={18} />
                 <Skeleton width="15%" height={18} />
@@ -247,7 +258,11 @@ export function MessagesSkeleton({
 } = {}) {
   return (
     <AppSkeleton>
-      <div className="relative flex h-[calc(100vh-8rem)] min-h-[450px] rounded-2xl border border-border bg-card overflow-hidden" aria-label="Loading messages" role="status">
+      <div
+        className="relative flex h-[calc(100vh-8rem)] min-h-[450px] rounded-2xl border border-border bg-card overflow-hidden"
+        aria-label="Loading messages"
+        role="status"
+      >
         {showLogo && <BrandedLogoBadge title={title} subtitle={subtitle} />}
         <div className={`flex w-full ${showLogo ? "opacity-35" : ""}`}>
           <div className="w-80 border-r border-border p-4 space-y-3 hidden md:block">

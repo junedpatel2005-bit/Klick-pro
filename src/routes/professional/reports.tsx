@@ -50,10 +50,18 @@ function displayStatus(status: string) {
 
 function statusBadgeClass(status: string) {
   const normalized = status.toUpperCase();
-  if (normalized.includes("COMPLETED") || normalized.includes("PAID") || normalized.includes("SETTLED")) {
+  if (
+    normalized.includes("COMPLETED") ||
+    normalized.includes("PAID") ||
+    normalized.includes("SETTLED")
+  ) {
     return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
   }
-  if (normalized.includes("RUNNING") || normalized.includes("IN_PROGRESS") || normalized.includes("FUNDED")) {
+  if (
+    normalized.includes("RUNNING") ||
+    normalized.includes("IN_PROGRESS") ||
+    normalized.includes("FUNDED")
+  ) {
     return "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20";
   }
   if (normalized.includes("PENDING") || normalized.includes("AWAITING")) {
@@ -78,7 +86,9 @@ function isWithinDateRange(dateString: string | null | undefined, filter: DateFi
   }
   if (filter === "last_month") {
     const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    return date.getMonth() === prevMonth.getMonth() && date.getFullYear() === prevMonth.getFullYear();
+    return (
+      date.getMonth() === prevMonth.getMonth() && date.getFullYear() === prevMonth.getFullYear()
+    );
   }
   if (filter === "last_90_days") {
     const ninetyDaysAgo = new Date();
@@ -94,7 +104,9 @@ function isWithinDateRange(dateString: string | null | undefined, filter: DateFi
 function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
   const csvContent = [
     headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(","),
-    ...rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")),
+    ...rows.map((row) =>
+      row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","),
+    ),
   ].join("\r\n");
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -142,23 +154,40 @@ function ProjectsReport() {
     });
   }, [projects, search, statusFilter, dateFilter]);
 
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } = useRowSelection(filteredProjects);
+  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
+    useRowSelection(filteredProjects);
   const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
 
   // Financial calculations
   const totalContractValue = filteredProjects.reduce((sum, p) => sum + (Number(p.budget) || 0), 0);
-  const activeCount = filteredProjects.filter((p) => p.status.toUpperCase().includes("RUNNING") || p.status.toUpperCase().includes("PROGRESS")).length;
-  const avgProgress = filteredProjects.length > 0
-    ? Math.round(filteredProjects.reduce((sum, p) => sum + (p.progress || 0), 0) / filteredProjects.length)
-    : 0;
+  const activeCount = filteredProjects.filter(
+    (p) =>
+      p.status.toUpperCase().includes("RUNNING") || p.status.toUpperCase().includes("PROGRESS"),
+  ).length;
+  const avgProgress =
+    filteredProjects.length > 0
+      ? Math.round(
+          filteredProjects.reduce((sum, p) => sum + (p.progress || 0), 0) / filteredProjects.length,
+        )
+      : 0;
 
   const handleExportCsv = () => {
-    const rowsToExport = selectedList.length > 0
-      ? filteredProjects.filter((p) => selectedIds.has(p.id))
-      : filteredProjects;
+    const rowsToExport =
+      selectedList.length > 0
+        ? filteredProjects.filter((p) => selectedIds.has(p.id))
+        : filteredProjects;
     downloadCsv(
       "klick-pro-professional-projects",
-      ["Project ID", "Job Title", "Client", "Status", "Deadline", "Budget", "Progress %", "Accepted Date"],
+      [
+        "Project ID",
+        "Job Title",
+        "Client",
+        "Status",
+        "Deadline",
+        "Budget",
+        "Progress %",
+        "Accepted Date",
+      ],
       rowsToExport.map((p) => [
         `#PRJ-${p.id}`,
         p.jobTitle ?? "Untitled project",
@@ -168,7 +197,7 @@ function ProjectsReport() {
         money(p),
         `${p.progress}%`,
         p.acceptedAt ? new Date(p.acceptedAt).toLocaleDateString() : "—",
-      ])
+      ]),
     );
   };
 
@@ -230,7 +259,10 @@ function ProjectsReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-muted animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-xl font-bold tracking-tight text-foreground sm:text-2xl truncate">
-              ₹{filteredProjects.length > 0 ? Math.round(totalContractValue / filteredProjects.length).toLocaleString() : "0"}
+              ₹
+              {filteredProjects.length > 0
+                ? Math.round(totalContractValue / filteredProjects.length).toLocaleString()
+                : "0"}
             </div>
           )}
           <p className="mt-1 text-xs text-muted-foreground">Per engagement</p>
@@ -348,7 +380,7 @@ function ProjectsReport() {
               render: (project) => (
                 <span
                   className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(
-                    project.status
+                    project.status,
                   )}`}
                 >
                   <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -388,8 +420,8 @@ function ProjectsReport() {
       {/* Period Reconciliation Summary */}
       <div className="flex flex-col gap-2 rounded-2xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground">
         <div>
-          Showing <span className="font-semibold text-foreground">{filteredProjects.length}</span> of{" "}
-          <span className="font-semibold text-foreground">{projects.length}</span> engagements.
+          Showing <span className="font-semibold text-foreground">{filteredProjects.length}</span>{" "}
+          of <span className="font-semibold text-foreground">{projects.length}</span> engagements.
           {selectedList.length > 0 && (
             <span className="ml-2 font-semibold text-primary">
               ({selectedList.length} rows selected for export)
@@ -397,7 +429,8 @@ function ProjectsReport() {
           )}
         </div>
         <div className="font-mono">
-          Total Committed Value: <span className="font-bold text-foreground">₹{totalContractValue.toLocaleString()}</span>
+          Total Committed Value:{" "}
+          <span className="font-bold text-foreground">₹{totalContractValue.toLocaleString()}</span>
         </div>
       </div>
     </div>
@@ -438,24 +471,28 @@ function EarningsReport() {
     });
   }, [items, search, statusFilter, dateFilter]);
 
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } = useRowSelection(filteredItems);
+  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
+    useRowSelection(filteredItems);
   const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
 
   // Statement calculations
   const totalEarned = filteredItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const clearedItems = filteredItems.filter(
-    (item) => item.status.toUpperCase() === "COMPLETED" || item.status.toUpperCase() === "PAID"
+    (item) => item.status.toUpperCase() === "COMPLETED" || item.status.toUpperCase() === "PAID",
   );
   const clearedTotal = clearedItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const pendingItems = filteredItems.filter(
-    (item) => item.status.toUpperCase() === "PENDING" || item.status.toUpperCase() === "AWAITING_ADMIN_APPROVAL"
+    (item) =>
+      item.status.toUpperCase() === "PENDING" ||
+      item.status.toUpperCase() === "AWAITING_ADMIN_APPROVAL",
   );
   const pendingTotal = pendingItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
   const handleExportCsv = () => {
-    const rowsToExport = selectedList.length > 0
-      ? filteredItems.filter((item) => selectedIds.has(item.id))
-      : filteredItems;
+    const rowsToExport =
+      selectedList.length > 0
+        ? filteredItems.filter((item) => selectedIds.has(item.id))
+        : filteredItems;
     downloadCsv(
       "klick-pro-professional-earnings",
       ["Invoice / Txn ID", "Description", "Status", "Amount (INR)", "Date"],
@@ -465,7 +502,7 @@ function EarningsReport() {
         item.status,
         item.amount,
         new Date(item.createdAt).toLocaleDateString(),
-      ])
+      ]),
     );
   };
 
@@ -527,7 +564,10 @@ function EarningsReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-muted animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl truncate">
-              ₹{filteredItems.length > 0 ? Math.round(totalEarned / filteredItems.length).toLocaleString() : "0"}
+              ₹
+              {filteredItems.length > 0
+                ? Math.round(totalEarned / filteredItems.length).toLocaleString()
+                : "0"}
             </div>
           )}
           <p className="mt-1 text-xs text-muted-foreground">Per milestone</p>
@@ -633,7 +673,7 @@ function EarningsReport() {
               render: (item) => (
                 <span
                   className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(
-                    item.status
+                    item.status,
                   )}`}
                 >
                   <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -681,7 +721,8 @@ function EarningsReport() {
           )}
         </div>
         <div className="font-mono">
-          Settled Revenue: <span className="font-bold text-foreground">₹{clearedTotal.toLocaleString()} INR</span>
+          Settled Revenue:{" "}
+          <span className="font-bold text-foreground">₹{clearedTotal.toLocaleString()} INR</span>
         </div>
       </div>
     </div>
@@ -705,7 +746,8 @@ export default function ProfessionalReports() {
               Reports & Earnings Statements
             </h1>
             <p className="mt-2 text-sm text-slate-300 sm:text-base leading-relaxed">
-              Official audit statements of your contracted projects, milestone disbursements, and bank settlements. Download tax-ready statements in PDF or Excel format.
+              Official audit statements of your contracted projects, milestone disbursements, and
+              bank settlements. Download tax-ready statements in PDF or Excel format.
             </p>
           </div>
 

@@ -25,7 +25,11 @@ import {
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
-import type { PublicClientProfile, PublicClientJobItem, PublicReviewItem } from "@/lib/types/marketplace";
+import type {
+  PublicClientProfile,
+  PublicClientJobItem,
+  PublicReviewItem,
+} from "@/lib/types/marketplace";
 
 const formatCurrency = (value: number | null) =>
   value == null ? "Flexible" : `₹${value.toLocaleString("en-IN")}`;
@@ -139,7 +143,8 @@ export default function ClientProfilePage() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Client Not Found</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            The client profile you are looking for does not exist, has been removed, or is not publicly accessible.
+            The client profile you are looking for does not exist, has been removed, or is not
+            publicly accessible.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Button asChild variant="default">
@@ -306,13 +311,18 @@ export default function ClientProfilePage() {
               {/* Total Jobs Posted */}
               <div className="inline-flex items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
                 <Briefcase className="h-3.5 w-3.5" />
-                <span>{client.totalJobsPosted} {client.totalJobsPosted === 1 ? "Job" : "Jobs"} Posted</span>
+                <span>
+                  {client.totalJobsPosted} {client.totalJobsPosted === 1 ? "Job" : "Jobs"} Posted
+                </span>
               </div>
 
               {/* Completed Hires */}
               <div className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                <span>{client.completedProjectsCount} Completed {client.completedProjectsCount === 1 ? "Hire" : "Hires"}</span>
+                <span>
+                  {client.completedProjectsCount} Completed{" "}
+                  {client.completedProjectsCount === 1 ? "Hire" : "Hires"}
+                </span>
               </div>
             </div>
           </div>
@@ -320,9 +330,7 @@ export default function ClientProfilePage() {
           {/* About / Company Information Section */}
           <section className="mt-8 grid gap-6 sm:grid-cols-2">
             <div>
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                About the Client
-              </h2>
+              <h2 className="text-lg font-semibold flex items-center gap-2">About the Client</h2>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                 {client.companyDescription ||
                   "This client has not added a detailed company description yet. They actively hire qualified professionals on Klick-Pro."}
@@ -353,7 +361,11 @@ export default function ClientProfilePage() {
                   <div>
                     <p className="font-medium text-foreground">Website</p>
                     <a
-                      href={client.companyWebsite.startsWith("http") ? client.companyWebsite : `https://${client.companyWebsite}`}
+                      href={
+                        client.companyWebsite.startsWith("http")
+                          ? client.companyWebsite
+                          : `https://${client.companyWebsite}`
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
@@ -400,7 +412,8 @@ export default function ClientProfilePage() {
                 <Briefcase className="mx-auto h-8 w-8 text-muted-foreground/60" />
                 <p className="mt-2 text-sm font-medium text-foreground">No active jobs right now</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  This client does not have open job postings at the moment. Check back soon or explore other opportunities.
+                  This client does not have open job postings at the moment. Check back soon or
+                  explore other opportunities.
                 </p>
                 <Button asChild size="sm" className="mt-4">
                   <Link href="/jobs">Explore Marketplace Jobs</Link>
@@ -455,7 +468,11 @@ export default function ClientProfilePage() {
                       </div>
                     </div>
 
-                    <Button asChild size="sm" className="w-full sm:w-auto shrink-0 gap-1.5 font-semibold">
+                    <Button
+                      asChild
+                      size="sm"
+                      className="w-full sm:w-auto shrink-0 gap-1.5 font-semibold"
+                    >
                       <Link href={`/job/${job.id}`}>
                         View Job
                         <ChevronRight className="h-4 w-4" />
@@ -572,7 +589,8 @@ export default function ClientProfilePage() {
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-primary" />
               <span>
-                All client ratings and reviews are verified from completed project milestones on Klick-Pro.
+                All client ratings and reviews are verified from completed project milestones on
+                Klick-Pro.
               </span>
             </div>
             <Link href="/privacy" className="text-primary hover:underline">
@@ -584,4 +602,3 @@ export default function ClientProfilePage() {
     </AppShell>
   );
 }
-

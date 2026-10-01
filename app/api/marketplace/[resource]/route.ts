@@ -45,10 +45,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
     if (resource === "client-detail" || resource === "client") {
       const id = idSchema.safeParse(new URL(request.url).searchParams.get("id"));
       if (!id.success)
-        return NextResponse.json(
-          { error: "A valid client id is required." },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: "A valid client id is required." }, { status: 400 });
       const client = await getPublicClientProfile(id.data);
       return client
         ? NextResponse.json(client)

@@ -2,7 +2,9 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client";
 
-const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+const db = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
+});
 
 async function auditDatabase() {
   console.log("=========================================");
@@ -11,7 +13,7 @@ async function auditDatabase() {
 
   // 1. Connection check
   const connResult = await db.$queryRawUnsafe<any[]>(
-    "SELECT count(*) as total_conn, count(*) FILTER (WHERE state = 'active') as active_conn, count(*) FILTER (WHERE state = 'idle in transaction') as idle_in_tx FROM pg_stat_activity WHERE datname = current_database()"
+    "SELECT count(*) as total_conn, count(*) FILTER (WHERE state = 'active') as active_conn, count(*) FILTER (WHERE state = 'idle in transaction') as idle_in_tx FROM pg_stat_activity WHERE datname = current_database()",
   );
   console.log("\n[1] Connection Pool Status:");
   console.log(`    Total connections: ${connResult[0].total_conn}`);
@@ -53,17 +55,17 @@ async function auditDatabase() {
   console.log("\n[5] Relational Integrity & Orphan Check:");
 
   const orphanedWallets = await db.$queryRawUnsafe<any[]>(
-    'SELECT w.id, w."userId", w.balance FROM "Wallet" w LEFT JOIN "User" u ON w."userId" = u.id WHERE u.id IS NULL'
+    'SELECT w.id, w."userId", w.balance FROM "Wallet" w LEFT JOIN "User" u ON w."userId" = u.id WHERE u.id IS NULL',
   );
   console.log(`    Orphaned Wallets (no user): ${orphanedWallets.length}`, orphanedWallets);
 
   const orphanedWT = await db.$queryRawUnsafe<any[]>(
-    'SELECT wt.id FROM "WalletTransaction" wt LEFT JOIN "Wallet" w ON wt."walletId" = w.id WHERE w.id IS NULL'
+    'SELECT wt.id FROM "WalletTransaction" wt LEFT JOIN "Wallet" w ON wt."walletId" = w.id WHERE w.id IS NULL',
   );
   console.log(`    Orphaned Wallet Transactions (no wallet): ${orphanedWT.length}`);
 
   const orphanedMilestones = await db.$queryRawUnsafe<any[]>(
-    'SELECT pm.id FROM "ProjectMilestone" pm LEFT JOIN "ProjectTracking" pt ON pm."trackingId" = pt.id WHERE pt.id IS NULL'
+    'SELECT pm.id FROM "ProjectMilestone" pm LEFT JOIN "ProjectTracking" pt ON pm."trackingId" = pt.id WHERE pt.id IS NULL',
   );
   console.log(`    Orphaned Milestones (no tracking): ${orphanedMilestones.length}`);
 
@@ -88,24 +90,30 @@ async function auditDatabase() {
     const ledgerSum = sumResult._sum.amount ?? 0;
     if (w.balance !== ledgerSum) {
       balanceMismatches++;
-      console.log(`    Wallet ID ${w.id} (User ${w.userId}): cached balance = ${w.balance}, ledger sum = ${ledgerSum}`);
+      console.log(
+        `    Wallet ID ${w.id} (User ${w.userId}): cached balance = ${w.balance}, ledger sum = ${ledgerSum}`,
+      );
     }
   }
   if (balanceMismatches === 0) {
-    console.log(`    All ${wallets.length} wallets are in 100% mathematical balance with their ledger!`);
+    console.log(
+      `    All ${wallets.length} wallets are in 100% mathematical balance with their ledger!`,
+    );
   } else {
-    console.log(`    ${balanceMismatches} wallet(s) have discrepancy between cached balance and ledger sum.`);
+    console.log(
+      `    ${balanceMismatches} wallet(s) have discrepancy between cached balance and ledger sum.`,
+    );
   }
 
   // 5. Index and table size audit
   console.log("\n[7] Database Storage & Engine Health:");
   const dbSizeRes = await db.$queryRawUnsafe<any[]>(
-    "SELECT pg_size_pretty(pg_database_size(current_database())) as db_size"
+    "SELECT pg_size_pretty(pg_database_size(current_database())) as db_size",
   );
   console.log(`    Database Size: ${dbSizeRes[0].db_size}`);
 
   const engineStats = await db.$queryRawUnsafe<any[]>(
-    "SELECT xact_commit, xact_rollback, conflicts, deadlocks, round(100.0 * blks_hit / nullif(blks_hit + blks_read, 0), 2) as cache_hit_pct FROM pg_stat_database WHERE datname = current_database()"
+    "SELECT xact_commit, xact_rollback, conflicts, deadlocks, round(100.0 * blks_hit / nullif(blks_hit + blks_read, 0), 2) as cache_hit_pct FROM pg_stat_database WHERE datname = current_database()",
   );
   console.log(`    Committed Transactions: ${engineStats[0].xact_commit}`);
   console.log(`    Rolled Back Transactions: ${engineStats[0].xact_rollback}`);

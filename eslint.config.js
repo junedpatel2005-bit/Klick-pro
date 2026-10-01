@@ -6,7 +6,16 @@ import tseslint from "typescript-eslint";
 
 const config = tseslint.config(
   {
-    ignores: [".next/**", ".project-work-files/**", "**/node_modules/**", "generated/**", "tmp/**"],
+    ignores: [
+      ".next/**",
+      ".project-work-files/**",
+      "**/node_modules/**",
+      "generated/**",
+      "tmp/**",
+      // Agent worktree sandboxes are throwaway copies of the same sources and
+      // would otherwise quadruple every lint finding.
+      ".kilo/**",
+    ],
   },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],

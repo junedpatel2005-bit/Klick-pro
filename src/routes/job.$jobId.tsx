@@ -1210,7 +1210,12 @@ export default function JobDetails({
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl font-bold">About the Client</h2>
                   {job.client.id ? (
-                    <Button variant="ghost" size="sm" asChild className="h-7 text-xs text-primary hover:text-primary gap-1 px-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      asChild
+                      className="h-7 text-xs text-primary hover:text-primary gap-1 px-2"
+                    >
                       <Link href={`/client/${job.client.id}`}>
                         View Profile
                         <ExternalLink className="h-3 w-3" />
@@ -2233,7 +2238,9 @@ export default function JobDetails({
                       href={`/client/${job.client.id}`}
                       className="group inline-flex items-center gap-1.5 font-semibold text-foreground hover:text-primary transition-colors"
                     >
-                      <span className="underline-offset-4 group-hover:underline">{job.client.name}</span>
+                      <span className="underline-offset-4 group-hover:underline">
+                        {job.client.name}
+                      </span>
                       <ExternalLink className="h-3.5 w-3.5 opacity-60 transition-opacity group-hover:opacity-100" />
                     </Link>
                   ) : (
@@ -2243,7 +2250,10 @@ export default function JobDetails({
               </div>
               {job.client.id ? (
                 <Button variant="outline" size="sm" asChild>
-                  <Link href={`/client/${job.client.id}`} className="inline-flex items-center gap-1.5 font-medium">
+                  <Link
+                    href={`/client/${job.client.id}`}
+                    className="inline-flex items-center gap-1.5 font-medium"
+                  >
                     View Client Profile
                     <ExternalLink className="h-3.5 w-3.5" />
                   </Link>

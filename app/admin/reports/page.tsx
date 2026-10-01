@@ -61,7 +61,9 @@ function isWithinDateRange(dateString: string | null | undefined, filter: DateFi
   }
   if (filter === "last_month") {
     const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    return date.getMonth() === prevMonth.getMonth() && date.getFullYear() === prevMonth.getFullYear();
+    return (
+      date.getMonth() === prevMonth.getMonth() && date.getFullYear() === prevMonth.getFullYear()
+    );
   }
   if (filter === "last_90_days") {
     const ninetyDaysAgo = new Date();
@@ -77,7 +79,9 @@ function isWithinDateRange(dateString: string | null | undefined, filter: DateFi
 function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
   const csvContent = [
     headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(","),
-    ...rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")),
+    ...rows.map((row) =>
+      row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","),
+    ),
   ].join("\r\n");
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -118,7 +122,8 @@ function UsersReport() {
     });
   }, [users, search, roleFilter, dateFilter]);
 
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } = useRowSelection(filteredUsers);
+  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
+    useRowSelection(filteredUsers);
   const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
 
   // KPIs
@@ -128,9 +133,8 @@ function UsersReport() {
   const clientCount = filteredUsers.filter((u) => u.role === "CLIENT").length;
 
   const handleExportCsv = () => {
-    const rowsToExport = selectedList.length > 0
-      ? filteredUsers.filter((u) => selectedIds.has(u.id))
-      : filteredUsers;
+    const rowsToExport =
+      selectedList.length > 0 ? filteredUsers.filter((u) => selectedIds.has(u.id)) : filteredUsers;
     downloadCsv(
       "klick-pro-admin-users",
       ["User ID", "First Name", "Last Name", "Email", "Role", "Active", "Verified", "Joined Date"],
@@ -143,7 +147,7 @@ function UsersReport() {
         u.isActive ? "Yes" : "No",
         u.isVerified ? "Yes" : "No",
         new Date(u.createdAt).toLocaleDateString(),
-      ])
+      ]),
     );
   };
 
@@ -168,7 +172,9 @@ function UsersReport() {
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Verified Identity</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">
+              Verified Identity
+            </span>
             <ShieldCheck className="h-4 w-4 text-emerald-600" />
           </div>
           {loading ? (
@@ -314,8 +320,8 @@ function UsersReport() {
                     user.role === "PROFESSIONAL"
                       ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
                       : user.role === "CLIENT"
-                      ? "bg-purple-50 text-purple-700 border border-purple-200"
-                      : "bg-slate-100 text-slate-800 border border-slate-200"
+                        ? "bg-purple-50 text-purple-700 border border-purple-200"
+                        : "bg-slate-100 text-slate-800 border border-slate-200"
                   }`}
                 >
                   {user.role}
@@ -415,25 +421,31 @@ function JobsReport() {
         (job.title && job.title.toLowerCase().includes(search.toLowerCase())) ||
         clientName.includes(search.toLowerCase()) ||
         String(job.id).includes(search);
-      const matchesStatus = statusFilter === "ALL" || job.status.toUpperCase() === statusFilter.toUpperCase();
+      const matchesStatus =
+        statusFilter === "ALL" || job.status.toUpperCase() === statusFilter.toUpperCase();
       const matchesDate = isWithinDateRange(job.createdAt, dateFilter);
       return matchesSearch && matchesStatus && matchesDate;
     });
   }, [jobs, search, statusFilter, dateFilter]);
 
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } = useRowSelection(filteredJobs);
+  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
+    useRowSelection(filteredJobs);
   const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
 
   // KPIs
   const totalJobs = filteredJobs.length;
-  const runningJobs = filteredJobs.filter((j) => j.status.toUpperCase().includes("RUNNING") || j.status.toUpperCase().includes("PROGRESS")).length;
-  const completedJobs = filteredJobs.filter((j) => j.status.toUpperCase().includes("COMPLETED")).length;
+  const runningJobs = filteredJobs.filter(
+    (j) =>
+      j.status.toUpperCase().includes("RUNNING") || j.status.toUpperCase().includes("PROGRESS"),
+  ).length;
+  const completedJobs = filteredJobs.filter((j) =>
+    j.status.toUpperCase().includes("COMPLETED"),
+  ).length;
   const openJobs = filteredJobs.filter((j) => j.status.toUpperCase() === "OPEN").length;
 
   const handleExportCsv = () => {
-    const rowsToExport = selectedList.length > 0
-      ? filteredJobs.filter((j) => selectedIds.has(j.id))
-      : filteredJobs;
+    const rowsToExport =
+      selectedList.length > 0 ? filteredJobs.filter((j) => selectedIds.has(j.id)) : filteredJobs;
     downloadCsv(
       "klick-pro-admin-jobs",
       ["Job ID", "Title", "Client Name", "Category", "Status", "Created Date"],
@@ -444,7 +456,7 @@ function JobsReport() {
         j.category ?? "General",
         j.status,
         new Date(j.createdAt).toLocaleDateString(),
-      ])
+      ]),
     );
   };
 
@@ -627,9 +639,7 @@ function JobsReport() {
               key: "status",
               header: "Status",
               render: (job) => (
-                <span className="text-xs font-semibold text-slate-700">
-                  {job.status}
-                </span>
+                <span className="text-xs font-semibold text-slate-700">{job.status}</span>
               ),
             },
             {
@@ -739,27 +749,40 @@ function FinanceReport() {
         row.party.toLowerCase().includes(search.toLowerCase()) ||
         row.type.toLowerCase().includes(search.toLowerCase()) ||
         String(row.id).includes(search);
-      const matchesKind = kindFilter === "ALL" || row.kind.toUpperCase() === kindFilter.toUpperCase();
+      const matchesKind =
+        kindFilter === "ALL" || row.kind.toUpperCase() === kindFilter.toUpperCase();
       const matchesDate = isWithinDateRange(row.createdAt, dateFilter);
       return matchesSearch && matchesKind && matchesDate;
     });
   }, [rows, search, kindFilter, dateFilter]);
 
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } = useRowSelection(filteredRows);
+  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
+    useRowSelection(filteredRows);
   const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
 
   // Financial KPIs
   const totalVolume = filteredRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
-  const paymentVolume = filteredRows.filter((r) => r.kind === "Payment").reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
-  const payoutVolume = filteredRows.filter((r) => r.kind === "Payout").reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+  const paymentVolume = filteredRows
+    .filter((r) => r.kind === "Payment")
+    .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+  const payoutVolume = filteredRows
+    .filter((r) => r.kind === "Payout")
+    .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
   const handleExportCsv = () => {
-    const rowsToExport = selectedList.length > 0
-      ? filteredRows.filter((r) => selectedIds.has(r.id))
-      : filteredRows;
+    const rowsToExport =
+      selectedList.length > 0 ? filteredRows.filter((r) => selectedIds.has(r.id)) : filteredRows;
     downloadCsv(
       "klick-pro-admin-financial-audit",
-      ["Reference", "Kind", "Transaction Type", "Amount (INR)", "Status", "Parties Involved", "Timestamp"],
+      [
+        "Reference",
+        "Kind",
+        "Transaction Type",
+        "Amount (INR)",
+        "Status",
+        "Parties Involved",
+        "Timestamp",
+      ],
       rowsToExport.map((r) => [
         `#TXN-${r.id}`,
         r.kind,
@@ -768,7 +791,7 @@ function FinanceReport() {
         r.status,
         r.party,
         new Date(r.createdAt).toLocaleString(),
-      ])
+      ]),
     );
   };
 
@@ -778,7 +801,9 @@ function FinanceReport() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Gross Volume (GMV)</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">
+              Gross Volume (GMV)
+            </span>
             <CircleDollarSign className="h-4 w-4 text-indigo-600" />
           </div>
           {loading ? (
@@ -955,18 +980,14 @@ function FinanceReport() {
               key: "status",
               header: "Status",
               render: (row) => (
-                <span className="text-xs font-semibold text-slate-700">
-                  {row.status}
-                </span>
+                <span className="text-xs font-semibold text-slate-700">{row.status}</span>
               ),
             },
             {
               key: "party",
               header: "Parties Involved",
               render: (row) => (
-                <span className="text-xs text-slate-600 line-clamp-1 max-w-sm">
-                  {row.party}
-                </span>
+                <span className="text-xs text-slate-600 line-clamp-1 max-w-sm">{row.party}</span>
               ),
             },
             {
@@ -1023,7 +1044,8 @@ export default function AdminReportsPage() {
               Platform Reports & Audit Ledgers
             </h1>
             <p className="mt-1 text-sm text-slate-500 max-w-2xl">
-              Official compliance records of platform accounts, active marketplace job volume, and reconciled gross settlement transactions.
+              Official compliance records of platform accounts, active marketplace job volume, and
+              reconciled gross settlement transactions.
             </p>
           </div>
 

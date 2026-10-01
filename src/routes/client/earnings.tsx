@@ -600,7 +600,8 @@ export default function ClientEarnings() {
                     <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Instant wallet balance
                   </span>
                   <span className="inline-flex items-center gap-1 font-medium">
-                    <LockKeyhole className="h-3.5 w-3.5 text-indigo-600" /> UPI, Netbanking &amp; Cards
+                    <LockKeyhole className="h-3.5 w-3.5 text-indigo-600" /> UPI, Netbanking &amp;
+                    Cards
                   </span>
                 </div>
 
@@ -623,7 +624,11 @@ export default function ClientEarnings() {
                         min="1"
                         value={shortcutAmount}
                         onChange={(e) => setShortcutAmount(e.target.value)}
-                        placeholder={topUpAmount ? `Use ₹${Number(topUpAmount).toLocaleString("en-IN")}` : "Enter amount"}
+                        placeholder={
+                          topUpAmount
+                            ? `Use ₹${Number(topUpAmount).toLocaleString("en-IN")}`
+                            : "Enter amount"
+                        }
                         className="h-full w-full bg-transparent text-xs font-medium outline-none placeholder:text-muted-foreground/60"
                       />
                     </div>
@@ -1164,15 +1169,15 @@ export default function ClientEarnings() {
           actionBusy === "shortcut"
             ? "Adding Funds to Wallet…"
             : actionBusy === "topup"
-            ? "Connecting to payment gateway…"
-            : "Submitting withdrawal request…"
+              ? "Connecting to payment gateway…"
+              : "Submitting withdrawal request…"
         }
         description={
           actionBusy === "shortcut"
             ? "Processing Razorpay transaction and crediting your wallet balance."
             : actionBusy === "topup"
-            ? "Preparing secure checkout with Razorpay."
-            : "Sending your withdrawal request to admin review."
+              ? "Preparing secure checkout with Razorpay."
+              : "Sending your withdrawal request to admin review."
         }
       />
     </div>

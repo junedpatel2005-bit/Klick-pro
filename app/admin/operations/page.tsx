@@ -1912,939 +1912,935 @@ function DisputeDetailsPanel({
           <p key="error-message" className="p-6 text-sm text-rose-700">
             Dispute details could not be loaded. Please try again.
           </p>
-        ) : details && dispute ? (() => {
-              const milestoneUploads =
-                details.workUploads?.filter(
-                  (u) => targetMilestone && u.milestoneId === targetMilestone.id,
-                ) ||
-                (details.workUploads ?? []);
+        ) : details && dispute ? (
+          (() => {
+            const milestoneUploads =
+              details.workUploads?.filter(
+                (u) => targetMilestone && u.milestoneId === targetMilestone.id,
+              ) ||
+              (details.workUploads ?? []);
 
-              const milestonePayment = details.payments?.find(
-                (p) =>
-                  (targetMilestone ? p.milestoneId === targetMilestone.id : false) &&
-                  (p.status === "SUCCEEDED" || p.status === "RELEASED" || p.status === "COMPLETED"),
+            const milestonePayment = details.payments?.find(
+              (p) =>
+                (targetMilestone ? p.milestoneId === targetMilestone.id : false) &&
+                (p.status === "SUCCEEDED" || p.status === "RELEASED" || p.status === "COMPLETED"),
+            );
+
+            const isMilestonePaid = Boolean(
+              milestonePayment ||
+              (targetMilestone &&
+                (targetMilestone.status === "COMPLETED" || targetMilestone.status === "APPROVED")),
+            );
+
+            const hasWorkSubmitted =
+              milestoneUploads.length > 0 || Boolean(targetMilestone?.submittedAt);
+
+            const combinedText = `${dispute.message || ""} ${
+              details.dispute.responseMessage || ""
+            }`.toLowerCase();
+            const mentionsPayment =
+              /pay|paid|money|escrow|release|fund|salary|fee|amount|balance|cost/i.test(
+                combinedText,
               );
+            const isWorkMatter =
+              dispute.issueType === "QUALITY_OF_WORK" ||
+              dispute.issueType === "POOR_QUALITY" ||
+              dispute.issueType === "DEFECTIVE_WORK" ||
+              dispute.issueType === "SCOPE_DISAGREEMENT" ||
+              dispute.issueType === "MISSED_DEADLINE" ||
+              dispute.issueType === "SCOPE_CREEP";
 
-              const isMilestonePaid = Boolean(
-                milestonePayment ||
-                (targetMilestone &&
-                  (targetMilestone.status === "COMPLETED" ||
-                    targetMilestone.status === "APPROVED")),
-              );
+            const isMoneyMatter =
+              dispute.issueType === "PAYMENT_NOT_RELEASED" ||
+              dispute.issueType === "REFUND_REQUEST" ||
+              dispute.issueType === "PAYMENT_ISSUE" ||
+              dispute.issueType === "UNFUNDED_MILESTONE" ||
+              dispute.issueType === "APPROVAL_DELAY" ||
+              mentionsPayment;
 
-              const hasWorkSubmitted =
-                milestoneUploads.length > 0 || Boolean(targetMilestone?.submittedAt);
+            const respondentRole = dispute.reporterRole === "CLIENT" ? "PROFESSIONAL" : "CLIENT";
 
-              const combinedText = `${dispute.message || ""} ${
-                details.dispute.responseMessage || ""
-              }`.toLowerCase();
-              const mentionsPayment =
-                /pay|paid|money|escrow|release|fund|salary|fee|amount|balance|cost/i.test(
-                  combinedText,
-                );
-              const isWorkMatter =
-                dispute.issueType === "QUALITY_OF_WORK" ||
-                dispute.issueType === "POOR_QUALITY" ||
-                dispute.issueType === "DEFECTIVE_WORK" ||
-                dispute.issueType === "SCOPE_DISAGREEMENT" ||
-                dispute.issueType === "MISSED_DEADLINE" ||
-                dispute.issueType === "SCOPE_CREEP";
-
-              const isMoneyMatter =
-                dispute.issueType === "PAYMENT_NOT_RELEASED" ||
-                dispute.issueType === "REFUND_REQUEST" ||
-                dispute.issueType === "PAYMENT_ISSUE" ||
-                dispute.issueType === "UNFUNDED_MILESTONE" ||
-                dispute.issueType === "APPROVAL_DELAY" ||
-                mentionsPayment;
-
-              const respondentRole = dispute.reporterRole === "CLIENT" ? "PROFESSIONAL" : "CLIENT";
-
-              return (
-                <div
-                  key="dispute-content"
-                  className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_340px]"
-                >
-                  <div className="space-y-6">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge value={dispute.status} />
-                      <Badge value={dispute.priority} />
-                      {dispute.disputeRound && (
-                        <span className="rounded-md bg-indigo-50 px-2.5 py-0.5 text-xs font-bold text-indigo-700 border border-indigo-200">
-                          Dispute Round {dispute.disputeRound} of 3
-                        </span>
-                      )}
-                      {isWorkMatter ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-800 border border-amber-300">
-                          <Layers className="h-3.5 w-3.5 text-amber-600" />
-                          Matter: Work Quality &amp; Deliverables
-                        </span>
-                      ) : isMoneyMatter ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">
-                          <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
-                          Matter: Payment, Escrow &amp; Billing
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700 border border-slate-300">
-                          Matter: General Contract Terms
-                        </span>
-                      )}
-                      <span className="text-sm text-slate-500 font-medium">
-                        Case #{dispute.id} · Updated {date(dispute.updatedAt)}
+            return (
+              <div
+                key="dispute-content"
+                className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_340px]"
+              >
+                <div className="space-y-6">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge value={dispute.status} />
+                    <Badge value={dispute.priority} />
+                    {dispute.disputeRound && (
+                      <span className="rounded-md bg-indigo-50 px-2.5 py-0.5 text-xs font-bold text-indigo-700 border border-indigo-200">
+                        Dispute Round {dispute.disputeRound} of 3
                       </span>
+                    )}
+                    {isWorkMatter ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-800 border border-amber-300">
+                        <Layers className="h-3.5 w-3.5 text-amber-600" />
+                        Matter: Work Quality &amp; Deliverables
+                      </span>
+                    ) : isMoneyMatter ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">
+                        <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
+                        Matter: Payment, Escrow &amp; Billing
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700 border border-slate-300">
+                        Matter: General Contract Terms
+                      </span>
+                    )}
+                    <span className="text-sm text-slate-500 font-medium">
+                      Case #{dispute.id} · Updated {date(dispute.updatedAt)}
+                    </span>
+                  </div>
+
+                  {/* RESOLVED OUTCOME CARD */}
+                  {details.dispute.status === "RESOLVED" && (
+                    <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/60 p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                          <span className="font-bold text-sm text-emerald-900">
+                            Dispute Resolved · {label(details.dispute.decision || "RESOLVED")}
+                          </span>
+                        </div>
+                        <div className="text-xs font-bold text-emerald-800">
+                          {details.dispute.refundAmount
+                            ? `Client Refund: ₹${details.dispute.refundAmount.toLocaleString()} `
+                            : ""}
+                          {details.dispute.payoutAmount
+                            ? `Professional Payout: ₹${details.dispute.payoutAmount.toLocaleString()}`
+                            : ""}
+                        </div>
+                      </div>
+                      {details.dispute.decisionReason && (
+                        <p className="text-xs text-slate-700 bg-white p-3 rounded-xl border border-emerald-200">
+                          &ldquo;{details.dispute.decisionReason}&rdquo;
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 1. PARTICIPANT STATEMENTS & CLAIMS (SHOW BOTH FIRST) */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-indigo-600" />
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
+                        1. Participant Statements & Dispute Claims
+                      </h3>
                     </div>
 
-                    {/* RESOLVED OUTCOME CARD */}
-                    {details.dispute.status === "RESOLVED" && (
-                      <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50/60 p-4 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                            <span className="font-bold text-sm text-emerald-900">
-                              Dispute Resolved · {label(details.dispute.decision || "RESOLVED")}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {/* Complainant Initial Claim */}
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200">
+                            <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                              <CircleAlert className="h-4 w-4 text-rose-500" />
+                              Complainant ({label(dispute.reporterRole)})
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium">
+                              {date(dispute.createdAt)}
                             </span>
                           </div>
-                          <div className="text-xs font-bold text-emerald-800">
-                            {details.dispute.refundAmount
-                              ? `Client Refund: ₹${details.dispute.refundAmount.toLocaleString()} `
-                              : ""}
-                            {details.dispute.payoutAmount
-                              ? `Professional Payout: ₹${details.dispute.payoutAmount.toLocaleString()}`
-                              : ""}
-                          </div>
+                          <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800 bg-white p-3 rounded-xl border border-slate-200">
+                            {dispute.message}
+                          </p>
                         </div>
-                        {details.dispute.decisionReason && (
-                          <p className="text-xs text-slate-700 bg-white p-3 rounded-xl border border-emerald-200">
-                            &ldquo;{details.dispute.decisionReason}&rdquo;
+
+                        {details.dispute.evidence && details.dispute.evidence.length > 0 ? (
+                          <div className="mt-3 pt-3 border-t border-slate-200/80">
+                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                              Complainant Evidence ({details.dispute.evidence.length} files)
+                            </p>
+                            <div className="space-y-1.5">
+                              {details.dispute.evidence.map((file, i) => (
+                                <a
+                                  key={i}
+                                  href={file.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 hover:bg-slate-50 transition text-xs font-semibold text-indigo-700"
+                                >
+                                  <Paperclip className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                  <span className="truncate">{file.name}</span>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mt-3 text-[11px] text-slate-400 italic">
+                            No files attached by complainant.
                           </p>
                         )}
                       </div>
-                    )}
 
-                    {/* 1. PARTICIPANT STATEMENTS & CLAIMS (SHOW BOTH FIRST) */}
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2">
-                        <MessageSquare className="h-4 w-4 text-indigo-600" />
-                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                          1. Participant Statements & Dispute Claims
-                        </h3>
-                      </div>
-
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        {/* Complainant Initial Claim */}
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 flex flex-col justify-between">
-                          <div>
-                            <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200">
-                              <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                                <CircleAlert className="h-4 w-4 text-rose-500" />
-                                Complainant ({label(dispute.reporterRole)})
+                      {/* Respondent Counter-Explanation */}
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between gap-2 pb-2 border-b border-amber-200">
+                            <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                              <ShieldAlert className="h-4 w-4 text-amber-600" />
+                              Respondent ({label(respondentRole)})
+                            </span>
+                            {details.dispute.respondedAt ? (
+                              <span className="text-[11px] text-amber-700 font-medium">
+                                {date(details.dispute.respondedAt)}
                               </span>
-                              <span className="text-[11px] text-slate-500 font-medium">
-                                {date(dispute.createdAt)}
+                            ) : (
+                              <span className="text-[11px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-md">
+                                Pending Response
                               </span>
-                            </div>
-                            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800 bg-white p-3 rounded-xl border border-slate-200">
-                              {dispute.message}
-                            </p>
+                            )}
                           </div>
 
-                          {details.dispute.evidence && details.dispute.evidence.length > 0 ? (
-                            <div className="mt-3 pt-3 border-t border-slate-200/80">
-                              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                                Complainant Evidence ({details.dispute.evidence.length} files)
+                          {details.dispute.responseMessage ? (
+                            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800 bg-white p-3 rounded-xl border border-amber-200">
+                              {details.dispute.responseMessage}
+                            </p>
+                          ) : (
+                            <div className="mt-3 rounded-xl border border-dashed border-amber-300 bg-white/60 p-4 text-center">
+                              <p className="text-xs text-amber-800 font-medium">
+                                Respondent has not submitted a counter-explanation yet.
+                              </p>
+                              <p className="text-[11px] text-slate-500 mt-1">
+                                Adjudicator can proceed with ruling based on verified platform
+                                system records.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {details.dispute.responseEvidence &&
+                          details.dispute.responseEvidence.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-amber-200/80">
+                              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 mb-1.5">
+                                Counter-Evidence ({details.dispute.responseEvidence.length} files)
                               </p>
                               <div className="space-y-1.5">
-                                {details.dispute.evidence.map((file, i) => (
+                                {details.dispute.responseEvidence.map((file, i) => (
                                   <a
                                     key={i}
                                     href={file.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 hover:bg-slate-50 transition text-xs font-semibold text-indigo-700"
+                                    className="flex items-center gap-2 rounded-lg border border-amber-200 bg-white p-2 hover:bg-amber-50 transition text-xs font-semibold text-amber-900"
                                   >
-                                    <Paperclip className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                    <Paperclip className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                                     <span className="truncate">{file.name}</span>
                                   </a>
                                 ))}
                               </div>
                             </div>
-                          ) : (
-                            <p className="mt-3 text-[11px] text-slate-400 italic">
-                              No files attached by complainant.
-                            </p>
                           )}
-                        </div>
+                      </div>
+                    </div>
+                  </div>
 
-                        {/* Respondent Counter-Explanation */}
-                        <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 flex flex-col justify-between">
-                          <div>
-                            <div className="flex items-center justify-between gap-2 pb-2 border-b border-amber-200">
-                              <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                                <ShieldAlert className="h-4 w-4 text-amber-600" />
-                                Respondent ({label(respondentRole)})
+                  {/* 2. OFFICIAL SYSTEM RECORDS & AUDIT VERIFICATION */}
+                  <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50/30 p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Scale className="h-5 w-5 text-indigo-600" />
+                        <h3 className="text-sm font-bold text-indigo-950">
+                          2. Official System Records & Verified Platform Audit
+                        </h3>
+                      </div>
+                      <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-800">
+                        Live Platform Records
+                      </span>
+                    </div>
+
+                    {/* Dispute Matter Classification */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {mentionsPayment ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
+                          <Wallet className="h-3.5 w-3.5 text-emerald-600" />
+                          Dispute Matter: Milestone Payment & Escrow Settlement
+                        </span>
+                      ) : null}
+                      {hasWorkSubmitted ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-800 border border-blue-200">
+                          <FileCheck className="h-3.5 w-3.5 text-blue-600" />
+                          Dispute Matter: Work Quality & Deliverables Verification
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {/* Smart Finding */}
+                    <div className="rounded-xl border border-indigo-200 bg-white p-4 space-y-2.5">
+                      <p className="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="h-4 w-4 text-indigo-600" />
+                        Audit Finding · Automated Platform Analysis
+                      </p>
+                      <div className="space-y-1.5 text-xs text-slate-700 leading-relaxed">
+                        {mentionsPayment ? (
+                          isMilestonePaid ? (
+                            <div className="flex items-start gap-2 text-emerald-800 font-semibold bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                              <span>
+                                Payment Verified on Record: Milestone &quot;
+                                {targetMilestone?.title ?? "Target"}&quot; is recorded as PAID (₹
+                                {(
+                                  targetMilestone?.amount ?? details.financial.paidAmount
+                                ).toLocaleString()}
+                                ). Funds have already been paid out and completed.
                               </span>
-                              {details.dispute.respondedAt ? (
-                                <span className="text-[11px] text-amber-700 font-medium">
-                                  {date(details.dispute.respondedAt)}
-                                </span>
-                              ) : (
-                                <span className="text-[11px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-md">
-                                  Pending Response
-                                </span>
-                              )}
                             </div>
+                          ) : isMilestoneFunded ? (
+                            <div className="flex items-start gap-2 text-indigo-900 font-semibold bg-indigo-50 p-2.5 rounded-lg border border-indigo-200">
+                              <Wallet className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+                              <span>
+                                Payment in Escrow: ₹
+                                {(targetPayment?.amount ?? disputeAmount).toLocaleString()} is
+                                currently SECURED in platform escrow for this milestone, but has NOT
+                                been released to the professional.
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-start gap-2 text-rose-900 font-semibold bg-rose-50 p-2.5 rounded-lg border border-rose-200">
+                              <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                              <span>
+                                Payment Status: Milestone is UNPAID in official records (₹0 paid or
+                                in escrow). Client wallet balance is ₹
+                                {(details.clientWalletBalance ?? 0).toLocaleString()}.
+                              </span>
+                            </div>
+                          )
+                        ) : null}
 
-                            {details.dispute.responseMessage ? (
-                              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800 bg-white p-3 rounded-xl border border-amber-200">
-                                {details.dispute.responseMessage}
-                              </p>
-                            ) : (
-                              <div className="mt-3 rounded-xl border border-dashed border-amber-300 bg-white/60 p-4 text-center">
-                                <p className="text-xs text-amber-800 font-medium">
-                                  Respondent has not submitted a counter-explanation yet.
-                                </p>
-                                <p className="text-[11px] text-slate-500 mt-1">
-                                  Adjudicator can proceed with ruling based on verified platform
-                                  system records.
-                                </p>
-                              </div>
-                            )}
+                        {hasWorkSubmitted ? (
+                          <div className="flex items-start gap-2 text-blue-900 bg-blue-50 p-2.5 rounded-lg border border-blue-200">
+                            <FileCheck className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                            <span>
+                              Deliverables Verified: Professional submitted{" "}
+                              {milestoneUploads.length} work deliverable upload(s) in system
+                              {targetMilestone?.submittedAt
+                                ? ` on ${date(targetMilestone.submittedAt)}`
+                                : ""}
+                              .
+                            </span>
                           </div>
-
-                          {details.dispute.responseEvidence &&
-                            details.dispute.responseEvidence.length > 0 && (
-                              <div className="mt-3 pt-3 border-t border-amber-200/80">
-                                <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 mb-1.5">
-                                  Counter-Evidence ({details.dispute.responseEvidence.length} files)
-                                </p>
-                                <div className="space-y-1.5">
-                                  {details.dispute.responseEvidence.map((file, i) => (
-                                    <a
-                                      key={i}
-                                      href={file.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2 rounded-lg border border-amber-200 bg-white p-2 hover:bg-amber-50 transition text-xs font-semibold text-amber-900"
-                                    >
-                                      <Paperclip className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                                      <span className="truncate">{file.name}</span>
-                                    </a>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                        </div>
+                        ) : (
+                          <div className="flex items-start gap-2 text-slate-700 bg-slate-100 p-2.5 rounded-lg border border-slate-200">
+                            <Clock3 className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
+                            <span>
+                              Deliverables Status: No work uploads or deliverable files are recorded
+                              on file for this milestone.
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    {/* 2. OFFICIAL SYSTEM RECORDS & AUDIT VERIFICATION */}
-                    <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50/30 p-5 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Scale className="h-5 w-5 text-indigo-600" />
-                          <h3 className="text-sm font-bold text-indigo-950">
-                            2. Official System Records & Verified Platform Audit
-                          </h3>
-                        </div>
-                        <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-[11px] font-bold text-indigo-800">
-                          Live Platform Records
-                        </span>
-                      </div>
-
-                      {/* Dispute Matter Classification */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        {mentionsPayment ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
-                            <Wallet className="h-3.5 w-3.5 text-emerald-600" />
-                            Dispute Matter: Milestone Payment & Escrow Settlement
-                          </span>
-                        ) : null}
-                        {hasWorkSubmitted ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-800 border border-blue-200">
-                            <FileCheck className="h-3.5 w-3.5 text-blue-600" />
-                            Dispute Matter: Work Quality & Deliverables Verification
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {/* Smart Finding */}
-                      <div className="rounded-xl border border-indigo-200 bg-white p-4 space-y-2.5">
-                        <p className="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
-                          <Sparkles className="h-4 w-4 text-indigo-600" />
-                          Audit Finding · Automated Platform Analysis
+                    {/* Ground Truth Metric Cards */}
+                    <div className="grid gap-3 sm:grid-cols-3 text-xs">
+                      <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1">
+                        <p className="text-[11px] font-bold uppercase text-slate-500">
+                          Disputed Milestone
                         </p>
-                        <div className="space-y-1.5 text-xs text-slate-700 leading-relaxed">
-                          {mentionsPayment ? (
-                            isMilestonePaid ? (
-                              <div className="flex items-start gap-2 text-emerald-800 font-semibold bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
-                                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                                <span>
-                                  Payment Verified on Record: Milestone &quot;
-                                  {targetMilestone?.title ?? "Target"}&quot; is recorded as PAID (₹
-                                  {(
-                                    targetMilestone?.amount ?? details.financial.paidAmount
-                                  ).toLocaleString()}
-                                  ). Funds have already been paid out and completed.
-                                </span>
-                              </div>
-                            ) : isMilestoneFunded ? (
-                              <div className="flex items-start gap-2 text-indigo-900 font-semibold bg-indigo-50 p-2.5 rounded-lg border border-indigo-200">
-                                <Wallet className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
-                                <span>
-                                  Payment in Escrow: ₹
-                                  {(targetPayment?.amount ?? disputeAmount).toLocaleString()} is
-                                  currently SECURED in platform escrow for this milestone, but has
-                                  NOT been released to the professional.
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex items-start gap-2 text-rose-900 font-semibold bg-rose-50 p-2.5 rounded-lg border border-rose-200">
-                                <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
-                                <span>
-                                  Payment Status: Milestone is UNPAID in official records (₹0 paid
-                                  or in escrow). Client wallet balance is ₹
-                                  {(details.clientWalletBalance ?? 0).toLocaleString()}.
-                                </span>
-                              </div>
-                            )
-                          ) : null}
-
-                          {hasWorkSubmitted ? (
-                            <div className="flex items-start gap-2 text-blue-900 bg-blue-50 p-2.5 rounded-lg border border-blue-200">
-                              <FileCheck className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-                              <span>
-                                Deliverables Verified: Professional submitted{" "}
-                                {milestoneUploads.length} work deliverable upload(s) in system
-                                {targetMilestone?.submittedAt
-                                  ? ` on ${date(targetMilestone.submittedAt)}`
-                                  : ""}
-                                .
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex items-start gap-2 text-slate-700 bg-slate-100 p-2.5 rounded-lg border border-slate-200">
-                              <Clock3 className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
-                              <span>
-                                Deliverables Status: No work uploads or deliverable files are
-                                recorded on file for this milestone.
-                              </span>
-                            </div>
-                          )}
+                        <p className="font-bold text-slate-900 text-sm truncate">
+                          {targetMilestone?.title ?? "General Contract"}
+                        </p>
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="font-semibold text-indigo-700">
+                            ₹{(targetMilestone?.amount ?? 0).toLocaleString()}
+                          </span>
+                          <Badge value={targetMilestone?.status ?? "N/A"} />
                         </div>
                       </div>
 
-                      {/* Ground Truth Metric Cards */}
-                      <div className="grid gap-3 sm:grid-cols-3 text-xs">
-                        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1">
-                          <p className="text-[11px] font-bold uppercase text-slate-500">
-                            Disputed Milestone
-                          </p>
-                          <p className="font-bold text-slate-900 text-sm truncate">
-                            {targetMilestone?.title ?? "General Contract"}
-                          </p>
-                          <div className="flex items-center justify-between pt-1">
-                            <span className="font-semibold text-indigo-700">
-                              ₹{(targetMilestone?.amount ?? 0).toLocaleString()}
+                      <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1">
+                        <p className="text-[11px] font-bold uppercase text-slate-500">
+                          Milestone Payment Status
+                        </p>
+                        <div className="pt-0.5">
+                          {isMilestonePaid ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                              PAYMENT CONFIRMED
                             </span>
-                            <Badge value={targetMilestone?.status ?? "N/A"} />
-                          </div>
-                        </div>
-
-                        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1">
-                          <p className="text-[11px] font-bold uppercase text-slate-500">
-                            Milestone Payment Status
-                          </p>
-                          <div className="pt-0.5">
-                            {isMilestonePaid ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800">
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                                PAYMENT CONFIRMED
-                              </span>
-                            ) : isMilestoneFunded ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-2 py-0.5 font-bold text-indigo-800">
-                                <Wallet className="h-3.5 w-3.5 text-indigo-600" />
-                                HELD IN ESCROW
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-2 py-0.5 font-bold text-rose-800">
-                                <CircleAlert className="h-3.5 w-3.5 text-rose-600" />
-                                UNPAID / NOT IN ESCROW
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-slate-500 pt-1">
-                            {isMilestonePaid
-                              ? `Milestone settled and completed`
-                              : isMilestoneFunded
-                                ? `Secured in platform escrow`
-                                : `Client has not funded this milestone`}
-                          </p>
-                        </div>
-
-                        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1">
-                          <p className="text-[11px] font-bold uppercase text-slate-500">
-                            Work Delivery Record
-                          </p>
-                          <div className="pt-0.5">
-                            {hasWorkSubmitted ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2 py-0.5 font-bold text-blue-800">
-                                <FileCheck className="h-3.5 w-3.5 text-blue-600" />
-                                {milestoneUploads.length} UPLOAD(S) ON FILE
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 font-bold text-slate-700">
-                                NO SUBMISSIONS ON FILE
-                              </span>
-                            )}
-                          </div>
-                          {milestoneUploads[0]?.fileName && (
-                            <p className="text-[11px] text-indigo-600 truncate pt-1">
-                              File: {milestoneUploads[0].fileName}
-                            </p>
+                          ) : isMilestoneFunded ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-2 py-0.5 font-bold text-indigo-800">
+                              <Wallet className="h-3.5 w-3.5 text-indigo-600" />
+                              HELD IN ESCROW
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-2 py-0.5 font-bold text-rose-800">
+                              <CircleAlert className="h-3.5 w-3.5 text-rose-600" />
+                              UNPAID / NOT IN ESCROW
+                            </span>
                           )}
                         </div>
+                        <p className="text-[11px] text-slate-500 pt-1">
+                          {isMilestonePaid
+                            ? `Milestone settled and completed`
+                            : isMilestoneFunded
+                              ? `Secured in platform escrow`
+                              : `Client has not funded this milestone`}
+                        </p>
                       </div>
 
-                      {/* Uploaded files list if present */}
-                      {milestoneUploads.length > 0 && (
-                        <div className="pt-1">
-                          <p className="text-[11px] font-bold uppercase text-slate-600 mb-1.5">
-                            Official Deliverables & Uploaded Evidence on Record:
+                      <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1">
+                        <p className="text-[11px] font-bold uppercase text-slate-500">
+                          Work Delivery Record
+                        </p>
+                        <div className="pt-0.5">
+                          {hasWorkSubmitted ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-blue-100 px-2 py-0.5 font-bold text-blue-800">
+                              <FileCheck className="h-3.5 w-3.5 text-blue-600" />
+                              {milestoneUploads.length} UPLOAD(S) ON FILE
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 font-bold text-slate-700">
+                              NO SUBMISSIONS ON FILE
+                            </span>
+                          )}
+                        </div>
+                        {milestoneUploads[0]?.fileName && (
+                          <p className="text-[11px] text-indigo-600 truncate pt-1">
+                            File: {milestoneUploads[0].fileName}
                           </p>
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            {milestoneUploads.map((u) => (
-                              <div
-                                key={u.id}
-                                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 text-xs"
-                              >
-                                <div className="min-w-0">
-                                  <p className="font-semibold text-slate-800 truncate">
-                                    {u.title || u.fileName || "Uploaded Work"}
-                                  </p>
-                                  <p className="text-[10px] text-slate-500">
-                                    Round {u.roundNumber} · {date(u.createdAt)}
-                                  </p>
-                                </div>
-                                {u.fileUrl && (
-                                  <a
-                                    href={u.fileUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="shrink-0 rounded-md bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100"
-                                  >
-                                    View File
-                                  </a>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Uploaded files list if present */}
+                    {milestoneUploads.length > 0 && (
+                      <div className="pt-1">
+                        <p className="text-[11px] font-bold uppercase text-slate-600 mb-1.5">
+                          Official Deliverables & Uploaded Evidence on Record:
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {milestoneUploads.map((u) => (
+                            <div
+                              key={u.id}
+                              className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-2.5 text-xs"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-semibold text-slate-800 truncate">
+                                  {u.title || u.fileName || "Uploaded Work"}
+                                </p>
+                                <p className="text-[10px] text-slate-500">
+                                  Round {u.roundNumber} · {date(u.createdAt)}
+                                </p>
+                              </div>
+                              {u.fileUrl && (
+                                <a
+                                  href={u.fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="shrink-0 rounded-md bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100"
+                                >
+                                  View File
+                                </a>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 3. PROJECT DETAILS & MILESTONES */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
+                        3. Project Milestones & Contract Breakdown
+                      </h3>
+                      <span className="text-xs font-semibold text-slate-600">
+                        {details.milestoneSummary.completed} of {details.milestoneSummary.total}{" "}
+                        completed
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {details.milestones.length ? (
+                        details.milestones.map((milestone) => (
+                          <div
+                            key={milestone.id}
+                            className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+                              milestone.id === details.dispute.milestoneId
+                                ? "border-indigo-400 bg-indigo-50/40 ring-1 ring-indigo-300"
+                                : "border-slate-200 bg-slate-50/60"
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold text-slate-900">{milestone.title}</p>
+                                {milestone.id === details.dispute.milestoneId && (
+                                  <span className="rounded-md bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">
+                                    In Dispute
+                                  </span>
                                 )}
                               </div>
-                            ))}
+                              <p className="text-xs text-slate-500">
+                                {milestone.dueDate
+                                  ? `Due ${date(milestone.dueDate)}`
+                                  : "No due date"}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <Badge value={milestone.status} />
+                              <p className="mt-1 text-sm font-bold text-slate-900">
+                                ₹{milestone.amount.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-slate-500 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                          No milestones were created yet.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 4. ADJUDICATION DECISION SUITE */}
+                  {SHOW_DISPUTE_ADJUDICATION && details && details.dispute.status !== "RESOLVED" ? (
+                    <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50/50 p-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
+                          <Gavel className="h-5 w-5 text-indigo-600" />
+                          4. Admin Adjudication & Decision Suite
+                        </div>
+                        <span className="text-xs font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-lg">
+                          {isMilestoneFunded
+                            ? `Held in Escrow: ₹${disputeAmount.toLocaleString()}`
+                            : targetMilestone
+                              ? `Disputed Milestone: ₹${disputeAmount.toLocaleString()}`
+                              : `Dispute Amount: ₹${disputeAmount.toLocaleString()}`}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        Select a binding ruling for{" "}
+                        {targetMilestone
+                          ? `milestone "${targetMilestone.title}" (₹${disputeAmount.toLocaleString()})`
+                          : `₹${disputeAmount.toLocaleString()}`}
+                        . Submitting will execute automated wallet transactions and update milestone
+                        status.
+                      </p>
+
+                      <div className="grid sm:grid-cols-3 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDecision("CLIENT_WINS")}
+                          className={`p-3.5 rounded-xl border text-left transition ${
+                            selectedDecision === "CLIENT_WINS"
+                              ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500 text-emerald-900"
+                              : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
+                          }`}
+                        >
+                          <p className="font-bold text-xs flex items-center gap-1.5">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            Client Wins
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            Rule in client favor. Require revision or grant refund.
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDecision("PROFESSIONAL_WINS")}
+                          className={`p-3.5 rounded-xl border text-left transition ${
+                            selectedDecision === "PROFESSIONAL_WINS"
+                              ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500 text-blue-900"
+                              : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
+                          }`}
+                        >
+                          <p className="font-bold text-xs flex items-center gap-1.5">
+                            <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                            Professional Wins
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            Approve milestone, release payout & unlock next milestone.
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDecision("PARTIAL_SETTLEMENT");
+                            if (!partialRefund && !partialPayout && isMilestoneFunded) {
+                              const half = Math.floor(refundableAmount / 2);
+                              setPartialRefund(half.toString());
+                              setPartialPayout((refundableAmount - half).toString());
+                            }
+                          }}
+                          className={`p-3.5 rounded-xl border text-left transition ${
+                            selectedDecision === "PARTIAL_SETTLEMENT"
+                              ? "border-amber-500 bg-amber-50 ring-2 ring-amber-500 text-amber-900"
+                              : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
+                          }`}
+                        >
+                          <p className="font-bold text-xs flex items-center gap-1.5">
+                            <CheckCircle2 className="h-4 w-4 text-amber-600" />
+                            Partial Settlement
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            {isMilestoneFunded
+                              ? `Custom split of ₹${refundableAmount.toLocaleString()} escrow between both parties.`
+                              : `Milestone is unpaid (cannot split escrow funds).`}
+                          </p>
+                        </button>
+                      </div>
+
+                      {selectedDecision === "CLIENT_WINS" && (
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-3">
+                          <p className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                            <Sparkles className="h-4 w-4 text-emerald-700" />
+                            Choose Resolution Action for Client Victory:
+                          </p>
+                          <div className="grid sm:grid-cols-2 gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => setClientWinAction("REVISION")}
+                              className={`p-3 rounded-lg border text-left text-xs transition ${
+                                clientWinAction === "REVISION"
+                                  ? "border-emerald-600 bg-white font-semibold text-emerald-950 shadow-xs ring-2 ring-emerald-500"
+                                  : "border-emerald-200 bg-emerald-50/50 text-slate-700 hover:bg-white"
+                              }`}
+                            >
+                              <p className="font-bold flex items-center gap-1.5">
+                                <FileCheck className="h-3.5 w-3.5 text-emerald-600" />
+                                Require Professional Revision (Recommended)
+                              </p>
+                              <p className="text-[11px] text-slate-600 font-normal mt-1">
+                                Milestone set to Revision Requested. Professional must deliver fixes
+                                based on dispute instructions. Escrow remains held.
+                              </p>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setClientWinAction("REFUND")}
+                              className={`p-3 rounded-lg border text-left text-xs transition ${
+                                clientWinAction === "REFUND"
+                                  ? "border-emerald-600 bg-white font-semibold text-emerald-950 shadow-xs ring-2 ring-emerald-500"
+                                  : "border-emerald-200 bg-emerald-50/50 text-slate-700 hover:bg-white"
+                              }`}
+                            >
+                              <p className="font-bold flex items-center gap-1.5">
+                                <Wallet className="h-3.5 w-3.5 text-emerald-600" />
+                                Issue Escrow Refund & Cancel Milestone
+                              </p>
+                              <p className="text-[11px] text-slate-600 font-normal mt-1">
+                                Full refund of ₹{disputeAmount.toLocaleString()} credited to client
+                                wallet. Disputed milestone is cancelled.
+                              </p>
+                            </button>
+                          </div>
+
+                          <div className="rounded-lg bg-emerald-100/60 p-2.5 text-[11px] text-emerald-900 space-y-1">
+                            <p className="font-bold">What happens next upon execution:</p>
+                            {clientWinAction === "REVISION" ? (
+                              <ul className="list-disc pl-4 space-y-0.5">
+                                <li>
+                                  Disputed milestone status will change to <b>REVISION_REQUESTED</b>
+                                  .
+                                </li>
+                                <li>
+                                  Professional will be required to submit revised deliverables
+                                  addressing the dispute note.
+                                </li>
+                                <li>
+                                  Escrow funds remain protected on the platform until client reviews
+                                  revised deliverables.
+                                </li>
+                              </ul>
+                            ) : (
+                              <ul className="list-disc pl-4 space-y-0.5">
+                                <li>
+                                  ₹{disputeAmount.toLocaleString()} will be refunded to
+                                  Client&apos;s wallet immediately.
+                                </li>
+                                <li>
+                                  Disputed milestone will be marked <b>CANCELLED</b>.
+                                </li>
+                                <li>Next sequential milestone will activate.</li>
+                              </ul>
+                            )}
                           </div>
                         </div>
                       )}
-                    </div>
 
-                    {/* 3. PROJECT DETAILS & MILESTONES */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
-                          3. Project Milestones & Contract Breakdown
-                        </h3>
-                        <span className="text-xs font-semibold text-slate-600">
-                          {details.milestoneSummary.completed} of {details.milestoneSummary.total}{" "}
-                          completed
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        {details.milestones.length ? (
-                          details.milestones.map((milestone) => (
-                            <div
-                              key={milestone.id}
-                              className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
-                                milestone.id === details.dispute.milestoneId
-                                  ? "border-indigo-400 bg-indigo-50/40 ring-1 ring-indigo-300"
-                                  : "border-slate-200 bg-slate-50/60"
-                              }`}
-                            >
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <p className="font-semibold text-slate-900">{milestone.title}</p>
-                                  {milestone.id === details.dispute.milestoneId && (
-                                    <span className="rounded-md bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">
-                                      In Dispute
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-xs text-slate-500">
-                                  {milestone.dueDate
-                                    ? `Due ${date(milestone.dueDate)}`
-                                    : "No due date"}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <Badge value={milestone.status} />
-                                <p className="mt-1 text-sm font-bold text-slate-900">
-                                  ₹{milestone.amount.toLocaleString()}
-                                </p>
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-sm text-slate-500 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                            No milestones were created yet.
+                      {selectedDecision === "PROFESSIONAL_WINS" && (
+                        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-2">
+                          <p className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                            <CheckCircle2 className="h-4 w-4 text-blue-700" />
+                            What happens next upon execution:
                           </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 4. ADJUDICATION DECISION SUITE */}
-                    {SHOW_DISPUTE_ADJUDICATION &&
-                    details &&
-                    details.dispute.status !== "RESOLVED" ? (
-                      <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50/50 p-5 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
-                            <Gavel className="h-5 w-5 text-indigo-600" />
-                            4. Admin Adjudication & Decision Suite
-                          </div>
-                          <span className="text-xs font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-lg">
-                            {isMilestoneFunded
-                              ? `Held in Escrow: ₹${disputeAmount.toLocaleString()}`
-                              : targetMilestone
-                                ? `Disputed Milestone: ₹${disputeAmount.toLocaleString()}`
-                                : `Dispute Amount: ₹${disputeAmount.toLocaleString()}`}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-600 leading-relaxed">
-                          Select a binding ruling for{" "}
-                          {targetMilestone
-                            ? `milestone "${targetMilestone.title}" (₹${disputeAmount.toLocaleString()})`
-                            : `₹${disputeAmount.toLocaleString()}`}
-                          . Submitting will execute automated wallet transactions and update
-                          milestone status.
-                        </p>
-
-                        <div className="grid sm:grid-cols-3 gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedDecision("CLIENT_WINS")}
-                            className={`p-3.5 rounded-xl border text-left transition ${
-                              selectedDecision === "CLIENT_WINS"
-                                ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500 text-emerald-900"
-                                : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
-                            }`}
-                          >
-                            <p className="font-bold text-xs flex items-center gap-1.5">
-                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                              Client Wins
-                            </p>
-                            <p className="text-[11px] text-slate-500 mt-1">
-                              Rule in client favor. Require revision or grant refund.
-                            </p>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setSelectedDecision("PROFESSIONAL_WINS")}
-                            className={`p-3.5 rounded-xl border text-left transition ${
-                              selectedDecision === "PROFESSIONAL_WINS"
-                                ? "border-blue-500 bg-blue-50 ring-2 ring-blue-500 text-blue-900"
-                                : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
-                            }`}
-                          >
-                            <p className="font-bold text-xs flex items-center gap-1.5">
-                              <CheckCircle2 className="h-4 w-4 text-blue-600" />
-                              Professional Wins
-                            </p>
-                            <p className="text-[11px] text-slate-500 mt-1">
-                              Approve milestone, release payout & unlock next milestone.
-                            </p>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedDecision("PARTIAL_SETTLEMENT");
-                              if (!partialRefund && !partialPayout && isMilestoneFunded) {
-                                const half = Math.floor(refundableAmount / 2);
-                                setPartialRefund(half.toString());
-                                setPartialPayout((refundableAmount - half).toString());
-                              }
-                            }}
-                            className={`p-3.5 rounded-xl border text-left transition ${
-                              selectedDecision === "PARTIAL_SETTLEMENT"
-                                ? "border-amber-500 bg-amber-50 ring-2 ring-amber-500 text-amber-900"
-                                : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
-                            }`}
-                          >
-                            <p className="font-bold text-xs flex items-center gap-1.5">
-                              <CheckCircle2 className="h-4 w-4 text-amber-600" />
-                              Partial Settlement
-                            </p>
-                            <p className="text-[11px] text-slate-500 mt-1">
-                              {isMilestoneFunded
-                                ? `Custom split of ₹${refundableAmount.toLocaleString()} escrow between both parties.`
-                                : `Milestone is unpaid (cannot split escrow funds).`}
-                            </p>
-                          </button>
-                        </div>
-
-                        {selectedDecision === "CLIENT_WINS" && (
-                          <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 space-y-3">
-                            <p className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-                              <Sparkles className="h-4 w-4 text-emerald-700" />
-                              Choose Resolution Action for Client Victory:
-                            </p>
-                            <div className="grid sm:grid-cols-2 gap-2.5">
-                              <button
-                                type="button"
-                                onClick={() => setClientWinAction("REVISION")}
-                                className={`p-3 rounded-lg border text-left text-xs transition ${
-                                  clientWinAction === "REVISION"
-                                    ? "border-emerald-600 bg-white font-semibold text-emerald-950 shadow-xs ring-2 ring-emerald-500"
-                                    : "border-emerald-200 bg-emerald-50/50 text-slate-700 hover:bg-white"
-                                }`}
-                              >
-                                <p className="font-bold flex items-center gap-1.5">
-                                  <FileCheck className="h-3.5 w-3.5 text-emerald-600" />
-                                  Require Professional Revision (Recommended)
-                                </p>
-                                <p className="text-[11px] text-slate-600 font-normal mt-1">
-                                  Milestone set to Revision Requested. Professional must deliver
-                                  fixes based on dispute instructions. Escrow remains held.
-                                </p>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => setClientWinAction("REFUND")}
-                                className={`p-3 rounded-lg border text-left text-xs transition ${
-                                  clientWinAction === "REFUND"
-                                    ? "border-emerald-600 bg-white font-semibold text-emerald-950 shadow-xs ring-2 ring-emerald-500"
-                                    : "border-emerald-200 bg-emerald-50/50 text-slate-700 hover:bg-white"
-                                }`}
-                              >
-                                <p className="font-bold flex items-center gap-1.5">
-                                  <Wallet className="h-3.5 w-3.5 text-emerald-600" />
-                                  Issue Escrow Refund & Cancel Milestone
-                                </p>
-                                <p className="text-[11px] text-slate-600 font-normal mt-1">
-                                  Full refund of ₹{disputeAmount.toLocaleString()} credited to
-                                  client wallet. Disputed milestone is cancelled.
-                                </p>
-                              </button>
-                            </div>
-
-                            <div className="rounded-lg bg-emerald-100/60 p-2.5 text-[11px] text-emerald-900 space-y-1">
-                              <p className="font-bold">What happens next upon execution:</p>
-                              {clientWinAction === "REVISION" ? (
-                                <ul className="list-disc pl-4 space-y-0.5">
-                                  <li>
-                                    Disputed milestone status will change to{" "}
-                                    <b>REVISION_REQUESTED</b>.
-                                  </li>
-                                  <li>
-                                    Professional will be required to submit revised deliverables
-                                    addressing the dispute note.
-                                  </li>
-                                  <li>
-                                    Escrow funds remain protected on the platform until client
-                                    reviews revised deliverables.
-                                  </li>
-                                </ul>
-                              ) : (
-                                <ul className="list-disc pl-4 space-y-0.5">
-                                  <li>
-                                    ₹{disputeAmount.toLocaleString()} will be refunded to
-                                    Client&apos;s wallet immediately.
-                                  </li>
-                                  <li>
-                                    Disputed milestone will be marked <b>CANCELLED</b>.
-                                  </li>
-                                  <li>Next sequential milestone will activate.</li>
-                                </ul>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {selectedDecision === "PROFESSIONAL_WINS" && (
-                          <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 space-y-2">
-                            <p className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
-                              <CheckCircle2 className="h-4 w-4 text-blue-700" />
-                              What happens next upon execution:
-                            </p>
-                            <ul className="list-disc pl-4 text-[11px] text-blue-900 space-y-1">
-                              <li>
-                                Disputed milestone &quot;{targetMilestone?.title ?? "Target"}&quot;
-                                will be marked <b>APPROVED & COMPLETED</b>.
+                          <ul className="list-disc pl-4 text-[11px] text-blue-900 space-y-1">
+                            <li>
+                              Disputed milestone &quot;{targetMilestone?.title ?? "Target"}&quot;
+                              will be marked <b>APPROVED & COMPLETED</b>.
+                            </li>
+                            <li>
+                              Payout of ₹{disputeAmount.toLocaleString()} will be automatically
+                              released to Professional&apos;s wallet earnings.
+                            </li>
+                            <li>
+                              Next milestone (Milestone 2 or subsequent stage) will{" "}
+                              <b>automatically unlock and advance to IN_PROGRESS</b>.
+                            </li>
+                            {!isMilestoneFunded && (
+                              <li className="text-amber-800 font-semibold">
+                                Milestone is currently unfunded by client. Client will be prompted
+                                on project tracking page with an instant payment modal to settle
+                                this milestone.
                               </li>
-                              <li>
-                                Payout of ₹{disputeAmount.toLocaleString()} will be automatically
-                                released to Professional&apos;s wallet earnings.
-                              </li>
-                              <li>
-                                Next milestone (Milestone 2 or subsequent stage) will{" "}
-                                <b>automatically unlock and advance to IN_PROGRESS</b>.
-                              </li>
-                              {!isMilestoneFunded && (
-                                <li className="text-amber-800 font-semibold">
-                                  Milestone is currently unfunded by client. Client will be prompted
-                                  on project tracking page with an instant payment modal to settle
-                                  this milestone.
-                                </li>
-                              )}
-                            </ul>
-                          </div>
-                        )}
-
-                        {selectedDecision === "PARTIAL_SETTLEMENT" && (
-                          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <p className="text-xs font-bold text-amber-900">
-                                Escrow Split Distribution
-                              </p>
-                              <span className="text-[11px] font-semibold text-amber-800">
-                                Total Available: ₹{refundableAmount.toLocaleString()}
-                              </span>
-                            </div>
-                            <div className="grid sm:grid-cols-2 gap-3">
-                              <div>
-                                <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                                  Refund to Client (₹)
-                                </label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max={refundableAmount}
-                                  value={partialRefund}
-                                  onChange={(e) => setPartialRefund(e.target.value)}
-                                  placeholder="0"
-                                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:ring-2 focus:ring-amber-300 outline-none"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                                  Release to Professional (₹)
-                                </label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max={refundableAmount}
-                                  value={partialPayout}
-                                  onChange={(e) => setPartialPayout(e.target.value)}
-                                  placeholder="0"
-                                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:ring-2 focus:ring-amber-300 outline-none"
-                                />
-                              </div>
-                            </div>
-                            {Number(partialRefund) + Number(partialPayout) > refundableAmount && (
-                              <p className="text-[11px] font-bold text-rose-600">
-                                ⚠ Error: Combined amount (₹
-                                {(Number(partialRefund) + Number(partialPayout)).toLocaleString()})
-                                exceeds total available escrow (₹{refundableAmount.toLocaleString()}
-                                ).
-                              </p>
                             )}
-                          </div>
-                        )}
-
-                        <div>
-                          <label className="text-xs font-semibold text-slate-800 block mb-1">
-                            Ruling Justification / Resolution Notes *
-                          </label>
-                          <textarea
-                            value={decisionNotes}
-                            onChange={(e) => setDecisionNotes(e.target.value)}
-                            placeholder="Detail the rationale for this ruling..."
-                            className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs focus:ring-2 focus:ring-indigo-200 outline-none"
-                            rows={2}
-                          />
+                          </ul>
                         </div>
+                      )}
 
-                        <div className="flex items-center justify-end pt-1">
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={handleExecuteDecision}
-                            disabled={executingDecision || !decisionNotes.trim()}
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs"
-                          >
-                            <Gavel className="mr-1.5 h-3.5 w-3.5" />
-                            {executingDecision ? "Executing Ruling..." : "Execute Binding Ruling"}
-                          </Button>
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {/* 5. DISPUTE COMMUNICATIONS & ARBITRATION THREAD */}
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600">
-                            <MessageSquare className="h-4 w-4" />
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                              Dispute Communications & Arbitration Thread
-                            </h4>
-                            <p className="text-[11px] text-slate-500">
-                              Official communication between Client, Professional, and Klick-Pro
-                              Support.
+                      {selectedDecision === "PARTIAL_SETTLEMENT" && (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-bold text-amber-900">
+                              Escrow Split Distribution
                             </p>
+                            <span className="text-[11px] font-semibold text-amber-800">
+                              Total Available: ₹{refundableAmount.toLocaleString()}
+                            </span>
                           </div>
+                          <div className="grid sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                                Refund to Client (₹)
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                max={refundableAmount}
+                                value={partialRefund}
+                                onChange={(e) => setPartialRefund(e.target.value)}
+                                placeholder="0"
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:ring-2 focus:ring-amber-300 outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                                Release to Professional (₹)
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                max={refundableAmount}
+                                value={partialPayout}
+                                onChange={(e) => setPartialPayout(e.target.value)}
+                                placeholder="0"
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:ring-2 focus:ring-amber-300 outline-none"
+                              />
+                            </div>
+                          </div>
+                          {Number(partialRefund) + Number(partialPayout) > refundableAmount && (
+                            <p className="text-[11px] font-bold text-rose-600">
+                              ⚠ Error: Combined amount (₹
+                              {(Number(partialRefund) + Number(partialPayout)).toLocaleString()})
+                              exceeds total available escrow (₹{refundableAmount.toLocaleString()}
+                              ).
+                            </p>
+                          )}
                         </div>
-                        <span className="text-xs text-slate-400 font-semibold">
-                          {messages.length} message(s)
-                        </span>
-                      </div>
+                      )}
 
-                      {/* Message list */}
-                      <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
-                        {messages.length === 0 ? (
-                          <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
-                            No official discussion messages yet. You can post clarifications or
-                            updates below.
-                          </div>
-                        ) : (
-                          messages.map((item) => {
-                            const isAdmin = item.senderRole === "ADMIN";
-                            const isProfessional = item.senderRole === "PROFESSIONAL";
-                            return (
-                              <div
-                                key={item.id}
-                                className={`flex flex-col ${
-                                  isAdmin
-                                    ? "items-center"
-                                    : isProfessional
-                                      ? "items-end"
-                                      : "items-start"
-                                }`}
-                              >
-                                <div
-                                  className={`max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed ${
-                                    isAdmin
-                                      ? "border-2 border-indigo-300 bg-indigo-50/90 text-indigo-950"
-                                      : isProfessional
-                                        ? "bg-blue-600 text-white shadow-xs"
-                                        : "bg-slate-100 text-slate-900 border border-slate-200"
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-1.5 font-bold text-[10px] uppercase tracking-wider mb-1 opacity-90">
-                                    {isAdmin ? (
-                                      <>
-                                        <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" />
-                                        <span>Klick-Pro Dispute Team (You)</span>
-                                      </>
-                                    ) : isProfessional ? (
-                                      <span>
-                                        Professional (
-                                        {details.professional
-                                          ? `${details.professional.firstName} ${details.professional.lastName}`
-                                          : "Professional"}
-                                        )
-                                      </span>
-                                    ) : (
-                                      <span>
-                                        Client (
-                                        {details.client
-                                          ? `${details.client.firstName} ${details.client.lastName}`
-                                          : "Client"}
-                                        )
-                                      </span>
-                                    )}
-                                    <span className="opacity-60 text-[9px] font-normal lowercase">
-                                      · {formatMessageTime(item.createdAt)}
-                                    </span>
-                                  </div>
-                                  <p className="whitespace-pre-wrap">{item.message}</p>
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-
-                      {/* Send Message Input Box */}
-                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                        <input
-                          type="text"
-                          placeholder="Type a message or clarification regarding this dispute..."
-                          value={draft}
-                          onChange={(e) => setDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                              e.preventDefault();
-                              void sendAdminMessage();
-                            }
-                          }}
-                          className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                      <div>
+                        <label className="text-xs font-semibold text-slate-800 block mb-1">
+                          Ruling Justification / Resolution Notes *
+                        </label>
+                        <textarea
+                          value={decisionNotes}
+                          onChange={(e) => setDecisionNotes(e.target.value)}
+                          placeholder="Detail the rationale for this ruling..."
+                          className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs focus:ring-2 focus:ring-indigo-200 outline-none"
+                          rows={2}
                         />
+                      </div>
+
+                      <div className="flex items-center justify-end pt-1">
                         <Button
                           type="button"
                           size="sm"
-                          disabled={sending || !draft.trim()}
-                          onClick={sendAdminMessage}
-                          className="shrink-0 text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-500 shadow-2xs disabled:opacity-50"
+                          onClick={handleExecuteDecision}
+                          disabled={executingDecision || !decisionNotes.trim()}
+                          className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs"
                         >
-                          <Send className="mr-1 h-3.5 w-3.5" />
-                          {sending ? "Sending…" : "Send"}
+                          <Gavel className="mr-1.5 h-3.5 w-3.5" />
+                          {executingDecision ? "Executing Ruling..." : "Execute Binding Ruling"}
                         </Button>
                       </div>
-                      {sendMessage ? (
-                        <p className="text-xs font-semibold text-rose-600">{sendMessage}</p>
-                      ) : null}
                     </div>
+                  ) : null}
+
+                  {/* 5. DISPUTE COMMUNICATIONS & ARBITRATION THREAD */}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600">
+                          <MessageSquare className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                            Dispute Communications & Arbitration Thread
+                          </h4>
+                          <p className="text-[11px] text-slate-500">
+                            Official communication between Client, Professional, and Klick-Pro
+                            Support.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-xs text-slate-400 font-semibold">
+                        {messages.length} message(s)
+                      </span>
+                    </div>
+
+                    {/* Message list */}
+                    <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                      {messages.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
+                          No official discussion messages yet. You can post clarifications or
+                          updates below.
+                        </div>
+                      ) : (
+                        messages.map((item) => {
+                          const isAdmin = item.senderRole === "ADMIN";
+                          const isProfessional = item.senderRole === "PROFESSIONAL";
+                          return (
+                            <div
+                              key={item.id}
+                              className={`flex flex-col ${
+                                isAdmin
+                                  ? "items-center"
+                                  : isProfessional
+                                    ? "items-end"
+                                    : "items-start"
+                              }`}
+                            >
+                              <div
+                                className={`max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed ${
+                                  isAdmin
+                                    ? "border-2 border-indigo-300 bg-indigo-50/90 text-indigo-950"
+                                    : isProfessional
+                                      ? "bg-blue-600 text-white shadow-xs"
+                                      : "bg-slate-100 text-slate-900 border border-slate-200"
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5 font-bold text-[10px] uppercase tracking-wider mb-1 opacity-90">
+                                  {isAdmin ? (
+                                    <>
+                                      <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" />
+                                      <span>Klick-Pro Dispute Team (You)</span>
+                                    </>
+                                  ) : isProfessional ? (
+                                    <span>
+                                      Professional (
+                                      {details.professional
+                                        ? `${details.professional.firstName} ${details.professional.lastName}`
+                                        : "Professional"}
+                                      )
+                                    </span>
+                                  ) : (
+                                    <span>
+                                      Client (
+                                      {details.client
+                                        ? `${details.client.firstName} ${details.client.lastName}`
+                                        : "Client"}
+                                      )
+                                    </span>
+                                  )}
+                                  <span className="opacity-60 text-[9px] font-normal lowercase">
+                                    · {formatMessageTime(item.createdAt)}
+                                  </span>
+                                </div>
+                                <p className="whitespace-pre-wrap">{item.message}</p>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Send Message Input Box */}
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                      <input
+                        type="text"
+                        placeholder="Type a message or clarification regarding this dispute..."
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            void sendAdminMessage();
+                          }
+                        }}
+                        className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={sending || !draft.trim()}
+                        onClick={sendAdminMessage}
+                        className="shrink-0 text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-500 shadow-2xs disabled:opacity-50"
+                      >
+                        <Send className="mr-1 h-3.5 w-3.5" />
+                        {sending ? "Sending…" : "Send"}
+                      </Button>
+                    </div>
+                    {sendMessage ? (
+                      <p className="text-xs font-semibold text-rose-600">{sendMessage}</p>
+                    ) : null}
                   </div>
-                  <aside className="h-fit space-y-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-900">Job</h3>
-                      <p className="mt-1 text-sm font-medium text-slate-700">
-                        {details.job?.title ?? "Untitled job"}
-                      </p>
-                    </div>
-                    <div className="border-t border-slate-200 pt-4">
-                      <h3 className="text-sm font-semibold text-slate-900">Client</h3>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {details.client
-                          ? `${details.client.firstName} ${details.client.lastName}`
-                          : "Unknown"}
-                      </p>
-                      <p className="text-xs text-slate-500">{details.client?.email}</p>
-                    </div>
-                    <div className="border-t border-slate-200 pt-4">
-                      <h3 className="text-sm font-semibold text-slate-900">Professional</h3>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {details.professional
-                          ? `${details.professional.firstName} ${details.professional.lastName}`
-                          : "Unknown"}
-                      </p>
-                      <p className="text-xs text-slate-500">{details.professional?.email}</p>
-                    </div>
-                    <div className="border-t border-slate-200 pt-4">
-                      <h3 className="text-sm font-semibold text-slate-900">Payments & Escrow</h3>
-                      <dl className="mt-3 grid grid-cols-2 gap-2 text-center">
-                        <div className="rounded-lg bg-white border border-slate-200 p-2 shadow-2xs">
-                          <dt className="text-[10px] uppercase font-semibold text-slate-500">
-                            Paid
-                          </dt>
-                          <dd className="mt-1 text-sm font-bold text-slate-900">
-                            ₹{details.financial.paidAmount.toLocaleString()}
-                          </dd>
-                        </div>
-                        <div className="rounded-lg bg-white border border-slate-200 p-2 shadow-2xs">
-                          <dt className="text-[10px] uppercase font-semibold text-slate-500">
-                            In Escrow
-                          </dt>
-                          <dd className="mt-1 text-sm font-bold text-indigo-700">
-                            ₹{(details.financial.inEscrow ?? 0).toLocaleString()}
-                          </dd>
-                        </div>
-                      </dl>
-                    </div>
-                  </aside>
                 </div>
-              );
-            })()
-          : null}
+                <aside className="h-fit space-y-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">Job</h3>
+                    <p className="mt-1 text-sm font-medium text-slate-700">
+                      {details.job?.title ?? "Untitled job"}
+                    </p>
+                  </div>
+                  <div className="border-t border-slate-200 pt-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Client</h3>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                      {details.client
+                        ? `${details.client.firstName} ${details.client.lastName}`
+                        : "Unknown"}
+                    </p>
+                    <p className="text-xs text-slate-500">{details.client?.email}</p>
+                  </div>
+                  <div className="border-t border-slate-200 pt-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Professional</h3>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                      {details.professional
+                        ? `${details.professional.firstName} ${details.professional.lastName}`
+                        : "Unknown"}
+                    </p>
+                    <p className="text-xs text-slate-500">{details.professional?.email}</p>
+                  </div>
+                  <div className="border-t border-slate-200 pt-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Payments & Escrow</h3>
+                    <dl className="mt-3 grid grid-cols-2 gap-2 text-center">
+                      <div className="rounded-lg bg-white border border-slate-200 p-2 shadow-2xs">
+                        <dt className="text-[10px] uppercase font-semibold text-slate-500">Paid</dt>
+                        <dd className="mt-1 text-sm font-bold text-slate-900">
+                          ₹{details.financial.paidAmount.toLocaleString()}
+                        </dd>
+                      </div>
+                      <div className="rounded-lg bg-white border border-slate-200 p-2 shadow-2xs">
+                        <dt className="text-[10px] uppercase font-semibold text-slate-500">
+                          In Escrow
+                        </dt>
+                        <dd className="mt-1 text-sm font-bold text-indigo-700">
+                          ₹{(details.financial.inEscrow ?? 0).toLocaleString()}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </aside>
+              </div>
+            );
+          })()
+        ) : null}
       </section>
     </div>
   );

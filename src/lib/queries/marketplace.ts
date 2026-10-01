@@ -721,9 +721,7 @@ export async function getOpenJob(id: number): Promise<MarketplaceJob | null> {
  * professional feedback reviews, total jobs count, completed project count, and open jobs).
  * Contact information (email, phone, exact address) is strictly excluded.
  */
-export async function getPublicClientProfile(
-  id: number,
-): Promise<PublicClientProfile | null> {
+export async function getPublicClientProfile(id: number): Promise<PublicClientProfile | null> {
   const user = await db.user.findFirst({
     where: { id },
     select: {
@@ -918,4 +916,3 @@ export async function getPublicClientProfile(
     reviewsList,
   };
 }
-
