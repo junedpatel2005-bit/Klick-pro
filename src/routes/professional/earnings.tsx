@@ -3,15 +3,24 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
+  AlertCircle,
+  ArrowDownLeft,
   ArrowUpRight,
+  Briefcase,
   BriefcaseBusiness,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   CircleDollarSign,
+  Clock,
   Clock3,
   Download,
+  FolderKanban,
   Landmark,
   LockKeyhole,
+  Percent,
   ReceiptText,
+  ShieldCheck,
   WalletCards,
   X,
 } from "lucide-react";
@@ -84,6 +93,10 @@ export default function Earnings() {
   const [paymentDetailsError, setPaymentDetailsError] = useState("");
   const [selectedStat, setSelectedStat] = useState<StatKey | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(10);
+  const [historyFilter, setHistoryFilter] = useState<
+    "all" | "milestones" | "commissions" | "disputes"
+  >("all");
   const load = () => {
     void fetch("/api/v1/portal/earnings", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : []))
@@ -120,6 +133,33 @@ export default function Earnings() {
           0,
         ) ?? 0,
     [items],
+  );
+  const tabCounts = useMemo(
+    () => ({
+      all: (items ?? []).length,
+      milestones: (items ?? []).filter(
+        (i) => i.type !== "PLATFORM_COMMISSION" && i.type !== "DISPUTE_PAYOUT",
+      ).length,
+      commissions: (items ?? []).filter((i) => i.type === "PLATFORM_COMMISSION").length,
+      disputes: (items ?? []).filter((i) => i.type === "DISPUTE_PAYOUT").length,
+    }),
+    [items],
+  );
+  const filteredItems = useMemo(
+    () =>
+      (items ?? []).filter((i) => {
+        if (historyFilter === "milestones") {
+          return i.type !== "PLATFORM_COMMISSION" && i.type !== "DISPUTE_PAYOUT";
+        }
+        if (historyFilter === "commissions") {
+          return i.type === "PLATFORM_COMMISSION";
+        }
+        if (historyFilter === "disputes") {
+          return i.type === "DISPUTE_PAYOUT";
+        }
+        return true;
+      }),
+    [items, historyFilter],
   );
   async function withdraw() {
     setActionBusy("withdraw");
@@ -324,12 +364,46 @@ export default function Earnings() {
                 </div>
                 <ReceiptText className="h-5 w-5 text-primary" />
               </div>
-              {items.map((i) => (
+              <div className="flex flex-wrap items-center gap-2 border-b border-border/70 bg-muted/20 p-3 sm:px-5">
+                {(
+                  [
+                    { key: "all", label: "All", count: tabCounts.all },
+                    { key: "milestones", label: "Milestones", count: tabCounts.milestones },
+                    { key: "commissions", label: "Commissions", count: tabCounts.commissions },
+                    { key: "disputes", label: "Disputes", count: tabCounts.disputes },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => {
+                      setHistoryFilter(tab.key);
+                      setVisibleCount(10);
+                    }}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all ${
+                      historyFilter === tab.key
+                        ? "border-primary bg-primary text-primary-foreground shadow-xs"
+                        : "border-border/80 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                        historyFilter === tab.key
+                          ? "bg-primary-foreground/20 text-primary-foreground"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {filteredItems.slice(0, visibleCount).map((i) => (
                 <div
                   role="button"
                   tabIndex={0}
                   key={i.id}
-                  className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border-b border-border p-5 text-left transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary last:border-0 sm:grid-cols-[minmax(0,1fr)_auto_auto]"
                   onClick={() => void openTransaction(i)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
@@ -337,55 +411,128 @@ export default function Earnings() {
                       void openTransaction(i);
                     }
                   }}
+                  className="group flex cursor-pointer items-center justify-between gap-4 border-b border-border/60 p-4 sm:p-5 transition-all hover:bg-muted/40 last:border-0"
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold truncate">{i.description}</p>
-                      {i.type === "PLATFORM_COMMISSION" ? (
-                        <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                          Commission cut (10%)
-                        </span>
-                      ) : (
-                        <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                          Milestone money
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {new Date(i.createdAt).toLocaleDateString(undefined, {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}{" "}
-                      · {i.status}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p
-                      className={`font-bold ${
+                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                    <div
+                      className={`h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${
                         i.type === "PLATFORM_COMMISSION"
-                          ? "text-amber-600 dark:text-amber-400"
-                          : "text-foreground"
+                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                          : i.type === "DISPUTE_PAYOUT"
+                            ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
+                            : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
                       }`}
                     >
-                      {i.type === "PLATFORM_COMMISSION" ? "-" : "+"}₹
-                      {Math.abs(i.amount).toLocaleString()}{" "}
-                      <span className="text-xs">{i.currency}</span>
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {i.type === "PLATFORM_COMMISSION"
-                        ? "Platform commission (10%)"
-                        : i.type === "DISPUTE_PAYOUT"
-                          ? "Dispute settlement payment"
-                          : "Client milestone payment"}
-                    </p>
+                      {i.type === "PLATFORM_COMMISSION" ? (
+                        <Percent className="h-5 w-5" />
+                      ) : i.type === "DISPUTE_PAYOUT" ? (
+                        <ShieldCheck className="h-5 w-5" />
+                      ) : (
+                        <Briefcase className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-foreground text-sm sm:text-base truncate">
+                          {i.description}
+                        </p>
+                        <span
+                          className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                            i.type === "PLATFORM_COMMISSION"
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                              : i.type === "DISPUTE_PAYOUT"
+                                ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
+                                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                          }`}
+                        >
+                          {i.type === "PLATFORM_COMMISSION"
+                            ? "Commission cut (10%)"
+                            : i.type === "DISPUTE_PAYOUT"
+                              ? "Dispute payout"
+                              : "Milestone earning"}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                        <span>
+                          {new Date(i.createdAt).toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })}{" "}
+                          ·{" "}
+                          {new Date(i.createdAt).toLocaleTimeString(undefined, {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: true,
+                          })}
+                        </span>
+                        {i.invoicePaymentId && (
+                          <>
+                            <span className="text-muted-foreground/40">·</span>
+                            <span className="font-mono text-[10px] text-muted-foreground/90 bg-muted/60 px-1.5 py-0.5 rounded border border-border/40">
+                              INV #{i.invoicePaymentId}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right">
+                      <p
+                        className={`text-sm sm:text-base font-bold tabular-nums ${
+                          i.type === "PLATFORM_COMMISSION"
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-emerald-600 dark:text-emerald-400"
+                        }`}
+                      >
+                        {i.type === "PLATFORM_COMMISSION" ? "-" : "+"}₹
+                        {Math.abs(i.amount).toLocaleString("en-IN")}{" "}
+                        <span className="text-xs font-normal text-muted-foreground">
+                          {i.currency}
+                        </span>
+                      </p>
+                      <div className="mt-1 flex justify-end">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+                            i.type === "PLATFORM_COMMISSION"
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                              : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                          }`}
+                        >
+                          <CheckCircle2 className="h-3 w-3" />
+                          {i.type === "PLATFORM_COMMISSION"
+                            ? "Deducted"
+                            : i.status === "COMPLETED"
+                              ? "Credited to wallet"
+                              : i.status}
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/30 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground hidden sm:block shrink-0" />
                   </div>
                 </div>
               ))}
-              {!items.length && (
+              {filteredItems.length > visibleCount && (
+                <div className="border-t border-border/60 bg-muted/10 p-4 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount((prev) => prev + 10)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 py-2.5 text-xs font-semibold text-foreground shadow-xs transition-all hover:bg-accent hover:border-primary/40 hover:shadow-sm active:scale-[0.98]"
+                  >
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    <span>Show more transactions</span>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                      {filteredItems.length - visibleCount} remaining
+                    </span>
+                  </button>
+                </div>
+              )}
+              {!filteredItems.length && (
                 <p className="p-8 text-sm text-muted-foreground">
-                  No approved payments yet. Payments appear here after a client approves a
-                  milestone.
+                  {historyFilter === "all"
+                    ? "No approved payments yet. Payments appear here after a client approves a milestone."
+                    : `No ${historyFilter} transactions found.`}
                 </p>
               )}
             </section>
@@ -441,7 +588,7 @@ export default function Earnings() {
                   Payout destination
                   <input
                     className="mt-2 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-                    placeholder="Bank account or UPI ID"
+                    placeholder="Account No + IFSC (e.g. 1234567890 SBIN0001234) or UPI ID"
                     value={destination}
                     onChange={(e) => setDestination(e.target.value)}
                   />

@@ -34,7 +34,9 @@ export async function POST(request: NextRequest) {
     where: { id: parsed.data.withdrawalId },
   });
   const payment = await db.payment.findUnique({ where: { id: parsed.data.paymentId } });
-  if (!withdrawal || withdrawal.status !== "PENDING")
+  if (!withdrawal)
+    return NextResponse.json({ error: "Withdrawal not found." }, { status: 404 });
+  if (withdrawal.status !== "PENDING")
     return NextResponse.json({ error: "Withdrawal is no longer pending." }, { status: 409 });
   if (
     !payment ||
@@ -54,6 +56,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "Professional has not saved a Razorpay Route linked account." },
       { status: 400 },
+    );
+  // Claim the withdrawal so a concurrent request cannot pay it a second time.
+  // This must run only after every validation above, otherwise a rejected
+  // request would strand the row in PROCESSING.
+  const claimed = await db.projectWithdrawal.updateMany({
+    where: { id: withdrawal.id, status: "PENDING" },
+    data: { status: "PROCESSING" },
+  });
+  if (claimed.count !== 1)
+    return NextResponse.json(
+      { error: "Withdrawal is already being processed." },
+      { status: 409 },
     );
   try {
     const transferId = await createRazorpayPaymentTransfer({

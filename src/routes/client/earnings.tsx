@@ -2,14 +2,22 @@
 import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
+  AlertCircle,
+  ArrowDownLeft,
   ArrowUpRight,
+  Briefcase,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   CircleDollarSign,
+  Clock,
   CreditCard,
+  FolderKanban,
   Landmark,
   Loader2,
   LockKeyhole,
+  Percent,
   Plus,
   ReceiptText,
   ShieldCheck,
@@ -86,7 +94,9 @@ export default function ClientEarnings() {
     | null
   >(null);
   const [paymentDetailsError, setPaymentDetailsError] = useState("");
-  const [historyFilter, setHistoryFilter] = useState<"all" | "successful" | "failed">("all");
+  const [historyFilter, setHistoryFilter] = useState<
+    "all" | "milestones" | "commissions" | "deposits" | "failed"
+  >("all");
   const [withdrawMethod, setWithdrawMethod] = useState<"BANK" | "CARD" | "UPI">("BANK");
   const [withdrawDestination, setWithdrawDestination] = useState("");
   const [bankAccount, setBankAccount] = useState("");
@@ -95,6 +105,7 @@ export default function ClientEarnings() {
   const [withdrawMessage, setWithdrawMessage] = useState("");
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [shortcutAmount, setShortcutAmount] = useState("");
+  const [visibleCount, setVisibleCount] = useState(10);
 
   async function runShortcutTopUp() {
     const amt = Number(shortcutAmount) || Number(topUpAmount);
@@ -399,11 +410,42 @@ export default function ClientEarnings() {
       ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [payments, wallet],
   );
+  const tabCounts = useMemo(
+    () => ({
+      all: historyItems.length,
+      milestones: historyItems.filter(
+        (item) => item.kind === "payment" && item.payment.type !== "PLATFORM_COMMISSION",
+      ).length,
+      commissions: historyItems.filter(
+        (item) =>
+          (item.kind === "payment" && item.payment.type === "PLATFORM_COMMISSION") ||
+          (item.kind === "topup" && item.transaction.type === "PLATFORM_COMMISSION"),
+      ).length,
+      deposits: historyItems.filter(
+        (item) => item.kind === "topup" && item.transaction.type === "WALLET_TOP_UP",
+      ).length,
+      failed: historyItems.filter((item) => item.status === "FAILED").length,
+    }),
+    [historyItems],
+  );
   const filteredHistoryItems = useMemo(
     () =>
       historyItems.filter((item) => {
-        if (historyFilter === "successful") return item.status === "COMPLETED";
-        if (historyFilter === "failed") return item.status === "FAILED";
+        if (historyFilter === "milestones") {
+          return item.kind === "payment" && item.payment.type !== "PLATFORM_COMMISSION";
+        }
+        if (historyFilter === "commissions") {
+          return (
+            (item.kind === "payment" && item.payment.type === "PLATFORM_COMMISSION") ||
+            (item.kind === "topup" && item.transaction.type === "PLATFORM_COMMISSION")
+          );
+        }
+        if (historyFilter === "deposits") {
+          return item.kind === "topup" && item.transaction.type === "WALLET_TOP_UP";
+        }
+        if (historyFilter === "failed") {
+          return item.status === "FAILED";
+        }
         return true;
       }),
     [historyItems, historyFilter],
@@ -646,18 +688,34 @@ export default function ClientEarnings() {
                     </button>
                   ))}
                 </div>
-                <input
-                  className="mt-3 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
-                  value={withdrawDestination}
-                  onChange={(event) => setWithdrawDestination(event.target.value)}
-                  placeholder={
-                    withdrawMethod === "BANK"
-                      ? "Account number and IFSC"
-                      : withdrawMethod === "CARD"
-                        ? "Card number"
-                        : "UPI ID (name@bank)"
-                  }
-                />
+                {withdrawMethod === "BANK" ? (
+                  <div className="mt-3 space-y-2.5">
+                    <input
+                      className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
+                      value={bankAccount}
+                      onChange={(event) => setBankAccount(event.target.value)}
+                      placeholder="Bank account number (e.g. 1234567890)"
+                    />
+                    <input
+                      className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm uppercase focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none placeholder:normal-case font-mono text-xs tracking-wider"
+                      value={bankIfsc}
+                      onChange={(event) => setBankIfsc(event.target.value.toUpperCase())}
+                      placeholder="IFSC code (e.g. HDFC0001234)"
+                      maxLength={11}
+                    />
+                  </div>
+                ) : (
+                  <input
+                    className="mt-3 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
+                    value={withdrawDestination}
+                    onChange={(event) => setWithdrawDestination(event.target.value)}
+                    placeholder={
+                      withdrawMethod === "CARD"
+                        ? "Debit / Credit Card number (16 digits)"
+                        : "UPI ID (e.g. username@okhdfcbank, 9876543210@paytm)"
+                    }
+                  />
+                )}
                 <div className="mt-3 flex gap-2">
                   <div className="flex h-12 min-w-0 flex-1 items-center rounded-xl border border-input bg-background px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
                     <span className="mr-2 text-sm font-semibold text-muted-foreground">₹</span>
@@ -679,7 +737,10 @@ export default function ClientEarnings() {
                       !Number(withdrawAmount) ||
                       Number(withdrawAmount) < (wallet?.minWithdrawalAmount ?? 500) ||
                       Number(withdrawAmount) > (wallet?.available ?? 0) ||
-                      !withdrawDestination.trim()
+                      (withdrawMethod === "BANK"
+                        ? !bankAccount.trim() || !bankIfsc.trim()
+                        : !withdrawDestination.trim()) ||
+                      actionBusy === "withdraw"
                     }
                   >
                     Withdraw
@@ -736,25 +797,43 @@ export default function ClientEarnings() {
                 </div>
                 <ReceiptText className="h-5 w-5 text-primary" />
               </div>
-              <div className="flex gap-2 border-b border-border p-3">
+              <div className="flex flex-wrap items-center gap-2 border-b border-border/70 bg-muted/20 p-3 sm:px-5">
                 {(
                   [
-                    { key: "all", label: "All" },
-                    { key: "successful", label: "Successful" },
-                    { key: "failed", label: "Failed" },
+                    { key: "all", label: "All", count: tabCounts.all },
+                    { key: "milestones", label: "Milestones", count: tabCounts.milestones },
+                    { key: "commissions", label: "Commissions", count: tabCounts.commissions },
+                    { key: "deposits", label: "Deposits", count: tabCounts.deposits },
+                    { key: "failed", label: "Failed", count: tabCounts.failed },
                   ] as const
                 ).map((tab) => (
                   <button
                     key={tab.key}
                     type="button"
-                    onClick={() => setHistoryFilter(tab.key)}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${historyFilter === tab.key ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-primary"}`}
+                    onClick={() => {
+                      setHistoryFilter(tab.key);
+                      setVisibleCount(10);
+                    }}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all ${
+                      historyFilter === tab.key
+                        ? "border-primary bg-primary text-primary-foreground shadow-xs"
+                        : "border-border/80 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    }`}
                   >
-                    {tab.label}
+                    <span>{tab.label}</span>
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                        historyFilter === tab.key
+                          ? "bg-primary-foreground/20 text-primary-foreground"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
                   </button>
                 ))}
               </div>
-              {filteredHistoryItems.map((item) =>
+              {filteredHistoryItems.slice(0, visibleCount).map((item) =>
                 item.kind === "payment" ? (
                   <div
                     key={item.key}
@@ -765,45 +844,96 @@ export default function ClientEarnings() {
                       if (event.key === "Enter" || event.key === " ")
                         void openPaymentDetails(item.payment);
                     }}
-                    className="flex cursor-pointer items-center justify-between gap-4 border-b border-border p-5 transition hover:bg-muted/40 last:border-0"
+                    className="group flex cursor-pointer items-center justify-between gap-4 border-b border-border/60 p-4 sm:p-5 transition-all hover:bg-muted/40 last:border-0"
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold truncate">{item.payment.description}</p>
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                      <div
+                        className={`h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${
+                          item.payment.type === "PLATFORM_COMMISSION"
+                            ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                            : "bg-primary/10 text-primary border-primary/20"
+                        }`}
+                      >
                         {item.payment.type === "PLATFORM_COMMISSION" ? (
-                          <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                            Commission fee (10%)
-                          </span>
+                          <Percent className="h-5 w-5" />
                         ) : (
-                          <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                            Milestone payment
-                          </span>
+                          <FolderKanban className="h-5 w-5" />
                         )}
                       </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {new Date(item.payment.createdAt).toLocaleDateString(undefined, {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-foreground text-sm sm:text-base truncate">
+                            {item.payment.description}
+                          </p>
+                          {item.payment.type === "PLATFORM_COMMISSION" ? (
+                            <span className="shrink-0 rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                              Commission fee (10%)
+                            </span>
+                          ) : (
+                            <span className="shrink-0 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                              Milestone payment
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                          <span>
+                            {new Date(item.payment.createdAt).toLocaleDateString(undefined, {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            })}{" "}
+                            ·{" "}
+                            {new Date(item.payment.createdAt).toLocaleTimeString(undefined, {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: true,
+                            })}
+                          </span>
+                          {item.payment.invoicePaymentId && (
+                            <>
+                              <span className="text-muted-foreground/40">·</span>
+                              <span className="font-mono text-[10px] text-muted-foreground/90 bg-muted/60 px-1.5 py-0.5 rounded border border-border/40">
+                                INV #{item.payment.invoicePaymentId}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p
-                        className={`font-bold ${item.payment.type === "PLATFORM_COMMISSION" ? "text-amber-600 dark:text-amber-400" : ""}`}
-                      >
-                        ₹{item.payment.amount.toLocaleString()} {item.payment.currency}
-                      </p>
-                      <p
-                        className={`mt-1 inline-flex items-center gap-1 text-xs font-semibold ${item.payment.status === "COMPLETED" ? "text-success" : "text-warning"}`}
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        {item.payment.status === "COMPLETED"
-                          ? "Payout completed"
-                          : item.payment.status === "FUNDED"
-                            ? "Awaiting admin payout"
-                            : item.payment.status}
-                      </p>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <p
+                          className={`text-sm sm:text-base font-bold tabular-nums ${
+                            item.payment.type === "PLATFORM_COMMISSION"
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-foreground"
+                          }`}
+                        >
+                          -₹{item.payment.amount.toLocaleString("en-IN")}{" "}
+                          <span className="text-xs font-normal text-muted-foreground">
+                            {item.payment.currency}
+                          </span>
+                        </p>
+                        <div className="mt-1 flex justify-end">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+                              item.payment.status === "COMPLETED"
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                : item.payment.status === "FUNDED"
+                                  ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
+                                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                            }`}
+                          >
+                            <CheckCircle2 className="h-3 w-3" />
+                            {item.payment.status === "COMPLETED"
+                              ? "Payout completed"
+                              : item.payment.status === "FUNDED"
+                                ? "Awaiting admin payout"
+                                : item.payment.status}
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/30 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground hidden sm:block shrink-0" />
                     </div>
                   </div>
                 ) : (
@@ -818,39 +948,137 @@ export default function ClientEarnings() {
                       if (event.key === "Enter" || event.key === " ")
                         setSelectedTransaction({ kind: "topup", detail: item.transaction });
                     }}
-                    className="flex cursor-pointer items-center justify-between gap-4 border-b border-border bg-muted/20 p-5 transition hover:bg-muted/40 last:border-0"
+                    className="group flex cursor-pointer items-center justify-between gap-4 border-b border-border/60 p-4 sm:p-5 transition-all hover:bg-muted/40 last:border-0"
                   >
-                    <div>
-                      <p className="font-semibold">Wallet top-up</p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {new Date(item.transaction.createdAt).toLocaleDateString(undefined, {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        })}
-                        {item.transaction.providerReference
-                          ? ` · ${item.transaction.providerReference}`
-                          : ""}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold">₹{item.transaction.amount.toLocaleString()} INR</p>
-                      <p
-                        className={`mt-1 text-xs font-semibold ${item.transaction.status === "COMPLETED" ? "text-success" : item.transaction.status === "FAILED" ? "text-destructive" : "text-warning"}`}
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                      <div
+                        className={`h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${
+                          item.transaction.status === "COMPLETED"
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                            : item.transaction.status === "FAILED"
+                              ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                              : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                        }`}
                       >
-                        {item.transaction.status === "COMPLETED"
-                          ? "Wallet funded"
-                          : item.transaction.status}
-                      </p>
+                        {item.transaction.status === "COMPLETED" ? (
+                          <ArrowDownLeft className="h-5 w-5" />
+                        ) : item.transaction.status === "FAILED" ? (
+                          <AlertCircle className="h-5 w-5" />
+                        ) : (
+                          <Clock className="h-5 w-5" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-foreground text-sm sm:text-base truncate">
+                            Wallet top-up
+                          </p>
+                          <span
+                            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                              item.transaction.status === "COMPLETED"
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                : item.transaction.status === "FAILED"
+                                  ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                            }`}
+                          >
+                            Deposit
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                          <span>
+                            {new Date(item.transaction.createdAt).toLocaleDateString(undefined, {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            })}{" "}
+                            ·{" "}
+                            {new Date(item.transaction.createdAt).toLocaleTimeString(undefined, {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: true,
+                            })}
+                          </span>
+                          {item.transaction.providerReference && (
+                            <>
+                              <span className="text-muted-foreground/40">·</span>
+                              <span className="font-mono text-[10px] text-muted-foreground/90 bg-muted/60 px-1.5 py-0.5 rounded border border-border/40">
+                                {item.transaction.providerReference}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <p
+                          className={`text-sm sm:text-base font-bold tabular-nums ${
+                            item.transaction.status === "COMPLETED"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : item.transaction.status === "FAILED"
+                                ? "text-muted-foreground line-through"
+                                : "text-amber-600 dark:text-amber-400"
+                          }`}
+                        >
+                          {item.transaction.status === "COMPLETED"
+                            ? "+"
+                            : item.transaction.status === "FAILED"
+                              ? ""
+                              : ""}
+                          ₹{item.transaction.amount.toLocaleString("en-IN")}{" "}
+                          <span className="text-xs font-normal text-muted-foreground">INR</span>
+                        </p>
+                        <div className="mt-1 flex justify-end">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+                              item.transaction.status === "COMPLETED"
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                : item.transaction.status === "FAILED"
+                                  ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                            }`}
+                          >
+                            {item.transaction.status === "COMPLETED" ? (
+                              <CheckCircle2 className="h-3 w-3" />
+                            ) : item.transaction.status === "FAILED" ? (
+                              <AlertCircle className="h-3 w-3" />
+                            ) : (
+                              <Clock className="h-3 w-3" />
+                            )}
+                            {item.transaction.status === "COMPLETED"
+                              ? "Wallet funded"
+                              : item.transaction.status === "FAILED"
+                                ? "Failed"
+                                : item.transaction.status}
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/30 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground hidden sm:block shrink-0" />
                     </div>
                   </div>
                 ),
+              )}
+              {filteredHistoryItems.length > visibleCount && (
+                <div className="border-t border-border/60 bg-muted/10 p-4 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount((prev) => prev + 10)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 py-2.5 text-xs font-semibold text-foreground shadow-xs transition-all hover:bg-accent hover:border-primary/40 hover:shadow-sm active:scale-[0.98]"
+                  >
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    <span>Show more transactions</span>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                      {filteredHistoryItems.length - visibleCount} remaining
+                    </span>
+                  </button>
+                </div>
               )}
               {!filteredHistoryItems.length && (
                 <p className="p-8 text-sm text-muted-foreground">
                   {historyFilter === "all"
                     ? "No payment activity yet."
-                    : `No ${historyFilter} transactions.`}
+                    : `No ${historyFilter} transactions found.`}
                 </p>
               )}
             </section>
