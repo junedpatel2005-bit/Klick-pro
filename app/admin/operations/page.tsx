@@ -1745,8 +1745,8 @@ function DisputeDetailsPanel({
   const [partialPayout, setPartialPayout] = useState("");
   const [decisionNotes, setDecisionNotes] = useState("");
   const [executingDecision, setExecutingDecision] = useState(false);
-  // Dispute System Active
-  const SHOW_DISPUTE_ADJUDICATION = true;
+  // Dispute System Active (Adjudication suite hidden)
+  const SHOW_DISPUTE_ADJUDICATION = false as boolean;
 
   // Target the specific disputed milestone instead of the entire contract budget
   const targetMilestone = details
