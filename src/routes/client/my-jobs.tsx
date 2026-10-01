@@ -36,6 +36,11 @@ type Job = {
   createdAt: string;
   jobDate: string | null;
   agreedAmount?: number | null;
+  milestoneStats?: {
+    total: number;
+    completed: number;
+    remaining: number;
+  } | null;
 };
 
 type Filter = "ALL" | Job["status"] | "SCHEDULED";
@@ -438,6 +443,44 @@ export default function MyJobs() {
                             })}
                           </span>
                         </div>
+                        {job.milestoneStats && job.milestoneStats.total > 0 && (
+                          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
+                            <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              <span>
+                                {job.milestoneStats.completed} of {job.milestoneStats.total}{" "}
+                                {job.milestoneStats.total === 1 ? "milestone" : "milestones"} done
+                              </span>
+                            </span>
+                            <span className="text-muted-foreground/60">•</span>
+                            <span
+                              className={
+                                job.milestoneStats.remaining > 0
+                                  ? "font-semibold text-amber-600 dark:text-amber-400"
+                                  : "font-semibold text-emerald-600 dark:text-emerald-400"
+                              }
+                            >
+                              {job.milestoneStats.remaining > 0
+                                ? `${job.milestoneStats.remaining} remaining`
+                                : "All completed"}
+                            </span>
+                            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted/80 ml-1 hidden sm:block">
+                              <div
+                                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                                style={{
+                                  width: `${Math.round((job.milestoneStats.completed / job.milestoneStats.total) * 100)}%`,
+                                }}
+                              />
+                            </div>
+                            <span className="text-[11px] font-semibold text-muted-foreground hidden sm:inline">
+                              (
+                              {Math.round(
+                                (job.milestoneStats.completed / job.milestoneStats.total) * 100,
+                              )}
+                              %)
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">

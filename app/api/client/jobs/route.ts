@@ -166,6 +166,14 @@ export async function GET(request: NextRequest) {
         jobId: true,
         status: true,
         request: { select: { bidAmount: true } },
+        milestones: {
+          select: {
+            id: true,
+            status: true,
+            amount: true,
+            payment: { select: { status: true } },
+          },
+        },
       },
       orderBy: { id: "desc" },
     });
@@ -199,6 +207,25 @@ export async function GET(request: NextRequest) {
               ? "CLOSED"
               : "RUNNING"
           : job.status;
+
+        const projectMilestones = project?.milestones ?? [];
+        const total = projectMilestones.length;
+        const completed = projectMilestones.filter(
+          (m) =>
+            m.status === "APPROVED" ||
+            m.status === "COMPLETED" ||
+            m.payment?.status === "COMPLETED",
+        ).length;
+        const remaining = Math.max(0, total - completed);
+        const milestoneStats =
+          total > 0
+            ? {
+                total,
+                completed,
+                remaining,
+              }
+            : null;
+
         return {
           ...job,
           status,
@@ -207,6 +234,7 @@ export async function GET(request: NextRequest) {
           proposalCount: ["RUNNING", "COMPLETED", "CLOSED"].includes(status)
             ? 0
             : (proposalCountByJob.get(job.id) ?? 0),
+          milestoneStats,
         };
       }),
     });
