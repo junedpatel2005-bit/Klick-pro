@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { calculateMilestoneMoney } from "@/lib/payment-fees";
+import { CLIENT_FEE_RATE, calculateMilestoneMoney } from "@/lib/payment-fees";
 import { getPlatformCommissionRate } from "@/lib/platform-settings";
 import { Prisma } from "@generated/prisma/client";
 
@@ -151,7 +151,7 @@ export async function fundMilestoneFromWallet(
       userId: input.clientId,
       amount: -money.clientFeeAmount,
       type: "PLATFORM_COMMISSION",
-      description: `Platform commission fee (10%): ₹${money.clientFeeAmount.toLocaleString("en-IN")}`,
+      description: `Client platform fee (${Math.round(CLIENT_FEE_RATE * 100)}%): ₹${money.clientFeeAmount.toLocaleString("en-IN")}`,
       idempotencyKey: `payment-${input.paymentId}-client-commission-debit`,
       paymentId: input.paymentId,
       metadata: { milestoneId: input.milestoneId, feeAmount: money.clientFeeAmount },

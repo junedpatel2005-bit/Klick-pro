@@ -12,9 +12,9 @@ export const DEFAULT_PLATFORM_SETTINGS: Record<
   { value: string; description: string; category: "FINANCE" | "DISPUTES" | "GENERAL" | "SECURITY" }
 > = {
   commission_rate: {
-    value: "20",
+    value: "10",
     description:
-      "Platform commission percentage charged to professionals on milestone payouts (e.g. 20%)",
+      "Professional-side fee percentage on milestone payouts. The client-side fee is a separate fixed 10%, so 10% here means a 20% total platform take.",
     category: "FINANCE",
   },
   max_dispute_rounds: {
