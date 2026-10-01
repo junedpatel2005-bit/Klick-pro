@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
-import { PrismaClient } from "@generated/prisma/client";
+import { PrismaClient } from "../generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is required.");
@@ -451,7 +451,6 @@ const legacyCategoryMap: Record<string, string> = {
 async function main() {
   const before = {
     jobs: await db.clientJob.count(),
-    hireJobs: await db.hireJob.count(),
     categories: await db.serviceCategory.count(),
     payments: await db.payment.count(),
     earnings: await db.projectTransaction.count(),
@@ -478,12 +477,6 @@ async function main() {
       await tx.favoriteJob.deleteMany();
       await tx.clientJobAttachment.deleteMany();
       await tx.clientJob.deleteMany();
-
-      await tx.hireMilestone.deleteMany();
-      await tx.hireAttachment.deleteMany();
-      await tx.hireContract.deleteMany();
-      await tx.directHireNegotiation.deleteMany();
-      await tx.hireJob.deleteMany();
 
       await tx.service.deleteMany();
       await tx.serviceCategory.deleteMany();
@@ -551,7 +544,6 @@ async function main() {
 
   const after = {
     jobs: await db.clientJob.count(),
-    hireJobs: await db.hireJob.count(),
     categories: await db.serviceCategory.count(),
     payments: await db.payment.count(),
     earnings: await db.projectTransaction.count(),
