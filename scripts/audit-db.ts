@@ -12,7 +12,9 @@ async function auditDatabase() {
   console.log("=========================================");
 
   // 1. Connection check
-  const connResult = await db.$queryRawUnsafe<any[]>(
+  const connResult = await db.$queryRawUnsafe<
+    { total_conn: string; active_conn: string; idle_in_tx: string }[]
+  >(
     "SELECT count(*) as total_conn, count(*) FILTER (WHERE state = 'active') as active_conn, count(*) FILTER (WHERE state = 'idle in transaction') as idle_in_tx FROM pg_stat_activity WHERE datname = current_database()",
   );
   console.log("\n[1] Connection Pool Status:");
@@ -54,17 +56,19 @@ async function auditDatabase() {
   // 3. Foreign key & orphan check
   console.log("\n[5] Relational Integrity & Orphan Check:");
 
-  const orphanedWallets = await db.$queryRawUnsafe<any[]>(
+  const orphanedWallets = await db.$queryRawUnsafe<
+    { id: number; userId: number; balance: number }[]
+  >(
     'SELECT w.id, w."userId", w.balance FROM "Wallet" w LEFT JOIN "User" u ON w."userId" = u.id WHERE u.id IS NULL',
   );
   console.log(`    Orphaned Wallets (no user): ${orphanedWallets.length}`, orphanedWallets);
 
-  const orphanedWT = await db.$queryRawUnsafe<any[]>(
+  const orphanedWT = await db.$queryRawUnsafe<{ id: number }[]>(
     'SELECT wt.id FROM "WalletTransaction" wt LEFT JOIN "Wallet" w ON wt."walletId" = w.id WHERE w.id IS NULL',
   );
   console.log(`    Orphaned Wallet Transactions (no wallet): ${orphanedWT.length}`);
 
-  const orphanedMilestones = await db.$queryRawUnsafe<any[]>(
+  const orphanedMilestones = await db.$queryRawUnsafe<{ id: number }[]>(
     'SELECT pm.id FROM "ProjectMilestone" pm LEFT JOIN "ProjectTracking" pt ON pm."trackingId" = pt.id WHERE pt.id IS NULL',
   );
   console.log(`    Orphaned Milestones (no tracking): ${orphanedMilestones.length}`);
@@ -107,12 +111,20 @@ async function auditDatabase() {
 
   // 5. Index and table size audit
   console.log("\n[7] Database Storage & Engine Health:");
-  const dbSizeRes = await db.$queryRawUnsafe<any[]>(
+  const dbSizeRes = await db.$queryRawUnsafe<{ db_size: string }[]>(
     "SELECT pg_size_pretty(pg_database_size(current_database())) as db_size",
   );
   console.log(`    Database Size: ${dbSizeRes[0].db_size}`);
 
-  const engineStats = await db.$queryRawUnsafe<any[]>(
+  const engineStats = await db.$queryRawUnsafe<
+    {
+      xact_commit: string;
+      xact_rollback: string;
+      conflicts: string;
+      deadlocks: string;
+      cache_hit_pct: number | null;
+    }[]
+  >(
     "SELECT xact_commit, xact_rollback, conflicts, deadlocks, round(100.0 * blks_hit / nullif(blks_hit + blks_read, 0), 2) as cache_hit_pct FROM pg_stat_database WHERE datname = current_database()",
   );
   console.log(`    Committed Transactions: ${engineStats[0].xact_commit}`);

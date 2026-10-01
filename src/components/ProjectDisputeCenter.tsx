@@ -254,7 +254,6 @@ export function ProjectDisputeCenter({
 }: ProjectDisputeCenterProps) {
   // TEMPORARY HIDDEN (Dispute System): To unhide, set to true
   const SHOW_DISPUTE_CENTER = false as boolean;
-  if (!SHOW_DISPUTE_CENTER) return null;
 
   const isClient = viewerRole === "CLIENT";
   const isReporter = dispute ? dispute.reporterId === viewerUserId : false;
@@ -376,6 +375,10 @@ export function ProjectDisputeCenter({
       return [];
     }
   }, [dispute?.responseAttachmentsJson]);
+
+  // Every hook above must run on every render, so the feature flag can only be
+  // honoured after them - returning earlier breaks React's hook ordering.
+  if (!SHOW_DISPUTE_CENTER) return null;
 
   const handleFileUpload = async (files: FileList | null, target: "create" | "reject") => {
     if (!files || files.length === 0) return;

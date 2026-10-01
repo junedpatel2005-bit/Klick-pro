@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
@@ -465,6 +465,27 @@ function OperationsContent() {
     };
   }, []);
 
+  // Declared before the effect below that depends on it. Uses only stable
+  // setters, refs and the router, so an empty dependency list is correct.
+  const openDispute = useCallback(
+    async (id: number) => {
+      setDisputeDetailsStatus("loading");
+      setSelectedDispute(null);
+      lastDisputeIdRef.current = id;
+      router.replace(`/admin/operations?dispute=${id}`, { scroll: false });
+      try {
+        const response = await fetch(`/api/v1/admin/disputes/${id}`, { cache: "no-store" });
+        if (!response.ok) throw new Error("Unable to load dispute details");
+        const result = await response.json();
+        setSelectedDispute(result);
+        setDisputeDetailsStatus("idle");
+      } catch {
+        setDisputeDetailsStatus("error");
+      }
+    },
+    [router],
+  );
+
   useEffect(() => {
     const id = disputeQueryId ? Number(disputeQueryId) : null;
     if (id && !Number.isNaN(id)) {
@@ -479,7 +500,9 @@ function OperationsContent() {
         setDisputeDetailsStatus("idle");
       }
     }
-  }, [disputeQueryId]);
+    // openDispute is a plain function re-created each render; lastDisputeIdRef
+    // keeps the effect to a single action per dispute id.
+  }, [disputeQueryId, openDispute]);
 
   const jobs = useMemo(
     () =>
@@ -521,22 +544,6 @@ function OperationsContent() {
       setDetailsStatus("idle");
     } catch {
       setDetailsStatus("error");
-    }
-  }
-
-  async function openDispute(id: number) {
-    setDisputeDetailsStatus("loading");
-    setSelectedDispute(null);
-    lastDisputeIdRef.current = id;
-    router.replace(`/admin/operations?dispute=${id}`, { scroll: false });
-    try {
-      const response = await fetch(`/api/v1/admin/disputes/${id}`, { cache: "no-store" });
-      if (!response.ok) throw new Error("Unable to load dispute details");
-      const result = await response.json();
-      setSelectedDispute(result);
-      setDisputeDetailsStatus("idle");
-    } catch {
-      setDisputeDetailsStatus("error");
     }
   }
 

@@ -24,7 +24,10 @@ if (typeof window !== "undefined" && typeof Node === "function" && Node.prototyp
         if (child && child.parentNode) {
           return child.parentNode.removeChild(child);
         }
-      } catch {}
+      } catch {
+        // The DOM is already in an unrecoverable state here. Returning the node
+        // untouched lets React reconcile on the next render instead of throwing.
+      }
       return child;
     }
   };
