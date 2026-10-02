@@ -2,9 +2,10 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { invalidateCurrentUser } from "@/lib/current-user";
-import { ExternalLink, LogOut, ShieldCheck, Menu } from "lucide-react";
+import { ExternalLink, LogOut, ShieldCheck, Menu, Bell } from "lucide-react";
 import { useDatabaseStatus } from "@/hooks/use-database-status";
 import { useAdminSidebar } from "@/components/AdminSidebarContext";
+import { useAdminNotificationCount } from "@/lib/use-admin-notification-count";
 
 const pageTitles: Record<string, string> = {
   "/admin": "Command Center",
@@ -20,18 +21,29 @@ const pageTitles: Record<string, string> = {
   "/admin/messages": "Admin Communications",
   "/admin/templates": "Email Template Library",
   "/admin/settings": "Platform Configuration & Settings",
+  "/admin/sms-templates": "SMS Template Library",
   "/admin/extra/reviews": "Review Moderation",
   "/admin/extra/announcements": "Sitewide Banners",
   "/admin/extra/audit-logs": "Audit Trail & Logs",
   "/admin/extra/escrow": "Escrow Ledger",
 };
 
+function resolvePageTitle(pathname: string): string {
+  if (pageTitles[pathname]) return pageTitles[pathname];
+  if (pathname.startsWith("/admin/users/")) return "User Profile & Activity";
+  if (pathname.startsWith("/admin/templates/")) return "Email Template Editor";
+  if (pathname.startsWith("/admin/sms-templates/")) return "SMS Template Editor";
+  return "Admin Workspace";
+}
+
 export function AdminHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const dbStatus = useDatabaseStatus();
   const { collapsed, toggleSidebar } = useAdminSidebar();
-  const currentPageTitle = pageTitles[pathname] ?? "Admin Workspace";
+  const { unreadCount } = useAdminNotificationCount();
+  const currentPageTitle = resolvePageTitle(pathname);
+  const onNotificationsPage = pathname?.startsWith("/admin/notifications");
 
   async function logout() {
     await fetch("/api/v1/auth/logout", { method: "POST" });
@@ -102,6 +114,31 @@ export function AdminHeader() {
               ? "Offline"
               : "Checking…"}
         </div>
+
+        {/* Notification Bell */}
+        <button
+          type="button"
+          id="header-notification-bell"
+          onClick={() => router.push("/admin/notifications")}
+          aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+          title={
+            unreadCount > 0
+              ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`
+              : "Notifications"
+          }
+          className={`relative grid h-9 w-9 place-items-center rounded-xl border transition shadow-2xs ${
+            onNotificationsPage
+              ? "border-indigo-200 bg-indigo-50 text-indigo-600"
+              : "border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+          }`}
+        >
+          <Bell className="h-4 w-4" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-rose-500 px-1 text-[9.5px] font-bold text-white shadow-sm ring-2 ring-white">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
+        </button>
 
         {/* Admin Avatar & Logout */}
         <div className="flex items-center gap-2 pl-2 border-l border-slate-200">

@@ -252,6 +252,8 @@ export default function Admin() {
                 </div>
               ))}
             </div>
+          ) : data.newUsers.length === 0 ? (
+            <p className="py-6 text-center text-xs text-slate-400">No recent user registrations.</p>
           ) : (
             data.newUsers.map((user) => (
               <div key={user.id} className="flex items-center justify-between gap-3 py-3.5">
@@ -290,6 +292,8 @@ export default function Admin() {
                 </div>
               ))}
             </div>
+          ) : data.newJobs.length === 0 ? (
+            <p className="py-6 text-center text-xs text-slate-400">No recent job posts.</p>
           ) : (
             data.newJobs.map((job) => (
               <div key={job.id} className="flex items-center justify-between gap-3 py-3.5">
@@ -322,6 +326,10 @@ export default function Admin() {
                 </div>
               ))}
             </div>
+          ) : data.newDisputes.length === 0 ? (
+            <p className="py-6 text-center text-xs text-slate-400">
+              No active disputes or inquiries.
+            </p>
           ) : (
             data.newDisputes.map((dispute) => (
               <div key={dispute.id} className="flex items-center justify-between gap-3 py-3.5">

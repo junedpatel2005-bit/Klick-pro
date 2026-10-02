@@ -32,15 +32,23 @@ export default function AdminSupportPage() {
   const [category, setCategory] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
 
-  const load = () =>
+  const load = () => {
+    setLoading(true);
     void fetch("/api/v1/admin/data/support", { cache: "no-store" })
       .then((response) => response.json())
       .then((data) => {
         setFaqs(data.faqs ?? []);
         setContactRequests(data.contactRequests ?? []);
-      });
+      })
+      .catch(() => {
+        setFaqs([]);
+        setContactRequests([]);
+      })
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     load();
@@ -208,7 +216,13 @@ export default function AdminSupportPage() {
           </div>
 
           <div className="mt-5 space-y-3">
-            {faqs.length === 0 ? (
+            {loading ? (
+              <div className="space-y-3 py-1">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-24 animate-pulse rounded-xl bg-slate-100" />
+                ))}
+              </div>
+            ) : faqs.length === 0 ? (
               <p className="py-8 text-center text-sm text-slate-400">No FAQ entries yet.</p>
             ) : (
               faqs.map((faq) => (
@@ -261,12 +275,18 @@ export default function AdminSupportPage() {
             <h2 className="font-semibold text-slate-900">Contact requests</h2>
           </div>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-            {contactRequests.length} total
+            {loading ? "..." : `${contactRequests.length} total`}
           </span>
         </div>
 
         <div className="mt-5 space-y-3">
-          {contactRequests.length === 0 ? (
+          {loading ? (
+            <div className="space-y-3 py-1">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-24 animate-pulse rounded-xl bg-slate-100" />
+              ))}
+            </div>
+          ) : contactRequests.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">No contact messages yet.</p>
           ) : (
             contactRequests.map((item) => (
