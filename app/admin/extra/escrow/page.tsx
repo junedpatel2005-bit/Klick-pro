@@ -129,29 +129,45 @@ export default function AdminEscrowLedgerPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
           <p className="text-xs font-semibold text-slate-500">Total Escrow Secured</p>
-          <p className="mt-2 text-2xl font-bold text-indigo-700">
-            ₹{stats.totalEscrowHeld.toLocaleString()}
-          </p>
+          {loading ? (
+            <div className="mt-2 h-8 w-28 animate-pulse rounded-lg bg-slate-200" />
+          ) : (
+            <p className="mt-2 text-2xl font-bold text-indigo-700">
+              ₹{stats.totalEscrowHeld.toLocaleString()}
+            </p>
+          )}
           <p className="mt-1 text-[11px] text-slate-400">Held in platform escrow</p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
           <p className="text-xs font-semibold text-slate-500">Active Escrow Contracts</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{stats.activeContractsCount}</p>
+          {loading ? (
+            <div className="mt-2 h-8 w-16 animate-pulse rounded-lg bg-slate-200" />
+          ) : (
+            <p className="mt-2 text-2xl font-bold text-slate-900">{stats.activeContractsCount}</p>
+          )}
           <p className="mt-1 text-[11px] text-slate-400">Funded & awaiting delivery</p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
           <p className="text-xs font-semibold text-amber-700">Aging Funds (&gt;14 Days)</p>
-          <p className="mt-2 text-2xl font-bold text-amber-600">{stats.stuckContractsCount}</p>
+          {loading ? (
+            <div className="mt-2 h-8 w-16 animate-pulse rounded-lg bg-amber-100" />
+          ) : (
+            <p className="mt-2 text-2xl font-bold text-amber-600">{stats.stuckContractsCount}</p>
+          )}
           <p className="mt-1 text-[11px] text-slate-400">Needs review or release</p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
           <p className="text-xs font-semibold text-rose-700">Disputed Escrow At-Risk</p>
-          <p className="mt-2 text-2xl font-bold text-rose-600">
-            ₹{stats.totalDisputedEscrow.toLocaleString()}
-          </p>
+          {loading ? (
+            <div className="mt-2 h-8 w-24 animate-pulse rounded-lg bg-rose-100" />
+          ) : (
+            <p className="mt-2 text-2xl font-bold text-rose-600">
+              ₹{stats.totalDisputedEscrow.toLocaleString()}
+            </p>
+          )}
           <p className="mt-1 text-[11px] text-slate-400">Frozen in arbitration</p>
         </div>
       </div>
@@ -198,8 +214,24 @@ export default function AdminEscrowLedgerPage() {
       {/* Ledger Table */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
         {loading && records.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-500 animate-pulse">
-            Loading platform escrow ledger...
+          <div className="p-5 space-y-3">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between gap-4 py-3.5 px-2 border-b border-slate-100 animate-pulse"
+              >
+                <div className="space-y-1.5 flex-1">
+                  <div className="h-4 w-44 bg-slate-200 rounded" />
+                  <div className="h-3 w-20 bg-slate-100 rounded" />
+                </div>
+                <div className="h-4 w-28 bg-slate-200 rounded" />
+                <div className="h-4 w-28 bg-slate-200 rounded" />
+                <div className="h-4 w-16 bg-slate-200 rounded" />
+                <div className="h-4 w-20 bg-slate-100 rounded" />
+                <div className="h-6 w-24 bg-slate-200 rounded-full" />
+                <div className="h-6 w-16 bg-slate-100 rounded" />
+              </div>
+            ))}
           </div>
         ) : records.length === 0 ? (
           <div className="p-12 text-center">
