@@ -1,32 +1,38 @@
 import "server-only";
 import crypto from "node:crypto";
 
-const config = {
-  keyId: process.env.RAZORPAY_KEY_ID?.trim() ?? "",
-  keySecret: process.env.RAZORPAY_KEY_SECRET?.trim() ?? "",
-  webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET?.trim() ?? "",
-  routeEnabled: process.env.RAZORPAY_ROUTE_ENABLED === "true",
-};
+// Read on every call rather than caching in a module-level const. A long-lived
+// server process would otherwise keep serving whatever the values were at
+// import time, and changing one of them would silently require a restart.
+function config() {
+  return {
+    keyId: process.env.RAZORPAY_KEY_ID?.trim() ?? "",
+    keySecret: process.env.RAZORPAY_KEY_SECRET?.trim() ?? "",
+    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET?.trim() ?? "",
+    routeEnabled: process.env.RAZORPAY_ROUTE_ENABLED === "true",
+  };
+}
 
 // Credentials are the source of truth for Razorpay availability. Keep the
 // flag as an explicit opt-out so deployments that only define the credentials
 // do not incorrectly return "funding is not configured".
-const enabled = process.env.RAZORPAY_ENABLED !== "false";
+const enabled = () => process.env.RAZORPAY_ENABLED !== "false";
 
 export function razorpayConfig() {
-  return { enabled, keyId: config.keyId };
+  return { enabled: enabled(), keyId: config().keyId };
 }
 
 export function isRazorpayConfigured() {
-  return enabled && Boolean(config.keyId && config.keySecret);
+  const current = config();
+  return enabled() && Boolean(current.keyId && current.keySecret);
 }
 
 export function isRazorpayWebhookConfigured() {
-  return enabled && Boolean(config.webhookSecret);
+  return enabled() && Boolean(config().webhookSecret);
 }
 
 export function isRazorpayRouteConfigured() {
-  return isRazorpayConfigured() && config.routeEnabled;
+  return isRazorpayConfigured() && config().routeEnabled;
 }
 
 export async function createRazorpayPaymentTransfer(input: {
@@ -64,7 +70,45 @@ export async function createRazorpayPaymentTransfer(input: {
 }
 
 function authHeader() {
-  return `Basic ${Buffer.from(`${config.keyId}:${config.keySecret}`).toString("base64")}`;
+  const { keyId, keySecret } = config();
+  return `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
+}
+
+export type LinkedAccountCheck =
+  | { ok: true; accountId: string }
+  | { ok: false; reason: "not_configured" | "not_found" | "inactive" | "error" };
+
+/**
+ * Confirms a linked account really exists under this merchant's Razorpay key
+ * and is usable for payouts.
+ *
+ * A professional-supplied `acc_*` string is otherwise unverified, so an admin
+ * payout could be routed to an account the professional does not control. The
+ * fetch only succeeds for accounts created under our own API key, which is
+ * what makes this an ownership check rather than a format check.
+ */
+export async function verifyRazorpayLinkedAccount(accountId: string): Promise<LinkedAccountCheck> {
+  if (!isRazorpayConfigured()) return { ok: false, reason: "not_configured" };
+
+  const response = await fetch(
+    `https://api.razorpay.com/v1/accounts/${encodeURIComponent(accountId)}`,
+    { headers: { Authorization: authHeader() }, cache: "no-store" },
+  );
+
+  if (response.status === 404) return { ok: false, reason: "not_found" };
+  if (!response.ok) return { ok: false, reason: "error" };
+
+  const body = (await response.json().catch(() => null)) as {
+    id?: string;
+    status?: string;
+  } | null;
+
+  if (!body?.id) return { ok: false, reason: "not_found" };
+  // A linked account that is not activated yet cannot receive a transfer.
+  if (body.status && body.status !== "activated") {
+    return { ok: false, reason: "inactive" };
+  }
+  return { ok: true, accountId: body.id };
 }
 
 export async function createRazorpayOrder(input: {
@@ -109,7 +153,7 @@ export function verifyRazorpayPaymentSignature(
   signature: string,
 ) {
   const expected = crypto
-    .createHmac("sha256", config.keySecret)
+    .createHmac("sha256", config().keySecret)
     .update(`${orderId}|${paymentId}`)
     .digest("hex");
   const a = Buffer.from(expected, "utf8");
@@ -119,7 +163,10 @@ export function verifyRazorpayPaymentSignature(
 
 export function verifyRazorpayWebhookSignature(rawBody: string, signature: string | null) {
   if (!isRazorpayWebhookConfigured() || !signature) return false;
-  const expected = crypto.createHmac("sha256", config.webhookSecret).update(rawBody).digest("hex");
+  const expected = crypto
+    .createHmac("sha256", config().webhookSecret)
+    .update(rawBody)
+    .digest("hex");
   const a = Buffer.from(expected, "utf8");
   const b = Buffer.from(signature, "utf8");
   return a.length === b.length && crypto.timingSafeEqual(a, b);

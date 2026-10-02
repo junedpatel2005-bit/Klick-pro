@@ -111,28 +111,10 @@ export default function ClientEarnings() {
   async function runShortcutTopUp() {
     const amt = Number(shortcutAmount) || Number(topUpAmount);
     if (!amt || amt <= 0) return;
-    setActionBusy("shortcut");
     setWalletMessage("");
-    try {
-      const response = await fetch("/api/v1/wallet/deposit/quick", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ amount: amt }),
-      });
-      const data = await response.json().catch(() => null);
-      if (response.ok) {
-        setWalletMessage(`✓ ₹${amt.toLocaleString("en-IN")} added to your wallet successfully!`);
-        setShortcutAmount("");
-        setTopUpAmount("");
-        loadWallet();
-      } else {
-        setWalletMessage(data?.error ?? "Unable to complete quick deposit.");
-      }
-    } catch {
-      setWalletMessage("Request timed out. Please try again.");
-    } finally {
-      setActionBusy(null);
-    }
+    // Shortcuts must go through the same Razorpay checkout as a manual top-up.
+    // A shortcut is only a pre-filled amount, not a way to skip payment.
+    await startTopUp(amt);
   }
 
   function loadWallet() {
@@ -223,13 +205,15 @@ export default function ClientEarnings() {
       setActionBusy(null);
     }
   }
-  async function startTopUp() {
+  async function startTopUp(amountOverride?: number) {
+    const topUp = Number(amountOverride ?? topUpAmount);
+    if (!topUp || topUp <= 0) return;
     setActionBusy("topup");
     try {
       const response = await fetch("/api/v1/wallet/deposit/order", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ amount: Number(topUpAmount) }),
+        body: JSON.stringify({ amount: topUp }),
       });
       const result = await response.json().catch(() => null);
       if (!response.ok) {
@@ -281,9 +265,10 @@ export default function ClientEarnings() {
               const data = await verified.json().catch(() => null);
               if (verified.ok) {
                 setWalletMessage(
-                  `✓ ₹${(data?.amount ?? Number(topUpAmount)).toLocaleString("en-IN")} added to your wallet successfully!`,
+                  `✓ ₹${(data?.amount ?? topUp).toLocaleString("en-IN")} added to your wallet successfully!`,
                 );
                 setTopUpAmount("");
+                setShortcutAmount("");
                 loadWallet();
               } else {
                 setWalletMessage(data?.error ?? "Wallet funding verification failed.");

@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import { createRazorpayPaymentTransfer, isRazorpayRouteConfigured } from "@/lib/razorpay";
+import {
+  createRazorpayPaymentTransfer,
+  isRazorpayRouteConfigured,
+  verifyRazorpayLinkedAccount,
+} from "@/lib/razorpay";
 
 const bodySchema = z.object({
   withdrawalId: z.number().int().positive(),
@@ -56,30 +60,43 @@ export async function POST(request: NextRequest) {
       { error: "Professional has not saved a Razorpay Route linked account." },
       { status: 400 },
     );
-  // Claim the withdrawal so a concurrent request cannot pay it a second time.
-  // This must run only after every validation above, otherwise a rejected
-  // request would strand the row in PROCESSING.
-  const claimed = await db.projectWithdrawal.updateMany({
-    where: { id: withdrawal.id, status: "PENDING" },
-    data: { status: "PROCESSING" },
-  });
-  if (claimed.count !== 1)
-    return NextResponse.json({ error: "Withdrawal is already being processed." }, { status: 409 });
+  // Re-verify the destination immediately before sending money. A professional
+  // can change their saved account at any time, and a stale or unowned id must
+  // never be paid out.
+  const accountCheck = await verifyRazorpayLinkedAccount(professional.razorpayAccountId);
+  if (!accountCheck.ok) {
+    const message =
+      accountCheck.reason === "not_found"
+        ? "The professional's Razorpay linked account no longer exists on our account."
+        : accountCheck.reason === "inactive"
+          ? "The professional's Razorpay linked account is not activated."
+          : "Razorpay could not verify the payout account. Try again shortly.";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
+
+  // Phase 1: deduct the funds and claim the row, entirely BEFORE any money
+  // moves. Doing this first means an insufficient balance or a lost race fails
+  // while the Razorpay balance is still untouched.
   try {
-    const transferId = await createRazorpayPaymentTransfer({
-      paymentId: payment.razorpayPaymentId,
-      accountId: professional.razorpayAccountId,
-      amountRupees: withdrawal.amount,
-      referenceId: String(withdrawal.id),
-    });
-    const updated = await db.$transaction(async (tx) => {
-      const wallet = await tx.wallet.findUnique({ where: { userId: withdrawal.professionalId } });
+    await db.$transaction(async (tx) => {
+      const wallet = await tx.wallet.findUnique({
+        where: { userId: withdrawal.professionalId },
+      });
       if (
         !wallet ||
         wallet.balance < withdrawal.amount ||
         wallet.pendingBalance < withdrawal.amount
       )
         throw new Error("Professional wallet reservation is no longer available.");
+
+      const claimed = await tx.projectWithdrawal.updateMany({
+        where: { id: withdrawal.id, status: "PENDING" },
+        data: { status: "PROCESSING", paymentId: payment.id },
+      });
+      if (claimed.count !== 1) throw new Error("Withdrawal is already being processed.");
+
+      // pendingBalance was reserved when the withdrawal was requested, so the
+      // reservation is consumed here; balance is what actually leaves.
       await tx.wallet.update({
         where: { id: wallet.id },
         data: {
@@ -87,30 +104,52 @@ export async function POST(request: NextRequest) {
           pendingBalance: { decrement: withdrawal.amount },
         },
       });
-      return tx.projectWithdrawal.update({
-        where: { id: withdrawal.id },
-        data: {
-          paymentId: payment.id,
-          providerTransferId: transferId,
-          status: "COMPLETED",
-          processedAt: new Date(),
-          failureReason: null,
-        },
-      });
     });
-    return NextResponse.json({ withdrawal: updated });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to reserve payout funds.";
+    return NextResponse.json({ error: message }, { status: 409 });
+  }
+
+  // Phase 2: move the money. The funds are already deducted, so a failure here
+  // has to put them back.
+  let transferId: string;
+  try {
+    const created = await createRazorpayPaymentTransfer({
+      paymentId: payment.razorpayPaymentId,
+      accountId: accountCheck.accountId,
+      amountRupees: withdrawal.amount,
+      referenceId: String(withdrawal.id),
+    });
+    // Null means Route payouts are not configured, which is already rejected
+    // above. Treat it as a failure rather than recording a null transfer id.
+    if (!created) throw new Error("Razorpay transfer could not be created.");
+    transferId = created;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Razorpay transfer failed.";
     await db.$transaction(async (tx) => {
+      await tx.wallet.update({
+        where: { userId: withdrawal.professionalId },
+        data: { balance: { increment: withdrawal.amount } },
+      });
       await tx.projectWithdrawal.update({
         where: { id: withdrawal.id },
-        data: { paymentId: payment.id, status: "FAILED", failureReason: message },
-      });
-      await tx.wallet.updateMany({
-        where: { userId: withdrawal.professionalId, pendingBalance: { gte: withdrawal.amount } },
-        data: { pendingBalance: { decrement: withdrawal.amount } },
+        data: { status: "FAILED", failureReason: message },
       });
     });
     return NextResponse.json({ error: message }, { status: 502 });
   }
+
+  // Phase 3: record the transfer. If this write fails the row stays PROCESSING
+  // for reconciliation, which is recoverable, rather than being marked FAILED
+  // after the money has already left.
+  const updated = await db.projectWithdrawal.update({
+    where: { id: withdrawal.id },
+    data: {
+      providerTransferId: transferId,
+      status: "COMPLETED",
+      processedAt: new Date(),
+      failureReason: null,
+    },
+  });
+  return NextResponse.json({ withdrawal: updated });
 }

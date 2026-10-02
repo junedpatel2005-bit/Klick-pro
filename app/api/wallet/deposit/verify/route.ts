@@ -2,11 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import {
-  isRazorpayConfigured,
-  razorpayConfig,
-  verifyRazorpayPaymentSignature,
-} from "@/lib/razorpay";
+import { isRazorpayConfigured, verifyRazorpayPaymentSignature } from "@/lib/razorpay";
 import { creditWalletFromVerifiedProvider } from "@/lib/wallet-ledger";
 
 const schema = z.object({
@@ -32,15 +28,12 @@ export async function POST(request: NextRequest) {
   if (!parsed.success)
     return NextResponse.json({ error: "Payment verification failed." }, { status: 400 });
 
-  const keyId = razorpayConfig().keyId;
-  const isTestMode = keyId.startsWith("rzp_test_");
-  const isSimulatedTest =
-    isTestMode &&
-    parsed.data.razorpayPaymentId.startsWith("pay_simulated_") &&
-    parsed.data.razorpaySignature === "sandbox_test_verified";
-
+  // There is no simulated/sandbox path. A previous build accepted any
+  // `pay_simulated_*` id with the literal signature "sandbox_test_verified"
+  // whenever the key was a test key, which let anyone mint wallet balance in
+  // every test-key environment including Vercel previews. Nothing in the app
+  // used it, so payment must always be proven by a real Razorpay signature.
   if (
-    !isSimulatedTest &&
     !verifyRazorpayPaymentSignature(
       parsed.data.razorpayOrderId,
       parsed.data.razorpayPaymentId,
@@ -56,13 +49,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Wallet top-up not found." }, { status: 404 });
   if (transaction.status === "COMPLETED")
     return NextResponse.json({ ok: true, alreadyProcessed: true });
-  await db.$transaction((tx) =>
-    creditWalletFromVerifiedProvider(tx, {
-      userId: session.userId,
-      amount: transaction.amount,
-      providerReference: parsed.data.razorpayOrderId,
-      providerPaymentId: parsed.data.razorpayPaymentId,
-    }),
-  );
+  try {
+    await db.$transaction((tx) =>
+      creditWalletFromVerifiedProvider(tx, {
+        userId: session.userId,
+        amount: transaction.amount,
+        providerReference: parsed.data.razorpayOrderId,
+        providerPaymentId: parsed.data.razorpayPaymentId,
+      }),
+    );
+  } catch {
+    // The top-up was claimed by a concurrent request, so the balance is already
+    // correct. Surface that as success rather than a 500.
+    return NextResponse.json({ ok: true, alreadyProcessed: true });
+  }
   return NextResponse.json({ ok: true, amount: transaction.amount });
 }

@@ -41,6 +41,11 @@ export async function GET(request: NextRequest) {
         where: {
           userId: session.userId,
           readAt: null,
+          // Must stay a subset of what /api/portal/notifications lists, or the
+          // sidebar badge reports items the notifications page never shows.
+          // That endpoint also filters clearedAt and hides outbound
+          // PROPOSAL_SENT / PROPOSAL_UPDATE_SENT rows.
+          clearedAt: null,
           type: {
             notIn: [
               "NEW_JOB",
@@ -48,6 +53,8 @@ export async function GET(request: NextRequest) {
               "JOB_POSTED",
               "PROFESSIONAL_HIRED",
               "HIRE_REQUEST_SENT",
+              "PROPOSAL_SENT",
+              "PROPOSAL_UPDATE_SENT",
             ],
           },
           NOT: [{ type: { startsWith: "HIRE_" } }],
