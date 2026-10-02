@@ -20,8 +20,12 @@ async function runRazorpayFullTest() {
   const isTestKey = keyId.startsWith("rzp_test_");
   console.log(`  ✓ Key ID: ${keyId.slice(0, 12)}... (${isTestKey ? "TEST MODE" : "LIVE MODE"})`);
   console.log(`  ✓ Key Secret: ${keySecret.slice(0, 4)}...[REDACTED] (${keySecret.length} chars)`);
-  console.log(`  ✓ Webhook Secret: ${webhookSecret ? "Configured (" + webhookSecret.slice(0, 4) + "...)" : "Not Configured"}`);
-  console.log(`  ✓ Razorpay Route Payouts: ${routeEnabled ? "Enabled" : "Disabled (Manual/Standard payout mode)"}`);
+  console.log(
+    `  ✓ Webhook Secret: ${webhookSecret ? "Configured (" + webhookSecret.slice(0, 4) + "...)" : "Not Configured"}`,
+  );
+  console.log(
+    `  ✓ Razorpay Route Payouts: ${routeEnabled ? "Enabled" : "Disabled (Manual/Standard payout mode)"}`,
+  );
 
   const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
 
@@ -84,7 +88,9 @@ async function runRazorpayFullTest() {
   }
 
   const fetchedOrder = (await fetchOrderRes.json()) as { id: string; status: string };
-  console.log(`  ✓ Order lookup verified: ID ${fetchedOrder.id} matches status "${fetchedOrder.status}"`);
+  console.log(
+    `  ✓ Order lookup verified: ID ${fetchedOrder.id} matches status "${fetchedOrder.status}"`,
+  );
 
   // Step 4: Cryptographic Payment Signature Math
   console.log("\n[4/6] Verifying HMAC-SHA256 Payment Signature Algorithm...");
@@ -97,12 +103,17 @@ async function runRazorpayFullTest() {
   // Validate timingSafeEqual logic
   const validBufferA = Buffer.from(validSignature, "utf8");
   const validBufferB = Buffer.from(validSignature, "utf8");
-  const isMatch = validBufferA.length === validBufferB.length && crypto.timingSafeEqual(validBufferA, validBufferB);
+  const isMatch =
+    validBufferA.length === validBufferB.length &&
+    crypto.timingSafeEqual(validBufferA, validBufferB);
 
   // Validate tamper rejection
   const tamperedSig = validSignature.slice(0, -4) + "0000";
   const tamperBuffer = Buffer.from(tamperedSig, "utf8");
-  const isTamperDetected = !(validBufferA.length === tamperBuffer.length && crypto.timingSafeEqual(validBufferA, tamperBuffer));
+  const isTamperDetected = !(
+    validBufferA.length === tamperBuffer.length &&
+    crypto.timingSafeEqual(validBufferA, tamperBuffer)
+  );
 
   if (isMatch && isTamperDetected) {
     console.log("  ✓ Authentic signature verified correctly.");
@@ -122,27 +133,36 @@ async function runRazorpayFullTest() {
         payment: { entity: { id: mockPaymentId, order_id: orderData.id, amount: 10000 } },
       },
     });
-    const webhookSig = crypto
-      .createHmac("sha256", webhookSecret)
-      .update(mockPayload)
-      .digest("hex");
+    const webhookSig = crypto.createHmac("sha256", webhookSecret).update(mockPayload).digest("hex");
     const sigA = Buffer.from(webhookSig, "utf8");
     const sigB = Buffer.from(webhookSig, "utf8");
     const webhookOk = sigA.length === sigB.length && crypto.timingSafeEqual(sigA, sigB);
-    console.log(`  ✓ Webhook HMAC signature generation & verification: ${webhookOk ? "SUCCESS" : "FAIL"}`);
+    console.log(
+      `  ✓ Webhook HMAC signature generation & verification: ${webhookOk ? "SUCCESS" : "FAIL"}`,
+    );
   } else {
     console.log("  ⚠ Skipped webhook signature calculation (RAZORPAY_WEBHOOK_SECRET is empty).");
   }
 
   // Step 6: Application Checkout Config Endpoint
-  console.log("\n[6/6] Checking Local Application Checkout Config API (/api/payments/razorpay/config)...");
+  console.log(
+    "\n[6/6] Checking Local Application Checkout Config API (/api/payments/razorpay/config)...",
+  );
   try {
-    let appConfigRes = await fetch("http://[::1]:3000/api/payments/razorpay/config").catch(() => null);
+    let appConfigRes = await fetch("http://[::1]:3000/api/payments/razorpay/config").catch(
+      () => null,
+    );
     if (!appConfigRes) {
-      appConfigRes = await fetch("http://localhost:3000/api/payments/razorpay/config").catch(() => null);
+      appConfigRes = await fetch("http://localhost:3000/api/payments/razorpay/config").catch(
+        () => null,
+      );
     }
     if (appConfigRes && appConfigRes.ok) {
-      const appConfig = (await appConfigRes.json()) as { enabled: boolean; keyId: string; currency?: string };
+      const appConfig = (await appConfigRes.json()) as {
+        enabled: boolean;
+        keyId: string;
+        currency?: string;
+      };
       console.log(`  ✓ Application Endpoint HTTP ${appConfigRes.status}`);
       console.log(`  ✓ Checkout Enabled: ${appConfig.enabled}`);
       console.log(`  ✓ Public Client KeyId: ${appConfig.keyId}`);
@@ -151,7 +171,9 @@ async function runRazorpayFullTest() {
       console.log(`  ⚠ Server responded with HTTP ${appConfigRes?.status ?? "unknown"}`);
     }
   } catch (err: unknown) {
-    console.log(`  ⚠ Local server check skipped (${err instanceof Error ? err.message : String(err)})`);
+    console.log(
+      `  ⚠ Local server check skipped (${err instanceof Error ? err.message : String(err)})`,
+    );
   }
 
   console.log("\n=================================================");
