@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import type { MarketplaceCategory } from "@/lib/types/marketplace";
 import { getAllStates, getDistrictsByState } from "@/lib/india-locations";
 
@@ -356,6 +357,10 @@ function ProfessionalJobsContent() {
   useEffect(() => {
     void loadJobs();
   }, [loadJobs]);
+
+  useRealtimeRefresh(["servio:proposal", "servio:project-update", "servio:notification"], () => {
+    void loadJobs();
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

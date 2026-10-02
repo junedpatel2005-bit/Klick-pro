@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import { MessageSquareText, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -44,6 +45,11 @@ export default function AdminSupportPage() {
   useEffect(() => {
     load();
   }, []);
+
+  useRealtimeRefresh(
+    ["servio:notification", "servio:admin-overview-update", "servio:settings-update"],
+    load,
+  );
 
   async function addFaq(event: React.FormEvent) {
     event.preventDefault();

@@ -7,6 +7,8 @@ import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
+import { ImpersonationModeBanner } from "@/components/ImpersonationModeBanner";
+import { SitewideAnnouncementBanner } from "@/components/SitewideAnnouncementBanner";
 import {
   AppMobileNavigation,
   AppSidebar,
@@ -109,6 +111,8 @@ export function PortalShell({
           sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-64"
         }`}
       >
+        <ImpersonationModeBanner />
+        <SitewideAnnouncementBanner />
         <AppHeader role={activeUser?.role ?? (isProfessional ? "PROFESSIONAL" : "CLIENT")} />
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           {pathname !== "/dashboard" && pathname !== "/professional/dashboard" && (

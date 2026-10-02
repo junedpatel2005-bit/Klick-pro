@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageActionLoading } from "@/components/PageActionLoading";
 import {
@@ -237,6 +238,16 @@ export default function AdminFinancePage() {
   useEffect(() => {
     void fetchFinance();
   }, []);
+
+  useRealtimeRefresh(
+    [
+      "servio:admin-operations-update",
+      "servio:admin-overview-update",
+      "servio:project-update",
+      "servio:notification",
+    ],
+    () => void fetchFinance(),
+  );
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);

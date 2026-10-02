@@ -17,7 +17,9 @@ import {
   Trash2,
   UsersRound,
   XCircle,
+  LogIn,
 } from "lucide-react";
+import { ENABLE_ADMIN_EXTRA_SECTION } from "@/config/extra-features";
 import { Button } from "@/components/ui/button";
 
 type User = {
@@ -47,6 +49,7 @@ function UserGroup({
   loading = false,
   onToggle,
   onDelete,
+  onImpersonate,
 }: {
   title: string;
   users: User[];
@@ -54,6 +57,7 @@ function UserGroup({
   loading?: boolean;
   onToggle: (user: User) => void;
   onDelete: (user: User) => void;
+  onImpersonate?: (user: User) => void;
 }) {
   const router = useRouter();
   const Icon = kind === "professional" ? ShieldCheck : UsersRound;
@@ -227,6 +231,22 @@ function UserGroup({
                   Message
                 </Link>
 
+                {/* Support View / Impersonate */}
+                {ENABLE_ADMIN_EXTRA_SECTION && user.isActive && (
+                  <Button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onImpersonate?.(user);
+                    }}
+                    variant="outline"
+                    className="border-amber-200 bg-amber-50/70 text-amber-800 hover:bg-amber-100 hover:text-amber-900 shadow-2xs text-xs font-semibold"
+                    title={`Support View: Inspect portal as ${user.firstName}`}
+                  >
+                    <LogIn className="mr-1.5 h-3.5 w-3.5 text-amber-700" />
+                    View as User
+                  </Button>
+                )}
+
                 {/* Shortcut to disable/enable user */}
                 <Button
                   onClick={(event) => {
@@ -394,6 +414,21 @@ export default function AdminUsersPage() {
     if (!response.ok) return setMessage(data.error ?? "Unable to delete account.");
     setUsers((current) => current.filter((item) => item.id !== user.id));
     setMessage(`${user.firstName} ${user.lastName}'s account was deleted.`);
+  };
+
+  const handleImpersonate = async (user: User) => {
+    try {
+      const response = await fetch("/api/admin/extra/impersonate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      const data = await response.json();
+      if (!response.ok) return setMessage(data.error ?? "Unable to impersonate user.");
+      window.location.href = data.redirectUrl || "/dashboard";
+    } catch {
+      setMessage("Impersonation request failed.");
+    }
   };
 
   const resetFilters = () => {
@@ -568,6 +603,7 @@ export default function AdminUsersPage() {
             loading={loading}
             onToggle={(user) => setConfirmAction({ user, kind: "toggle" })}
             onDelete={(user) => setConfirmAction({ user, kind: "delete" })}
+            onImpersonate={handleImpersonate}
           />
         ) : (
           <UserGroup
@@ -578,6 +614,7 @@ export default function AdminUsersPage() {
             loading={loading}
             onToggle={(user) => setConfirmAction({ user, kind: "toggle" })}
             onDelete={(user) => setConfirmAction({ user, kind: "delete" })}
+            onImpersonate={handleImpersonate}
           />
         )}
       </div>

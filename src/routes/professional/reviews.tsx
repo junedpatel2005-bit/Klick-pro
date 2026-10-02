@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import {
   Star,
   Search,
@@ -149,6 +150,11 @@ export default function ProfessionalReviews() {
   useEffect(() => {
     void fetchReviews();
   }, []);
+
+  useRealtimeRefresh(
+    ["servio:project-update", "servio:notification", "servio:message"],
+    () => void fetchReviews(),
+  );
 
   const receivedReviews = useMemo(
     () => data?.receivedReviews ?? data?.reviews ?? [],

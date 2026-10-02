@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
+import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import {
   AlertCircle,
   ArrowDownLeft,
@@ -172,6 +173,15 @@ export default function ClientEarnings() {
       .finally(() => setPaymentsLoading(false));
     loadWallet();
   }, []);
+  useRealtimeRefresh(["servio:project-update", "servio:notification", "servio:proposal"], () => {
+    setPaymentsLoading(true);
+    void fetch("/api/v1/portal/earnings", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setPayments)
+      .catch(() => setPayments([]))
+      .finally(() => setPaymentsLoading(false));
+    void loadWallet();
+  });
   async function requestWithdrawal() {
     const destination =
       withdrawMethod === "BANK"

@@ -16,7 +16,11 @@ const contentSecurityPolicy = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'self'",
-  "upgrade-insecure-requests",
+  // Dev runs on plain http://localhost:3000. This directive rewrites ws:// to
+  // wss://, so the browser attempts a TLS handshake against the HTTP dev
+  // server and Socket.IO fails with "websocket error". Production is served
+  // over TLS, so keep the directive there only.
+  ...(isDevelopment ? [] : ["upgrade-insecure-requests"]),
 ].join("; ");
 
 const nextConfig: NextConfig = {

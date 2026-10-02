@@ -21,7 +21,12 @@ import {
   Wrench,
   Sliders,
   Smartphone,
+  Star,
+  Megaphone,
+  History,
+  Landmark,
 } from "lucide-react";
+import { ENABLE_ADMIN_EXTRA_SECTION } from "@/config/extra-features";
 
 const linkGroups = [
   {
@@ -63,6 +68,19 @@ const linkGroups = [
       { href: "/admin/messages", label: "Messages", icon: MessageSquare, badge: "messages" },
     ],
   },
+  ...(ENABLE_ADMIN_EXTRA_SECTION
+    ? [
+        {
+          group: "EXTRA",
+          items: [
+            { href: "/admin/extra/reviews", label: "Review moderation", icon: Star },
+            { href: "/admin/extra/announcements", label: "Sitewide banners", icon: Megaphone },
+            { href: "/admin/extra/audit-logs", label: "Audit logs", icon: History },
+            { href: "/admin/extra/escrow", label: "Escrow ledger", icon: Landmark },
+          ],
+        },
+      ]
+    : []),
 ];
 
 import { useAdminSidebar } from "@/components/AdminSidebarContext";

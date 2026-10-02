@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import {
   FileText,
   Search,
@@ -139,6 +140,8 @@ function ProjectsReport() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useRealtimeRefresh(["servio:project-update", "servio:proposal", "servio:notification"], loadData);
 
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
@@ -457,6 +460,8 @@ function EarningsReport() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useRealtimeRefresh(["servio:project-update", "servio:notification"], loadData);
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {

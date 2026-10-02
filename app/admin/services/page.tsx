@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import {
   Boxes,
   Building2,
@@ -158,6 +159,11 @@ export default function AdminServicesPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  useRealtimeRefresh(
+    ["servio:notification", "servio:admin-overview-update", "servio:settings-update"],
+    () => void load(),
+  );
 
   // 1. Level 1: Parent Domains (parentId === null)
   const parents = useMemo(() => services.filter((item) => item.parentId === null), [services]);

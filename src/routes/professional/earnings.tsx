@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
+import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import {
   AlertCircle,
   ArrowDownLeft,
@@ -120,6 +121,7 @@ export default function Earnings() {
       .catch(() => setRazorpayAccountId(""));
   };
   useEffect(load, []);
+  useRealtimeRefresh(["servio:project-update", "servio:notification", "servio:proposal"], load);
   const thisMonth = useMemo(
     () =>
       items

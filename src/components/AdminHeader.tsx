@@ -20,6 +20,10 @@ const pageTitles: Record<string, string> = {
   "/admin/messages": "Admin Communications",
   "/admin/templates": "Email Template Library",
   "/admin/settings": "Platform Configuration & Settings",
+  "/admin/extra/reviews": "Review Moderation",
+  "/admin/extra/announcements": "Sitewide Banners",
+  "/admin/extra/audit-logs": "Audit Trail & Logs",
+  "/admin/extra/escrow": "Escrow Ledger",
 };
 
 export function AdminHeader() {
