@@ -4,7 +4,6 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "predev": "node -e \"try{require('fs').rmSync('.next/dev/types/routes.d.ts')}catch{}\"",
     "dev": "node server.mjs",
     "dev:webpack": "cross-env NEXT_WEBPACK=1 node server.mjs",
     "build": "prisma migrate deploy && next build",
