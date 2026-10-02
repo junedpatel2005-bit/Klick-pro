@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
         where: { id: { in: trackingIds } },
         include: {
           job: {
-            select: { id: true, title: true, budgetMin: true, budgetMax: true },
+            select: { id: true, title: true, category: true, budgetMin: true, budgetMax: true },
           },
         },
       }),
@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
         trackingId: r.trackingId,
         jobId: tracking?.job.id ?? null,
         jobTitle: tracking?.job.title ?? `Project #${r.trackingId}`,
+        jobCategory: tracking?.job.category ?? null,
         jobBudget: tracking?.job.budgetMax ?? tracking?.job.budgetMin ?? 0,
         clientId: r.clientId,
         clientName: client ? `${client.firstName} ${client.lastName}`.trim() : "Unknown Client",

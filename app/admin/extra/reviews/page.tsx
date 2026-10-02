@@ -15,6 +15,7 @@ import {
   RefreshCw,
   User,
   ShieldAlert,
+  Briefcase,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ type ReviewItem = {
   trackingId: number;
   jobId: number | null;
   jobTitle: string;
+  jobCategory?: string | null;
   jobBudget: number;
   clientId: number;
   clientName: string;
@@ -179,30 +181,46 @@ export default function ReviewModerationPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
           <p className="text-xs font-semibold text-slate-500">Total Reviews</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{stats.total}</p>
+          {loading ? (
+            <div className="mt-2 h-8 w-20 animate-pulse rounded-lg bg-slate-200" />
+          ) : (
+            <p className="mt-2 text-2xl font-bold text-slate-900">{stats.total}</p>
+          )}
           <p className="mt-1 text-[11px] text-slate-400">Published feedback</p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
           <p className="text-xs font-semibold text-slate-500">Average Platform Score</p>
-          <div className="mt-2 flex items-center gap-1.5">
-            <span className="text-2xl font-bold text-amber-600">
-              {stats.averageRating || "0.0"}
-            </span>
-            <Star className="h-5 w-5 fill-amber-500 text-amber-500" />
-          </div>
+          {loading ? (
+            <div className="mt-2 h-8 w-24 animate-pulse rounded-lg bg-amber-100" />
+          ) : (
+            <div className="mt-2 flex items-center gap-1.5">
+              <span className="text-2xl font-bold text-amber-600">
+                {stats.averageRating || "0.0"}
+              </span>
+              <Star className="h-5 w-5 fill-amber-500 text-amber-500" />
+            </div>
+          )}
           <p className="mt-1 text-[11px] text-slate-400">Out of 5.0 stars</p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
           <p className="text-xs font-semibold text-emerald-700">5-Star Feedback</p>
-          <p className="mt-2 text-2xl font-bold text-emerald-600">{stats.fiveStar}</p>
+          {loading ? (
+            <div className="mt-2 h-8 w-16 animate-pulse rounded-lg bg-emerald-100" />
+          ) : (
+            <p className="mt-2 text-2xl font-bold text-emerald-600">{stats.fiveStar}</p>
+          )}
           <p className="mt-1 text-[11px] text-slate-400">Top quality ratings</p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
           <p className="text-xs font-semibold text-rose-700">1-Star / Flagged</p>
-          <p className="mt-2 text-2xl font-bold text-rose-600">{stats.oneStar}</p>
+          {loading ? (
+            <div className="mt-2 h-8 w-16 animate-pulse rounded-lg bg-rose-100" />
+          ) : (
+            <p className="mt-2 text-2xl font-bold text-rose-600">{stats.oneStar}</p>
+          )}
           <p className="mt-1 text-[11px] text-slate-400">Disputed or low score</p>
         </div>
       </div>
@@ -262,13 +280,22 @@ export default function ReviewModerationPage() {
             >
               {/* Review Card Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm text-slate-900">{r.jobTitle}</span>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                    <Briefcase className="h-3.5 w-3.5 text-indigo-600" />
+                    Job Name:
+                  </span>
+                  <span className="font-bold text-sm text-slate-900">{r.jobTitle}</span>
+                  {r.jobCategory && (
+                    <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 border border-indigo-200">
+                      {r.jobCategory}
+                    </span>
+                  )}
                   {r.jobId && (
                     <Link
                       href={`/job/${r.jobId}`}
                       target="_blank"
-                      className="text-indigo-600 hover:text-indigo-700 flex items-center gap-1 text-xs font-semibold"
+                      className="text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 text-xs font-semibold bg-white px-2 py-0.5 rounded-md border border-slate-200 shadow-2xs hover:border-indigo-300"
                     >
                       <ExternalLink className="h-3 w-3" /> Job #{r.jobId}
                     </Link>

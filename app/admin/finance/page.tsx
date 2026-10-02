@@ -219,6 +219,10 @@ export default function AdminFinancePage() {
     variant?: "default" | "destructive";
     action: () => Promise<void>;
   } | null>(null);
+  const [razorpayChoice, setRazorpayChoice] = useState<{
+    withdrawal: Withdrawal;
+    candidates: EnrichedPayment[];
+  } | null>(null);
 
   const fetchFinance = async () => {
     setLoading(true);
@@ -540,6 +544,59 @@ export default function AdminFinancePage() {
           }
         } catch (err) {
           toast.error(err instanceof Error ? err.message : "Payout failed.");
+        } finally {
+          setBusyId(null);
+        }
+      },
+    });
+  }
+
+  // Razorpay Route moves the money out from one specific captured payment, so
+  // the admin has to choose which settlement funds this withdrawal.
+  function eligiblePaymentsFor(withdrawal: Withdrawal) {
+    return (data?.payments ?? []).filter(
+      (payment) =>
+        payment.professionalId === withdrawal.professionalId &&
+        payment.status === "COMPLETED" &&
+        Boolean(payment.razorpayPaymentId),
+    );
+  }
+
+  function handlePayViaRazorpay(withdrawal: Withdrawal) {
+    const candidates = eligiblePaymentsFor(withdrawal);
+    if (candidates.length === 0) {
+      toast.error(
+        "No captured Razorpay payment is available for this professional. Approve manually or capture a payment first.",
+      );
+      return;
+    }
+    const first = candidates[0];
+    if (candidates.length === 1 && first) {
+      executeRazorpayPayout(withdrawal, first);
+      return;
+    }
+    setRazorpayChoice({ withdrawal, candidates });
+  }
+
+  function executeRazorpayPayout(withdrawal: Withdrawal, payment: EnrichedPayment) {
+    setConfirmAction({
+      title: "Send Payout via Razorpay?",
+      description: `This transfers ₹${withdrawal.amount.toLocaleString("en-IN")} to the professional's linked Razorpay account from payment #${payment.id}. This cannot be undone.`,
+      confirmLabel: "Send Payout",
+      action: async () => {
+        setBusyId(withdrawal.id);
+        try {
+          const response = await fetch("/api/admin/finance/payouts", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ withdrawalId: withdrawal.id, paymentId: payment.id }),
+          });
+          const res = await response.json().catch(() => null);
+          if (!response.ok) throw new Error(res?.error ?? "Razorpay payout failed.");
+          toast.success(`Withdrawal #${withdrawal.id} paid out via Razorpay.`);
+          await fetchFinance();
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Razorpay payout failed.");
         } finally {
           setBusyId(null);
         }
@@ -1012,7 +1069,21 @@ export default function AdminFinancePage() {
                             <button
                               type="button"
                               disabled={busyId === item.refId}
+                              onClick={() =>
+                                handlePayViaRazorpay(
+                                  (data?.withdrawals ?? []).find((w) => w.id === item.refId)!,
+                                )
+                              }
+                              title="Send this payout to the professional's linked Razorpay account"
+                              className="rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-indigo-500 transition disabled:opacity-50"
+                            >
+                              Pay via Razorpay
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busyId === item.refId}
                               onClick={() => handleWithdrawalStatus(item.refId, "COMPLETED")}
+                              title="Mark completed without sending money through Razorpay"
                               className="rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-emerald-500 transition disabled:opacity-50"
                             >
                               Approve
@@ -1092,6 +1163,63 @@ export default function AdminFinancePage() {
           }
         }}
       />
+
+      {/* Razorpay Route moves money from one captured payment, so when a
+          professional has several the admin picks the settlement to draw from. */}
+      {razorpayChoice && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Choose payout source"
+        >
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-sm font-bold text-slate-800">
+              Fund this payout from which payment?
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">
+              ₹{razorpayChoice.withdrawal.amount.toLocaleString("en-IN")} for withdrawal #
+              {razorpayChoice.withdrawal.id}. Razorpay moves the money out of the selected captured
+              payment.
+            </p>
+            <ul className="mt-4 max-h-72 space-y-2 overflow-y-auto">
+              {razorpayChoice.candidates.map((payment) => (
+                <li key={payment.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const { withdrawal } = razorpayChoice;
+                      setRazorpayChoice(null);
+                      executeRazorpayPayout(withdrawal, payment);
+                    }}
+                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5 text-left hover:border-indigo-300 hover:bg-indigo-50/50 transition"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-semibold text-slate-800">
+                        Payment #{payment.id} ·{" "}
+                        {getUserDisplayName(payment.professional, "Professional")}
+                      </span>
+                      <span className="block truncate font-mono text-[11px] text-slate-500">
+                        {payment.razorpayPaymentId}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs font-bold text-slate-700">
+                      ₹{payment.amount.toLocaleString("en-IN")}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={() => setRazorpayChoice(null)}
+              className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <PageActionLoading
         active={busyId !== null}

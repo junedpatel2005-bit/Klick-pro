@@ -139,28 +139,44 @@ export default function AdminAuditLogsPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
           <p className="text-xs font-semibold text-slate-500">Total Action Records</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{stats.total}</p>
+          {loading ? (
+            <div className="mt-2 h-8 w-20 animate-pulse rounded-lg bg-slate-200" />
+          ) : (
+            <p className="mt-2 text-2xl font-bold text-slate-900">{stats.total}</p>
+          )}
           <p className="mt-1 text-[11px] text-slate-400">Captured events</p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
           <p className="text-xs font-semibold text-slate-500">Active Admin Actors</p>
-          <p className="mt-2 text-2xl font-bold text-indigo-600">{stats.uniqueActors}</p>
+          {loading ? (
+            <div className="mt-2 h-8 w-16 animate-pulse rounded-lg bg-indigo-100" />
+          ) : (
+            <p className="mt-2 text-2xl font-bold text-indigo-600">{stats.uniqueActors}</p>
+          )}
           <p className="mt-1 text-[11px] text-slate-400">Staff accounts</p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
           <p className="text-xs font-semibold text-slate-500">Matching Events</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{logs.length}</p>
+          {loading ? (
+            <div className="mt-2 h-8 w-16 animate-pulse rounded-lg bg-slate-200" />
+          ) : (
+            <p className="mt-2 text-2xl font-bold text-slate-900">{logs.length}</p>
+          )}
           <p className="mt-1 text-[11px] text-slate-400">In current filter</p>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
           <p className="text-xs font-semibold text-slate-500">Log Integrity</p>
-          <div className="mt-2 flex items-center gap-1.5 text-emerald-600 font-bold text-lg">
-            <ShieldCheck className="h-5 w-5" />
-            Verified
-          </div>
+          {loading ? (
+            <div className="mt-2 h-8 w-28 animate-pulse rounded-lg bg-emerald-100" />
+          ) : (
+            <div className="mt-2 flex items-center gap-1.5 text-emerald-600 font-bold text-lg">
+              <ShieldCheck className="h-5 w-5" />
+              Verified
+            </div>
+          )}
           <p className="mt-1 text-[11px] text-slate-400">PostgreSQL journal</p>
         </div>
       </div>
