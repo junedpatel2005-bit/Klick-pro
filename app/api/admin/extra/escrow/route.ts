@@ -26,74 +26,88 @@ export async function GET(request: NextRequest) {
   const query = searchParams.get("query")?.toLowerCase() || "";
 
   try {
-    const payments = await db.payment.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 150,
-      include: {
-        client: {
-          select: { id: true, firstName: true, lastName: true, email: true },
+    // Query all original milestones and open disputes
+    const [milestones, openDisputes] = await Promise.all([
+      db.projectMilestone.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 150,
+        include: {
+          tracking: {
+            include: {
+              job: {
+                select: { id: true, title: true },
+              },
+            },
+          },
+          payment: {
+            select: { id: true, status: true, amount: true, createdAt: true },
+          },
         },
-        professional: {
-          select: { id: true, firstName: true, lastName: true, email: true },
-        },
-        job: {
-          select: { id: true, title: true },
-        },
-        milestone: {
-          select: { id: true, title: true, status: true },
-        },
-      },
+      }),
+      db.projectDispute.findMany({
+        where: { status: "OPEN" },
+        select: { id: true, trackingId: true, milestoneId: true },
+      }),
+    ]);
+
+    const userIds = Array.from(new Set(milestones.flatMap((m) => [m.clientId, m.professionalId])));
+
+    const users = await db.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, firstName: true, lastName: true, email: true },
     });
-
-    const trackingIds = payments
-      .map((p) => p.projectTrackingId)
-      .filter((id): id is number => typeof id === "number");
-
-    const disputes =
-      trackingIds.length > 0
-        ? await db.projectDispute.findMany({
-            where: { trackingId: { in: trackingIds }, status: "OPEN" },
-            select: { id: true, trackingId: true, status: true },
-          })
-        : [];
-    const disputeMap = new Map(disputes.map((d) => [d.trackingId, d]));
+    const userMap = new Map(users.map((u) => [u.id, u]));
 
     const now = Date.now();
 
-    const records = payments.map((p) => {
-      const ageDays = Math.floor((now - new Date(p.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-      const dispute = p.projectTrackingId ? disputeMap.get(p.projectTrackingId) : null;
-      const isDisputed = Boolean(dispute);
+    const records = milestones.map((m) => {
+      const client = userMap.get(m.clientId);
+      const pro = userMap.get(m.professionalId);
+      const openDispute = openDisputes.find(
+        (d) => d.trackingId === m.trackingId && (d.milestoneId === m.id || d.milestoneId === null),
+      );
+      const isDisputed = Boolean(openDispute);
+      const ageDays = Math.floor((now - new Date(m.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+
+      // Determine escrow state
+      let escrowStatus = "HELD";
+      if (m.status === "APPROVED" || m.payment?.status === "COMPLETED") {
+        escrowStatus = "COMPLETED";
+      } else if (isDisputed) {
+        escrowStatus = "DISPUTED";
+      } else if (m.status === "IN_PROGRESS" || m.status === "AWAITING_CLIENT_REVIEW") {
+        escrowStatus = "FUNDED";
+      } else {
+        escrowStatus = "UPCOMING";
+      }
 
       return {
-        id: p.id,
-        trackingId: p.projectTrackingId ?? 0,
-        jobId: p.job?.id ?? null,
-        jobTitle:
-          p.job?.title ??
-          (p.milestone?.title ? `Milestone: ${p.milestone.title}` : `Payment #${p.id}`),
-        milestoneId: p.milestoneId ?? 0,
-        amount: p.amount,
-        status: p.status,
-        clientName: p.client
-          ? `${p.client.firstName} ${p.client.lastName}`.trim()
-          : "Unknown Client",
-        clientEmail: p.client?.email ?? "",
-        professionalName: p.professional
-          ? `${p.professional.firstName} ${p.professional.lastName}`.trim()
-          : "Unassigned Pro",
-        professionalEmail: p.professional?.email ?? "",
+        id: m.id,
+        trackingId: m.trackingId,
+        jobId: m.tracking.job.id,
+        jobTitle: m.tracking.job.title || `Milestone: ${m.title}`,
+        milestoneId: m.id,
+        milestoneTitle: m.title,
+        amount: m.amount,
+        status: escrowStatus,
+        rawStatus: m.status,
+        clientName: client ? `${client.firstName} ${client.lastName}`.trim() : "Unknown Client",
+        clientEmail: client?.email ?? "",
+        professionalName: pro ? `${pro.firstName} ${pro.lastName}`.trim() : "Unassigned Pro",
+        professionalEmail: pro?.email ?? "",
         ageDays,
-        isStuck: ageDays > 14 && p.status === "FUNDED",
+        isStuck: ageDays > 14 && (escrowStatus === "FUNDED" || escrowStatus === "HELD"),
         isDisputed,
-        disputeId: dispute?.id ?? null,
-        createdAt: p.createdAt,
+        disputeId: openDispute?.id ?? null,
+        createdAt: m.createdAt,
       };
     });
 
     let filtered = records;
     if (statusFilter === "HELD") {
-      filtered = filtered.filter((r) => r.status === "FUNDED");
+      filtered = filtered.filter(
+        (r) => r.status === "FUNDED" || r.status === "HELD" || r.status === "UPCOMING",
+      );
     } else if (statusFilter === "STUCK") {
       filtered = filtered.filter((r) => r.isStuck);
     } else if (statusFilter === "DISPUTED") {
@@ -106,21 +120,24 @@ export async function GET(request: NextRequest) {
       filtered = filtered.filter(
         (r) =>
           r.jobTitle.toLowerCase().includes(query) ||
+          r.milestoneTitle.toLowerCase().includes(query) ||
           r.clientName.toLowerCase().includes(query) ||
           r.professionalName.toLowerCase().includes(query),
       );
     }
 
     const totalEscrowHeld = records
-      .filter((r) => r.status === "FUNDED")
+      .filter((r) => r.status === "FUNDED" || r.status === "HELD")
       .reduce((sum, r) => sum + r.amount, 0);
 
     const totalDisputedEscrow = records
-      .filter((r) => r.status === "FUNDED" && r.isDisputed)
+      .filter((r) => r.isDisputed)
       .reduce((sum, r) => sum + r.amount, 0);
 
     const stuckContractsCount = records.filter((r) => r.isStuck).length;
-    const activeContractsCount = records.filter((r) => r.status === "FUNDED").length;
+    const activeContractsCount = records.filter(
+      (r) => r.status === "FUNDED" || r.status === "HELD",
+    ).length;
 
     return NextResponse.json({
       records: filtered,

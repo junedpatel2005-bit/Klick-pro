@@ -7,8 +7,8 @@ import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
-import { ImpersonationModeBanner } from "@/components/ImpersonationModeBanner";
 import { SitewideAnnouncementBanner } from "@/components/SitewideAnnouncementBanner";
+import { ImpersonationModeBanner } from "@/components/ImpersonationModeBanner";
 import {
   AppMobileNavigation,
   AppSidebar,

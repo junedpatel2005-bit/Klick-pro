@@ -84,6 +84,7 @@ export async function dismissSingleNotificationWithAnimation(
   toastId: string | number,
   notificationId?: number,
   href?: string,
+  navigate?: (target: string) => void,
 ) {
   if (typeof window === "undefined") {
     toast.dismiss(toastId);
@@ -149,6 +150,10 @@ export async function dismissSingleNotificationWithAnimation(
   }
 
   if (href) {
-    window.location.assign(href);
+    // A client-side route change keeps the shell mounted, so the sidebar and
+    // header survive. Anything leaving the app (external hosts, file downloads,
+    // API exports) still needs a real document load.
+    if (navigate && href.startsWith("/") && !href.startsWith("//")) navigate(href);
+    else window.location.assign(href);
   }
 }

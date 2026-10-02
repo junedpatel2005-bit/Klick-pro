@@ -26,24 +26,54 @@ export async function GET(request: NextRequest) {
   const query = searchParams.get("query")?.toLowerCase() || "";
 
   try {
-    const logs = await db.auditLog.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 150,
-      include: {
-        actor: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            role: true,
-            avatarUrl: true,
+    // 1. Fetch system audit logs
+    // 2. Fetch all real project timeline events from the database
+    const [rawAuditLogs, timelineEvents] = await Promise.all([
+      db.auditLog.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        include: {
+          actor: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              role: true,
+            },
           },
         },
+      }),
+      db.projectTimelineEvent.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 150,
+        include: {
+          tracking: {
+            include: {
+              job: {
+                select: { id: true, title: true },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    // Fetch actor details for timeline events
+    const timelineActorIds = Array.from(new Set(timelineEvents.map((e) => e.actorId)));
+    const timelineActors = await db.user.findMany({
+      where: { id: { in: timelineActorIds } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
       },
     });
+    const actorMap = new Map(timelineActors.map((a) => [a.id, a]));
 
-    let filtered = logs.map((log) => ({
+    const mappedAuditLogs = rawAuditLogs.map((log) => ({
       id: log.id,
       actorId: log.actorId,
       actorName: log.actor
@@ -58,6 +88,33 @@ export async function GET(request: NextRequest) {
       createdAt: log.createdAt,
     }));
 
+    const mappedTimelineEvents = timelineEvents.map((e) => {
+      const actor = actorMap.get(e.actorId);
+      return {
+        id: e.id + 100000,
+        actorId: e.actorId,
+        actorName: actor ? `${actor.firstName} ${actor.lastName}`.trim() : `User #${e.actorId}`,
+        actorEmail: actor?.email ?? `user${e.actorId}@klick-pro.com`,
+        actorRole: e.actorRole,
+        action: e.type,
+        entityType: "ProjectTracking",
+        entityId: String(e.trackingId),
+        metadata: {
+          title: e.title,
+          description: e.description,
+          stage: e.stage,
+          jobTitle: e.tracking.job.title,
+          milestoneId: e.milestoneId,
+        },
+        createdAt: e.createdAt,
+      };
+    });
+
+    const combined = [...mappedAuditLogs, ...mappedTimelineEvents].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+    let filtered = combined;
     if (actionFilter && actionFilter !== "ALL") {
       filtered = filtered.filter((l) =>
         l.action.toLowerCase().includes(actionFilter.toLowerCase()),
@@ -75,16 +132,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const uniqueActors = new Set(logs.map((l) => l.actorId).filter(Boolean)).size;
+    const uniqueActors = new Set(combined.map((l) => l.actorId).filter(Boolean)).size;
     const actionsCountMap: Record<string, number> = {};
-    for (const log of logs) {
+    for (const log of combined) {
       actionsCountMap[log.action] = (actionsCountMap[log.action] || 0) + 1;
     }
 
     return NextResponse.json({
       logs: filtered,
       stats: {
-        total: logs.length,
+        total: combined.length,
         uniqueActors,
         actionsBreakdown: actionsCountMap,
       },

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { fetchCurrentUser } from "@/lib/current-user";
 import { io } from "socket.io-client";
 import { toast } from "sonner";
@@ -75,105 +76,112 @@ function getNotificationVisual(type = "", title = "") {
 }
 
 export function RealtimeNotifications() {
+  const router = useRouter();
   const userIdRef = useRef<number | null>(null);
   const seenNotifications = useRef(new Set<string>());
   const notificationsInitialized = useRef(false);
 
-  const showNotification = useCallback((notification: RealtimeNotification) => {
-    let actionLabel = "View";
-    if (notification.href?.includes("/project/")) actionLabel = "View Project";
-    else if (notification.href?.includes("/job/")) actionLabel = "Review Job";
-    else if (notification.type.includes("PROPOSAL")) actionLabel = "Review Proposal";
-    else if (notification.type.includes("DISPUTE")) actionLabel = "Check Dispute";
-    else if (notification.type.includes("VERIFICATION")) actionLabel = "Inspect Status";
+  const showNotification = useCallback(
+    (notification: RealtimeNotification) => {
+      let actionLabel = "View";
+      if (notification.href?.includes("/project/")) actionLabel = "View Project";
+      else if (notification.href?.includes("/job/")) actionLabel = "Review Job";
+      else if (notification.type.includes("PROPOSAL")) actionLabel = "Review Proposal";
+      else if (notification.type.includes("DISPUTE")) actionLabel = "Check Dispute";
+      else if (notification.type.includes("VERIFICATION")) actionLabel = "Inspect Status";
 
-    const { Icon, iconClass } = getNotificationVisual(notification.type, notification.title);
+      const { Icon, iconClass } = getNotificationVisual(notification.type, notification.title);
 
-    let titleContent: React.ReactNode = notification.title;
-    if (notification.title.includes(" · ")) {
-      const [projectName, ...actionParts] = notification.title.split(" · ");
-      titleContent = (
-        <div className="flex flex-col gap-0.5">
-          <span className="font-bold text-foreground text-sm leading-snug">{projectName}</span>
-          <span className="text-xs font-semibold text-primary">{actionParts.join(" · ")}</span>
-        </div>
-      );
-    } else {
-      titleContent = (
-        <span className="font-bold text-foreground text-sm leading-snug">{notification.title}</span>
-      );
-    }
-
-    toast.custom(
-      (t) => (
-        <div
-          data-notification-toast="true"
-          data-notification-id={String(t)}
-          className="group relative w-full max-w-sm rounded-2xl border border-border/80 bg-background/95 p-4 shadow-[0_12px_36px_-6px_rgba(0,0,0,0.16)] backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/10 transition-all duration-200 animate-in fade-in-50 slide-in-from-top-3"
-        >
-          {/* Subtle top indicator bar */}
-          <div className="absolute top-0 inset-x-5 h-0.5 rounded-full bg-gradient-to-r from-primary/40 via-primary to-primary/40 opacity-70" />
-
-          {/* Close button at top-right */}
-          <button
-            type="button"
-            onClick={() => void dismissSingleNotificationWithAnimation(t, notification.id)}
-            className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-lg text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-            aria-label="Dismiss notification"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-
-          <div className="flex items-start gap-3 pr-5">
-            <div
-              className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-xs ${iconClass}`}
-            >
-              <Icon className="h-4.5 w-4.5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              {titleContent}
-              {notification.description && (
-                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground leading-relaxed">
-                  {notification.description}
-                </p>
-              )}
-            </div>
+      let titleContent: React.ReactNode = notification.title;
+      if (notification.title.includes(" · ")) {
+        const [projectName, ...actionParts] = notification.title.split(" · ");
+        titleContent = (
+          <div className="flex flex-col gap-0.5">
+            <span className="font-bold text-foreground text-sm leading-snug">{projectName}</span>
+            <span className="text-xs font-semibold text-primary">{actionParts.join(" · ")}</span>
           </div>
+        );
+      } else {
+        titleContent = (
+          <span className="font-bold text-foreground text-sm leading-snug">
+            {notification.title}
+          </span>
+        );
+      }
 
-          {/* Action Row */}
-          <div className="mt-3 flex items-center justify-between pt-2.5 border-t border-border/50 text-xs">
-            <span className="text-[10.5px] font-medium text-muted-foreground/70">Just now</span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => void dismissAllNotificationsWithAnimation()}
-                className="rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+      toast.custom(
+        (t) => (
+          <div
+            data-notification-toast="true"
+            data-notification-id={String(t)}
+            className="group relative w-full max-w-sm rounded-2xl border border-border/80 bg-background/95 p-4 shadow-[0_12px_36px_-6px_rgba(0,0,0,0.16)] backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/10 transition-all duration-200 animate-in fade-in-50 slide-in-from-top-3"
+          >
+            {/* Subtle top indicator bar */}
+            <div className="absolute top-0 inset-x-5 h-0.5 rounded-full bg-gradient-to-r from-primary/40 via-primary to-primary/40 opacity-70" />
+
+            {/* Close button at top-right */}
+            <button
+              type="button"
+              onClick={() => void dismissSingleNotificationWithAnimation(t, notification.id)}
+              className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-lg text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+              aria-label="Dismiss notification"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+
+            <div className="flex items-start gap-3 pr-5">
+              <div
+                className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-xs ${iconClass}`}
               >
-                Dismiss all
-              </button>
-              {notification.href && (
+                <Icon className="h-4.5 w-4.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                {titleContent}
+                {notification.description && (
+                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground leading-relaxed">
+                    {notification.description}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Action Row */}
+            <div className="mt-3 flex items-center justify-between pt-2.5 border-t border-border/50 text-xs">
+              <span className="text-[10.5px] font-medium text-muted-foreground/70">Just now</span>
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => {
-                    void dismissSingleNotificationWithAnimation(
-                      t,
-                      notification.id,
-                      notification.href,
-                    );
-                  }}
-                  className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1 font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition-all cursor-pointer active:scale-95"
+                  onClick={() => void dismissAllNotificationsWithAnimation()}
+                  className="rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
                 >
-                  <span>{actionLabel}</span>
-                  <ArrowRight className="h-3 w-3" />
+                  Dismiss all
                 </button>
-              )}
+                {notification.href && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void dismissSingleNotificationWithAnimation(
+                        t,
+                        notification.id,
+                        notification.href,
+                        (target) => router.push(target),
+                      );
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1 font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition-all cursor-pointer active:scale-95"
+                  >
+                    <span>{actionLabel}</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      ),
-      { duration: 6500 },
-    );
-  }, []);
+        ),
+        { duration: 6500 },
+      );
+    },
+    [router],
+  );
 
   const showGroupedNotification = useCallback(
     (notifications: RealtimeNotification[]) => {
@@ -244,7 +252,12 @@ export function RealtimeNotifications() {
               <button
                 type="button"
                 onClick={() => {
-                  void dismissSingleNotificationWithAnimation(t, undefined, "/notifications");
+                  void dismissSingleNotificationWithAnimation(
+                    t,
+                    undefined,
+                    "/notifications",
+                    (target) => router.push(target),
+                  );
                 }}
                 className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1 font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 transition-all cursor-pointer active:scale-95"
               >
@@ -257,7 +270,7 @@ export function RealtimeNotifications() {
         { duration: 7500 },
       );
     },
-    [showNotification],
+    [showNotification, router],
   );
 
   const notificationKey = (notification: RealtimeNotification) =>
