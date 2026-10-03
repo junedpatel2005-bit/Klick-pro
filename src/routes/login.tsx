@@ -180,8 +180,8 @@ export default function Login() {
       await sendPhoneCode();
       return;
     }
-    if (phoneCode.length !== 4) {
-      setError("Enter the 4-digit verification code.");
+    if (phoneCode.length !== 4 && phoneCode.length !== 6) {
+      setError("Enter the 4-digit or 6-digit verification code.");
       return;
     }
     setPending(true);
@@ -469,11 +469,12 @@ export default function Login() {
                   value={phoneCode}
                   disabled={pending}
                   onChange={(event) =>
-                    setPhoneCode(event.target.value.replace(/\D/g, "").slice(0, 4))
+                    setPhoneCode(event.target.value.replace(/\D/g, "").slice(0, 6))
                   }
                   inputMode="numeric"
-                  placeholder="Enter 4-digit OTP"
-                  className="h-11 tracking-[0.35em]"
+                  maxLength={6}
+                  placeholder="Enter OTP (4 or 6 digits)"
+                  className="h-11 tracking-[0.25em]"
                   required
                 />
               </div>

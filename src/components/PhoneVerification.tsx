@@ -52,7 +52,9 @@ export function PhoneVerification({
 
   async function verify() {
     setMessage(null);
-    if (code.length !== 4) return setMessage("Enter the 4-digit verification code.");
+    if (code.length !== 4 && code.length !== 6) {
+      return setMessage("Enter the 4-digit or 6-digit verification code.");
+    }
     setPending(true);
     const response = await fetch("/api/v1/auth/verify-phone", {
       method: "POST",
@@ -111,10 +113,11 @@ export function PhoneVerification({
           <Input
             ref={inputRef}
             value={code}
-            onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 4))}
+            onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            maxLength={6}
             inputMode="numeric"
-            placeholder="4-digit code"
-            className="h-11 tracking-[0.3em]"
+            placeholder="Enter OTP (  6 digits OTP)"
+            className="h-11 tracking-[0.25em]"
           />
           <Button type="button" onClick={verify} disabled={pending}>
             Confirm

@@ -12,7 +12,7 @@ import { countryCodes } from "@/lib/country-codes";
 import { isValidPhoneNumber, phoneValidationMessage } from "@/lib/phone-validation";
 import { cn } from "@/lib/utils";
 
-const emptyOtp = ["", "", "", ""];
+const emptyOtp = ["", "", "", "", "", ""];
 
 function EmailTab() {
   const [email, setEmail] = useState("");
@@ -197,17 +197,17 @@ function PhoneTab() {
   }
 
   function handleOtpPaste(event: ClipboardEvent<HTMLInputElement>) {
-    const digits = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4);
+    const digits = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
     if (!digits) return;
     event.preventDefault();
-    setOtp(Array.from({ length: 4 }, (_, index) => digits[index] ?? ""));
-    otpRefs.current[Math.min(digits.length, 4) - 1]?.focus();
+    setOtp(Array.from({ length: 6 }, (_, index) => digits[index] ?? ""));
+    otpRefs.current[Math.min(digits.length, 6) - 1]?.focus();
   }
 
   async function verifyCode() {
-    const code = otp.join("");
-    if (code.length !== 4) {
-      setError("Enter the 4-digit verification code.");
+    const code = otp.join("").trim();
+    if (code.length !== 4 && code.length !== 6) {
+      setError("Enter the 4-digit or 6-digit verification code.");
       return;
     }
     setError(null);
@@ -370,7 +370,7 @@ function PhoneTab() {
                 autoComplete="one-time-code"
                 maxLength={1}
                 aria-label={`Verification digit ${index + 1}`}
-                className="h-12 w-12 text-center text-lg font-semibold"
+                className="h-11 w-11 sm:h-12 sm:w-12 text-center text-lg font-semibold"
               />
             ))}
           </div>
