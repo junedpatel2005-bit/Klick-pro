@@ -26,6 +26,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { capitalizeFirst } from "@/lib/utils";
 
 export type DisputeAttachment = {
   id?: number;
@@ -1337,7 +1338,7 @@ export function ProjectDisputeCenter({
                             })}
                           </span>
                         </div>
-                        <p className="whitespace-pre-wrap">{msg.message}</p>
+                        <p className="whitespace-pre-wrap">{capitalizeFirst(msg.message)}</p>
                       </div>
                     </div>
                   );

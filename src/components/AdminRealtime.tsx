@@ -10,6 +10,7 @@ import {
   dismissAllNotificationsWithAnimation,
   dismissSingleNotificationWithAnimation,
 } from "@/lib/notification-dismiss";
+import { capitalizeFirst } from "@/lib/utils";
 
 type AdminRealtimeNotification = {
   id?: number;
@@ -58,11 +59,11 @@ export function AdminRealtime() {
               </div>
               <div className="min-w-0 flex-1">
                 <h5 className="text-sm font-bold text-slate-900 dark:text-white leading-snug">
-                  {notification.title || "New Admin Notification"}
+                  {capitalizeFirst(notification.title || "New Admin Notification")}
                 </h5>
                 {notification.description && (
                   <p className="mt-1 line-clamp-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    {notification.description}
+                    {capitalizeFirst(notification.description)}
                   </p>
                 )}
               </div>

@@ -21,6 +21,7 @@ import {
   dismissSingleNotificationWithAnimation,
 } from "@/lib/notification-dismiss";
 import { fetchPortalNotifications, invalidateNotificationsCache } from "@/lib/notifications-client";
+import { capitalizeFirst } from "@/lib/utils";
 
 type RealtimeNotification = {
   id?: number;
@@ -92,19 +93,23 @@ export function RealtimeNotifications() {
 
       const { Icon, iconClass } = getNotificationVisual(notification.type, notification.title);
 
-      let titleContent: React.ReactNode = notification.title;
+      let titleContent: React.ReactNode = capitalizeFirst(notification.title);
       if (notification.title.includes(" · ")) {
         const [projectName, ...actionParts] = notification.title.split(" · ");
         titleContent = (
           <div className="flex flex-col gap-0.5">
-            <span className="font-bold text-foreground text-sm leading-snug">{projectName}</span>
-            <span className="text-xs font-semibold text-primary">{actionParts.join(" · ")}</span>
+            <span className="font-bold text-foreground text-sm leading-snug">
+              {capitalizeFirst(projectName)}
+            </span>
+            <span className="text-xs font-semibold text-primary">
+              {capitalizeFirst(actionParts.join(" · "))}
+            </span>
           </div>
         );
       } else {
         titleContent = (
           <span className="font-bold text-foreground text-sm leading-snug">
-            {notification.title}
+            {capitalizeFirst(notification.title)}
           </span>
         );
       }
@@ -139,7 +144,7 @@ export function RealtimeNotifications() {
                 {titleContent}
                 {notification.description && (
                   <p className="mt-1 line-clamp-2 text-xs text-muted-foreground leading-relaxed">
-                    {notification.description}
+                    {capitalizeFirst(notification.description)}
                   </p>
                 )}
               </div>
@@ -228,10 +233,12 @@ export function RealtimeNotifications() {
                   </span>
                 </div>
                 <div className="mt-1.5 rounded-xl bg-muted/40 p-2.5 border border-border/50">
-                  <p className="text-xs font-semibold text-foreground truncate">{latest.title}</p>
+                  <p className="text-xs font-semibold text-foreground truncate">
+                    {capitalizeFirst(latest.title)}
+                  </p>
                   {latest.description && (
                     <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
-                      {latest.description}
+                      {capitalizeFirst(latest.description)}
                     </p>
                   )}
                 </div>

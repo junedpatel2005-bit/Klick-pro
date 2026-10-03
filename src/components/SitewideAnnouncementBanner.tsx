@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Info, AlertTriangle, AlertCircle, CheckCircle2, X, ArrowRight } from "lucide-react";
 import { ENABLE_ADMIN_EXTRA_SECTION } from "@/config/extra-features";
+import { capitalizeFirst } from "@/lib/utils";
 
 type BannerData = {
   enabled: boolean;
@@ -90,7 +91,9 @@ export function SitewideAnnouncementBanner() {
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
         <div className="flex items-center gap-2 overflow-hidden">
           <Icon className="h-4 w-4 shrink-0" />
-          <span className="truncate sm:whitespace-normal font-semibold">{banner.message}</span>
+          <span className="truncate sm:whitespace-normal font-semibold">
+            {capitalizeFirst(banner.message)}
+          </span>
           {banner.link && (
             <Link
               href={banner.link}

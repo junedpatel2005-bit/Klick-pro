@@ -15,6 +15,7 @@ import {
   Star,
   UserRound,
 } from "lucide-react";
+import { capitalizeFirst } from "@/lib/utils";
 
 type DashboardData = {
   professional: {
@@ -321,9 +322,9 @@ export default function ProfessionalDashboard() {
                   className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${notification.readAt ? "bg-muted" : "bg-primary"}`}
                 />
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">{notification.title}</p>
+                  <p className="text-sm font-medium">{capitalizeFirst(notification.title)}</p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {notification.description}
+                    {capitalizeFirst(notification.description)}
                   </p>
                 </div>
               </div>

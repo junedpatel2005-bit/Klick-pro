@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { capitalizeFirst } from "@/lib/utils";
 type Conversation = {
   id: string;
   jobTitle: string | null;
@@ -33,7 +34,7 @@ export default function Messages() {
               <li key={conversation.id} className="p-5">
                 <p className="font-medium">{conversation.jobTitle ?? "Marketplace conversation"}</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {conversation.messages[0]?.body ?? "No messages yet."}
+                  {capitalizeFirst(conversation.messages[0]?.body ?? "No messages yet.")}
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">
                   {conversation.lastMessageAt

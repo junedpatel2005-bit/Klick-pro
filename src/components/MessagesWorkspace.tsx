@@ -15,6 +15,7 @@ import {
   Send,
   ShieldCheck,
 } from "lucide-react";
+import { capitalizeFirst } from "@/lib/utils";
 
 export type ContactProject = {
   id: number;
@@ -633,10 +634,12 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
                     <p
                       className={`truncate text-xs ${admin ? "text-slate-500" : "text-muted-foreground"}`}
                     >
-                      {contact.lastMessage?.body ??
-                        (!admin && (contact.role === "ADMIN" || contact.isAdminTeam)
-                          ? "Official KLICK-PRO Help & Support"
-                          : "Start a conversation")}
+                      {capitalizeFirst(
+                        contact.lastMessage?.body ??
+                          (!admin && (contact.role === "ADMIN" || contact.isAdminTeam)
+                            ? "Official KLICK-PRO Help & Support"
+                            : "Start a conversation"),
+                      )}
                     </p>
                   </div>
                 </button>
@@ -959,7 +962,7 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
                               {selected.name}
                             </div>
                           )}
-                          <p className="whitespace-pre-wrap">{message.body}</p>
+                          <p className="whitespace-pre-wrap">{capitalizeFirst(message.body)}</p>
                           <p
                             className={`mt-1 text-[10px] ${
                               isMine

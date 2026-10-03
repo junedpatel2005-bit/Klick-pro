@@ -17,6 +17,7 @@ import {
 import { ClientAccountMenu, type AccountUser } from "@/components/ClientAccountMenu";
 import { Button } from "@/components/ui/button";
 import { fetchPortalNotifications, invalidateNotificationsCache } from "@/lib/notifications-client";
+import { capitalizeFirst } from "@/lib/utils";
 
 type DashboardNotification = {
   id: number;
@@ -386,7 +387,7 @@ export function AppHeader({
                               isUnread ? "text-foreground" : "text-foreground/80"
                             }`}
                           >
-                            {item.title}
+                            {capitalizeFirst(item.title)}
                           </p>
                           <span className="flex-shrink-0 text-[10px] text-muted-foreground">
                             {formatRelativeTime(item.createdAt)}
@@ -394,7 +395,7 @@ export function AppHeader({
                         </div>
                         {item.description && (
                           <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-                            {item.description}
+                            {capitalizeFirst(item.description)}
                           </p>
                         )}
                       </div>

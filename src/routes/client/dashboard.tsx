@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardSkeleton } from "@/components/LoadingSkeleton";
+import { capitalizeFirst } from "@/lib/utils";
 
 type DashboardData = {
   user: { firstName: string; averageRating: number; phoneVerifiedAt: string | null };
@@ -243,11 +244,11 @@ export default function Dashboard() {
                     />
                     <div className="min-w-0">
                       <p className="text-sm font-semibold leading-snug group-hover:text-primary">
-                        {notification.title}
+                        {capitalizeFirst(notification.title)}
                       </p>
                       {notification.description ? (
                         <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                          {notification.description}
+                          {capitalizeFirst(notification.description)}
                         </p>
                       ) : null}
                       <p className="mt-1 text-[11px] text-muted-foreground">
