@@ -3,6 +3,7 @@ import { createHash, randomInt } from "crypto";
 import twilio from "twilio";
 import { db } from "@/lib/db";
 import { Prisma } from "@generated/prisma/client";
+import { sendSms } from "@/lib/sms/engine";
 
 export type PhoneOtpResult = { ok: true } | { ok: false; error: string; status: number };
 export type AccountRole = "CLIENT" | "PROFESSIONAL";
@@ -32,7 +33,7 @@ function developmentCode() {
 }
 
 function randomCode() {
-  return randomInt(0, 10000).toString().padStart(4, "0");
+  return randomInt(100000, 1000000).toString();
 }
 
 function isTwilioVerifyConfigured() {
@@ -77,33 +78,47 @@ export async function requestPhoneOtp(phone: string, role: AccountRole): Promise
   const normalised = normalisePhone(phone);
   if (!normalised) return { ok: false, status: 400, error: "Enter a valid phone number." };
 
-  if (providerName() !== "twilio") {
-    const code = developmentCode() ?? randomCode();
-    await invalidatePriorCodes(normalised, role);
-    await createCode(normalised, role, code);
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[phone-otp:development] code for ${normalised} (${role}): ${code}`);
+  const code = developmentCode() ?? randomCode();
+  await invalidatePriorCodes(normalised, role);
+  await createCode(normalised, role, code);
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[phone-otp] code for ${normalised} (${role}): ${code}`);
+  }
+
+  // 1. Try sending via Klick-Pro SMS Template Engine (exact "auth_phone_otp" template from Admin studio)
+  const templateResult = await sendSms({
+    to: normalised,
+    templateKey: "auth_phone_otp",
+    variables: {
+      otp_code: code,
+      user_name: "there",
+    },
+  });
+
+  if (templateResult.ok && templateResult.provider === "twilio") {
+    return { ok: true };
+  }
+
+  // 2. If direct programmable SMS delivery did not dispatch via Twilio (e.g. carrier filters / trial restrictions),
+  // fallback to Twilio Verify service
+  if (providerName() === "twilio" && isTwilioVerifyConfigured()) {
+    try {
+      await twilioClient()
+        .verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
+        .verifications.create({ to: normalised, channel: "sms" });
+      return { ok: true };
+    } catch (error) {
+      console.error("[phone-otp:twilio-verify] send failed", error);
+      return {
+        ok: false,
+        status: 503,
+        error: "Unable to send the verification code. Please try again.",
+      };
     }
-    return { ok: true };
   }
 
-  if (!isTwilioVerifyConfigured()) {
-    return { ok: false, status: 503, error: "The SMS provider is not configured yet." };
-  }
-
-  try {
-    await twilioClient()
-      .verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
-      .verifications.create({ to: normalised, channel: "sms" });
-    return { ok: true };
-  } catch (error) {
-    console.error("[phone-otp:twilio-verify] send failed", error);
-    return {
-      ok: false,
-      status: 503,
-      error: "Unable to send the verification code. Please try again.",
-    };
-  }
+  return { ok: true };
 }
 
 /** Verifies an OTP without exposing provider configuration to the client. */
@@ -128,25 +143,22 @@ export async function verifyPhoneOtp(
     return { ok: true };
   }
 
-  if (providerName() !== "twilio") {
-    if (trimmedCode.length !== 4 && trimmedCode.length !== 6) {
-      return { ok: false, status: 400, error: "Enter the 4-digit or 6-digit verification code." };
-    }
+  if (trimmedCode.length !== 4 && trimmedCode.length !== 6) {
+    return { ok: false, status: 400, error: "Enter the 4-digit or 6-digit verification code." };
+  }
 
-    const record = await db.otpCode.findFirst({
-      where: {
-        phone: normalised,
-        role,
-        consumedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+  // 1. Check local database for the OTP generated and sent by Klick-Pro SMS template
+  const record = await db.otpCode.findFirst({
+    where: {
+      phone: normalised,
+      role,
+      consumedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
-    if (!record) {
-      return { ok: false, status: 400, error: "The verification code is invalid or has expired." };
-    }
-
+  if (record) {
     if (record.attempts >= MAX_ATTEMPTS) {
       return {
         ok: false,
@@ -167,37 +179,32 @@ export async function verifyPhoneOtp(
           AND "attempts" < ${MAX_ATTEMPTS}
       `,
     );
-    if (result !== 1 || !isCorrectCode) {
-      return { ok: false, status: 400, error: "Invalid verification code." };
+    if (result === 1 && isCorrectCode) {
+      return { ok: true };
     }
-    return { ok: true };
   }
 
-  if (!isTwilioVerifyConfigured()) {
-    return { ok: false, status: 503, error: "The SMS provider is not configured yet." };
+  // 2. If Twilio Verify was used as fallback, verify against Twilio Verify service
+  if (isTwilioVerifyConfigured()) {
+    try {
+      const check = await twilioClient()
+        .verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
+        .verificationChecks.create({ to: normalised, code: trimmedCode });
+      if (check.status === "approved") {
+        return { ok: true };
+      }
+    } catch (error) {
+      const twilioError = error as { status?: number };
+      if (twilioError.status === 404) {
+        return {
+          ok: false,
+          status: 400,
+          error: "The verification code is invalid or has expired.",
+        };
+      }
+      console.error("[phone-otp:twilio-verify] check failed", error);
+    }
   }
 
-  try {
-    const check = await twilioClient()
-      .verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
-      .verificationChecks.create({ to: normalised, code: trimmedCode });
-    if (check.status !== "approved") {
-      return { ok: false, status: 400, error: "Invalid verification code." };
-    }
-    return { ok: true };
-  } catch (error) {
-    // Twilio returns 404 (error code 20404) once a verification has expired
-    // or no longer exists, which is a user-facing "invalid code" case, not a
-    // provider failure.
-    const twilioError = error as { status?: number };
-    if (twilioError.status === 404) {
-      return { ok: false, status: 400, error: "The verification code is invalid or has expired." };
-    }
-    console.error("[phone-otp:twilio-verify] check failed", error);
-    return {
-      ok: false,
-      status: 503,
-      error: "Unable to verify the code right now. Please try again.",
-    };
-  }
+  return { ok: false, status: 400, error: "Invalid verification code." };
 }
