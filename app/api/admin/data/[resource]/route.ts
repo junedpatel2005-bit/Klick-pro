@@ -476,6 +476,8 @@ export async function GET(
             avatarUrl: true,
             role: true,
             companyName: true,
+            isVerified: true,
+            phoneVerifiedAt: true,
           },
         }),
         db.legacyUserProfile
@@ -502,6 +504,8 @@ export async function GET(
             avatarUrl: u.avatarUrl,
             role: u.role,
             companyName: u.companyName,
+            isVerified: u.isVerified,
+            phoneVerifiedAt: u.phoneVerifiedAt,
           },
         ]),
       );

@@ -84,71 +84,76 @@ export async function POST(request: NextRequest) {
   if (!reportRequest)
     return NextResponse.json({ error: "Invalid export request." }, { status: 400 });
 
-  const tracking = await db.projectTracking.findMany({
-    where: {
-      professionalId: user.id,
-      status: { not: "COMPLETED" },
-      ...(reportRequest.scope === "selected" ? { id: { in: reportRequest.ids ?? [] } } : {}),
-    },
-    orderBy: { acceptedAt: "desc" },
-  });
+  try {
+    const tracking = await db.projectTracking.findMany({
+      where: {
+        professionalId: user.id,
+        status: { not: "COMPLETED" },
+        ...(reportRequest.scope === "selected" ? { id: { in: reportRequest.ids ?? [] } } : {}),
+      },
+      orderBy: { acceptedAt: "desc" },
+    });
 
-  const jobs = await db.clientJob.findMany({
-    where: { id: { in: tracking.map((project) => project.jobId) } },
-    select: {
-      id: true,
-      title: true,
-      deadline: true,
-      budgetMin: true,
-      budgetMax: true,
-      hourlyRate: true,
-      timingType: true,
-      userId: true,
-    },
-  });
-  const jobMap = new Map(jobs.map((job) => [job.id, job]));
-  const clients = await db.user.findMany({
-    where: { id: { in: jobs.map((job) => job.userId) } },
-    select: { id: true, firstName: true, lastName: true },
-  });
-  const clientMap = new Map(
-    clients.map((client) => [client.id, `${client.firstName} ${client.lastName}`.trim()]),
-  );
+    const jobs = await db.clientJob.findMany({
+      where: { id: { in: tracking.map((project) => project.jobId) } },
+      select: {
+        id: true,
+        title: true,
+        deadline: true,
+        budgetMin: true,
+        budgetMax: true,
+        hourlyRate: true,
+        timingType: true,
+        userId: true,
+      },
+    });
+    const jobMap = new Map(jobs.map((job) => [job.id, job]));
+    const clients = await db.user.findMany({
+      where: { id: { in: jobs.map((job) => job.userId) } },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    const clientMap = new Map(
+      clients.map((client) => [client.id, `${client.firstName} ${client.lastName}`.trim()]),
+    );
 
-  const rows: ProjectRow[] = tracking.map((project) => {
-    const job = jobMap.get(project.jobId);
-    return {
-      id: project.id,
-      jobId: project.jobId,
-      status: project.status,
-      acceptedAt: project.acceptedAt,
-      progress: project.progress,
-      currentStage: project.currentStage,
-      jobTitle: job?.title ?? `Job #${project.jobId}`,
-      clientName: job ? (clientMap.get(job.userId) ?? "Client") : "Client",
-      deadline: job?.deadline ?? null,
-      budget: job
-        ? job.timingType === "HOURLY"
-          ? job.hourlyRate
-          : (job.budgetMax ?? job.budgetMin)
-        : null,
-      timingType: job?.timingType ?? "FIXED",
-    };
-  });
+    const rows: ProjectRow[] = tracking.map((project) => {
+      const job = jobMap.get(project.jobId);
+      return {
+        id: project.id,
+        jobId: project.jobId,
+        status: project.status,
+        acceptedAt: project.acceptedAt,
+        progress: project.progress,
+        currentStage: project.currentStage,
+        jobTitle: job?.title ?? `Job #${project.jobId}`,
+        clientName: job ? (clientMap.get(job.userId) ?? "Client") : "Client",
+        deadline: job?.deadline ?? null,
+        budget: job
+          ? job.timingType === "HOURLY"
+            ? job.hourlyRate
+            : (job.budgetMax ?? job.budgetMin)
+          : null,
+        timingType: job?.timingType ?? "FIXED",
+      };
+    });
 
-  const buffer = await renderReportPdf(
-    ReportDocument({
-      title: "Running projects",
-      subtitle: "Professional workspace — your active projects",
-      generatedFor: `${user.firstName} ${user.lastName}`,
-      filterSummary:
-        reportRequest.scope === "selected" ? `${rows.length} selected` : `${rows.length} total`,
-      columns,
-      rows,
-      pageSize: reportRequest.pageSize,
-      orientation: reportRequest.orientation,
-    }),
-  );
+    const buffer = await renderReportPdf(
+      ReportDocument({
+        title: "Running projects",
+        subtitle: "Professional workspace — your active projects",
+        generatedFor: `${user.firstName} ${user.lastName}`,
+        filterSummary:
+          reportRequest.scope === "selected" ? `${rows.length} selected` : `${rows.length} total`,
+        columns,
+        rows,
+        pageSize: reportRequest.pageSize,
+        orientation: reportRequest.orientation,
+      }),
+    );
 
-  return pdfResponse(buffer, `running-projects-${reportRequest.scope}.pdf`);
+    return pdfResponse(buffer, `running-projects-${reportRequest.scope}.pdf`);
+  } catch (error) {
+    console.error("Professional jobs export failed:", error);
+    return NextResponse.json({ error: "The report could not be generated." }, { status: 500 });
+  }
 }

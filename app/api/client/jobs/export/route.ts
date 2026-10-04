@@ -72,27 +72,32 @@ export async function POST(request: NextRequest) {
   if (!reportRequest)
     return NextResponse.json({ error: "Invalid export request." }, { status: 400 });
 
-  const jobs = await db.clientJob.findMany({
-    where: {
-      userId: user.id,
-      ...(reportRequest.scope === "selected" ? { id: { in: reportRequest.ids ?? [] } } : {}),
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+  try {
+    const jobs = await db.clientJob.findMany({
+      where: {
+        userId: user.id,
+        ...(reportRequest.scope === "selected" ? { id: { in: reportRequest.ids ?? [] } } : {}),
+      },
+      orderBy: { updatedAt: "desc" },
+    });
 
-  const buffer = await renderReportPdf(
-    ReportDocument({
-      title: "My jobs",
-      subtitle: "Client workspace — your posted projects",
-      generatedFor: `${user.firstName} ${user.lastName}`,
-      filterSummary:
-        reportRequest.scope === "selected" ? `${jobs.length} selected` : `${jobs.length} total`,
-      columns,
-      rows: jobs,
-      pageSize: reportRequest.pageSize,
-      orientation: reportRequest.orientation,
-    }),
-  );
+    const buffer = await renderReportPdf(
+      ReportDocument({
+        title: "My jobs",
+        subtitle: "Client workspace — your posted projects",
+        generatedFor: `${user.firstName} ${user.lastName}`,
+        filterSummary:
+          reportRequest.scope === "selected" ? `${jobs.length} selected` : `${jobs.length} total`,
+        columns,
+        rows: jobs,
+        pageSize: reportRequest.pageSize,
+        orientation: reportRequest.orientation,
+      }),
+    );
 
-  return pdfResponse(buffer, `my-jobs-${reportRequest.scope}.pdf`);
+    return pdfResponse(buffer, `my-jobs-${reportRequest.scope}.pdf`);
+  } catch (error) {
+    console.error("Client jobs export failed:", error);
+    return NextResponse.json({ error: "The report could not be generated." }, { status: 500 });
+  }
 }

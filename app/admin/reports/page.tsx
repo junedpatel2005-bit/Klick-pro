@@ -52,9 +52,23 @@ type FinanceRow = {
 
 type DateFilter = "all" | "this_month" | "last_month" | "last_90_days" | "this_year";
 
+function formatDateSafely(
+  dateInput: string | Date | null | undefined,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  if (!dateInput) return "—";
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(
+    "en-IN",
+    options ?? { day: "2-digit", month: "short", year: "numeric" },
+  );
+}
+
 function isWithinDateRange(dateString: string | null | undefined, filter: DateFilter): boolean {
   if (filter === "all" || !dateString) return true;
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return false;
   const now = new Date();
   if (filter === "this_month") {
     return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
@@ -83,7 +97,7 @@ function downloadCsv(filename: string, headers: string[], rows: (string | number
       row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","),
     ),
   ].join("\r\n");
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.setAttribute("href", url);
@@ -103,8 +117,12 @@ function UsersReport() {
 
   useEffect(() => {
     void fetch("/api/v1/admin/data/users", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((data) => setUsers(data.users ?? []))
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => setUsers(Array.isArray(data?.users) ? data.users : []))
+      .catch((err) => {
+        console.error("Failed to load admin users report data:", err);
+        setUsers([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -146,7 +164,7 @@ function UsersReport() {
         u.role,
         u.isActive ? "Yes" : "No",
         u.isVerified ? "Yes" : "No",
-        new Date(u.createdAt).toLocaleDateString(),
+        formatDateSafely(u.createdAt),
       ]),
     );
   };
@@ -364,13 +382,7 @@ function UsersReport() {
               header: "Joined Date",
               align: "right",
               render: (user) => (
-                <span className="text-xs text-slate-500">
-                  {new Date(user.createdAt).toLocaleDateString("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </span>
+                <span className="text-xs text-slate-500">{formatDateSafely(user.createdAt)}</span>
               ),
             },
           ]}
@@ -408,8 +420,12 @@ function JobsReport() {
 
   useEffect(() => {
     void fetch("/api/v1/admin/data/jobs", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((data) => setJobs(data.jobs ?? []))
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => setJobs(Array.isArray(data?.jobs) ? data.jobs : []))
+      .catch((err) => {
+        console.error("Failed to load admin jobs report data:", err);
+        setJobs([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -455,7 +471,7 @@ function JobsReport() {
         `${j.user?.firstName ?? ""} ${j.user?.lastName ?? ""}`.trim() || "Client",
         j.category ?? "General",
         j.status,
-        new Date(j.createdAt).toLocaleDateString(),
+        formatDateSafely(j.createdAt),
       ]),
     );
   };
@@ -647,13 +663,7 @@ function JobsReport() {
               header: "Created Date",
               align: "right",
               render: (job) => (
-                <span className="text-xs text-slate-500">
-                  {new Date(job.createdAt).toLocaleDateString("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </span>
+                <span className="text-xs text-slate-500">{formatDateSafely(job.createdAt)}</span>
               ),
             },
           ]}
@@ -691,54 +701,60 @@ function FinanceReport() {
 
   useEffect(() => {
     void fetch("/api/v1/admin/data/finance", { cache: "no-store" })
-      .then((response) => response.json())
-      .then(
-        (data: {
-          transactions: {
-            id: number;
-            type: string;
-            amount: number;
-            currency: string;
-            status: string;
-            clientId: number;
-            professionalId: number;
-            createdAt: string;
-          }[];
-          withdrawals: {
-            id: number;
-            amount: number;
-            currency: string;
-            status: string;
-            professionalId: number;
-            createdAt: string;
-          }[];
-          names: Record<string, string>;
-        }) => {
-          const combined: FinanceRow[] = [
-            ...data.transactions.map((item) => ({
-              id: item.id,
-              kind: "Payment" as const,
-              type: item.type,
-              amount: item.amount,
-              currency: item.currency,
-              status: item.status,
-              party: `Client: ${data.names[item.clientId] ?? `#${item.clientId}`} · Pro: ${data.names[item.professionalId] ?? `#${item.professionalId}`}`,
-              createdAt: item.createdAt,
-            })),
-            ...data.withdrawals.map((item) => ({
-              id: item.id,
-              kind: "Payout" as const,
-              type: "Withdrawal",
-              amount: item.amount,
-              currency: item.currency,
-              status: item.status,
-              party: `Professional: ${data.names[item.professionalId] ?? `#${item.professionalId}`}`,
-              createdAt: item.createdAt,
-            })),
-          ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          setRows(combined);
-        },
-      )
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!data) return;
+        const transactions = Array.isArray(data.transactions) ? data.transactions : [];
+        const withdrawals = Array.isArray(data.withdrawals) ? data.withdrawals : [];
+        const names = data.names && typeof data.names === "object" ? data.names : {};
+
+        type ApiTransaction = {
+          id: number;
+          type?: string;
+          amount?: number;
+          currency?: string;
+          status?: string;
+          clientId?: number;
+          professionalId?: number;
+          createdAt?: string;
+        };
+        type ApiWithdrawal = {
+          id: number;
+          amount?: number;
+          currency?: string;
+          status?: string;
+          professionalId?: number;
+          createdAt?: string;
+        };
+
+        const combined: FinanceRow[] = [
+          ...transactions.map((item: ApiTransaction) => ({
+            id: item.id,
+            kind: "Payment" as const,
+            type: item.type ?? "PAYMENT",
+            amount: Number(item.amount) || 0,
+            currency: item.currency || "INR",
+            status: item.status ?? "PENDING",
+            party: `Client: ${(item.clientId && names[item.clientId]) ?? `#${item.clientId}`} · Pro: ${(item.professionalId && names[item.professionalId]) ?? `#${item.professionalId}`}`,
+            createdAt: item.createdAt || new Date().toISOString(),
+          })),
+          ...withdrawals.map((item: ApiWithdrawal) => ({
+            id: item.id,
+            kind: "Payout" as const,
+            type: "Withdrawal",
+            amount: Number(item.amount) || 0,
+            currency: item.currency || "INR",
+            status: item.status ?? "PENDING",
+            party: `Professional: ${(item.professionalId && names[item.professionalId]) ?? `#${item.professionalId}`}`,
+            createdAt: item.createdAt || new Date().toISOString(),
+          })),
+        ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setRows(combined);
+      })
+      .catch((err) => {
+        console.error("Failed to load admin finance reports:", err);
+        setRows([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -790,7 +806,13 @@ function FinanceReport() {
         r.amount,
         r.status,
         r.party,
-        new Date(r.createdAt).toLocaleString(),
+        formatDateSafely(r.createdAt, {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
       ]),
     );
   };
@@ -995,13 +1017,7 @@ function FinanceReport() {
               header: "Timestamp",
               align: "right",
               render: (row) => (
-                <span className="text-xs text-slate-500">
-                  {new Date(row.createdAt).toLocaleDateString("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </span>
+                <span className="text-xs text-slate-500">{formatDateSafely(row.createdAt)}</span>
               ),
             },
           ]}

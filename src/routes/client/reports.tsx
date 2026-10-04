@@ -82,9 +82,23 @@ function jobBudget(job: Job) {
   return `₹${job.budgetMin?.toLocaleString() ?? "—"} – ₹${job.budgetMax?.toLocaleString() ?? "—"}`;
 }
 
-function isWithinDateRange(dateString: string, filter: DateFilter): boolean {
-  if (filter === "all") return true;
+function formatDateSafely(
+  dateInput: string | Date | null | undefined,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  if (!dateInput) return "—";
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(
+    "en-IN",
+    options ?? { day: "2-digit", month: "short", year: "numeric" },
+  );
+}
+
+function isWithinDateRange(dateString: string | null | undefined, filter: DateFilter): boolean {
+  if (filter === "all" || !dateString) return true;
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return false;
   const now = new Date();
   if (filter === "this_month") {
     return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
@@ -113,7 +127,7 @@ function downloadCsv(filename: string, headers: string[], rows: (string | number
       row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","),
     ),
   ].join("\r\n");
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.setAttribute("href", url);
@@ -184,7 +198,7 @@ function ProjectsReport() {
         readableStatus(j.status),
         jobBudget(j),
         j.locationAddress ?? "Remote",
-        new Date(j.updatedAt).toLocaleDateString(),
+        formatDateSafely(j.updatedAt),
       ]),
     );
   };
@@ -386,11 +400,7 @@ function ProjectsReport() {
               align: "right",
               render: (job) => (
                 <span className="text-xs text-muted-foreground">
-                  {new Date(job.updatedAt).toLocaleDateString("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })}
+                  {formatDateSafely(job.updatedAt)}
                 </span>
               ),
             },
@@ -483,7 +493,7 @@ function PaymentsReport() {
         p.type,
         p.status,
         p.amount,
-        new Date(p.createdAt).toLocaleDateString(),
+        formatDateSafely(p.createdAt),
       ]),
     );
   };
@@ -695,11 +705,7 @@ function PaymentsReport() {
               align: "right",
               render: (payment) => (
                 <span className="text-xs text-muted-foreground">
-                  {new Date(payment.createdAt).toLocaleDateString("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })}
+                  {formatDateSafely(payment.createdAt)}
                 </span>
               ),
             },

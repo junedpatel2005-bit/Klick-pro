@@ -143,7 +143,12 @@ export function ReportTable<T>({ columns, rows }: { columns: ReportColumn<T>[]; 
             key={column.key}
             style={[
               styles.tableHeaderCell,
-              { flexGrow: column.width, textAlign: column.align ?? "left" },
+              {
+                flexGrow: column.width,
+                flexBasis: 0,
+                flexShrink: 1,
+                textAlign: column.align ?? "left",
+              },
             ]}
           >
             {column.header}
@@ -156,17 +161,29 @@ export function ReportTable<T>({ columns, rows }: { columns: ReportColumn<T>[]; 
           style={[styles.tableRow, index % 2 === 1 ? styles.tableRowAlt : {}]}
           wrap={false}
         >
-          {columns.map((column) => (
-            <Text
-              key={column.key}
-              style={[
-                styles.tableCell,
-                { flexGrow: column.width, textAlign: column.align ?? "left" },
-              ]}
-            >
-              {column.format(row)}
-            </Text>
-          ))}
+          {columns.map((column) => {
+            const formatted = column.format(row);
+            const displayValue =
+              formatted !== null && formatted !== undefined && formatted !== ""
+                ? String(formatted)
+                : "—";
+            return (
+              <Text
+                key={column.key}
+                style={[
+                  styles.tableCell,
+                  {
+                    flexGrow: column.width,
+                    flexBasis: 0,
+                    flexShrink: 1,
+                    textAlign: column.align ?? "left",
+                  },
+                ]}
+              >
+                {displayValue}
+              </Text>
+            );
+          })}
         </View>
       ))}
       {rows.length === 0 && <Text style={styles.empty}>No records match this export.</Text>}

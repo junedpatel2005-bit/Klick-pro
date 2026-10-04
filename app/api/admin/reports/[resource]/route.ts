@@ -104,110 +104,120 @@ export async function POST(
   const session = await requireAdmin(request);
   if (!session) return NextResponse.json({ error: "Admin access required." }, { status: 403 });
 
-  const reportRequest = parseReportRequest(await request.json().catch(() => null));
-  if (!reportRequest)
-    return NextResponse.json({ error: "Invalid export request." }, { status: 400 });
-  const { resource } = await params;
-  const selectedOnly = reportRequest.scope === "selected";
-  const ids = reportRequest.ids ?? [];
+  try {
+    const reportRequest = parseReportRequest(await request.json().catch(() => null));
+    if (!reportRequest)
+      return NextResponse.json({ error: "Invalid export request." }, { status: 400 });
+    const { resource } = await params;
+    const selectedOnly = reportRequest.scope === "selected";
+    const ids = reportRequest.ids ?? [];
 
-  let title: string;
-  let subtitle: string;
-  let document: ReturnType<typeof ReportDocument>;
+    let title: string;
+    let subtitle: string;
+    let document: ReturnType<typeof ReportDocument>;
 
-  if (resource === "users") {
-    const users = await db.user.findMany({
-      where: {
-        role: { in: ["CLIENT", "PROFESSIONAL"] },
-        ...(selectedOnly ? { id: { in: ids } } : {}),
-      },
-      select: {
-        firstName: true,
-        lastName: true,
-        email: true,
-        role: true,
-        isActive: true,
-        isVerified: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: "desc" },
-      take: selectedOnly ? undefined : 500,
-    });
-    title = "Users & professionals";
-    subtitle = "Admin module — platform accounts";
-    document = buildDocument(title, subtitle, userColumns, users, reportRequest, selectedOnly);
-  } else if (resource === "jobs") {
-    const jobs = await db.clientJob.findMany({
-      where: selectedOnly ? { id: { in: ids } } : {},
-      include: { user: { select: { firstName: true, lastName: true } } },
-      orderBy: { createdAt: "desc" },
-      take: selectedOnly ? undefined : 500,
-    });
-    const rows: JobRow[] = jobs.map((job) => ({
-      title: job.title,
-      clientName: `${job.user.firstName} ${job.user.lastName}`.trim(),
-      category: job.category,
-      status: job.status,
-      createdAt: job.createdAt,
-    }));
-    title = "Jobs & projects";
-    subtitle = "Admin module — marketplace operations";
-    document = buildDocument(title, subtitle, jobColumns, rows, reportRequest, selectedOnly);
-  } else if (resource === "finance") {
-    const [transactions, withdrawals] = await Promise.all([
-      db.projectTransaction.findMany({
-        where: selectedOnly ? { id: { in: ids } } : {},
+    if (resource === "users") {
+      const users = await db.user.findMany({
+        where: {
+          role: { in: ["CLIENT", "PROFESSIONAL"] },
+          ...(selectedOnly ? { id: { in: ids } } : {}),
+        },
+        select: {
+          firstName: true,
+          lastName: true,
+          email: true,
+          role: true,
+          isActive: true,
+          isVerified: true,
+          createdAt: true,
+        },
         orderBy: { createdAt: "desc" },
         take: selectedOnly ? undefined : 500,
-      }),
-      db.projectWithdrawal.findMany({
+      });
+      title = "Users & professionals";
+      subtitle = "Admin module — platform accounts";
+      document = buildDocument(title, subtitle, userColumns, users, reportRequest, selectedOnly);
+    } else if (resource === "jobs") {
+      const jobs = await db.clientJob.findMany({
         where: selectedOnly ? { id: { in: ids } } : {},
+        include: { user: { select: { firstName: true, lastName: true } } },
         orderBy: { createdAt: "desc" },
         take: selectedOnly ? undefined : 500,
-      }),
-    ]);
-    const userIds = [
-      ...new Set([
-        ...transactions.flatMap((item) => [item.clientId, item.professionalId]),
-        ...withdrawals.map((item) => item.professionalId),
-      ]),
-    ];
-    const users = await db.user.findMany({
-      where: { id: { in: userIds } },
-      select: { id: true, firstName: true, lastName: true },
-    });
-    const names = new Map(
-      users.map((user) => [user.id, `${user.firstName} ${user.lastName}`.trim()]),
+      });
+      const rows: JobRow[] = jobs.map((job) => ({
+        title: job.title,
+        clientName: job.user
+          ? `${job.user.firstName ?? ""} ${job.user.lastName ?? ""}`.trim() || "Client"
+          : "Client",
+        category: job.category,
+        status: job.status,
+        createdAt: job.createdAt,
+      }));
+      title = "Jobs & projects";
+      subtitle = "Admin module — marketplace operations";
+      document = buildDocument(title, subtitle, jobColumns, rows, reportRequest, selectedOnly);
+    } else if (resource === "finance") {
+      const [transactions, withdrawals] = await Promise.all([
+        db.projectTransaction.findMany({
+          where: selectedOnly ? { id: { in: ids } } : {},
+          orderBy: { createdAt: "desc" },
+          take: selectedOnly ? undefined : 500,
+        }),
+        db.projectWithdrawal.findMany({
+          where: selectedOnly ? { id: { in: ids } } : {},
+          orderBy: { createdAt: "desc" },
+          take: selectedOnly ? undefined : 500,
+        }),
+      ]);
+      const userIds = [
+        ...new Set([
+          ...transactions.flatMap((item) => [item.clientId, item.professionalId]),
+          ...withdrawals.map((item) => item.professionalId),
+        ].filter((id): id is number => typeof id === "number" && id > 0)),
+      ];
+      const users = await db.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, firstName: true, lastName: true },
+      });
+      const names = new Map(
+        users.map((user) => [user.id, `${user.firstName} ${user.lastName}`.trim()]),
+      );
+      const rows: FinanceRow[] = [
+        ...transactions.map((item) => ({
+          kind: "Payment" as const,
+          type: item.type,
+          amount: item.amount,
+          currency: item.currency,
+          status: item.status,
+          party: `Client: ${names.get(item.clientId) ?? `#${item.clientId}`} · Professional: ${names.get(item.professionalId) ?? `#${item.professionalId}`}`,
+          createdAt: item.createdAt,
+        })),
+        ...withdrawals.map((item) => ({
+          kind: "Payout" as const,
+          type: "Withdrawal",
+          amount: item.amount,
+          currency: item.currency,
+          status: item.status,
+          party: `Professional: ${names.get(item.professionalId) ?? `#${item.professionalId}`}`,
+          createdAt: item.createdAt,
+        })),
+      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      title = "Finance & payments";
+      subtitle = "Admin module — payments and payouts";
+      document = buildDocument(title, subtitle, financeColumns, rows, reportRequest, selectedOnly);
+    } else {
+      return NextResponse.json({ error: "Unknown report." }, { status: 404 });
+    }
+
+    const buffer = await renderReportPdf(document);
+    return pdfResponse(buffer, `${resource}-report-${reportRequest.scope}.pdf`);
+  } catch (error) {
+    console.error("Admin report export failed:", error);
+    return NextResponse.json(
+      { error: "The report could not be generated. Please try again." },
+      { status: 500 },
     );
-    const rows: FinanceRow[] = [
-      ...transactions.map((item) => ({
-        kind: "Payment" as const,
-        type: item.type,
-        amount: item.amount,
-        currency: item.currency,
-        status: item.status,
-        party: `Client: ${names.get(item.clientId) ?? `#${item.clientId}`} · Professional: ${names.get(item.professionalId) ?? `#${item.professionalId}`}`,
-        createdAt: item.createdAt,
-      })),
-      ...withdrawals.map((item) => ({
-        kind: "Payout" as const,
-        type: "Withdrawal",
-        amount: item.amount,
-        currency: item.currency,
-        status: item.status,
-        party: `Professional: ${names.get(item.professionalId) ?? `#${item.professionalId}`}`,
-        createdAt: item.createdAt,
-      })),
-    ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    title = "Finance & payments";
-    subtitle = "Admin module — payments and payouts";
-    document = buildDocument(title, subtitle, financeColumns, rows, reportRequest, selectedOnly);
-  } else {
-    return NextResponse.json({ error: "Unknown report." }, { status: 404 });
   }
-
-  const buffer = await renderReportPdf(document);
-  return pdfResponse(buffer, `${resource}-report-${reportRequest.scope}.pdf`);
 }
 
 function buildDocument<T>(

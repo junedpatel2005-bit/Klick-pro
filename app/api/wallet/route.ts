@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     .object({
       amount: z.number().int().positive(),
       destinationType: z.enum(["BANK", "CARD", "UPI"]).default("BANK"),
-      destinationLabel: z.string().trim().min(2).max(120),
+      destinationLabel: z.string().trim().min(2).max(1000),
     })
     .safeParse(await request.json().catch(() => null));
   if (!parsed.success)

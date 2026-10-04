@@ -10,19 +10,24 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Briefcase,
+  Building2,
   CheckCircle2,
   Clock,
   Coins,
   Copy,
+  CreditCard,
   ExternalLink,
   Eye,
   FileCheck2,
   Landmark,
   Layers,
+  Mail,
   Percent,
+  Phone,
   RefreshCw,
   Search,
   ShieldCheck,
+  Smartphone,
   User,
   Wallet,
   WalletCards,
@@ -42,6 +47,8 @@ type UserProfile = {
   avatarUrl?: string | null;
   companyName?: string | null;
   role?: string;
+  isVerified?: boolean;
+  phoneVerifiedAt?: string | null;
 };
 
 function getUserDisplayName(user?: UserProfile | null, fallback = ""): string {
@@ -210,6 +217,7 @@ export default function AdminFinancePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedPayment, setSelectedPayment] = useState<EnrichedPayment | null>(null);
+  const [selectedWithdrawal, setSelectedWithdrawal] = useState<Withdrawal | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
@@ -604,12 +612,18 @@ export default function AdminFinancePage() {
     });
   }
 
-  function handleWithdrawalStatus(withdrawalId: number, status: "COMPLETED" | "FAILED") {
+  function handleWithdrawalStatus(
+    withdrawalId: number,
+    status: "COMPLETED" | "FAILED",
+    failureReason?: string,
+  ) {
+    const isCompleted = status === "COMPLETED";
     setConfirmAction({
-      title:
-        status === "COMPLETED" ? "Mark Withdrawal as Completed?" : "Mark Withdrawal as Failed?",
-      description: `Are you sure you want to mark withdrawal #${withdrawalId} as ${status}?`,
-      confirmLabel: status === "COMPLETED" ? "Complete" : "Mark as Failed",
+      title: isCompleted ? "Approve Payout as Paid?" : "Reject Withdrawal Request?",
+      description: isCompleted
+        ? `Are you sure you want to mark withdrawal #${withdrawalId} as paid? This records that the funds have been sent to the professional's destination.`
+        : `Are you sure you want to reject withdrawal #${withdrawalId}? Reserved funds will be returned to the professional's wallet.`,
+      confirmLabel: isCompleted ? "Approve Payout" : "Reject Withdrawal",
       variant: status === "FAILED" ? "destructive" : "default",
       action: async () => {
         setBusyId(withdrawalId);
@@ -617,10 +631,19 @@ export default function AdminFinancePage() {
           const res = await fetch(`/api/admin/finance/withdrawals/${withdrawalId}`, {
             method: "PATCH",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ status }),
+            body: JSON.stringify({
+              status,
+              ...(failureReason ? { failureReason } : {}),
+            }),
           });
-          if (!res.ok) throw new Error("Failed to update withdrawal.");
-          toast.success(`Withdrawal #${withdrawalId} marked as ${status.toLowerCase()}.`);
+          const d = await res.json().catch(() => null);
+          if (!res.ok) throw new Error(d?.error ?? "Failed to update withdrawal.");
+          toast.success(
+            `Withdrawal #${withdrawalId} ${isCompleted ? "approved as paid" : "rejected"}.`,
+          );
+          if (selectedWithdrawal?.id === withdrawalId) {
+            setSelectedWithdrawal(null);
+          }
           await fetchFinance();
         } catch (err) {
           toast.error(err instanceof Error ? err.message : "Error updating withdrawal.");
@@ -629,6 +652,16 @@ export default function AdminFinancePage() {
         }
       },
     });
+  }
+
+  function promptRejectWithdrawal(w: Withdrawal) {
+    const reason = window.prompt(
+      `Enter reason for rejecting withdrawal #${w.id} (funds will be restored to professional's balance):`,
+      "Invalid bank account or IFSC code provided.",
+    );
+    if (reason !== null) {
+      handleWithdrawalStatus(w.id, "FAILED", reason.trim() || "Rejected by admin.");
+    }
   }
 
   return (
@@ -901,9 +934,12 @@ export default function AdminFinancePage() {
                     key={item.id}
                     onClick={() => {
                       if (item.paymentRaw) setSelectedPayment(item.paymentRaw);
+                      if (item.withdrawalRaw) setSelectedWithdrawal(item.withdrawalRaw);
                     }}
                     className={`group transition-colors ${
-                      isPayment ? "cursor-pointer hover:bg-indigo-50/20" : "hover:bg-slate-50/50"
+                      isPayment || item.withdrawalRaw
+                        ? "cursor-pointer hover:bg-indigo-50/20"
+                        : "hover:bg-slate-50/50"
                     }`}
                   >
                     {/* Txn ID & Provider */}
@@ -1064,38 +1100,46 @@ export default function AdminFinancePage() {
                           </button>
                         )}
 
-                        {isPendingWithdrawal && (
+                        {item.withdrawalRaw && (
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
-                              disabled={busyId === item.refId}
-                              onClick={() =>
-                                handlePayViaRazorpay(
-                                  (data?.withdrawals ?? []).find((w) => w.id === item.refId)!,
-                                )
-                              }
-                              title="Send this payout to the professional's linked Razorpay account"
-                              className="rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-indigo-500 transition disabled:opacity-50"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedWithdrawal(item.withdrawalRaw!);
+                              }}
+                              title="Inspect withdrawal request & beneficiary details"
+                              className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 hover:bg-slate-50 hover:text-slate-800 shadow-2xs transition"
                             >
-                              Pay via Razorpay
+                              <Eye className="h-3.5 w-3.5" />
                             </button>
-                            <button
-                              type="button"
-                              disabled={busyId === item.refId}
-                              onClick={() => handleWithdrawalStatus(item.refId, "COMPLETED")}
-                              title="Mark completed without sending money through Razorpay"
-                              className="rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-emerald-500 transition disabled:opacity-50"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              disabled={busyId === item.refId}
-                              onClick={() => handleWithdrawalStatus(item.refId, "FAILED")}
-                              className="rounded-lg bg-rose-50 border border-rose-200 px-2 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100 transition disabled:opacity-50"
-                            >
-                              Reject
-                            </button>
+                            {isPendingWithdrawal && (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={busyId === item.refId}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleWithdrawalStatus(item.refId, "COMPLETED");
+                                  }}
+                                  title="Mark completed without sending money through Razorpay"
+                                  className="rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-emerald-500 transition disabled:opacity-50"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={busyId === item.refId}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    promptRejectWithdrawal(item.withdrawalRaw!);
+                                  }}
+                                  className="rounded-lg bg-rose-50 border border-rose-200 px-2 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100 transition disabled:opacity-50"
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
                           </div>
                         )}
 
@@ -1144,6 +1188,21 @@ export default function AdminFinancePage() {
           onApprovePayout={handleApprovePayout}
           isBusy={busyId === selectedPayment.id}
           names={data?.names ?? {}}
+          onCopy={copyToClipboard}
+          copySuccess={copySuccess}
+        />
+      )}
+
+      {/* Withdrawal Deep-Dive Slide-Over Drawer */}
+      {selectedWithdrawal && (
+        <WithdrawalDrawer
+          withdrawal={selectedWithdrawal}
+          user={data?.usersById?.[selectedWithdrawal.professionalId] ?? null}
+          onClose={() => setSelectedWithdrawal(null)}
+          onApprove={(id) => handleWithdrawalStatus(id, "COMPLETED")}
+          onReject={promptRejectWithdrawal}
+          onPayRazorpay={handlePayViaRazorpay}
+          isBusy={busyId === selectedWithdrawal.id}
           onCopy={copyToClipboard}
           copySuccess={copySuccess}
         />
@@ -1348,6 +1407,427 @@ function StatusBadge({ status }: { status: string }) {
       <Clock className="h-3 w-3" />
       {status}
     </span>
+  );
+}
+
+// -------------------------------------------------------------------------
+// WITHDRAWAL DEEP-DIVE SLIDE-OVER DRAWER
+// -------------------------------------------------------------------------
+
+function WithdrawalDrawer({
+  withdrawal,
+  user,
+  onClose,
+  onApprove,
+  onReject,
+  onPayRazorpay,
+  isBusy,
+  onCopy,
+  copySuccess,
+}: {
+  withdrawal: Withdrawal;
+  user?: UserProfile | null;
+  onClose: () => void;
+  onApprove: (id: number) => void;
+  onReject: (withdrawal: Withdrawal) => void;
+  onPayRazorpay: (withdrawal: Withdrawal) => void;
+  isBusy: boolean;
+  onCopy: (text: string, label: string) => void;
+  copySuccess: string | null;
+}) {
+  let parsedDest: {
+    type?: string;
+    bankName?: string;
+    accountHolder?: string;
+    accountNumber?: string;
+    ifsc?: string;
+    upiId?: string;
+    upiHolder?: string;
+    cardHolder?: string;
+    cardNumber?: string;
+    cardBank?: string;
+  } | null = null;
+
+  try {
+    if (withdrawal.destinationLabel) {
+      parsedDest = JSON.parse(withdrawal.destinationLabel);
+    }
+  } catch {
+    // legacy string fallback
+  }
+
+  const methodType = (parsedDest?.type || withdrawal.destinationType || "BANK").toUpperCase();
+  const isBank = methodType === "BANK";
+  const isUpi = methodType === "UPI";
+  const isCard = methodType === "CARD";
+
+  const isPending = withdrawal.status === "PENDING";
+  const isCompleted = withdrawal.status === "COMPLETED";
+
+  const proName = user?.name || `Professional #${withdrawal.professionalId}`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs transition-opacity">
+      <div
+        className="w-full max-w-xl h-full bg-white shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Drawer Header */}
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-6 py-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs font-bold text-slate-900 bg-white border border-slate-200 px-2 py-0.5 rounded-lg shadow-2xs">
+                Withdrawal #{withdrawal.id}
+              </span>
+              <StatusBadge status={withdrawal.status} />
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Requested: {formatDate(withdrawal.createdAt)}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Drawer Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Amount & Method Card */}
+          <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950 p-6 text-white shadow-md">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
+                Payout Amount
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold backdrop-blur-xs border border-white/10 text-white">
+                {isBank && <Building2 className="h-3.5 w-3.5 text-emerald-300" />}
+                {isUpi && <Smartphone className="h-3.5 w-3.5 text-cyan-300" />}
+                {isCard && <CreditCard className="h-3.5 w-3.5 text-amber-300" />}
+                {isBank
+                  ? "Bank Transfer"
+                  : isUpi
+                    ? "UPI Transfer"
+                    : isCard
+                      ? "Debit Card"
+                      : "Payout"}
+              </span>
+            </div>
+            <p className="mt-3 font-display text-4xl font-black tracking-tight">
+              ₹{withdrawal.amount.toLocaleString("en-IN")}
+            </p>
+            <p className="mt-1 text-xs text-slate-300">
+              Currency: {withdrawal.currency || "INR"} · Status: {withdrawal.status}
+            </p>
+          </div>
+
+          {/* Professional User Details Card */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Professional Details
+              </h3>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                <User className="h-3 w-3" /> Professional #{withdrawal.professionalId}
+              </span>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-indigo-50 border border-indigo-100 font-bold text-indigo-700 text-lg">
+                {user?.name ? user.name.slice(0, 2).toUpperCase() : "PRO"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-slate-900 text-base">{proName}</p>
+                  {user?.isVerified && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">
+                      <ShieldCheck className="h-3 w-3" /> Verified
+                    </span>
+                  )}
+                </div>
+                {user?.companyName && (
+                  <p className="text-xs text-slate-500 mt-0.5">{user.companyName}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="divide-y divide-slate-100 pt-2 text-xs">
+              {/* Email */}
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-slate-500 flex items-center gap-1.5">
+                  <Mail className="h-3.5 w-3.5 text-slate-400" /> Email
+                </span>
+                <div className="flex items-center gap-1.5 font-medium text-slate-800">
+                  <span>{user?.email || "—"}</span>
+                  {user?.email && (
+                    <button
+                      type="button"
+                      onClick={() => onCopy(user.email, "Email")}
+                      className="text-slate-400 hover:text-indigo-600 transition p-1"
+                      title="Copy email"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Phone */}
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-slate-500 flex items-center gap-1.5">
+                  <Phone className="h-3.5 w-3.5 text-slate-400" /> Phone
+                </span>
+                <div className="flex items-center gap-1.5 font-medium text-slate-800">
+                  <span>{user?.phone || "No phone registered"}</span>
+                  {user?.phone && (
+                    <button
+                      type="button"
+                      onClick={() => onCopy(user.phone!, "Phone")}
+                      className="text-slate-400 hover:text-indigo-600 transition p-1"
+                      title="Copy phone"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {user?.phoneVerifiedAt ? (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      OTP Verified
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Structured Payout Destination Card */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Payout Destination & Beneficiary
+              </h3>
+              <span className="text-xs font-semibold text-slate-600">
+                {isBank ? "Bank Account" : isUpi ? "UPI ID" : isCard ? "Debit Card" : "Direct"}
+              </span>
+            </div>
+
+            {/* If BANK */}
+            {isBank && (
+              <div className="space-y-3">
+                <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200/80 space-y-2.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">Bank Name</span>
+                    <span className="font-bold text-slate-900 text-sm">
+                      {parsedDest?.bankName || "Bank Transfer"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">Account Holder</span>
+                    <span className="font-semibold text-slate-800">
+                      {parsedDest?.accountHolder || proName}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">Account Number</span>
+                    <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900 text-sm bg-white px-2 py-1 rounded border border-slate-200">
+                      <span>{parsedDest?.accountNumber || withdrawal.destinationLabel || "—"}</span>
+                      {(parsedDest?.accountNumber || withdrawal.destinationLabel) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onCopy(
+                              parsedDest?.accountNumber || withdrawal.destinationLabel || "",
+                              "Account Number",
+                            )
+                          }
+                          className="text-slate-400 hover:text-indigo-600 p-0.5 transition"
+                          title="Copy Account Number"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">IFSC Code</span>
+                    <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900 bg-white px-2 py-1 rounded border border-slate-200">
+                      <span>{parsedDest?.ifsc || "—"}</span>
+                      {parsedDest?.ifsc && (
+                        <button
+                          type="button"
+                          onClick={() => onCopy(parsedDest?.ifsc || "", "IFSC Code")}
+                          className="text-slate-400 hover:text-indigo-600 p-0.5 transition"
+                          title="Copy IFSC"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* If UPI */}
+            {isUpi && (
+              <div className="space-y-3">
+                <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200/80 space-y-2.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">Registered Name</span>
+                    <span className="font-semibold text-slate-800">
+                      {parsedDest?.upiHolder || proName}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">UPI ID / VPA</span>
+                    <div className="flex items-center gap-1.5 font-mono font-bold text-indigo-700 bg-indigo-50/50 px-2.5 py-1 rounded border border-indigo-200 text-sm">
+                      <span>{parsedDest?.upiId || withdrawal.destinationLabel || "—"}</span>
+                      {(parsedDest?.upiId || withdrawal.destinationLabel) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onCopy(parsedDest?.upiId || withdrawal.destinationLabel || "", "UPI ID")
+                          }
+                          className="text-indigo-400 hover:text-indigo-700 p-0.5 transition"
+                          title="Copy UPI ID"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* If CARD */}
+            {isCard && (
+              <div className="space-y-3">
+                <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200/80 space-y-2.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">Cardholder Name</span>
+                    <span className="font-semibold text-slate-800">
+                      {parsedDest?.cardHolder || proName}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">Issuing Bank</span>
+                    <span className="font-bold text-slate-900">
+                      {parsedDest?.cardBank || "Debit Card"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-500">Card Number</span>
+                    <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900 bg-white px-2 py-1 rounded border border-slate-200 text-sm">
+                      <span>{parsedDest?.cardNumber || withdrawal.destinationLabel || "—"}</span>
+                      {(parsedDest?.cardNumber || withdrawal.destinationLabel) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onCopy(
+                              parsedDest?.cardNumber || withdrawal.destinationLabel || "",
+                              "Card Number",
+                            )
+                          }
+                          className="text-slate-400 hover:text-indigo-600 p-0.5 transition"
+                          title="Copy Card Number"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Fallback plain string */}
+            {!isBank && !isUpi && !isCard && (
+              <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200/80 space-y-2">
+                <span className="text-xs text-slate-500">Destination Details</span>
+                <div className="flex items-center justify-between font-mono text-xs font-semibold text-slate-800 bg-white p-2.5 rounded border border-slate-200">
+                  <span>{withdrawal.destinationLabel || "—"}</span>
+                  {withdrawal.destinationLabel && (
+                    <button
+                      type="button"
+                      onClick={() => onCopy(withdrawal.destinationLabel!, "Destination")}
+                      className="text-slate-400 hover:text-indigo-600 p-0.5 transition"
+                      title="Copy destination"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Failure reason if rejected */}
+          {withdrawal.failureReason && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs space-y-1">
+              <p className="font-bold text-rose-800 flex items-center gap-1.5">
+                <AlertCircle className="h-4 w-4 text-rose-600" /> Rejection Reason
+              </p>
+              <p className="text-rose-700 leading-relaxed pl-5.5">{withdrawal.failureReason}</p>
+            </div>
+          )}
+
+          {/* Copy feedback */}
+          {copySuccess && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-semibold text-emerald-800 text-center animate-in fade-in duration-200">
+              ✓ {copySuccess} copied to clipboard!
+            </div>
+          )}
+        </div>
+
+        {/* Drawer Footer Actions */}
+        <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
+          {isPending ? (
+            <div className="flex flex-col sm:flex-row items-center gap-2.5">
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => onApprove(withdrawal.id)}
+                className="w-full sm:flex-1 rounded-xl bg-emerald-600 py-2.5 px-4 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 transition disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Approve & Mark as Paid
+              </button>
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => onReject(withdrawal)}
+                className="w-full sm:w-auto rounded-xl border border-rose-200 bg-rose-50 py-2.5 px-4 text-xs font-bold text-rose-700 hover:bg-rose-100 transition disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <XCircle className="h-4 w-4" />
+                Reject Payout
+              </button>
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => onPayRazorpay(withdrawal)}
+                title="Send money automatically via linked Razorpay Route"
+                className="w-full sm:w-auto rounded-xl border border-indigo-200 bg-indigo-50 py-2.5 px-3 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition disabled:opacity-50"
+              >
+                Razorpay
+              </button>
+            </div>
+          ) : isCompleted ? (
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-bold text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" />
+              This withdrawal was paid and completed.
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-bold text-rose-700">
+              <XCircle className="h-4 w-4" />
+              This withdrawal was rejected. Funds returned to professional wallet.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

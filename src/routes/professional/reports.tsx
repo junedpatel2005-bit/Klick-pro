@@ -78,9 +78,23 @@ function money(project: RunningProject) {
     : `₹${project.budget.toLocaleString()}`;
 }
 
+function formatDateSafely(
+  dateInput: string | Date | null | undefined,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  if (!dateInput) return "—";
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(
+    "en-IN",
+    options ?? { day: "2-digit", month: "short", year: "numeric" },
+  );
+}
+
 function isWithinDateRange(dateString: string | null | undefined, filter: DateFilter): boolean {
   if (filter === "all" || !dateString) return true;
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return false;
   const now = new Date();
   if (filter === "this_month") {
     return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
@@ -109,7 +123,7 @@ function downloadCsv(filename: string, headers: string[], rows: (string | number
       row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","),
     ),
   ].join("\r\n");
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.setAttribute("href", url);
@@ -132,7 +146,57 @@ function ProjectsReport() {
     setLoading(true);
     fetch("/api/v1/portal/professional-jobs", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : Promise.reject()))
-      .then((data: { activeProjects?: RunningProject[] }) => setProjects(data.activeProjects ?? []))
+      .then(
+        (data: {
+          activeProjects?: RunningProject[];
+          completedProjects?: Array<{
+            id: number;
+            jobId: number;
+            jobTitle: string | null;
+            clientName: string | null;
+            completedAt: string;
+            amount: number;
+          }>;
+          closedProjects?: Array<{
+            id: number;
+            jobId: number;
+            jobTitle: string | null;
+            clientName: string | null;
+            updatedAt?: string;
+          }>;
+        }) => {
+          const active: RunningProject[] = Array.isArray(data.activeProjects)
+            ? data.activeProjects
+            : [];
+          const completed: RunningProject[] = Array.isArray(data.completedProjects)
+            ? data.completedProjects.map((cp) => ({
+                id: cp.id,
+                jobTitle: cp.jobTitle ?? `Job #${cp.jobId}`,
+                clientName: cp.clientName ?? "Client",
+                status: "COMPLETED",
+                acceptedAt: cp.completedAt,
+                deadline: null,
+                budget: cp.amount,
+                timingType: "FIXED",
+                progress: 100,
+              }))
+            : [];
+          const closed: RunningProject[] = Array.isArray(data.closedProjects)
+            ? data.closedProjects.map((cl) => ({
+                id: cl.id,
+                jobTitle: cl.jobTitle ?? `Job #${cl.jobId}`,
+                clientName: cl.clientName ?? "Client",
+                status: "CLOSED",
+                acceptedAt: cl.updatedAt || new Date().toISOString(),
+                deadline: null,
+                budget: null,
+                timingType: "FIXED",
+                progress: 0,
+              }))
+            : [];
+          setProjects([...active, ...completed, ...closed]);
+        },
+      )
       .catch(() => setError("Your project data could not be loaded. Please try again."))
       .finally(() => setLoading(false));
   };
@@ -196,10 +260,10 @@ function ProjectsReport() {
         p.jobTitle ?? "Untitled project",
         p.clientName ?? "Client",
         displayStatus(p.status),
-        p.deadline ? new Date(p.deadline).toLocaleDateString() : "—",
+        p.deadline ? formatDateSafely(p.deadline) : "—",
         money(p),
         `${p.progress}%`,
-        p.acceptedAt ? new Date(p.acceptedAt).toLocaleDateString() : "—",
+        p.acceptedAt ? formatDateSafely(p.acceptedAt) : "—",
       ]),
     );
   };
@@ -506,7 +570,7 @@ function EarningsReport() {
         item.description ?? "Milestone earnings",
         item.status,
         item.amount,
-        new Date(item.createdAt).toLocaleDateString(),
+        formatDateSafely(item.createdAt),
       ]),
     );
   };
@@ -702,11 +766,7 @@ function EarningsReport() {
               align: "right",
               render: (item) => (
                 <span className="text-xs text-muted-foreground">
-                  {new Date(item.createdAt).toLocaleDateString("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })}
+                  {formatDateSafely(item.createdAt)}
                 </span>
               ),
             },
