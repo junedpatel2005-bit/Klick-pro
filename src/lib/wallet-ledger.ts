@@ -95,10 +95,13 @@ export async function creditWalletFromVerifiedProvider(
   // and both credit, because the transaction only sees READ COMMITTED snapshots.
   // updateMany applies its condition to the row lock itself, so exactly one caller
   // can win and the losers throw instead of inflating the balance.
+  // We allow transition from both PENDING and FAILED (e.g. if the user completed
+  // an external UPI app payment after the browser checkout modal was dismissed).
   const claimed = await tx.walletTransaction.updateMany({
-    where: { id: transaction.id, status: "PENDING" },
+    where: { id: transaction.id, status: { in: ["PENDING", "FAILED"] } },
     data: {
       status: "COMPLETED",
+      description: `Wallet funded via Razorpay (${input.providerPaymentId})`,
       metadataJson: JSON.stringify({ providerPaymentId: input.providerPaymentId }),
     },
   });

@@ -25,6 +25,7 @@ import {
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { getDetailedProfessional } from "@/lib/queries/marketplace";
 import type { DetailedProfessional } from "@/lib/types/marketplace";
+import { LinkedAccountsCard } from "@/components/LinkedAccountsCard";
 
 function formatCurrency(amount: number | null): string {
   if (amount === null || amount === undefined) return "Not specified";
@@ -403,6 +404,8 @@ export default async function ProfessionalProfilePage() {
         </div>
 
         <aside className="space-y-6">
+          <LinkedAccountsCard />
+
           <article className="rounded-3xl border border-border/80 bg-card p-6 shadow-soft">
             <h2 className="text-lg font-semibold">Contact</h2>
             <div className="mt-4 space-y-4 text-sm text-muted-foreground">

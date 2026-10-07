@@ -129,10 +129,12 @@ export async function POST(request: Request) {
         if (walletTx) {
           if (entity.amount !== undefined && entity.amount !== walletTx.amount * 100)
             throw new Error("Razorpay amount does not match the local wallet transaction.");
+          if (entity.currency && entity.currency !== "INR")
+            throw new Error("Razorpay currency does not match the local wallet transaction.");
 
           if (payload.event === "payment.captured") {
             const claimed = await tx.walletTransaction.updateMany({
-              where: { id: walletTx.id, status: "PENDING" },
+              where: { id: walletTx.id, status: { in: ["PENDING", "FAILED"] } },
               data: {
                 status: "COMPLETED",
                 description: `Wallet funded via Razorpay (${entity.id ?? entity.order_id})`,

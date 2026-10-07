@@ -189,6 +189,8 @@ type UnifiedItem = {
   provider: string;
   paymentRaw?: EnrichedPayment;
   withdrawalRaw?: Withdrawal;
+  topupRaw?: WalletTopUp;
+  ledgerRaw?: PlatformLedgerItem;
 };
 
 // --- Formatting Helpers ---
@@ -218,8 +220,25 @@ export default function AdminFinancePage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedPayment, setSelectedPayment] = useState<EnrichedPayment | null>(null);
   const [selectedWithdrawal, setSelectedWithdrawal] = useState<Withdrawal | null>(null);
+  const [selectedTopUp, setSelectedTopUp] = useState<UnifiedItem | null>(null);
+  const [selectedLedger, setSelectedLedger] = useState<UnifiedItem | null>(null);
+  const [selectedGenericItem, setSelectedGenericItem] = useState<UnifiedItem | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+
+  function handleInspectItem(item: UnifiedItem) {
+    if (item.paymentRaw) {
+      setSelectedPayment(item.paymentRaw);
+    } else if (item.withdrawalRaw) {
+      setSelectedWithdrawal(item.withdrawalRaw);
+    } else if (item.topupRaw) {
+      setSelectedTopUp(item);
+    } else if (item.ledgerRaw) {
+      setSelectedLedger(item);
+    } else {
+      setSelectedGenericItem(item);
+    }
+  }
   const [confirmAction, setConfirmAction] = useState<{
     title: string;
     description?: string;
@@ -420,6 +439,7 @@ export default function AdminFinancePage() {
         proPayout: null,
         status: topup.status,
         provider: "WALLET",
+        topupRaw: topup,
       });
     }
 
@@ -475,6 +495,7 @@ export default function AdminFinancePage() {
         proPayout: tx.amount < 0 ? Math.abs(tx.amount) : null,
         status: tx.status,
         provider: "TREASURY",
+        ledgerRaw: tx,
       });
     }
 
@@ -932,15 +953,8 @@ export default function AdminFinancePage() {
                 return (
                   <tr
                     key={item.id}
-                    onClick={() => {
-                      if (item.paymentRaw) setSelectedPayment(item.paymentRaw);
-                      if (item.withdrawalRaw) setSelectedWithdrawal(item.withdrawalRaw);
-                    }}
-                    className={`group transition-colors ${
-                      isPayment || item.withdrawalRaw
-                        ? "cursor-pointer hover:bg-indigo-50/20"
-                        : "hover:bg-slate-50/50"
-                    }`}
+                    onClick={() => handleInspectItem(item)}
+                    className="group transition-colors cursor-pointer hover:bg-indigo-50/30"
                   >
                     {/* Txn ID & Provider */}
                     <td className="py-3 pl-5 pr-2 whitespace-nowrap">
@@ -1100,59 +1114,46 @@ export default function AdminFinancePage() {
                           </button>
                         )}
 
-                        {item.withdrawalRaw && (
-                          <div className="flex items-center gap-1">
+                        {isPendingWithdrawal && item.withdrawalRaw && (
+                          <>
                             <button
                               type="button"
+                              disabled={busyId === item.refId}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelectedWithdrawal(item.withdrawalRaw!);
+                                handleWithdrawalStatus(item.refId, "COMPLETED");
                               }}
-                              title="Inspect withdrawal request & beneficiary details"
-                              className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 hover:bg-slate-50 hover:text-slate-800 shadow-2xs transition"
+                              title="Mark completed without sending money through Razorpay"
+                              className="rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-emerald-500 transition disabled:opacity-50"
                             >
-                              <Eye className="h-3.5 w-3.5" />
+                              Approve
                             </button>
-                            {isPendingWithdrawal && (
-                              <>
-                                <button
-                                  type="button"
-                                  disabled={busyId === item.refId}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleWithdrawalStatus(item.refId, "COMPLETED");
-                                  }}
-                                  title="Mark completed without sending money through Razorpay"
-                                  className="rounded-lg bg-emerald-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-emerald-500 transition disabled:opacity-50"
-                                >
-                                  Approve
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={busyId === item.refId}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    promptRejectWithdrawal(item.withdrawalRaw!);
-                                  }}
-                                  className="rounded-lg bg-rose-50 border border-rose-200 px-2 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100 transition disabled:opacity-50"
-                                >
-                                  Reject
-                                </button>
-                              </>
-                            )}
-                          </div>
+                            <button
+                              type="button"
+                              disabled={busyId === item.refId}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                promptRejectWithdrawal(item.withdrawalRaw!);
+                              }}
+                              className="rounded-lg bg-rose-50 border border-rose-200 px-2 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100 transition disabled:opacity-50"
+                            >
+                              Reject
+                            </button>
+                          </>
                         )}
 
-                        {isPayment && item.paymentRaw && (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedPayment(item.paymentRaw!)}
-                            className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 hover:bg-slate-50 hover:text-slate-800 shadow-2xs transition"
-                            title="Inspect Details"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </button>
-                        )}
+                        {/* Always available Eye button for ANY transaction */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleInspectItem(item);
+                          }}
+                          className="rounded-lg border border-slate-200 bg-white p-1 text-slate-500 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300 shadow-2xs transition active:scale-95"
+                          title="Inspect all transaction details"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1203,6 +1204,37 @@ export default function AdminFinancePage() {
           onReject={promptRejectWithdrawal}
           onPayRazorpay={handlePayViaRazorpay}
           isBusy={busyId === selectedWithdrawal.id}
+          onCopy={copyToClipboard}
+          copySuccess={copySuccess}
+        />
+      )}
+
+      {/* Client Top-Up Deep-Dive Slide-Over Drawer */}
+      {selectedTopUp && (
+        <TopUpDrawer
+          item={selectedTopUp}
+          user={data?.usersById?.[selectedTopUp.topupRaw?.wallet.userId ?? 0] ?? null}
+          onClose={() => setSelectedTopUp(null)}
+          onCopy={copyToClipboard}
+          copySuccess={copySuccess}
+        />
+      )}
+
+      {/* Treasury Ledger Deep-Dive Slide-Over Drawer */}
+      {selectedLedger && (
+        <LedgerDrawer
+          item={selectedLedger}
+          onClose={() => setSelectedLedger(null)}
+          onCopy={copyToClipboard}
+          copySuccess={copySuccess}
+        />
+      )}
+
+      {/* Generic Activity Deep-Dive Slide-Over Drawer */}
+      {selectedGenericItem && (
+        <GenericActivityDrawer
+          item={selectedGenericItem}
+          onClose={() => setSelectedGenericItem(null)}
           onCopy={copyToClipboard}
           copySuccess={copySuccess}
         />
@@ -2132,6 +2164,518 @@ function TransactionDrawer({
               Approve Milestone Payout
             </button>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------------
+// TOP-UP DEEP-DIVE SLIDE-OVER DRAWER
+// -------------------------------------------------------------------------
+
+function TopUpDrawer({
+  item,
+  user,
+  onClose,
+  onCopy,
+  copySuccess,
+}: {
+  item: UnifiedItem;
+  user?: UserProfile | null;
+  onClose: () => void;
+  onCopy: (text: string, label: string) => void;
+  copySuccess: string | null;
+}) {
+  const topup = item.topupRaw;
+  if (!topup) return null;
+
+  const clientName = getUserDisplayName(user, item.clientName || `Client #${topup.wallet.userId}`);
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs transition-opacity">
+      <div
+        className="w-full max-w-xl h-full bg-white shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Drawer Header */}
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-5 py-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs font-bold text-slate-900 bg-white border border-slate-200 px-2 py-0.5 rounded-lg shadow-2xs">
+                Top-up #{topup.id}
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Wallet Top-up
+              </span>
+              <StatusBadge status={topup.status} />
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Created: {formatDate(topup.createdAt)}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Drawer Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Top-up Amount Card */}
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 space-y-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+              <Wallet className="h-4 w-4 text-emerald-600" />
+              Wallet Credit Amount
+            </span>
+            <div className="flex items-baseline justify-between">
+              <p className="text-3xl font-black text-emerald-950">
+                +{formatMoney(topup.amount)}
+              </p>
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-full">
+                INR Deposit
+              </span>
+            </div>
+            <p className="text-xs text-emerald-700">
+              Funds credited directly to client balance for job funding and escrow milestone locking.
+            </p>
+          </div>
+
+          {/* Client Account Dossier */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <User className="h-3.5 w-3.5 text-slate-400" />
+              Client Account Details
+            </span>
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                <span className="text-slate-500">Client Name:</span>
+                <span className="font-bold text-slate-900">{clientName}</span>
+              </div>
+              {(user?.email || item.clientEmail) && (
+                <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                  <span className="text-slate-500">Email:</span>
+                  <span className="font-medium text-slate-800">{user?.email || item.clientEmail}</span>
+                </div>
+              )}
+              {user?.phone && (
+                <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                  <span className="text-slate-500">Phone:</span>
+                  <span className="font-medium text-slate-800">{user.phone}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                <span className="text-slate-500">Client User ID:</span>
+                <span className="font-mono font-semibold text-slate-700">#{topup.wallet.userId}</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-slate-500">Account Type:</span>
+                <span className="font-semibold text-slate-800">Marketplace Client</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Gateway & Payment Reference */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <CreditCard className="h-3.5 w-3.5 text-slate-400" />
+              Payment Gateway Reference
+            </span>
+            <div className="space-y-2.5 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Payment Channel:</span>
+                <span className="font-semibold text-slate-800">
+                  {topup.providerReference ? "Razorpay Gateway" : "Direct Wallet Deposit"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Reference / Order ID:</span>
+                <div className="flex items-center gap-1.5 font-mono text-slate-900 bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                  <span>{topup.providerReference || "WALLET_INTERNAL"}</span>
+                  {topup.providerReference && (
+                    <button
+                      type="button"
+                      onClick={() => onCopy(topup.providerReference!, "Reference ID")}
+                      className="text-slate-400 hover:text-indigo-600 transition"
+                      title="Copy reference"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Transaction Status:</span>
+                <span className="font-semibold text-emerald-700">{topup.status}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Timestamp:</span>
+                <span className="font-medium text-slate-600">{formatDate(topup.createdAt)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Copy feedback */}
+          {copySuccess && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-semibold text-emerald-800 text-center animate-in fade-in duration-200">
+              ✓ {copySuccess} copied to clipboard!
+            </div>
+          )}
+        </div>
+
+        {/* Drawer Footer */}
+        <div className="border-t border-slate-200 bg-slate-50 px-5 py-3.5 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition shadow-2xs"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------------
+// TREASURY LEDGER DEEP-DIVE SLIDE-OVER DRAWER
+// -------------------------------------------------------------------------
+
+function LedgerDrawer({
+  item,
+  onClose,
+  onCopy,
+  copySuccess,
+}: {
+  item: UnifiedItem;
+  onClose: () => void;
+  onCopy: (text: string, label: string) => void;
+  copySuccess: string | null;
+}) {
+  const ledger = item.ledgerRaw;
+  if (!ledger) return null;
+
+  const isCredit = ledger.amount >= 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs transition-opacity">
+      <div
+        className="w-full max-w-xl h-full bg-white shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Drawer Header */}
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-5 py-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs font-bold text-slate-900 bg-white border border-slate-200 px-2 py-0.5 rounded-lg shadow-2xs">
+                Ledger #{ledger.id}
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                {ledger.type.replaceAll("_", " ")}
+              </span>
+              <StatusBadge status={ledger.status} />
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Created: {formatDate(ledger.createdAt)}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Drawer Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Treasury Impact Card */}
+          <div
+            className={`rounded-2xl border p-5 space-y-2 ${
+              isCredit
+                ? "border-emerald-200 bg-emerald-50/50"
+                : "border-slate-200 bg-slate-50/80"
+            }`}
+          >
+            <span
+              className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                isCredit ? "text-emerald-800" : "text-slate-700"
+              }`}
+            >
+              <Landmark className="h-4 w-4" />
+              Treasury Cashflow Movement
+            </span>
+            <div className="flex items-baseline justify-between">
+              <p
+                className={`text-3xl font-black ${
+                  isCredit ? "text-emerald-950" : "text-slate-900"
+                }`}
+              >
+                {isCredit ? `+${formatMoney(ledger.amount)}` : `-${formatMoney(Math.abs(ledger.amount))}`}
+              </p>
+              <span
+                className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                  isCredit
+                    ? "text-emerald-800 bg-emerald-100"
+                    : "text-slate-700 bg-slate-200"
+                }`}
+              >
+                {isCredit ? "Treasury Credit" : "Treasury Disbursement"}
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 mt-1">
+              {isCredit
+                ? "Cash received or retained in the platform escrow & operational treasury."
+                : "Cash paid out from platform balances to partner accounts."}
+            </p>
+          </div>
+
+          {/* Description & Narrative */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Transaction Narrative
+            </span>
+            <p className="text-sm font-semibold text-slate-800 leading-relaxed">
+              {ledger.description || item.title || "Platform Treasury Operation"}
+            </p>
+          </div>
+
+          {/* Associated Project Context */}
+          {(ledger.projectTitle || ledger.milestoneTitle) && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Briefcase className="h-3.5 w-3.5 text-slate-400" />
+                Related Project / Milestone
+              </span>
+              <div className="space-y-1.5 text-xs">
+                {ledger.projectTitle && (
+                  <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span className="text-slate-500">Project Title:</span>
+                    <span className="font-bold text-slate-900">{ledger.projectTitle}</span>
+                  </div>
+                )}
+                {ledger.milestoneTitle && (
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-500">Milestone:</span>
+                    <span className="font-semibold text-indigo-700">{ledger.milestoneTitle}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Associated Parties */}
+          {(ledger.clientName || ledger.professionalName) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {ledger.clientName && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-3.5 space-y-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Client
+                  </span>
+                  <p className="font-bold text-slate-900 text-xs">{ledger.clientName}</p>
+                </div>
+              )}
+              {ledger.professionalName && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-3.5 space-y-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Professional
+                  </span>
+                  <p className="font-bold text-slate-900 text-xs">{ledger.professionalName}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Audit Data */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-2 text-xs">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Audit Record
+            </span>
+            <div className="flex justify-between py-1 border-b border-slate-100">
+              <span className="text-slate-500">Ledger ID:</span>
+              <span className="font-mono font-bold text-slate-800">#{ledger.id}</span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-slate-100">
+              <span className="text-slate-500">Event Type:</span>
+              <span className="font-mono text-slate-800">{ledger.type}</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="text-slate-500">Recorded At:</span>
+              <span className="text-slate-700">{formatDate(ledger.createdAt)}</span>
+            </div>
+          </div>
+
+          {/* Copy feedback */}
+          {copySuccess && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-semibold text-emerald-800 text-center animate-in fade-in duration-200">
+              ✓ {copySuccess} copied to clipboard!
+            </div>
+          )}
+        </div>
+
+        {/* Drawer Footer */}
+        <div className="border-t border-slate-200 bg-slate-50 px-5 py-3.5 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition shadow-2xs"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------------
+// GENERIC ACTIVITY DEEP-DIVE SLIDE-OVER DRAWER
+// -------------------------------------------------------------------------
+
+function GenericActivityDrawer({
+  item,
+  onClose,
+  onCopy,
+  copySuccess,
+}: {
+  item: UnifiedItem;
+  onClose: () => void;
+  onCopy: (text: string, label: string) => void;
+  copySuccess: string | null;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs transition-opacity">
+      <div
+        className="w-full max-w-xl h-full bg-white shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Drawer Header */}
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-5 py-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs font-bold text-slate-900 bg-white border border-slate-200 px-2 py-0.5 rounded-lg shadow-2xs">
+                Ref #{item.refId}
+              </span>
+              <KindBadge kind={item.kind} provider={item.provider} />
+              <StatusBadge status={item.status} />
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">Recorded: {formatDate(item.date)}</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Drawer Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Main Info */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Transaction Details
+            </span>
+            <p className="text-base font-bold text-slate-900">{item.title}</p>
+            {item.categoryOrRef && (
+              <p className="text-xs text-slate-500">{item.categoryOrRef}</p>
+            )}
+            {item.milestoneInfo && (
+              <span className="inline-flex items-center gap-1 rounded bg-slate-200/70 px-2 py-0.5 text-xs font-medium text-slate-700 mt-1">
+                <Layers className="h-3 w-3 text-slate-500" />
+                {item.milestoneInfo}
+              </span>
+            )}
+          </div>
+
+          {/* Financials Overview */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Coins className="h-3.5 w-3.5 text-slate-400" />
+              Financials
+            </span>
+            <div className="space-y-2 text-xs">
+              {item.clientPaid !== null && item.clientPaid !== undefined && (
+                <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                  <span className="text-slate-500">Gross Amount / Client Paid:</span>
+                  <span className="font-bold text-slate-900">{formatMoney(item.clientPaid)}</span>
+                </div>
+              )}
+              {item.adminNet !== null && item.adminNet !== undefined && (
+                <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                  <span className="text-slate-500">Platform Net:</span>
+                  <span className="font-bold text-emerald-700">+{formatMoney(item.adminNet)}</span>
+                </div>
+              )}
+              {item.proPayout !== null && item.proPayout !== undefined && (
+                <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                  <span className="text-slate-500">Professional Payout:</span>
+                  <span className="font-bold text-slate-800">{formatMoney(item.proPayout)}</span>
+                </div>
+              )}
+              {item.remainingAmount !== null && item.remainingAmount !== undefined && (
+                <div className="flex justify-between items-center py-1">
+                  <span className="text-slate-500">Remaining Balance:</span>
+                  <span className="font-bold text-amber-700">{formatMoney(item.remainingAmount)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Parties */}
+          {(item.clientName || item.proName) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {item.clientName && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-3.5 space-y-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Client
+                  </span>
+                  <p className="font-bold text-slate-900 text-xs">{item.clientName}</p>
+                  {item.clientEmail && (
+                    <p className="text-[11px] text-slate-500 truncate">{item.clientEmail}</p>
+                  )}
+                </div>
+              )}
+              {item.proName && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-3.5 space-y-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Professional
+                  </span>
+                  <p className="font-bold text-slate-900 text-xs">{item.proName}</p>
+                  {item.proEmail && (
+                    <p className="text-[11px] text-slate-500 truncate">{item.proEmail}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Copy feedback */}
+          {copySuccess && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-semibold text-emerald-800 text-center animate-in fade-in duration-200">
+              ✓ {copySuccess} copied to clipboard!
+            </div>
+          )}
+        </div>
+
+        {/* Drawer Footer */}
+        <div className="border-t border-slate-200 bg-slate-50 px-5 py-3.5 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition shadow-2xs"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>

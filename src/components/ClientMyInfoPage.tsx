@@ -54,6 +54,7 @@ import { toast } from "sonner";
 import { PhoneVerification } from "@/components/PhoneVerification";
 import { AddressMapPicker } from "@/components/AddressMapPicker";
 import { getAllStates, inferLocationFromAddress } from "@/lib/india-locations";
+import { LinkedAccountsCard } from "@/components/LinkedAccountsCard";
 
 function formatName(firstName: string, lastName: string) {
   return `${firstName} ${lastName}`.trim();
@@ -1201,6 +1202,9 @@ export function ClientMyInfoPage({ data }: { data: ClientAccountSummaryResponse 
                 </div>
               </CardContent>
             </Card>
+
+            {/* BOX: Linked Accounts (UPI, Bank, Card, Razorpay) */}
+            <LinkedAccountsCard />
 
             {/* BOX 5: Project Activity */}
             <Card className="border border-border/80 shadow-xs">

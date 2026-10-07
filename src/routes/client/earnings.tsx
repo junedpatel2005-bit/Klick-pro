@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import {
@@ -82,6 +83,20 @@ type PaymentDetail = {
   capturedAt: string | null;
   milestone: { id: number; title: string; amount: number } | null;
 };
+type LinkedAccount = {
+  id: string;
+  accountType: "BANK" | "UPI" | "CARD" | "RAZORPAY";
+  accountHolder: string | null;
+  accountNumber: string | null;
+  last4: string | null;
+  ifscCode: string | null;
+  bankName: string | null;
+  upiId: string | null;
+  cardBank: string | null;
+  razorpayAccountId: string | null;
+  isDefault: boolean;
+};
+
 export default function ClientEarnings() {
   const [payments, setPayments] = useState<Payment[] | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -107,6 +122,24 @@ export default function ClientEarnings() {
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [shortcutAmount, setShortcutAmount] = useState("");
   const [visibleCount, setVisibleCount] = useState(10);
+
+  // Profile Linked Accounts
+  const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
+  const [selectedLinkedAccountId, setSelectedLinkedAccountId] = useState<string>("");
+
+  function applyLinkedAccount(acc: LinkedAccount) {
+    if (acc.accountType === "BANK") {
+      setWithdrawMethod("BANK");
+      setBankAccount(acc.accountNumber ?? "");
+      setBankIfsc(acc.ifscCode ?? "");
+    } else if (acc.accountType === "UPI") {
+      setWithdrawMethod("UPI");
+      setWithdrawDestination(acc.upiId ?? "");
+    } else if (acc.accountType === "CARD") {
+      setWithdrawMethod("CARD");
+      setWithdrawDestination(acc.accountNumber ?? "");
+    }
+  }
 
   async function runShortcutTopUp() {
     const amt = Number(shortcutAmount) || Number(topUpAmount);
@@ -146,6 +179,22 @@ export default function ClientEarnings() {
       .catch(() => setWallet(null))
       .finally(() => setWalletLoading(false));
   }
+
+  function loadLinkedAccounts() {
+    void fetch("/api/v1/linked-accounts", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { accounts?: LinkedAccount[] } | null) => {
+        const accs = data?.accounts ?? [];
+        setLinkedAccounts(accs);
+        const def = accs.find((a) => a.isDefault) ?? accs[0];
+        if (def) {
+          applyLinkedAccount(def);
+          setSelectedLinkedAccountId(def.id);
+        }
+      })
+      .catch(() => setLinkedAccounts([]));
+  }
+
   useEffect(() => {
     setPaymentsLoading(true);
     void fetch("/api/v1/portal/earnings", { cache: "no-store" })
@@ -154,6 +203,7 @@ export default function ClientEarnings() {
       .catch(() => setPayments([]))
       .finally(() => setPaymentsLoading(false));
     loadWallet();
+    loadLinkedAccounts();
   }, []);
   useRealtimeRefresh(["servio:project-update", "servio:notification", "servio:proposal"], () => {
     setPaymentsLoading(true);
@@ -163,6 +213,7 @@ export default function ClientEarnings() {
       .catch(() => setPayments([]))
       .finally(() => setPaymentsLoading(false));
     void loadWallet();
+    loadLinkedAccounts();
   });
   async function requestWithdrawal() {
     const destination =
@@ -274,20 +325,68 @@ export default function ClientEarnings() {
                 setWalletMessage(data?.error ?? "Wallet funding verification failed.");
               }
             } catch {
-              setWalletMessage("Payment verification timed out. Your balance will update shortly.");
+              setWalletMessage("Verifying payment with server…");
+              let resolved = false;
+              for (let i = 0; i < 3; i++) {
+                await new Promise((r) => setTimeout(r, 2000));
+                try {
+                  const check = await fetch(
+                    `/api/v1/wallet/deposit/status?orderId=${encodeURIComponent(payment.razorpay_order_id)}`,
+                    { cache: "no-store" },
+                  );
+                  const checkData = await check.json().catch(() => null);
+                  if (checkData?.status === "COMPLETED") {
+                    resolved = true;
+                    setWalletMessage(
+                      `✓ ₹${(checkData?.amount ?? topUp).toLocaleString("en-IN")} added to your wallet successfully!`,
+                    );
+                    setTopUpAmount("");
+                    setShortcutAmount("");
+                    loadWallet();
+                    break;
+                  }
+                } catch {
+                  // retry
+                }
+              }
+              if (!resolved) {
+                setWalletMessage(
+                  "Payment verification timed out. If your account was debited, your balance will update automatically within 1 minute.",
+                );
+              }
             } finally {
               setActionBusy(null);
             }
           },
           modal: {
-            ondismiss: () => {
+            ondismiss: async () => {
+              // Before marking cancelled, check if the payment was actually captured (e.g. user paid via UPI app switch)
+              try {
+                const statusRes = await fetch(
+                  `/api/v1/wallet/deposit/status?orderId=${encodeURIComponent(result.orderId)}`,
+                  { cache: "no-store" },
+                );
+                const statusData = await statusRes.json().catch(() => null);
+                if (statusData?.status === "COMPLETED") {
+                  setActionBusy(null);
+                  setWalletMessage(
+                    `✓ ₹${(statusData?.amount ?? topUp).toLocaleString("en-IN")} added to your wallet successfully!`,
+                  );
+                  setTopUpAmount("");
+                  setShortcutAmount("");
+                  loadWallet();
+                  return;
+                }
+              } catch {
+                // fallback to fail
+              }
               setActionBusy(null);
               void fetch("/api/v1/wallet/deposit/fail", {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({ orderId: result.orderId, reason: "Checkout cancelled." }),
               });
-              setWalletMessage("Payment cancelled. No funds were debited.");
+              setWalletMessage("Checkout closed. No funds were debited.");
             },
           },
         });
@@ -669,7 +768,85 @@ export default function ClientEarnings() {
                   </span>
                 </p>
               </div>
-              <div className="w-full max-w-md">
+              <div className="w-full max-w-md space-y-3">
+                {/* Profile Linked Account Selector */}
+                <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <Landmark className="h-3.5 w-3.5 text-primary" />
+                      Profile Linked Account
+                    </label>
+                    <Link
+                      href="/my-info"
+                      className="text-[11px] font-medium text-primary hover:underline"
+                    >
+                      Manage accounts →
+                    </Link>
+                  </div>
+
+                  {linkedAccounts.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <select
+                          className="h-10 w-full appearance-none rounded-xl border border-input bg-background px-3 pr-8 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          value={selectedLinkedAccountId}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSelectedLinkedAccountId(val);
+                            const found = linkedAccounts.find((a) => a.id === val);
+                            if (found) {
+                              applyLinkedAccount(found);
+                            }
+                          }}
+                        >
+                          <option value="">-- Select saved account or type details below --</option>
+                          {linkedAccounts.map((acc) => {
+                            const label =
+                              acc.accountType === "BANK"
+                                ? `Bank: ${acc.bankName || "Bank Account"} (•••• ${acc.last4 || "••••"})`
+                                : acc.accountType === "UPI"
+                                ? `UPI: ${acc.upiId || "UPI"} (•••• ${acc.last4 || "••••"})`
+                                : acc.accountType === "CARD"
+                                ? `Card: ${acc.cardBank || "Debit Card"} (•••• ${acc.last4 || "••••"})`
+                                : `Razorpay: ${acc.razorpayAccountId || "Account"} (•••• ${acc.last4 || "••••"})`;
+                            return (
+                              <option key={acc.id} value={acc.id}>
+                                {acc.isDefault ? `★ [Default] ${label}` : label}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      </div>
+
+                      {selectedLinkedAccountId && (
+                        <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 px-2.5 py-1.5 border border-emerald-500/20 text-[11px] text-emerald-700 dark:text-emerald-300">
+                          <span className="font-medium flex items-center gap-1.5">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Auto-filled from profile
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedLinkedAccountId("")}
+                            className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                          >
+                            Reset selection
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between rounded-lg bg-background/60 p-2.5 border border-border/60 text-[11px] text-muted-foreground">
+                      <span>No saved accounts in profile yet.</span>
+                      <Link
+                        href="/my-info"
+                        className="font-semibold text-primary hover:underline ml-2"
+                      >
+                        + Link Account
+                      </Link>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex flex-wrap gap-2">
                   {(
                     [

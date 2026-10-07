@@ -25,9 +25,13 @@ export async function POST(request: NextRequest) {
   });
   if (!transaction)
     return NextResponse.json({ error: "Wallet payment not found." }, { status: 404 });
-  if (transaction.status === "COMPLETED") return NextResponse.json({ ok: true });
-  await db.walletTransaction.update({
-    where: { id: transaction.id },
+  if (transaction.status === "COMPLETED") return NextResponse.json({ ok: true, alreadyCompleted: true });
+
+  // Atomic conditional update: only mark FAILED if status is still PENDING.
+  // This prevents race conditions where a concurrent verify or webhook completes
+  // the payment right as the client modal is dismissed.
+  await db.walletTransaction.updateMany({
+    where: { id: transaction.id, status: "PENDING" },
     data: {
       status: "FAILED",
       metadataJson: JSON.stringify({ reason: parsed.data.reason ?? "Checkout cancelled." }),

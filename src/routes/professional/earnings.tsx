@@ -130,6 +130,20 @@ type CompletedJob = {
   amount: number;
   currency: string;
 };
+type LinkedAccount = {
+  id: string;
+  accountType: "BANK" | "UPI" | "CARD" | "RAZORPAY";
+  accountHolder: string | null;
+  accountNumber: string | null;
+  last4: string | null;
+  ifscCode: string | null;
+  bankName: string | null;
+  upiId: string | null;
+  cardBank: string | null;
+  razorpayAccountId: string | null;
+  isDefault: boolean;
+};
+
 type StatKey = "available" | "total" | "commission" | "month" | "reserved";
 export default function Earnings() {
   const [items, setItems] = useState<Transaction[] | null>(null);
@@ -137,6 +151,10 @@ export default function Earnings() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [amount, setAmount] = useState("");
   const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>("BANK");
+
+  // Profile Linked Accounts
+  const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
+  const [selectedLinkedAccountId, setSelectedLinkedAccountId] = useState<string>("");
 
   // Bank Form State
   const [bankName, setBankName] = useState("");
@@ -167,6 +185,28 @@ export default function Earnings() {
   const [historyFilter, setHistoryFilter] = useState<
     "all" | "milestones" | "commissions" | "disputes"
   >("all");
+
+  function applyLinkedAccount(acc: LinkedAccount) {
+    if (acc.accountType === "BANK") {
+      setPayoutMethod("BANK");
+      setBankName(acc.bankName ?? "");
+      setAccountHolder(acc.accountHolder ?? "");
+      setAccountNumber(acc.accountNumber ?? "");
+      setConfirmAccountNumber(acc.accountNumber ?? "");
+      setIfscCode(acc.ifscCode ?? "");
+    } else if (acc.accountType === "UPI") {
+      setPayoutMethod("UPI");
+      setUpiId(acc.upiId ?? "");
+      setUpiHolder(acc.accountHolder ?? "");
+    } else if (acc.accountType === "CARD") {
+      setPayoutMethod("CARD");
+      setCardHolder(acc.accountHolder ?? "");
+      setCardNumber(acc.accountNumber ?? "");
+      setCardBank(acc.cardBank ?? acc.bankName ?? "");
+    } else if (acc.accountType === "RAZORPAY") {
+      setRazorpayAccountId(acc.razorpayAccountId ?? "");
+    }
+  }
 
   useEffect(() => {
     try {
@@ -213,6 +253,18 @@ export default function Earnings() {
         setRazorpayAccountId(d?.razorpayAccountId ?? ""),
       )
       .catch(() => setRazorpayAccountId(""));
+    void fetch("/api/v1/linked-accounts", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { accounts?: LinkedAccount[] } | null) => {
+        const accs = data?.accounts ?? [];
+        setLinkedAccounts(accs);
+        const def = accs.find((a) => a.isDefault) ?? accs[0];
+        if (def) {
+          applyLinkedAccount(def);
+          setSelectedLinkedAccountId(def.id);
+        }
+      })
+      .catch(() => setLinkedAccounts([]));
   };
   useEffect(load, []);
   useRealtimeRefresh(["servio:project-update", "servio:notification", "servio:proposal"], load);
@@ -769,6 +821,84 @@ export default function Earnings() {
                       Amount exceeds available balance of ₹
                       {wallet.available.toLocaleString("en-IN")}.
                     </p>
+                  )}
+                </div>
+
+                {/* Profile Linked Account Selector */}
+                <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <Landmark className="h-3.5 w-3.5 text-primary" />
+                      Profile Linked Account
+                    </label>
+                    <Link
+                      href="/professional-profile"
+                      className="text-[11px] font-medium text-primary hover:underline"
+                    >
+                      Manage accounts →
+                    </Link>
+                  </div>
+
+                  {linkedAccounts.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <select
+                          className="h-10 w-full appearance-none rounded-xl border border-input bg-background px-3 pr-8 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          value={selectedLinkedAccountId}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSelectedLinkedAccountId(val);
+                            const found = linkedAccounts.find((a) => a.id === val);
+                            if (found) {
+                              applyLinkedAccount(found);
+                            }
+                          }}
+                        >
+                          <option value="">-- Select saved account or type details below --</option>
+                          {linkedAccounts.map((acc) => {
+                            const label =
+                              acc.accountType === "BANK"
+                                ? `Bank: ${acc.bankName || "Bank Account"} (•••• ${acc.last4 || "••••"})`
+                                : acc.accountType === "UPI"
+                                ? `UPI: ${acc.upiId || "UPI"} (•••• ${acc.last4 || "••••"})`
+                                : acc.accountType === "CARD"
+                                ? `Card: ${acc.cardBank || "Debit Card"} (•••• ${acc.last4 || "••••"})`
+                                : `Razorpay: ${acc.razorpayAccountId || "Account"} (•••• ${acc.last4 || "••••"})`;
+                            return (
+                              <option key={acc.id} value={acc.id}>
+                                {acc.isDefault ? `★ [Default] ${label}` : label}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      </div>
+
+                      {selectedLinkedAccountId && (
+                        <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 px-2.5 py-1.5 border border-emerald-500/20 text-[11px] text-emerald-700 dark:text-emerald-300">
+                          <span className="font-medium flex items-center gap-1.5">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Auto-filled from profile
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedLinkedAccountId("")}
+                            className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                          >
+                            Reset selection
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between rounded-lg bg-background/60 p-2.5 border border-border/60 text-[11px] text-muted-foreground">
+                      <span>No saved accounts in profile yet.</span>
+                      <Link
+                        href="/professional-profile"
+                        className="font-semibold text-primary hover:underline ml-2"
+                      >
+                        + Link Account
+                      </Link>
+                    </div>
                   )}
                 </div>
 

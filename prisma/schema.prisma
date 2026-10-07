@@ -178,6 +178,7 @@ model User {
   auditLogs                           AuditLog[]                @relation("AuditActor")
   personaVerifications                PersonaVerification[]
   sessions                            Session[]
+  linkedAccounts                      UserLinkedAccount[]
 
   @@index([professionalState, professionalDistrict])
   @@index([professionalCategoryId])
@@ -1190,4 +1191,25 @@ model SmsTemplate {
   @@index([audience])
   @@index([category])
   @@map("sms_templates")
+}
+
+model UserLinkedAccount {
+  id                Int      @id @default(autoincrement())
+  userId            Int      @map("user_id")
+  accountType       String   @map("account_type")
+  accountHolder     String?  @map("account_holder")
+  accountNumber     String?  @map("account_number")
+  last4             String?  @map("last_4")
+  ifscCode          String?  @map("ifsc_code")
+  bankName          String?  @map("bank_name")
+  upiId             String?  @map("upi_id")
+  cardBank          String?  @map("card_bank")
+  razorpayAccountId String?  @map("razorpay_account_id")
+  isDefault         Boolean  @default(false) @map("is_default")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_linked_accounts")
 }

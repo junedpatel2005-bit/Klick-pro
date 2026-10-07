@@ -171,3 +171,53 @@ export function verifyRazorpayWebhookSignature(rawBody: string, signature: strin
   const b = Buffer.from(signature, "utf8");
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
+
+export type RazorpayCapturedPayment = {
+  id: string;
+  orderId: string;
+  amount: number; // in paise
+  currency: string;
+  status: string; // "captured", "authorized", "failed", etc.
+};
+
+/**
+ * Reconciles with Razorpay API directly to fetch all payments associated with an order.
+ * Essential for resolving missing frontend callbacks, delayed webhooks, UPI app switches,
+ * or browser closures immediately when the user returns.
+ */
+export async function fetchRazorpayOrderPayments(orderId: string): Promise<RazorpayCapturedPayment[]> {
+  if (!isRazorpayConfigured()) return [];
+  try {
+    const response = await fetch(
+      `https://api.razorpay.com/v1/orders/${encodeURIComponent(orderId)}/payments`,
+      {
+        headers: { Authorization: authHeader() },
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) return [];
+    const body = (await response.json().catch(() => null)) as {
+      items?: Array<{
+        id?: string;
+        order_id?: string;
+        amount?: number;
+        currency?: string;
+        status?: string;
+      }>;
+    } | null;
+    if (!body?.items || !Array.isArray(body.items)) return [];
+    return body.items
+      .filter((p) => Boolean(p.id && p.status))
+      .map((p) => ({
+        id: p.id!,
+        orderId: p.order_id ?? orderId,
+        amount: p.amount ?? 0,
+        currency: p.currency ?? "INR",
+        status: p.status!,
+      }));
+  } catch (error) {
+    console.error("fetchRazorpayOrderPayments error:", error instanceof Error ? error.message : String(error));
+    return [];
+  }
+}
+

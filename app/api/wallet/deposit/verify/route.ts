@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
   if (!transaction || transaction.wallet.userId !== session.userId)
     return NextResponse.json({ error: "Wallet top-up not found." }, { status: 404 });
   if (transaction.status === "COMPLETED")
-    return NextResponse.json({ ok: true, alreadyProcessed: true });
+    return NextResponse.json({ ok: true, alreadyProcessed: true, amount: transaction.amount });
   try {
     await db.$transaction((tx) =>
       creditWalletFromVerifiedProvider(tx, {
@@ -58,10 +58,24 @@ export async function POST(request: NextRequest) {
         providerPaymentId: parsed.data.razorpayPaymentId,
       }),
     );
-  } catch {
-    // The top-up was claimed by a concurrent request, so the balance is already
-    // correct. Surface that as success rather than a 500.
-    return NextResponse.json({ ok: true, alreadyProcessed: true });
+  } catch (err) {
+    // Check if the top-up was claimed by a concurrent request (e.g. webhook or duplicate verify)
+    const recheck = await db.walletTransaction.findUnique({
+      where: { providerReference: parsed.data.razorpayOrderId },
+    });
+    if (recheck?.status === "COMPLETED") {
+      return NextResponse.json({ ok: true, alreadyProcessed: true, amount: transaction.amount });
+    }
+    // Genuine database/system error: do not falsely report success.
+    console.error("Wallet deposit verification credit error:", {
+      orderId: parsed.data.razorpayOrderId,
+      paymentId: parsed.data.razorpayPaymentId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return NextResponse.json(
+      { error: "Payment verification could not be completed. Please refresh or contact support." },
+      { status: 500 },
+    );
   }
   return NextResponse.json({ ok: true, amount: transaction.amount });
 }
