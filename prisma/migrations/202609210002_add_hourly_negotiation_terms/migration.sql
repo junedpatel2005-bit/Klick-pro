@@ -1,0 +1,9 @@
+ALTER TABLE "ProjectRequest"
+  ADD COLUMN IF NOT EXISTS "hourlyRate" INTEGER,
+  ADD COLUMN IF NOT EXISTS "totalJobHours" INTEGER;
+
+ALTER TABLE "ProjectNegotiation"
+  ADD COLUMN IF NOT EXISTS "hourlyRate" INTEGER,
+  ADD COLUMN IF NOT EXISTS "totalJobHours" INTEGER,
+  ADD COLUMN IF NOT EXISTS "previousHourlyRate" INTEGER,
+  ADD COLUMN IF NOT EXISTS "previousTotalJobHours" INTEGER;

@@ -1,0 +1,15 @@
+-- AlterTable
+ALTER TABLE "ProjectDispute"
+  ADD COLUMN IF NOT EXISTS "dispute_round" INTEGER NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS "milestone_id" INTEGER,
+  ADD COLUMN IF NOT EXISTS "response_message" TEXT,
+  ADD COLUMN IF NOT EXISTS "response_attachments_json" TEXT DEFAULT '[]',
+  ADD COLUMN IF NOT EXISTS "responded_at" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "respondent_action" TEXT,
+  ADD COLUMN IF NOT EXISTS "decision" TEXT,
+  ADD COLUMN IF NOT EXISTS "decision_reason" TEXT,
+  ADD COLUMN IF NOT EXISTS "decision_at" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "decided_by" INTEGER,
+  ADD COLUMN IF NOT EXISTS "refund_amount" INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "payout_amount" INTEGER DEFAULT 0;
+

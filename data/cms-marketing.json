@@ -1,0 +1,271 @@
+{
+  "how-it-works": {
+    "hero": {
+      "label": "How it works",
+      "title": "A simpler, safer way to hire & get hired",
+      "description": "Klick-Pro connects clients with verified professionals through a secure, milestone-based escrow workflow. Here is how the end-to-end process works."
+    },
+    "items": [
+      {
+        "id": "step-1-post",
+        "title": "1. Post your job",
+        "description": "Describe what you need, choose a service category, and specify your budget and timeline. It takes under two minutes.",
+        "icon": "clipboard"
+      },
+      {
+        "id": "step-2-proposals",
+        "title": "2. Receive & compare quotes",
+        "description": "Verified professionals review your job and send customized proposals. Chat directly, compare ratings, and choose the best match.",
+        "icon": "message"
+      },
+      {
+        "id": "step-3-escrow",
+        "title": "3. Fund secure escrow",
+        "description": "Accept a proposal and deposit milestone funds into secure escrow. Money is protected safely by Klick-Pro before work begins.",
+        "icon": "shield"
+      },
+      {
+        "id": "step-4-tracking",
+        "title": "4. Collaborate & track milestones",
+        "description": "Professionals start work, update stages, share progress, and submit completed deliverables directly within the project tracker.",
+        "icon": "briefcase"
+      },
+      {
+        "id": "step-5-approval",
+        "title": "5. Inspect & release payment",
+        "description": "Review the submitted deliverables. Once you approve the work, funds are released directly to the professional's wallet.",
+        "icon": "wallet"
+      },
+      {
+        "id": "step-6-review",
+        "title": "6. Rate & review",
+        "description": "Both parties leave verified reviews and ratings upon project completion, helping build reputation and trust across the community.",
+        "icon": "star"
+      }
+    ]
+  },
+  "services": {
+    "hero": {
+      "label": "Marketplace jobs",
+      "title": "Browse client jobs",
+      "description": "Explore open work posted by clients and find the right service category for you."
+    },
+    "items": [
+      {
+        "id": "local",
+        "title": "Local services",
+        "description": "Find trusted professionals near you for work that needs a local touch.",
+        "icon": "map"
+      },
+      {
+        "id": "digital",
+        "title": "Digital projects",
+        "description": "Connect with skilled remote professionals for flexible project work.",
+        "icon": "search"
+      },
+      {
+        "id": "managed",
+        "title": "Managed projects",
+        "description": "Track communication, milestones, and payments in one place.",
+        "icon": "briefcase"
+      }
+    ]
+  },
+  "professional-home": {
+    "hero": {
+      "label": "Grow your professional business",
+      "title": "Find projects that match your skills",
+      "description": "Browse available projects, bid on work, and build your reputation with satisfied clients worldwide."
+    },
+    "features": {
+      "label": "Why Professionals Choose Us",
+      "title": "Everything you need to grow",
+      "description": "Find quality projects, get paid safely, and build a reputation clients trust."
+    },
+    "items": [
+      {
+        "id": "grow",
+        "title": "Grow",
+        "description": "Find quality projects and build your professional business.",
+        "icon": "trend"
+      },
+      {
+        "id": "safe",
+        "title": "Get paid safely",
+        "description": "Work with clear milestones and reliable payments.",
+        "icon": "shield"
+      },
+      {
+        "id": "reputation",
+        "title": "Build your reputation",
+        "description": "Deliver great work and earn reviews clients trust.",
+        "icon": "star"
+      }
+    ]
+  },
+  "for-clients": {
+    "hero": {
+      "label": "For clients",
+      "title": "Hire trusted pros — without the back-and-forth",
+      "description": "Post once. Get qualified, vetted proposals fast. Pay securely only when work is completed and approved."
+    },
+    "items": [
+      {
+        "id": "step-1-post",
+        "title": "1. Post your job requirement",
+        "description": "Describe your task or project, choose the service category, and set your budget and timeline. It's completely free to post.",
+        "icon": "clipboard"
+      },
+      {
+        "id": "step-2-proposals",
+        "title": "2. Get verified proposals",
+        "description": "Receive competitive quotes from ID-verified, background-checked professionals. Review their ratings, completed projects, and client feedback.",
+        "icon": "users"
+      },
+      {
+        "id": "step-3-chat",
+        "title": "3. Chat & finalize scope",
+        "description": "Message professionals in real-time to discuss details, ask questions, negotiate terms, and shortlist the top candidate.",
+        "icon": "message"
+      },
+      {
+        "id": "step-4-escrow",
+        "title": "4. Secure escrow deposit",
+        "description": "Deposit milestone payments securely through Razorpay. Your money is held safely in escrow and never released upfront.",
+        "icon": "shield"
+      },
+      {
+        "id": "step-5-milestones",
+        "title": "5. Track work & inspect results",
+        "description": "Follow project stages in real-time, inspect deliverables uploaded by your pro, and request revisions until you are 100% satisfied.",
+        "icon": "briefcase"
+      },
+      {
+        "id": "step-6-release-review",
+        "title": "6. Release payment & review",
+        "description": "Approve the completed milestone to release payment to the pro, then leave a review to help others in the community.",
+        "icon": "star"
+      }
+    ]
+  },
+  "for-professionals": {
+    "hero": {
+      "label": "For professionals",
+      "title": "Find quality jobs. Get paid safely. Grow your business.",
+      "description": "Connect with verified clients, submit competitive proposals, and receive guaranteed milestone payouts with zero payment chasing."
+    },
+    "items": [
+      {
+        "id": "step-1-profile",
+        "title": "1. Build profile & verify ID",
+        "description": "Showcase your expertise, add skills, set service areas, and complete verification to earn your verified pro trust badge.",
+        "icon": "shield"
+      },
+      {
+        "id": "step-2-browse",
+        "title": "2. Discover matching jobs",
+        "description": "Browse local and digital job postings matched to your trade, filtered by budget, location distance, and client urgency.",
+        "icon": "search"
+      },
+      {
+        "id": "step-3-proposals",
+        "title": "3. Send custom proposals",
+        "description": "Pitch your services with tailored quotes and timelines. Chat directly with clients to understand requirements and win contracts.",
+        "icon": "message"
+      },
+      {
+        "id": "step-4-escrow",
+        "title": "4. Guaranteed escrow funding",
+        "description": "Start work with total peace of mind. Client funds are deposited into secure escrow before you start, guaranteeing payment upon delivery.",
+        "icon": "clipboard"
+      },
+      {
+        "id": "step-5-deliver",
+        "title": "5. Submit milestone deliverables",
+        "description": "Keep clients updated with stage progression, upload completed work deliverables, and request milestone review in one click.",
+        "icon": "briefcase"
+      },
+      {
+        "id": "step-6-payouts",
+        "title": "6. Instant payouts & reputation",
+        "description": "Once milestones are approved, withdraw your earnings directly to your bank account anytime via Razorpay and collect 5-star reviews.",
+        "icon": "wallet"
+      }
+    ]
+  },
+  "contact": {
+    "hero": {
+      "label": "Contact Klick-Pro",
+      "title": "How can we help?",
+      "description": "Tell us what you need and our marketplace team will be in touch."
+    },
+    "items": [
+      {
+        "id": "email",
+        "title": "Email support",
+        "description": "For account, project, or payment questions, send us a message any time.",
+        "icon": "mail"
+      },
+      {
+        "id": "safe",
+        "title": "Safe & private",
+        "description": "Your request is only visible to the Klick-Pro support team.",
+        "icon": "shield"
+      }
+    ]
+  },
+  "pricing": {
+    "hero": {
+      "label": "Pricing",
+      "title": "Simple, transparent pricing",
+      "description": "Free for clients. Pros pay only when they get paid. No hidden fees."
+    },
+    "items": [
+      {
+        "id": "starter",
+        "title": "Starter",
+        "description": "Post jobs and apply for free. Pay only when you hire or are hired.",
+        "icon": "check"
+      },
+      {
+        "id": "pro",
+        "title": "Pro",
+        "description": "Win more work with priority placement and unlimited proposals.",
+        "icon": "star"
+      },
+      {
+        "id": "business",
+        "title": "Business",
+        "description": "Hire at scale with team seats, contracts, and dedicated support.",
+        "icon": "briefcase"
+      }
+    ]
+  },
+  "faq": {
+    "hero": {
+      "label": "Help center",
+      "title": "Frequently asked questions",
+      "description": "Can't find what you're looking for? Our team is one click away."
+    },
+    "items": [
+      {
+        "id": "what",
+        "title": "What is Klick-Pro?",
+        "description": "Klick-Pro is a marketplace that connects clients with verified professionals for local and remote work.",
+        "icon": "shield"
+      },
+      {
+        "id": "free",
+        "title": "Is it free to use?",
+        "description": "Posting jobs and creating a profile are free. Clients pay only the agreed price.",
+        "icon": "shield"
+      },
+      {
+        "id": "vet",
+        "title": "How are professionals vetted?",
+        "description": "Every pro completes ID verification. For in-home services, we also run background checks.",
+        "icon": "shield"
+      }
+    ]
+  }
+}

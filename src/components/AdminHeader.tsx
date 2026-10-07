@@ -1,0 +1,161 @@
+"use client";
+
+import { usePathname, useRouter } from "next/navigation";
+import { invalidateCurrentUser } from "@/lib/current-user";
+import { ExternalLink, LogOut, ShieldCheck, Menu, Bell } from "lucide-react";
+import { useDatabaseStatus } from "@/hooks/use-database-status";
+import { useAdminSidebar } from "@/components/AdminSidebarContext";
+import { useAdminNotificationCount } from "@/lib/use-admin-notification-count";
+
+const pageTitles: Record<string, string> = {
+  "/admin": "Command Center",
+  "/admin/users": "Users & Accounts",
+  "/admin/verifications": "Verification & Compliance",
+  "/admin/operations": "Jobs & Disputes",
+  "/admin/services": "Services Catalog",
+  "/admin/finance": "Finance & Payouts",
+  "/admin/reports": "Reports & Analytics",
+  "/admin/support": "Support & Knowledge Base",
+  "/admin/cms": "Visual CMS Editor",
+  "/admin/notifications": "Notifications & Alerts",
+  "/admin/messages": "Admin Communications",
+  "/admin/templates": "Email Template Library",
+  "/admin/settings": "Platform Configuration & Settings",
+  "/admin/sms-templates": "SMS Template Library",
+  "/admin/extra/reviews": "Review Moderation",
+  "/admin/extra/announcements": "Sitewide Banners",
+  "/admin/extra/audit-logs": "Audit Trail & Logs",
+  "/admin/extra/escrow": "Escrow Ledger",
+};
+
+function resolvePageTitle(pathname: string): string {
+  if (pageTitles[pathname]) return pageTitles[pathname];
+  if (pathname.startsWith("/admin/users/")) return "User Profile & Activity";
+  if (pathname.startsWith("/admin/templates/")) return "Email Template Editor";
+  if (pathname.startsWith("/admin/sms-templates/")) return "SMS Template Editor";
+  return "Admin Workspace";
+}
+
+export function AdminHeader() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const dbStatus = useDatabaseStatus();
+  const { collapsed, toggleSidebar } = useAdminSidebar();
+  const { unreadCount } = useAdminNotificationCount();
+  const currentPageTitle = resolvePageTitle(pathname);
+  const onNotificationsPage = pathname?.startsWith("/admin/notifications");
+
+  async function logout() {
+    await fetch("/api/v1/auth/logout", { method: "POST" });
+    invalidateCurrentUser();
+    router.replace("/admin/login");
+  }
+
+  return (
+    <header className="flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/80 px-4 sm:px-6 backdrop-blur-md sticky top-0 z-20">
+      {/* 3 lines toggle & Breadcrumb / Title */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label="Toggle Sidebar"
+          title={collapsed ? "Expand sidebar (show labels)" : "Collapse sidebar (icons only)"}
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition shadow-2xs"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+
+        <div className="flex items-center gap-2.5">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+            <ShieldCheck className="h-3.5 w-3.5 text-indigo-500" />
+            Admin
+          </span>
+          <span className="text-slate-300">/</span>
+          <h2 className="text-sm font-bold text-slate-800 tracking-tight">{currentPageTitle}</h2>
+        </div>
+      </div>
+
+      {/* Right Controls */}
+      <div className="flex items-center gap-3">
+        {/* Marketplace Quick Link */}
+        <a
+          href="/"
+          target="_blank"
+          rel="noreferrer"
+          className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200 transition shadow-2xs"
+        >
+          <span>Marketplace</span>
+          <ExternalLink className="h-3 w-3 text-slate-400" />
+        </a>
+
+        {/* System Server Status Indicator */}
+        <div
+          title={`Platform System Server: ${dbStatus === "connected" ? "Operational & Live" : dbStatus === "disconnected" ? "Offline" : "Checking"}`}
+          className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border ${
+            dbStatus === "connected"
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+              : dbStatus === "disconnected"
+                ? "bg-rose-50 text-rose-700 border-rose-200"
+                : "bg-slate-50 text-slate-600 border-slate-200"
+          }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              dbStatus === "connected"
+                ? "bg-emerald-500"
+                : dbStatus === "disconnected"
+                  ? "bg-rose-500"
+                  : "bg-slate-400"
+            }`}
+          />
+          {dbStatus === "connected"
+            ? "Live"
+            : dbStatus === "disconnected"
+              ? "Offline"
+              : "Checking…"}
+        </div>
+
+        {/* Notification Bell */}
+        <button
+          type="button"
+          id="header-notification-bell"
+          onClick={() => router.push("/admin/notifications")}
+          aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+          title={
+            unreadCount > 0
+              ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`
+              : "Notifications"
+          }
+          className={`relative grid h-9 w-9 place-items-center rounded-xl border transition shadow-2xs ${
+            onNotificationsPage
+              ? "border-indigo-200 bg-indigo-50 text-indigo-600"
+              : "border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+          }`}
+        >
+          <Bell className="h-4 w-4" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-rose-500 px-1 text-[9.5px] font-bold text-white shadow-sm ring-2 ring-white">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
+        </button>
+
+        {/* Admin Avatar & Logout */}
+        <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-400 text-white font-bold text-xs shadow-2xs ring-2 ring-indigo-50">
+            A
+          </div>
+          <button
+            type="button"
+            onClick={logout}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition shadow-2xs"
+            aria-label="Log out"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">Log out</span>
+          </button>
+        </div>
+      </div>
+    </header>
+  );
+}

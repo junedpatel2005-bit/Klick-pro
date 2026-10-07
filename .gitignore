@@ -1,0 +1,61 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+node_modules_old/
+.next
+dist
+dist-ssr
+.output
+.vinxi
+.tanstack/**
+.nitro
+*.local
+.env
+.env.test
+*.tsbuildinfo
+prisma/*.db
+prisma/*.db-shm
+prisma/*.db-wal
+
+# Wrangler / Cloudflare
+.wrangler/
+.dev.vars
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.vercel
+.project-work-files
+
+# Local scratch and large binaries - kept outside the repo tree so the dev
+# server file watcher and git do not walk them.
+tmp/
+*.dump
+*.mp4
+dump-contents.txt
+
+# Prisma client output (run: npx prisma generate)
+generated/
+
+# Generated seed-account credential dumps - never commit these.
+CLIENT_CREDENTIALS.md
+clients-credentials.json
+*credentials*.json
+
+# Local-only scratch output (credential dumps, exports).
+.local/

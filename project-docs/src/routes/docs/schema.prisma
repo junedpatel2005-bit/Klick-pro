@@ -1,0 +1,1338 @@
+// ============================================================================
+// Service Marketplace Platform — Prisma Schema
+// PostgreSQL (Supabase) + PostGIS
+//
+// v2 — WEB ONLY (responsive). Flutter deferred to phase 2.
+//
+// CHANGES FROM v1
+//   1. Device (FCM/APNs) → PushSubscription (W3C Web Push / VAPID).
+//      Native tokens return in phase 2; the model holds both without a rewrite.
+//   2. New TaxRate model — provincial GST/HST/PST. Canada is not one rate and
+//      a single config value produces wrong invoices.
+//   3. Payment records taxProvince + taxType — place of supply frozen at
+//      charge time so relocation never alters a historical invoice.
+//   4. MessageThread: real FK relations to User, and now unique per
+//      (job, professional) — a client negotiates with several professionals
+//      before appointing one, so one thread per job was wrong.
+//   5. AvailabilitySlot added — "filter by availability" needs working hours,
+//      not just a status enum.
+//   6. DisputeNote.author FK added.
+//   7. Partial-unique and GIST indexes documented at the foot of this file.
+//
+// CONVENTIONS
+//   - All money is Int, in CENTS. Never Float, never Decimal in app code.
+//   - Currency is CAD throughout. Admin "currency switch" is display
+//     relabelling only — no FX, no per-row conversion.
+//   - snake_case in the database, camelCase in the client, via @map.
+//   - PostGIS geography columns are Unsupported(): Prisma Client CANNOT read
+//     or write them. All point I/O goes through GeoRepository via $queryRaw.
+// ============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis, pg_trgm]
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserType {
+  CLIENT
+  PROFESSIONAL
+  ADMIN
+}
+
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
+enum AdminRole {
+  VERIFICATION_REVIEWER
+  DISPUTE_HANDLER
+  FINANCE
+  SUPER_ADMIN
+}
+
+enum WorkMode {
+  ONSITE
+  REMOTE
+  BOTH
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  BUSY
+  UNAVAILABLE
+}
+
+enum JobStatus {
+  DRAFT
+  PUBLISHED
+  QUOTED
+  ASSIGNED
+  IN_PROGRESS
+  AWAITING_CONFIRMATION
+  COMPLETED
+  CLOSED
+  CANCELLED
+  EXPIRED
+  DISPUTED
+  DELETED
+}
+
+enum BudgetType {
+  FIXED
+  HOURLY
+  NEGOTIABLE
+}
+
+enum Urgency {
+  LOW
+  NORMAL
+  HIGH
+  EMERGENCY
+}
+
+enum QuoteStatus {
+  SUBMITTED
+  SUPERSEDED
+  ACCEPTED
+  REJECTED
+  NOT_SELECTED
+  WITHDRAWN
+  EXPIRED
+}
+
+enum MilestoneStatus {
+  PENDING
+  AWAITING_FUNDING
+  FUNDED
+  IN_PROGRESS
+  SUBMITTED
+  REVISION_REQUESTED
+  CONFIRMED
+  RELEASED
+  CANCELLED
+}
+
+enum DocumentType {
+  GOV_ID
+  SELFIE
+  TRADE_CERT
+  WORK_LICENCE
+  BACKGROUND_CHECK
+  SAFETY_CERT
+  INSURANCE
+}
+
+enum DocumentStatus {
+  PENDING
+  REVIEWING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum BadgeType {
+  ID_VERIFIED
+  SKILL_VERIFIED
+  BACKGROUND_CHECKED
+  FULLY_VERIFIED
+}
+
+enum ReviewDirection {
+  CLIENT_TO_PRO
+  PRO_TO_CLIENT
+}
+
+enum ReviewStatus {
+  PENDING_COUNTERPART // hidden until both sides submit — prevents retaliation
+  PUBLISHED
+  HIDDEN
+}
+
+enum DisputeType {
+  ISSUE_REPORT
+  DISPUTE
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+enum MediaVisibility {
+  PUBLIC
+  PRIVATE
+  RESTRICTED // verification documents — admin only
+}
+
+enum VirusScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+}
+
+enum PaymentStatus {
+  REQUIRES_PAYMENT_METHOD
+  REQUIRES_CONFIRMATION
+  AUTHORIZED
+  CAPTURED
+  RELEASED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  FAILED
+  CANCELLED
+}
+
+enum PayoutStatus {
+  PENDING
+  IN_TRANSIT
+  PAID
+  FAILED
+  REVERSED
+}
+
+enum StripeAccountStatus {
+  NOT_STARTED
+  ONBOARDING
+  PENDING_VERIFICATION
+  ACTIVE
+  RESTRICTED
+  DISABLED
+}
+
+enum PushPlatform {
+  WEB // V1 — W3C Web Push via VAPID
+  IOS // phase 2
+  ANDROID // phase 2
+}
+
+enum TaxType {
+  GST
+  HST
+  GST_PST
+  GST_QST
+}
+
+enum NotificationEvent {
+  QUOTE_RECEIVED
+  QUOTE_REVISED
+  QUOTE_ACCEPTED
+  QUOTE_REJECTED
+  PROFESSIONAL_APPOINTED
+  APPOINTMENT_ACCEPTED
+  APPOINTMENT_DECLINED
+  JOB_NEARBY
+  JOB_STARTED
+  WORK_PROOF_UPLOADED
+  MILESTONE_SUBMITTED
+  REVISION_REQUESTED
+  MILESTONE_CONFIRMED
+  JOB_COMPLETED
+  REVIEW_RECEIVED
+  REVIEW_RESPONSE
+  REVIEW_REQUEST
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
+  BADGE_EXPIRING
+  PAYMENT_AUTHORIZED
+  PAYMENT_RELEASED
+  PAYOUT_SENT
+  MESSAGE_RECEIVED
+  DISPUTE_OPENED
+  DISPUTE_UPDATED
+}
+
+enum JobQueueStatus {
+  QUEUED
+  PROCESSING
+  DONE
+  FAILED
+  DEAD
+}
+
+// ============================================================================
+// IDENTITY & AUTH
+// ============================================================================
+
+model User {
+  id            String        @id @default(uuid())
+  userType      UserType      @map("user_type")
+  email         String?       @unique
+  phone         String?       @unique // E.164
+  passwordHash  String?       @map("password_hash") // null when social-only
+  emailVerified Boolean       @default(false) @map("email_verified")
+  phoneVerified Boolean       @default(false) @map("phone_verified")
+  authProvider  AuthProvider  @default(LOCAL) @map("auth_provider")
+  googleSub     String?       @unique @map("google_sub")
+  accountStatus AccountStatus @default(PENDING) @map("account_status")
+  adminRole     AdminRole?    @map("admin_role")
+  mfaSecret     String?       @map("mfa_secret") // mandatory for ADMIN
+  mfaEnabledAt  DateTime?     @map("mfa_enabled_at")
+  lastLoginAt   DateTime?     @map("last_login_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  deletedAt     DateTime?     @map("deleted_at")
+
+  clientProfile       ClientProfile?
+  professionalProfile ProfessionalProfile?
+  refreshTokens       RefreshToken[]
+  otpCodes            OtpCode[]
+  passwordResets      PasswordResetToken[]
+  pushSubscriptions   PushSubscription[]
+  notifications       Notification[]
+  notificationPrefs   NotificationPreference[]
+  ownedMedia          Media[]
+  reviewsAuthored     Review[]                @relation("ReviewAuthor")
+  reviewsReceived     Review[]                @relation("ReviewSubject")
+  disputesRaised      Dispute[]               @relation("DisputeRaiser")
+  disputesAssigned    Dispute[]               @relation("DisputeAdmin")
+  disputeNotes        DisputeNote[]
+  threadsAsClient     MessageThread[]         @relation("ThreadClient")
+  threadsAsPro        MessageThread[]         @relation("ThreadProfessional")
+  messagesSent        Message[]
+  auditLogs           AdminAuditLog[]         @relation("AuditActor")
+  docsReviewed        VerificationDocument[]  @relation("DocumentReviewer")
+
+  @@index([userType, accountStatus])
+  @@index([accountStatus, createdAt])
+  @@map("users")
+}
+
+/// Rotating refresh tokens. Presenting an already-consumed token revokes the
+/// entire family — this is how stolen-token replay is detected.
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  tokenHash  String    @unique @map("token_hash")
+  familyId   String    @map("family_id")
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  revokedAt  DateTime? @map("revoked_at")
+  userAgent  String?   @map("user_agent")
+  ipAddress  String?   @map("ip_address")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+model OtpCode {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  codeHash    String    @map("code_hash")
+  channel     String // EMAIL | SMS
+  destination String // mask in all logs
+  attempts    Int       @default(0)
+  expiresAt   DateTime  @map("expires_at")
+  consumedAt  DateTime? @map("consumed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, consumedAt])
+  @@map("otp_codes")
+}
+
+model PasswordResetToken {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+/// V1 is W3C Web Push (VAPID): endpoint + p256dh + auth keys.
+/// Phase 2 native clients set platform IOS/ANDROID and use deviceToken.
+model PushSubscription {
+  id           String       @id @default(uuid())
+  userId       String       @map("user_id")
+  platform     PushPlatform @default(WEB)
+  endpoint     String?      @unique // Web Push
+  p256dhKey    String?      @map("p256dh_key")
+  authKey      String?      @map("auth_key")
+  deviceToken  String?      @unique @map("device_token") // FCM/APNs, phase 2
+  userAgent    String?      @map("user_agent")
+  failureCount Int          @default(0) @map("failure_count")
+  lastSeenAt   DateTime     @default(now()) @map("last_seen_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, platform])
+  @@map("push_subscriptions")
+}
+
+// ============================================================================
+// PROFILES
+// ============================================================================
+
+model ClientProfile {
+  id             String  @id @default(uuid())
+  userId         String  @unique @map("user_id")
+  fullName       String  @map("full_name")
+  companyName    String? @map("company_name")
+  profilePhotoId String? @map("profile_photo_id")
+
+  /// PRIVATE — never serialize to a non-appointed party.
+  addressLine String? @map("address_line")
+  city        String?
+  province    String?
+  postalCode  String? @map("postal_code")
+  country     String  @default("CA")
+
+  /// PRIVATE — exact coordinates.
+  latitude  Decimal? @db.Decimal(10, 7)
+  longitude Decimal? @db.Decimal(10, 7)
+
+  /// PUBLIC — city level only, e.g. "Toronto".
+  displayArea String? @map("display_area")
+
+  profileComplete Boolean  @default(false) @map("profile_complete")
+  avgRating       Decimal? @db.Decimal(2, 1) @map("avg_rating")
+  reviewCount     Int      @default(0) @map("review_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profilePhoto   Media?          @relation(fields: [profilePhotoId], references: [id])
+  savedLocations SavedLocation[]
+  jobs           Job[]
+  shortlists     Shortlist[]
+
+  @@map("client_profiles")
+}
+
+model SavedLocation {
+  id          String   @id @default(uuid())
+  clientId    String   @map("client_id")
+  label       String
+  addressLine String   @map("address_line")
+  city        String
+  province    String?
+  postalCode  String?  @map("postal_code")
+  latitude    Decimal  @db.Decimal(10, 7)
+  longitude   Decimal  @db.Decimal(10, 7)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  client ClientProfile @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("saved_locations")
+}
+
+model ProfessionalProfile {
+  id                String  @id @default(uuid())
+  userId            String  @unique @map("user_id")
+  fullName          String  @map("full_name")
+  headline          String?
+  bio               String? @db.Text
+  profilePictureId  String? @map("profile_picture_id")
+  experienceYears   Int?    @map("experience_years")
+  experienceSummary String? @map("experience_summary") @db.Text
+
+  // Rates in CENTS.
+  hourlyRateCents Int? @map("hourly_rate_cents")
+  fixedRateCents  Int? @map("fixed_rate_cents")
+
+  /// PRIVATE — exact base location. Released only to an appointed client.
+  baseAddressLine String?  @map("base_address_line")
+  baseLatitude    Decimal? @db.Decimal(10, 7) @map("base_latitude")
+  baseLongitude   Decimal? @db.Decimal(10, 7) @map("base_longitude")
+  city            String?
+  province        String?
+  postalCode      String?  @map("postal_code")
+  country         String   @default("CA")
+
+  /// PUBLIC — city-level label, e.g. "Based in Toronto".
+  displayArea String? @map("display_area")
+
+  /// PUBLIC map marker — deterministic 1–2km offset from base_point,
+  /// computed on save. NEVER render base_point on a map. See TAD §4.3.
+  displayLatitude  Decimal? @db.Decimal(10, 7) @map("display_latitude")
+  displayLongitude Decimal? @db.Decimal(10, 7) @map("display_longitude")
+
+  // PostGIS — GeoRepository only, Prisma Client cannot touch these.
+  basePoint    Unsupported("geography(Point,4326)")? @map("base_point")
+  displayPoint Unsupported("geography(Point,4326)")? @map("display_point")
+
+  serviceRadiusKm    Int                @default(25) @map("service_radius_km")
+  workMode           WorkMode           @default(BOTH) @map("work_mode")
+  availabilityStatus AvailabilityStatus @default(AVAILABLE) @map("availability_status")
+  tradeLicenceNumber String?            @map("trade_licence_number")
+  profileComplete    Boolean            @default(false) @map("profile_complete")
+
+  // Derived — recomputed, never hand-set.
+  avgRating         Decimal? @db.Decimal(2, 1) @map("avg_rating")
+  reviewCount       Int      @default(0) @map("review_count")
+  completedJobCount Int      @default(0) @map("completed_job_count")
+
+  // Stripe Connect Express
+  stripeAccountId     String?             @unique @map("stripe_account_id")
+  stripeAccountStatus StripeAccountStatus @default(NOT_STARTED) @map("stripe_account_status")
+  payoutsEnabled      Boolean             @default(false) @map("payouts_enabled")
+  chargesEnabled      Boolean             @default(false) @map("charges_enabled")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profilePicture Media?                 @relation(fields: [profilePictureId], references: [id])
+  categories     ProfessionalCategory[]
+  skills         ProfessionalSkill[]
+  portfolioItems PortfolioItem[]
+  certifications Certification[]
+  availability   AvailabilitySlot[]
+  documents      VerificationDocument[]
+  badges         ProfessionalBadge[]
+  quotes         Quote[]
+  appointedJobs  Job[]                  @relation("AppointedProfessional")
+  savedJobs      SavedJob[]
+  shortlistedBy  Shortlist[]
+  payouts        Payout[]
+
+  @@index([availabilityStatus, profileComplete])
+  @@index([city, province])
+  @@map("professional_profiles")
+}
+
+/// Weekly working hours. A single status enum is not enough once clients
+/// filter by "available this week".
+model AvailabilitySlot {
+  id             String @id @default(uuid())
+  professionalId String @map("professional_id")
+  dayOfWeek      Int    @map("day_of_week") // 0 = Sunday
+  startMinute    Int    @map("start_minute") // minutes from midnight
+  endMinute      Int    @map("end_minute")
+  timezone       String @default("America/Toronto")
+
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@unique([professionalId, dayOfWeek, startMinute])
+  @@map("availability_slots")
+}
+
+/// Two-level taxonomy. Level 1 = parent (Development), level 2 = leaf
+/// (Frontend). Jobs may only reference leaf categories.
+model Category {
+  id           String   @id @default(uuid())
+  parentId     String?  @map("parent_id")
+  name         String
+  slug         String   @unique
+  level        Int      @default(1)
+  description  String?
+  iconKey      String?  @map("icon_key")
+  isActive     Boolean  @default(true) @map("is_active")
+  displayOrder Int      @default(0) @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  parent        Category?              @relation("CategoryTree", fields: [parentId], references: [id])
+  children      Category[]             @relation("CategoryTree")
+  jobs          Job[]
+  professionals ProfessionalCategory[]
+
+  @@index([parentId, isActive, displayOrder])
+  @@map("categories")
+}
+
+model ProfessionalCategory {
+  professionalId String   @map("professional_id")
+  categoryId     String   @map("category_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  category     Category            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([professionalId, categoryId])
+  @@index([categoryId])
+  @@map("professional_categories")
+}
+
+model Skill {
+  id       String  @id @default(uuid())
+  name     String  @unique
+  slug     String  @unique
+  isActive Boolean @default(true) @map("is_active")
+
+  professionals ProfessionalSkill[]
+
+  @@map("skills")
+}
+
+model ProfessionalSkill {
+  professionalId  String @map("professional_id")
+  skillId         String @map("skill_id")
+  yearsExperience Int?   @map("years_experience")
+
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  skill        Skill               @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([professionalId, skillId])
+  @@index([skillId])
+  @@map("professional_skills")
+}
+
+model PortfolioItem {
+  id             String    @id @default(uuid())
+  professionalId String    @map("professional_id")
+  title          String
+  description    String?   @db.Text
+  projectUrl     String?   @map("project_url")
+  completedAt    DateTime? @map("completed_at")
+  displayOrder   Int       @default(0) @map("display_order")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  media        PortfolioMedia[]
+
+  @@index([professionalId, displayOrder])
+  @@map("portfolio_items")
+}
+
+model PortfolioMedia {
+  portfolioItemId String @map("portfolio_item_id")
+  mediaId         String @map("media_id")
+  displayOrder    Int    @default(0) @map("display_order")
+
+  portfolioItem PortfolioItem @relation(fields: [portfolioItemId], references: [id], onDelete: Cascade)
+  media         Media         @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([portfolioItemId, mediaId])
+  @@map("portfolio_media")
+}
+
+model Certification {
+  id             String    @id @default(uuid())
+  professionalId String    @map("professional_id")
+  name           String
+  issuer         String?
+  issuedAt       DateTime? @map("issued_at")
+  expiresAt      DateTime? @map("expires_at")
+  credentialId   String?   @map("credential_id")
+  mediaId        String?   @map("media_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  media        Media?              @relation(fields: [mediaId], references: [id])
+
+  @@index([professionalId])
+  @@map("certifications")
+}
+
+// ============================================================================
+// VERIFICATION
+// ============================================================================
+
+/// RESTRICTED. Admin-only, every read audit-logged, never exposed to a client.
+model VerificationDocument {
+  id              String         @id @default(uuid())
+  professionalId  String         @map("professional_id")
+  documentType    DocumentType   @map("document_type")
+  mediaId         String         @map("media_id")
+  status          DocumentStatus @default(PENDING)
+  rejectionReason String?        @map("rejection_reason")
+  reviewedById    String?        @map("reviewed_by_id")
+  reviewedAt      DateTime?      @map("reviewed_at")
+  /// Licences, insurance and background checks expire. On expiry the derived
+  /// badge is revoked; 30-day advance warning notification.
+  expiresAt       DateTime?      @map("expires_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  media        Media               @relation(fields: [mediaId], references: [id])
+  reviewedBy   User?               @relation("DocumentReviewer", fields: [reviewedById], references: [id])
+
+  @@index([professionalId, status])
+  @@index([status, createdAt]) // admin queue, oldest first
+  @@index([expiresAt])
+  @@map("verification_documents")
+}
+
+/// Materialized derived badges. NEVER set directly — recomputed from
+/// VerificationDocument state within 60s of any approval or expiry.
+model ProfessionalBadge {
+  professionalId String    @map("professional_id")
+  badgeType      BadgeType @map("badge_type")
+  awardedAt      DateTime  @default(now()) @map("awarded_at")
+  expiresAt      DateTime? @map("expires_at")
+
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@id([professionalId, badgeType])
+  @@index([badgeType])
+  @@map("professional_badges")
+}
+
+// ============================================================================
+// JOBS
+// ============================================================================
+
+model Job {
+  id          String    @id @default(uuid())
+  clientId    String    @map("client_id")
+  categoryId  String    @map("category_id")
+  title       String    @db.VarChar(120)
+  description String    @db.Text
+  status      JobStatus @default(DRAFT)
+
+  budgetCents Int        @map("budget_cents")
+  budgetType  BudgetType @default(FIXED) @map("budget_type")
+  currency    String     @default("CAD") @db.Char(3)
+
+  urgency  Urgency   @default(NORMAL)
+  jobDate  DateTime? @map("job_date") @db.Date
+  deadline DateTime? @db.Date
+  workMode WorkMode  @default(ONSITE) @map("work_mode")
+
+  /// PRIVATE — exact location. Job owner and appointed professional only.
+  latitude    Decimal? @db.Decimal(10, 7)
+  longitude   Decimal? @db.Decimal(10, 7)
+  addressLine String?  @map("address_line")
+  city        String?
+  province    String?
+  postalCode  String?  @map("postal_code")
+
+  /// PUBLIC — city level only.
+  displayArea String? @map("display_area")
+
+  // PostGIS — GeoRepository only.
+  locationPoint Unsupported("geography(Point,4326)")? @map("location_point")
+
+  appointedProfessionalId String?   @map("appointed_professional_id")
+  appointedAt             DateTime? @map("appointed_at")
+  /// Commission frozen at appointment so later admin changes never rewrite
+  /// history. Basis points: 1000 = 10.00%.
+  commissionBps           Int?      @map("commission_bps")
+
+  quoteCount  Int       @default(0) @map("quote_count")
+  publishedAt DateTime? @map("published_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  closedAt    DateTime? @map("closed_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  client                ClientProfile        @relation(fields: [clientId], references: [id])
+  category              Category             @relation(fields: [categoryId], references: [id])
+  appointedProfessional ProfessionalProfile? @relation("AppointedProfessional", fields: [appointedProfessionalId], references: [id])
+  media                 JobMedia[]
+  quotes                Quote[]
+  milestones            Milestone[]
+  workProofs            WorkProof[]
+  timeline              JobTimelineEvent[]
+  reviews               Review[]
+  disputes              Dispute[]
+  savedBy               SavedJob[]
+  shortlists            Shortlist[]
+  messageThreads        MessageThread[]
+  payments              Payment[]
+
+  @@index([status, categoryId, urgency])
+  @@index([clientId, status])
+  @@index([appointedProfessionalId, status])
+  @@index([status, publishedAt])
+  @@map("jobs")
+}
+
+model JobMedia {
+  jobId        String @map("job_id")
+  mediaId      String @map("media_id")
+  displayOrder Int    @default(0) @map("display_order")
+
+  job   Job   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, mediaId])
+  @@map("job_media")
+}
+
+model SavedJob {
+  professionalId String   @map("professional_id")
+  jobId          String   @map("job_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  job          Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@id([professionalId, jobId])
+  @@map("saved_jobs")
+}
+
+/// Visible only to the client who created it.
+model Shortlist {
+  clientId       String   @map("client_id")
+  jobId          String   @map("job_id")
+  professionalId String   @map("professional_id")
+  note           String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  client       ClientProfile       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  job          Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  @@id([clientId, jobId, professionalId])
+  @@map("shortlists")
+}
+
+/// Append-only audit of everything that happened on a job.
+model JobTimelineEvent {
+  id        String   @id @default(uuid())
+  jobId     String   @map("job_id")
+  actorId   String?  @map("actor_id")
+  eventType String   @map("event_type")
+  fromState String?  @map("from_state")
+  toState   String?  @map("to_state")
+  payload   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+  @@map("job_timeline_events")
+}
+
+// ============================================================================
+// QUOTES & HIRING
+// ============================================================================
+
+model Quote {
+  id             String      @id @default(uuid())
+  jobId          String      @map("job_id")
+  professionalId String      @map("professional_id")
+  status         QuoteStatus @default(SUBMITTED)
+
+  amountCents Int    @map("amount_cents")
+  currency    String @default("CAD") @db.Char(3)
+
+  proposedStartDate    DateTime? @map("proposed_start_date") @db.Date
+  proposedDurationDays Int?      @map("proposed_duration_days")
+  coverMessage         String    @db.Text
+
+  /// Revisions supersede rather than overwrite — full history retained.
+  version           Int     @default(1)
+  supersedesQuoteId String? @unique @map("supersedes_quote_id")
+
+  rejectionReason String?   @map("rejection_reason")
+  submittedAt     DateTime  @default(now()) @map("submitted_at")
+  respondedAt     DateTime? @map("responded_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  job          Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  supersedes   Quote?              @relation("QuoteRevision", fields: [supersedesQuoteId], references: [id])
+  supersededBy Quote?              @relation("QuoteRevision")
+  milestones   ProposedMilestone[]
+
+  @@index([jobId, status])
+  @@index([professionalId, status])
+  @@map("quotes")
+}
+
+/// Milestone breakdown inside a quote. Copied into real Milestone rows on
+/// acceptance.
+model ProposedMilestone {
+  id            String  @id @default(uuid())
+  quoteId       String  @map("quote_id")
+  sequence      Int
+  title         String
+  description   String?
+  amountCents   Int     @map("amount_cents")
+  estimatedDays Int?    @map("estimated_days")
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@unique([quoteId, sequence])
+  @@map("proposed_milestones")
+}
+
+// ============================================================================
+// WORK & MILESTONES
+// ============================================================================
+
+model Milestone {
+  id          String          @id @default(uuid())
+  jobId       String          @map("job_id")
+  sequence    Int
+  title       String
+  description String?         @db.Text
+  amountCents Int             @map("amount_cents")
+  status      MilestoneStatus @default(PENDING)
+
+  submittedAt   DateTime? @map("submitted_at")
+  confirmedAt   DateTime? @map("confirmed_at")
+  releasedAt    DateTime? @map("released_at")
+  revisionCount Int       @default(0) @map("revision_count")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  job        Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  workProofs WorkProof[]
+  payment    Payment?
+
+  @@unique([jobId, sequence])
+  @@index([jobId, status])
+  @@map("milestones")
+}
+
+model WorkProof {
+  id          String   @id @default(uuid())
+  jobId       String   @map("job_id")
+  milestoneId String?  @map("milestone_id")
+  mediaId     String   @map("media_id")
+  caption     String?
+  uploadedAt  DateTime @default(now()) @map("uploaded_at")
+
+  job       Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  milestone Milestone? @relation(fields: [milestoneId], references: [id])
+  media     Media      @relation(fields: [mediaId], references: [id])
+
+  @@index([jobId])
+  @@index([milestoneId])
+  @@map("work_proofs")
+}
+
+// ============================================================================
+// PAYMENTS — Stripe Connect Express, escrow
+// ============================================================================
+
+/// One payment per milestone. All amounts in CENTS.
+///   amountCents            = what the client pays
+///   commissionCents        = platform fee, taken from the professional's side
+///   taxOnCommissionCents   = GST/HST the platform charges on ITS commission
+///   netToProfessionalCents = amountCents - commissionCents
+model Payment {
+  id          String        @id @default(uuid())
+  jobId       String        @map("job_id")
+  milestoneId String?       @unique @map("milestone_id")
+  status      PaymentStatus @default(REQUIRES_PAYMENT_METHOD)
+
+  amountCents          Int      @map("amount_cents")
+  commissionBps        Int      @map("commission_bps")
+  commissionCents      Int      @map("commission_cents")
+  taxRateBps           Int      @default(0) @map("tax_rate_bps")
+  taxOnCommissionCents Int      @default(0) @map("tax_on_commission_cents")
+  /// Place of supply frozen at charge time — a professional relocating must
+  /// never alter a historical invoice.
+  taxProvince          String?  @map("tax_province")
+  taxType              TaxType? @map("tax_type")
+  netToProfessionalCents Int    @map("net_to_professional_cents")
+  currency             String   @default("CAD") @db.Char(3)
+
+  stripePaymentIntentId String? @unique @map("stripe_payment_intent_id")
+  stripeChargeId        String? @map("stripe_charge_id")
+  stripeTransferId      String? @map("stripe_transfer_id")
+
+  authorizedAt  DateTime? @map("authorized_at")
+  capturedAt    DateTime? @map("captured_at")
+  releasedAt    DateTime? @map("released_at")
+  refundedCents Int       @default(0) @map("refunded_cents")
+  failureReason String?   @map("failure_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  job       Job        @relation(fields: [jobId], references: [id])
+  milestone Milestone? @relation(fields: [milestoneId], references: [id])
+  invoice   Invoice?
+
+  @@index([jobId, status])
+  @@index([status, createdAt])
+  @@map("payments")
+}
+
+model Invoice {
+  id            String   @id @default(uuid())
+  paymentId     String   @unique @map("payment_id")
+  invoiceNumber String   @unique @map("invoice_number")
+  issuedAt      DateTime @default(now()) @map("issued_at")
+  pdfMediaId    String?  @map("pdf_media_id")
+  /// Snapshot of every line item at issue time. Invoices must never change
+  /// retroactively when rates change.
+  lineItems     Json     @map("line_items")
+
+  payment Payment @relation(fields: [paymentId], references: [id])
+  pdf     Media?  @relation(fields: [pdfMediaId], references: [id])
+
+  @@map("invoices")
+}
+
+model Payout {
+  id             String       @id @default(uuid())
+  professionalId String       @map("professional_id")
+  amountCents    Int          @map("amount_cents")
+  currency       String       @default("CAD") @db.Char(3)
+  status         PayoutStatus @default(PENDING)
+  stripePayoutId String?      @unique @map("stripe_payout_id")
+  arrivalDate    DateTime?    @map("arrival_date")
+  failureReason  String?      @map("failure_reason")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id])
+
+  @@index([professionalId, status])
+  @@map("payouts")
+}
+
+/// Canada is not one rate. Seeded per province, versioned by effective date.
+model TaxRate {
+  id            String    @id @default(uuid())
+  province      String // ON, BC, QC, AB …
+  taxType       TaxType   @map("tax_type")
+  rateBps       Int       @map("rate_bps") // 1300 = 13.00%
+  label         String // "HST", "GST + PST"
+  effectiveFrom DateTime  @map("effective_from")
+  effectiveTo   DateTime? @map("effective_to")
+
+  @@unique([province, effectiveFrom])
+  @@index([province, effectiveTo])
+  @@map("tax_rates")
+}
+
+/// Idempotency guard. Every webhook checks here BEFORE acting.
+model StripeEvent {
+  id          String    @id // Stripe event ID
+  type        String
+  processedAt DateTime? @map("processed_at")
+  payload     Json
+  error       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([type, processedAt])
+  @@map("stripe_events")
+}
+
+// ============================================================================
+// REVIEWS & DISPUTES
+// ============================================================================
+
+/// Double-blind: both reviews stay PENDING_COUNTERPART until both are
+/// submitted or the 14-day window closes. Prevents retaliatory rating.
+model Review {
+  id            String          @id @default(uuid())
+  jobId         String          @map("job_id")
+  authorId      String          @map("author_id")
+  subjectId     String          @map("subject_id")
+  direction     ReviewDirection
+  rating        Int // 1-5
+  comment       String?         @db.Text
+  status        ReviewStatus    @default(PENDING_COUNTERPART)
+  responseText  String?         @map("response_text") @db.Text
+  respondedAt   DateTime?       @map("responded_at")
+  publishedAt   DateTime?       @map("published_at")
+  editableUntil DateTime?       @map("editable_until")
+  hiddenReason  String?         @map("hidden_reason")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  job     Job  @relation(fields: [jobId], references: [id])
+  author  User @relation("ReviewAuthor", fields: [authorId], references: [id])
+  subject User @relation("ReviewSubject", fields: [subjectId], references: [id])
+
+  @@unique([jobId, direction])
+  @@index([subjectId, status])
+  @@map("reviews")
+}
+
+model Dispute {
+  id              String        @id @default(uuid())
+  jobId           String        @map("job_id")
+  raisedById      String        @map("raised_by_id")
+  type            DisputeType
+  status          DisputeStatus @default(OPEN)
+  subject         String
+  description     String        @db.Text
+  assignedAdminId String?       @map("assigned_admin_id")
+  resolutionNote  String?       @map("resolution_note") @db.Text
+  resolvedAt      DateTime?     @map("resolved_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  job           Job           @relation(fields: [jobId], references: [id])
+  raisedBy      User          @relation("DisputeRaiser", fields: [raisedById], references: [id])
+  assignedAdmin User?         @relation("DisputeAdmin", fields: [assignedAdminId], references: [id])
+  notes         DisputeNote[]
+
+  @@index([status, createdAt])
+  @@index([jobId])
+  @@map("disputes")
+}
+
+model DisputeNote {
+  id         String   @id @default(uuid())
+  disputeId  String   @map("dispute_id")
+  authorId   String   @map("author_id")
+  body       String   @db.Text
+  isInternal Boolean  @default(false) @map("is_internal")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id])
+
+  @@index([disputeId, createdAt])
+  @@map("dispute_notes")
+}
+
+// ============================================================================
+// MESSAGING
+// ============================================================================
+
+/// One thread per (job, professional) pair — a client negotiates with several
+/// professionals before appointing one, so a single thread per job is wrong.
+/// NOT end-to-end encrypted: admins read threads for dispute resolution.
+/// This MUST be disclosed in the privacy policy.
+model MessageThread {
+  id                 String    @id @default(uuid())
+  jobId              String    @map("job_id")
+  clientUserId       String    @map("client_user_id")
+  professionalUserId String    @map("professional_user_id")
+  lastMessageAt      DateTime? @map("last_message_at")
+  isLocked           Boolean   @default(false) @map("is_locked")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  job          Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  client       User      @relation("ThreadClient", fields: [clientUserId], references: [id])
+  professional User      @relation("ThreadProfessional", fields: [professionalUserId], references: [id])
+  messages     Message[]
+
+  @@unique([jobId, professionalUserId])
+  @@index([clientUserId, lastMessageAt])
+  @@index([professionalUserId, lastMessageAt])
+  @@map("message_threads")
+}
+
+model Message {
+  id        String    @id @default(uuid())
+  threadId  String    @map("thread_id")
+  senderId  String    @map("sender_id")
+  body      String?   @db.Text
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  thread      MessageThread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender      User                @relation(fields: [senderId], references: [id])
+  attachments MessageAttachment[]
+
+  @@index([threadId, createdAt])
+  @@map("messages")
+}
+
+model MessageAttachment {
+  messageId String @map("message_id")
+  mediaId   String @map("media_id")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  media   Media   @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, mediaId])
+  @@map("message_attachments")
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id           String            @id @default(uuid())
+  userId       String            @map("user_id")
+  eventType    NotificationEvent @map("event_type")
+  title        String
+  body         String
+  deepLink     String?           @map("deep_link")
+  payload      Json?
+  readAt       DateTime?         @map("read_at")
+  channelsSent Json?             @map("channels_sent")
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  userId    String            @map("user_id")
+  eventType NotificationEvent @map("event_type")
+  inApp     Boolean           @default(true) @map("in_app")
+  push      Boolean           @default(true)
+  email     Boolean           @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, eventType])
+  @@map("notification_preferences")
+}
+
+// ============================================================================
+// MEDIA
+// ============================================================================
+
+model Media {
+  id              String          @id @default(uuid())
+  ownerId         String?         @map("owner_id")
+  bucket          String
+  storageKey      String          @unique @map("storage_key")
+  originalName    String?         @map("original_name")
+  mimeType        String          @map("mime_type")
+  sizeBytes       Int             @map("size_bytes")
+  width           Int?
+  height          Int?
+  visibility      MediaVisibility @default(PRIVATE)
+  virusScanStatus VirusScanStatus @default(PENDING) @map("virus_scan_status")
+  scannedAt       DateTime?       @map("scanned_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  owner                User?                  @relation(fields: [ownerId], references: [id])
+  clientProfiles       ClientProfile[]
+  professionalProfiles ProfessionalProfile[]
+  portfolioMedia       PortfolioMedia[]
+  certifications       Certification[]
+  verificationDocs     VerificationDocument[]
+  jobMedia             JobMedia[]
+  workProofs           WorkProof[]
+  messageAttachments   MessageAttachment[]
+  invoices             Invoice[]
+
+  @@index([ownerId])
+  @@index([virusScanStatus])
+  @@map("media")
+}
+
+// ============================================================================
+// PLATFORM CONFIG & ADMIN
+// ============================================================================
+
+/// Single-row config. displayCurrency is RELABELLING ONLY — all stored
+/// amounts remain CAD cents. Do not build FX off this.
+model PlatformConfig {
+  id                     Int      @id @default(1)
+  defaultCommissionBps   Int      @default(1000) @map("default_commission_bps") // 10.00%
+  displayCurrencyCode    String   @default("CAD") @map("display_currency_code") @db.Char(3)
+  displayCurrencySymbol  String   @default("$") @map("display_currency_symbol")
+  defaultTaxProvince     String   @default("ON") @map("default_tax_province")
+  quoteDailyLimit        Int      @default(20) @map("quote_daily_limit")
+  appointmentWindowHours Int      @default(48) @map("appointment_window_hours")
+  reviewWindowDays       Int      @default(14) @map("review_window_days")
+  nearbyNotifyDailyCap   Int      @default(10) @map("nearby_notify_daily_cap")
+  minReviewsForRating    Int      @default(3) @map("min_reviews_for_rating")
+  jobExpiryGraceDays     Int      @default(7) @map("job_expiry_grace_days")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_config")
+}
+
+/// Immutable, append-only, 7-year retention. No updates, no deletes.
+model AdminAuditLog {
+  id           String   @id @default(uuid())
+  actorId      String   @map("actor_id")
+  action       String
+  resourceType String   @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  beforeState  Json?    @map("before_state")
+  afterState   Json?    @map("after_state")
+  ipAddress    String?  @map("ip_address")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  actor User @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([actorId, createdAt])
+  @@index([resourceType, resourceId])
+  @@map("admin_audit_logs")
+}
+
+model ContactEnquiry {
+  id        String    @id @default(uuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String
+  message   String    @db.Text
+  ipAddress String?   @map("ip_address")
+  handledAt DateTime? @map("handled_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([handledAt, createdAt])
+  @@map("contact_enquiries")
+}
+
+/// DB-backed queue drained by Vercel Cron. Avoids the serverless time limit.
+model BackgroundJob {
+  id          String         @id @default(uuid())
+  jobType     String         @map("job_type")
+  payload     Json
+  status      JobQueueStatus @default(QUEUED)
+  attempts    Int            @default(0)
+  maxAttempts Int            @default(5) @map("max_attempts")
+  runAfter    DateTime       @default(now()) @map("run_after")
+  lockedAt    DateTime?      @map("locked_at")
+  lastError   String?        @map("last_error")
+  completedAt DateTime?      @map("completed_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  @@index([status, runAfter])
+  @@map("background_jobs")
+}
+
+// ============================================================================
+// RAW SQL — put these in a hand-written migration after `prisma migrate`
+// ============================================================================
+//
+// CREATE EXTENSION IF NOT EXISTS postgis;
+// CREATE EXTENSION IF NOT EXISTS pg_trgm;
+//
+// -- GiST indexes on geography columns (required for ST_DWithin performance)
+// CREATE INDEX jobs_location_point_idx
+//   ON jobs USING GIST (location_point);
+// CREATE INDEX professional_base_point_idx
+//   ON professional_profiles USING GIST (base_point);
+// CREATE INDEX professional_display_point_idx
+//   ON professional_profiles USING GIST (display_point);
+//
+// -- One ACTIVE quote per professional per job.
+// -- Prisma cannot express a filtered unique index.
+// CREATE UNIQUE INDEX quotes_one_active_per_pro_per_job
+//   ON quotes (job_id, professional_id)
+//   WHERE status = 'SUBMITTED';
+//
+// -- Trigram indexes for search
+// CREATE INDEX jobs_title_trgm ON jobs USING GIN (title gin_trgm_ops);
+// CREATE INDEX pro_name_trgm
+//   ON professional_profiles USING GIN (full_name gin_trgm_ops);
+//
+// -- Audit log is append-only
+// REVOKE UPDATE, DELETE ON admin_audit_logs FROM PUBLIC;
+//
+// -- Seed provincial tax rates (2026)
+// -- ON 13% HST · NB/NL/NS/PE 15% HST · BC/MB/SK 5% GST + PST
+// -- AB/NT/NU/YT 5% GST · QC 5% GST + 9.975% QST

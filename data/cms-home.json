@@ -1,0 +1,47 @@
+{
+  "hero": {
+    "eyebrow": "VERIFIED MARKETPLACE PROFESSIONALS",
+    "title": "Find trusted professionals for work that matters.",
+    "description": "Post work, compare qualified professionals, and manage every project in one place.",
+    "primaryCta": "Browse professionals",
+    "secondaryCta": "Post a job"
+  },
+  "features": [
+    {
+      "id": "projects",
+      "title": "Project Management",
+      "description": "Track progress, communicate in real-time, and manage all projects in one centralized dashboard.",
+      "icon": "briefcase"
+    },
+    {
+      "id": "verified",
+      "title": "Verified Professionals",
+      "description": "All professionals are verified and vetted to ensure quality work and your peace of mind.",
+      "icon": "shield"
+    },
+    {
+      "id": "matching",
+      "title": "Expert Matching",
+      "description": "Get matched with professionals that best fit your project needs and budget requirements.",
+      "icon": "users"
+    },
+    {
+      "id": "local",
+      "title": "Local & Remote",
+      "description": "Work with professionals near you or globally - choose what works best for your project.",
+      "icon": "map"
+    },
+    {
+      "id": "discovery",
+      "title": "Easy Discovery",
+      "description": "Browse portfolios, reviews, and rates to find the right fit. Make data-driven decisions.",
+      "icon": "search"
+    },
+    {
+      "id": "growth",
+      "title": "Seamless Growth",
+      "description": "Build long-term relationships with reliable partners and scale your business together.",
+      "icon": "arrow"
+    }
+  ]
+}

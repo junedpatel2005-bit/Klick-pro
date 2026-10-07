@@ -1,0 +1,209 @@
+openapi: 3.1.0
+info:
+  title: Servio API
+  version: 1.0.0
+  description: API contract for Servio marketplace discovery and auth.
+servers:
+  - url: http://localhost:3000
+paths:
+  /api/v1/professionals:
+    get:
+      summary: Search and discover professionals.
+      parameters:
+        - name: query
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: city
+          in: query
+          schema:
+            type: string
+        - name: minRating
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 5
+        - name: verified
+          in: query
+          schema:
+            type: boolean
+        - name: availability
+          in: query
+          schema:
+            type: string
+        - name: distanceKm
+          in: query
+          schema:
+            type: number
+            minimum: 1
+            maximum: 500
+        - name: originLat
+          in: query
+          schema:
+            type: number
+        - name: originLng
+          in: query
+          schema:
+            type: number
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [recommended, rating, distance, most-reviewed]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: Professional discovery results.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfessionalDiscoveryResponse"
+        "400":
+          description: Validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/auth/me:
+    get:
+      summary: Returns the current authenticated user or null.
+      responses:
+        "200":
+          description: Authentication state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    anyOf:
+                      - type: null
+                      - $ref: "#/components/schemas/AuthUser"
+components:
+  schemas:
+    ProfessionalDiscoveryResult:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        title:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        verified:
+          type: boolean
+        rating:
+          type: number
+        reviewCount:
+          type: integer
+        hourlyRate:
+          type: integer
+          nullable: true
+        location:
+          type: string
+          nullable: true
+        approximateDistanceKm:
+          type: number
+          nullable: true
+        availabilityStatus:
+          type: string
+        skills:
+          type: array
+          items:
+            type: string
+        bio:
+          type: string
+          nullable: true
+        displayPoint:
+          type: object
+          nullable: true
+          properties:
+            lat:
+              type: number
+            lng:
+              type: number
+    ProfessionalDiscoveryResponse:
+      type: object
+      properties:
+        professionals:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProfessionalDiscoveryResult"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        hasMore:
+          type: boolean
+        facets:
+          type: object
+          properties:
+            cities:
+              type: array
+              items:
+                $ref: "#/components/schemas/FacetItem"
+            categories:
+              type: array
+              items:
+                $ref: "#/components/schemas/FacetItem"
+    FacetItem:
+      type: object
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true

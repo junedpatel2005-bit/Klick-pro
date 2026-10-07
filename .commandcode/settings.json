@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(powershell -Command \"Get-ChildItem -Path 'D:\\new\\app\\project' -Recurse -Filter 'page.tsx' | Select-Object FullName, Length\")",
+      "powershell",
+      "Shell(powershell -Command \"Get-Content D:\\new\\DEPLOY.md\")",
+      "Shell(powershell -Command \"if (Test-Path D:\\new\\.vercel\\project.json) { Get-Content D:\\new\\.vercel\\project.json } else { 'no vercel project' }\")"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}
