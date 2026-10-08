@@ -47,9 +47,7 @@ export async function GET(request: NextRequest) {
       const payments = await fetchRazorpayOrderPayments(orderId);
       const capturedPayment = payments.find(
         (p) =>
-          p.status === "captured" &&
-          p.amount === transaction.amount * 100 &&
-          p.currency === "INR",
+          p.status === "captured" && p.amount === transaction.amount * 100 && p.currency === "INR",
       );
 
       if (capturedPayment) {
@@ -82,7 +80,10 @@ export async function GET(request: NextRequest) {
         }
       }
     } catch (err) {
-      console.warn("Status reconciliation warning:", err instanceof Error ? err.message : String(err));
+      console.warn(
+        "Status reconciliation warning:",
+        err instanceof Error ? err.message : String(err),
+      );
     }
   }
 
@@ -91,4 +92,3 @@ export async function GET(request: NextRequest) {
     amount: transaction.amount,
   });
 }
-

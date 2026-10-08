@@ -6,8 +6,10 @@ import { NextResponse } from "next/server";
  */
 export async function POST() {
   return NextResponse.json(
-    { error: "Direct wallet deposits are disabled. Fund your wallet using verified online checkout." },
+    {
+      error:
+        "Direct wallet deposits are disabled. Fund your wallet using verified online checkout.",
+    },
     { status: 410 },
   );
 }
-

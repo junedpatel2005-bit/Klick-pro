@@ -83,7 +83,9 @@ export function SiteHeader({
           {user ? (
             <div className="flex items-center gap-2">
               <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
-                <Link href={dashboardHref} prefetch={false}>Dashboard</Link>
+                <Link href={dashboardHref} prefetch={false}>
+                  Dashboard
+                </Link>
               </Button>
               <div className="hidden sm:block">
                 <ClientAccountMenu />
@@ -92,10 +94,14 @@ export function SiteHeader({
           ) : (
             <>
               <Button asChild variant="ghost" size="sm">
-                <Link href="/login" prefetch={false}>Log in</Link>
+                <Link href="/login" prefetch={false}>
+                  Log in
+                </Link>
               </Button>
               <Button asChild variant="outline" size="sm">
-                <Link href="/signup" prefetch={false}>Sign up</Link>
+                <Link href="/signup" prefetch={false}>
+                  Sign up
+                </Link>
               </Button>
             </>
           )}
@@ -105,7 +111,9 @@ export function SiteHeader({
               size="sm"
               className="bg-cta text-cta-foreground hover:bg-cta/90 shadow-soft"
             >
-              <Link href="/post-job" prefetch={false}>Post a Job</Link>
+              <Link href="/post-job" prefetch={false}>
+                Post a Job
+              </Link>
             </Button>
           ) : null}
         </div>
@@ -137,16 +145,22 @@ export function SiteHeader({
             <div className="mt-2 flex flex-col gap-2">
               {user ? (
                 <Button asChild variant="outline" size="sm">
-                  <Link href={dashboardHref} prefetch={false}>Dashboard</Link>
+                  <Link href={dashboardHref} prefetch={false}>
+                    Dashboard
+                  </Link>
                 </Button>
               ) : (
                 <Button asChild variant="outline" size="sm">
-                  <Link href="/login" prefetch={false}>Log in</Link>
+                  <Link href="/login" prefetch={false}>
+                    Log in
+                  </Link>
                 </Button>
               )}
               {user?.role === "CLIENT" ? (
                 <Button asChild size="sm" className="bg-cta text-cta-foreground hover:bg-cta/90">
-                  <Link href="/post-job" prefetch={false}>Post a Job</Link>
+                  <Link href="/post-job" prefetch={false}>
+                    Post a Job
+                  </Link>
                 </Button>
               ) : null}
             </div>

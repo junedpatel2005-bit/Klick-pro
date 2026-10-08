@@ -949,6 +949,7 @@ NEEDS VERIFICATION
 After relevant changes run as applicable:
 
 For database/schema changes (MANDATORY):
+
 - Create corresponding migration in prisma/migrations/<YYYYMMDDNNNN_name>/migration.sql
 - npx prisma format
 - npx prisma validate
@@ -957,6 +958,7 @@ For database/schema changes (MANDATORY):
 - npx prisma migrate status
 
 For code/TypeScript changes:
+
 - npm run typecheck
 - npm run lint
 - npm test

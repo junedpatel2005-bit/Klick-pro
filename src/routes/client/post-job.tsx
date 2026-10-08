@@ -395,7 +395,9 @@ export default function PostJob() {
   const handleClearDraft = () => {
     try {
       localStorage.removeItem(postJobDraftKey);
-    } catch {}
+    } catch {
+      // ignore
+    }
     setForm({ ...empty, jobDate: today });
     setStep(0);
     setMaxStep(0);

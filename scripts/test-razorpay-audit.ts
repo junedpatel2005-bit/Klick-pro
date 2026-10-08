@@ -1,7 +1,7 @@
 import "dotenv/config";
 import crypto from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../generated/prisma/client";
+import { PrismaClient, Prisma } from "../generated/prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is required.");
@@ -25,7 +25,12 @@ function record(test: string, pass: boolean, notes: string) {
   console.log(`  ${pass ? "✓ PASS" : "❌ FAIL"}: ${test} — ${notes}`);
 }
 
-function verifyRazorpayPaymentSignature(orderId: string, paymentId: string, signature: string, secret: string) {
+function verifyRazorpayPaymentSignature(
+  orderId: string,
+  paymentId: string,
+  signature: string,
+  secret: string,
+) {
   const expected = crypto
     .createHmac("sha256", secret)
     .update(`${orderId}|${paymentId}`)
@@ -37,20 +42,21 @@ function verifyRazorpayPaymentSignature(orderId: string, paymentId: string, sign
 
 function verifyRazorpayWebhookSignature(rawBody: string, signature: string | null, secret: string) {
   if (!signature || !secret) return false;
-  const expected = crypto
-    .createHmac("sha256", secret)
-    .update(rawBody)
-    .digest("hex");
+  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
   const a = Buffer.from(expected, "utf8");
   const b = Buffer.from(signature, "utf8");
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 async function creditWalletFromVerifiedProvider(
-  tx: any,
+  tx: Prisma.TransactionClient,
   input: { userId: number; amount: number; providerReference: string; providerPaymentId: string },
 ) {
-  const wallet = await tx.wallet.upsert({ where: { userId: input.userId }, update: {}, create: { userId: input.userId } });
+  const wallet = await tx.wallet.upsert({
+    where: { userId: input.userId },
+    update: {},
+    create: { userId: input.userId },
+  });
   const transaction = await tx.walletTransaction.findUnique({
     where: { providerReference: input.providerReference },
   });
@@ -112,13 +118,27 @@ async function runAudit() {
     .update(`${validOrderId}|${validPaymentId}`)
     .digest("hex");
 
-  const sigValid = verifyRazorpayPaymentSignature(validOrderId, validPaymentId, validSignature, keySecret);
-  record("Signature Verification", sigValid, "Valid HMAC signature passes timingSafeEqual verification");
+  const sigValid = verifyRazorpayPaymentSignature(
+    validOrderId,
+    validPaymentId,
+    validSignature,
+    keySecret,
+  );
+  record(
+    "Signature Verification",
+    sigValid,
+    "Valid HMAC signature passes timingSafeEqual verification",
+  );
 
   // TEST 2: Invalid Signature Rejection
   console.log("\n[Scenario 2] Tampered / Invalid Signature Rejection");
   const tamperedSig = validSignature.slice(0, -4) + "0000";
-  const sigRejected = !verifyRazorpayPaymentSignature(validOrderId, validPaymentId, tamperedSig, keySecret);
+  const sigRejected = !verifyRazorpayPaymentSignature(
+    validOrderId,
+    validPaymentId,
+    tamperedSig,
+    keySecret,
+  );
   record("Invalid Signature Rejection", sigRejected, "Tampered signature correctly rejected");
 
   // TEST 3: Amount Manipulation Protection
@@ -208,7 +228,10 @@ async function runAudit() {
   const successCount = raceOutcomes.filter((o) => o === "SUCCESS").length;
   const blockedCount = raceOutcomes.filter((o) => o === "BLOCKED").length;
   const walletAfterRace = await db.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
-  const raceSafe = successCount === 1 && blockedCount === 9 && walletAfterRace.balance === initialBalance + 500 + 250;
+  const raceSafe =
+    successCount === 1 &&
+    blockedCount === 9 &&
+    walletAfterRace.balance === initialBalance + 500 + 250;
   record(
     "Concurrent Race Protection",
     raceSafe,
@@ -286,7 +309,11 @@ async function runAudit() {
   });
   const validWhSig = crypto.createHmac("sha256", webhookSecret).update(webhookBody).digest("hex");
   const whValid = verifyRazorpayWebhookSignature(webhookBody, validWhSig, webhookSecret);
-  const whForgedInvalid = !verifyRazorpayWebhookSignature(webhookBody, validWhSig + "bad", webhookSecret);
+  const whForgedInvalid = !verifyRazorpayWebhookSignature(
+    webhookBody,
+    validWhSig + "bad",
+    webhookSecret,
+  );
   record(
     "Webhook Signature Verification",
     whValid && whForgedInvalid,
@@ -366,14 +393,17 @@ async function runAudit() {
     },
   });
 
-  const runnerA = db.$transaction((tx) =>
-    creditWalletFromVerifiedProvider(tx, {
-      userId: testUser.id,
-      amount: race2Tx.amount,
-      providerReference: race2OrderId,
-      providerPaymentId: race2PaymentId,
-    }),
-  ).then(() => "VERIFY_WON").catch(() => "VERIFY_LOST");
+  const runnerA = db
+    .$transaction((tx) =>
+      creditWalletFromVerifiedProvider(tx, {
+        userId: testUser.id,
+        amount: race2Tx.amount,
+        providerReference: race2OrderId,
+        providerPaymentId: race2PaymentId,
+      }),
+    )
+    .then(() => "VERIFY_WON")
+    .catch(() => "VERIFY_LOST");
 
   const runnerB = db.$transaction(async (tx) => {
     const claim = await tx.walletTransaction.updateMany({
@@ -397,7 +427,8 @@ async function runAudit() {
   const [resA, resB] = await Promise.all([runnerA, runnerB]);
   const walletAfterRace2 = await db.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
   const exactlyOneCredited =
-    ((resA === "VERIFY_WON" && resB === "WEBHOOK_LOST") || (resA === "VERIFY_LOST" && resB === "WEBHOOK_WON")) &&
+    ((resA === "VERIFY_WON" && resB === "WEBHOOK_LOST") ||
+      (resA === "VERIFY_LOST" && resB === "WEBHOOK_WON")) &&
     walletAfterRace2.balance === initialBalance + 500 + 250 + 300 + 400 + 150;
   record(
     "Callback + Webhook Race",

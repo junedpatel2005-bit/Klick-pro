@@ -185,7 +185,9 @@ export type RazorpayCapturedPayment = {
  * Essential for resolving missing frontend callbacks, delayed webhooks, UPI app switches,
  * or browser closures immediately when the user returns.
  */
-export async function fetchRazorpayOrderPayments(orderId: string): Promise<RazorpayCapturedPayment[]> {
+export async function fetchRazorpayOrderPayments(
+  orderId: string,
+): Promise<RazorpayCapturedPayment[]> {
   if (!isRazorpayConfigured()) return [];
   try {
     const response = await fetch(
@@ -216,8 +218,10 @@ export async function fetchRazorpayOrderPayments(orderId: string): Promise<Razor
         status: p.status!,
       }));
   } catch (error) {
-    console.error("fetchRazorpayOrderPayments error:", error instanceof Error ? error.message : String(error));
+    console.error(
+      "fetchRazorpayOrderPayments error:",
+      error instanceof Error ? error.message : String(error),
+    );
     return [];
   }
 }
-

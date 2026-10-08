@@ -81,10 +81,14 @@ export function ClientAccountMenu({ initialUser }: { initialUser?: AccountUser |
     return (
       <div className="flex items-center gap-2">
         <Button asChild variant="outline" size="sm">
-          <Link href="/login" prefetch={false}>Log in</Link>
+          <Link href="/login" prefetch={false}>
+            Log in
+          </Link>
         </Button>
         <Button asChild size="sm" className="bg-cta text-cta-foreground hover:bg-cta/90">
-          <Link href="/signup" prefetch={false}>Sign up</Link>
+          <Link href="/signup" prefetch={false}>
+            Sign up
+          </Link>
         </Button>
       </div>
     );
@@ -125,37 +129,55 @@ export function ClientAccountMenu({ initialUser }: { initialUser?: AccountUser |
         {isClient ? (
           <>
             <DropdownMenuItem asChild>
-              <Link href="/my-info" prefetch={false}>My Info &amp; Profile</Link>
+              <Link href="/my-info" prefetch={false}>
+                My Info &amp; Profile
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/my-jobs" prefetch={false}>Projects</Link>
+              <Link href="/my-jobs" prefetch={false}>
+                Projects
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/discover?saved=true" prefetch={false}>Saved Professionals</Link>
+              <Link href="/discover?saved=true" prefetch={false}>
+                Saved Professionals
+              </Link>
             </DropdownMenuItem>
           </>
         ) : isProfessional ? (
           <>
             <DropdownMenuItem asChild>
-              <Link href="/professional-profile?from=dashboard" prefetch={false}>Professional Profile</Link>
+              <Link href="/professional-profile?from=dashboard" prefetch={false}>
+                Professional Profile
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/professional/dashboard" prefetch={false}>Dashboard</Link>
+              <Link href="/professional/dashboard" prefetch={false}>
+                Dashboard
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/professional/my-jobs" prefetch={false}>Projects</Link>
+              <Link href="/professional/my-jobs" prefetch={false}>
+                Projects
+              </Link>
             </DropdownMenuItem>
           </>
         ) : isAdmin ? (
           <>
             <DropdownMenuItem asChild>
-              <Link href="/admin" prefetch={false}>Admin dashboard</Link>
+              <Link href="/admin" prefetch={false}>
+                Admin dashboard
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/admin/users" prefetch={false}>Users</Link>
+              <Link href="/admin/users" prefetch={false}>
+                Users
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/admin/operations" prefetch={false}>Jobs &amp; disputes</Link>
+              <Link href="/admin/operations" prefetch={false}>
+                Jobs &amp; disputes
+              </Link>
             </DropdownMenuItem>
           </>
         ) : null}

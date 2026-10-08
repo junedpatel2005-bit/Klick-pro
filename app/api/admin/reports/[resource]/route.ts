@@ -170,10 +170,12 @@ export async function POST(
         }),
       ]);
       const userIds = [
-        ...new Set([
-          ...transactions.flatMap((item) => [item.clientId, item.professionalId]),
-          ...withdrawals.map((item) => item.professionalId),
-        ].filter((id): id is number => typeof id === "number" && id > 0)),
+        ...new Set(
+          [
+            ...transactions.flatMap((item) => [item.clientId, item.professionalId]),
+            ...withdrawals.map((item) => item.professionalId),
+          ].filter((id): id is number => typeof id === "number" && id > 0),
+        ),
       ];
       const users = await db.user.findMany({
         where: { id: { in: userIds } },

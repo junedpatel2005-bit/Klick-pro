@@ -58,7 +58,7 @@ async function main() {
 
   if (preservedUserIds.length < 3) {
     throw new Error(
-      `Safety check failed: Expected 3 preserved accounts, but found ${preservedUserIds.length}.`
+      `Safety check failed: Expected 3 preserved accounts, but found ${preservedUserIds.length}.`,
     );
   }
 
@@ -226,7 +226,9 @@ async function main() {
   console.log("\n==================================================");
   console.log("             CLEANUP VERIFICATION SUMMARY        ");
   console.log("==================================================");
-  console.log(`ServiceCategory count (UNTOUCHED): ${categoryCountAfter} (Before: ${categoryCountBefore})`);
+  console.log(
+    `ServiceCategory count (UNTOUCHED): ${categoryCountAfter} (Before: ${categoryCountBefore})`,
+  );
   console.log(`Remaining Users: ${totalUsersAfter} (Preserved clean accounts only)`);
   console.log(`Remaining ClientJobs: ${totalJobsAfter}`);
   console.log(`Remaining Payments: ${totalPaymentsAfter}`);

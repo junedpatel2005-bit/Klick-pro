@@ -3,13 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -239,7 +233,8 @@ export function LinkedAccountsCard({
         ) : accounts.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-5 text-center">
             <p className="text-xs text-muted-foreground">
-              No linked accounts saved yet. Add your Bank Account, UPI ID, Razorpay, or Debit Card to withdraw earnings in 1 click.
+              No linked accounts saved yet. Add your Bank Account, UPI ID, Razorpay, or Debit Card
+              to withdraw earnings in 1 click.
             </p>
             <Button
               variant="outline"
@@ -265,7 +260,8 @@ export function LinkedAccountsCard({
 
               if (isBank) {
                 IconComponent = Building2;
-                iconColor = "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400";
+                iconColor =
+                  "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400";
                 titleText = `${acc.bankName || "Bank Account"} · •••• ${acc.last4 || "••••"}`;
                 subText = [
                   acc.accountHolder ? `Holder: ${acc.accountHolder}` : null,
@@ -275,17 +271,22 @@ export function LinkedAccountsCard({
                   .join(" | ");
               } else if (isUpi) {
                 IconComponent = Smartphone;
-                iconColor = "bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-950/40 dark:text-purple-400";
+                iconColor =
+                  "bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-950/40 dark:text-purple-400";
                 titleText = `UPI · ${acc.upiId}`;
-                subText = acc.accountHolder ? `Name: ${acc.accountHolder}` : "Virtual Payment Address";
+                subText = acc.accountHolder
+                  ? `Name: ${acc.accountHolder}`
+                  : "Virtual Payment Address";
               } else if (isCard) {
                 IconComponent = CreditCard;
-                iconColor = "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400";
+                iconColor =
+                  "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400";
                 titleText = `${acc.cardBank || "Debit Card"} · •••• ${acc.last4 || "••••"}`;
                 subText = acc.accountHolder ? `Holder: ${acc.accountHolder}` : "Debit Card";
               } else {
                 IconComponent = Landmark;
-                iconColor = "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400";
+                iconColor =
+                  "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400";
                 titleText = `Razorpay Route · ${acc.razorpayAccountId}`;
                 subText = "Linked Gateway Account";
               }
@@ -366,7 +367,8 @@ export function LinkedAccountsCard({
               Link Payout &amp; Settlement Account
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Save your account details once. You can use it across the platform with 1-click on the Earnings page.
+              Save your account details once. You can use it across the platform with 1-click on the
+              Earnings page.
             </DialogDescription>
           </DialogHeader>
 
@@ -626,4 +628,3 @@ export function LinkedAccountsCard({
     </Card>
   );
 }
-

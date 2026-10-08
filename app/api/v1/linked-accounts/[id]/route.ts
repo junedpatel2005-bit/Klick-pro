@@ -53,10 +53,7 @@ export async function DELETE(
   return NextResponse.json({ success: true });
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await sessionFrom(request);
   if (!session) return NextResponse.json({ error: "Sign-in required." }, { status: 401 });
 
@@ -86,4 +83,3 @@ export async function PATCH(
 
   return NextResponse.json({ account: updated, success: true });
 }
-

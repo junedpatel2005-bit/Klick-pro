@@ -204,6 +204,7 @@ export default function ClientEarnings() {
       .finally(() => setPaymentsLoading(false));
     loadWallet();
     loadLinkedAccounts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useRealtimeRefresh(["servio:project-update", "servio:notification", "servio:proposal"], () => {
     setPaymentsLoading(true);
@@ -805,10 +806,10 @@ export default function ClientEarnings() {
                               acc.accountType === "BANK"
                                 ? `Bank: ${acc.bankName || "Bank Account"} (•••• ${acc.last4 || "••••"})`
                                 : acc.accountType === "UPI"
-                                ? `UPI: ${acc.upiId || "UPI"} (•••• ${acc.last4 || "••••"})`
-                                : acc.accountType === "CARD"
-                                ? `Card: ${acc.cardBank || "Debit Card"} (•••• ${acc.last4 || "••••"})`
-                                : `Razorpay: ${acc.razorpayAccountId || "Account"} (•••• ${acc.last4 || "••••"})`;
+                                  ? `UPI: ${acc.upiId || "UPI"} (•••• ${acc.last4 || "••••"})`
+                                  : acc.accountType === "CARD"
+                                    ? `Card: ${acc.cardBank || "Debit Card"} (•••• ${acc.last4 || "••••"})`
+                                    : `Razorpay: ${acc.razorpayAccountId || "Account"} (•••• ${acc.last4 || "••••"})`;
                             return (
                               <option key={acc.id} value={acc.id}>
                                 {acc.isDefault ? `★ [Default] ${label}` : label}

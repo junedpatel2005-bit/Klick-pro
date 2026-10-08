@@ -11,12 +11,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 # Database & Prisma Migration Rules (STRICT & MANDATORY)
 
 ## Rule 1: Every Database Change MUST Have a Migration File
+
 - **ZERO UNTRACKED SCHEMA CHANGES**: Never modify `prisma/schema.prisma` or the PostgreSQL database without immediately creating and applying a corresponding migration file in `prisma/migrations/`.
 - Every table creation, column addition, alteration, deletion, foreign key, index, or constraint change MUST be captured in a numbered migration folder:
   `prisma/migrations/<YYYYMMDDNNNN_description>/migration.sql`
 - Never rely on `prisma db push` alone in development. Deployments run `prisma migrate deploy && next build` (see `package.json`), which strictly executes files in `prisma/migrations/`. Any unmigrated field will fail in production with Prisma error `P2022: The column does not exist`.
 
 ## Rule 2: Safe & Idempotent Migration DDL
+
 - For column additions, always use safe DDL:
   `ALTER TABLE "<TableName>" ADD COLUMN IF NOT EXISTS "<column_name>" <TYPE> [DEFAULT ...];`
 - For table creations:
@@ -26,7 +28,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - For foreign keys and constraints, wrap inside `DO $$ BEGIN ... EXCEPTION WHEN duplicate_object THEN null; END $$;` blocks so migrations are safe to re-run.
 
 ## Rule 3: Verification Workflow for Any Database Change
+
 Whenever any schema change is requested:
+
 1. Update `prisma/schema.prisma`.
 2. Format schema: `npx prisma format`.
 3. Validate schema: `npx prisma validate`.
@@ -39,6 +43,6 @@ Whenever any schema change is requested:
 # Communication & Transparency Rules
 
 ## Rule 4: Always Explain What You Are Doing Before Execution
+
 - **TRANSPARENCY FIRST**: Before executing multi-file edits, batch updates, or structural changes, always explain to the user what you are about to do, why, and how it will be implemented.
 - **NEVER WORK IN SILENCE**: Keep the user fully in the loop with a clear breakdown of the planned steps and affected files so the user has complete visibility and control over all modifications.
-

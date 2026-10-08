@@ -2233,15 +2233,14 @@ function TopUpDrawer({
               Wallet Credit Amount
             </span>
             <div className="flex items-baseline justify-between">
-              <p className="text-3xl font-black text-emerald-950">
-                +{formatMoney(topup.amount)}
-              </p>
+              <p className="text-3xl font-black text-emerald-950">+{formatMoney(topup.amount)}</p>
               <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-full">
                 INR Deposit
               </span>
             </div>
             <p className="text-xs text-emerald-700">
-              Funds credited directly to client balance for job funding and escrow milestone locking.
+              Funds credited directly to client balance for job funding and escrow milestone
+              locking.
             </p>
           </div>
 
@@ -2259,7 +2258,9 @@ function TopUpDrawer({
               {(user?.email || item.clientEmail) && (
                 <div className="flex justify-between items-center py-1 border-b border-slate-100">
                   <span className="text-slate-500">Email:</span>
-                  <span className="font-medium text-slate-800">{user?.email || item.clientEmail}</span>
+                  <span className="font-medium text-slate-800">
+                    {user?.email || item.clientEmail}
+                  </span>
                 </div>
               )}
               {user?.phone && (
@@ -2270,7 +2271,9 @@ function TopUpDrawer({
               )}
               <div className="flex justify-between items-center py-1 border-b border-slate-100">
                 <span className="text-slate-500">Client User ID:</span>
-                <span className="font-mono font-semibold text-slate-700">#{topup.wallet.userId}</span>
+                <span className="font-mono font-semibold text-slate-700">
+                  #{topup.wallet.userId}
+                </span>
               </div>
               <div className="flex justify-between items-center py-1">
                 <span className="text-slate-500">Account Type:</span>
@@ -2399,9 +2402,7 @@ function LedgerDrawer({
           {/* Treasury Impact Card */}
           <div
             className={`rounded-2xl border p-5 space-y-2 ${
-              isCredit
-                ? "border-emerald-200 bg-emerald-50/50"
-                : "border-slate-200 bg-slate-50/80"
+              isCredit ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-slate-50/80"
             }`}
           >
             <span
@@ -2418,13 +2419,13 @@ function LedgerDrawer({
                   isCredit ? "text-emerald-950" : "text-slate-900"
                 }`}
               >
-                {isCredit ? `+${formatMoney(ledger.amount)}` : `-${formatMoney(Math.abs(ledger.amount))}`}
+                {isCredit
+                  ? `+${formatMoney(ledger.amount)}`
+                  : `-${formatMoney(Math.abs(ledger.amount))}`}
               </p>
               <span
                 className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                  isCredit
-                    ? "text-emerald-800 bg-emerald-100"
-                    : "text-slate-700 bg-slate-200"
+                  isCredit ? "text-emerald-800 bg-emerald-100" : "text-slate-700 bg-slate-200"
                 }`}
               >
                 {isCredit ? "Treasury Credit" : "Treasury Disbursement"}
@@ -2586,9 +2587,7 @@ function GenericActivityDrawer({
               Transaction Details
             </span>
             <p className="text-base font-bold text-slate-900">{item.title}</p>
-            {item.categoryOrRef && (
-              <p className="text-xs text-slate-500">{item.categoryOrRef}</p>
-            )}
+            {item.categoryOrRef && <p className="text-xs text-slate-500">{item.categoryOrRef}</p>}
             {item.milestoneInfo && (
               <span className="inline-flex items-center gap-1 rounded bg-slate-200/70 px-2 py-0.5 text-xs font-medium text-slate-700 mt-1">
                 <Layers className="h-3 w-3 text-slate-500" />
@@ -2625,7 +2624,9 @@ function GenericActivityDrawer({
               {item.remainingAmount !== null && item.remainingAmount !== undefined && (
                 <div className="flex justify-between items-center py-1">
                   <span className="text-slate-500">Remaining Balance:</span>
-                  <span className="font-bold text-amber-700">{formatMoney(item.remainingAmount)}</span>
+                  <span className="font-bold text-amber-700">
+                    {formatMoney(item.remainingAmount)}
+                  </span>
                 </div>
               )}
             </div>

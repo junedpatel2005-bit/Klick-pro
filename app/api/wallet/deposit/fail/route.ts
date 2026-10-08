@@ -25,7 +25,8 @@ export async function POST(request: NextRequest) {
   });
   if (!transaction)
     return NextResponse.json({ error: "Wallet payment not found." }, { status: 404 });
-  if (transaction.status === "COMPLETED") return NextResponse.json({ ok: true, alreadyCompleted: true });
+  if (transaction.status === "COMPLETED")
+    return NextResponse.json({ ok: true, alreadyCompleted: true });
 
   // Atomic conditional update: only mark FAILED if status is still PENDING.
   // This prevents race conditions where a concurrent verify or webhook completes

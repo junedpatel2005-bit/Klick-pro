@@ -66,27 +66,42 @@ export async function POST(request: NextRequest) {
 
   if (accountType === "BANK") {
     if (!accountNumber || accountNumber.length < 6) {
-      return NextResponse.json({ error: "Please enter a valid bank account number." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Please enter a valid bank account number." },
+        { status: 400 },
+      );
     }
     if (!ifscCode || ifscCode.length !== 11) {
-      return NextResponse.json({ error: "Please enter a valid 11-character IFSC code." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Please enter a valid 11-character IFSC code." },
+        { status: 400 },
+      );
     }
     last4 = accountNumber.slice(-4);
   } else if (accountType === "UPI") {
     if (!upiId || !upiId.includes("@")) {
-      return NextResponse.json({ error: "Please enter a valid UPI ID (e.g. name@oksbi)." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Please enter a valid UPI ID (e.g. name@oksbi)." },
+        { status: 400 },
+      );
     }
     const parts = upiId.split("@");
     last4 = parts[0]?.slice(-4) ?? null;
   } else if (accountType === "CARD") {
     const cleanCard = (accountNumber ?? "").replace(/\s/g, "");
     if (cleanCard.length < 15) {
-      return NextResponse.json({ error: "Please enter a valid 16-digit debit card number." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Please enter a valid 16-digit debit card number." },
+        { status: 400 },
+      );
     }
     last4 = cleanCard.slice(-4);
   } else if (accountType === "RAZORPAY") {
     if (!razorpayAccountId || razorpayAccountId.length < 5) {
-      return NextResponse.json({ error: "Please enter a valid Razorpay Account ID (e.g. acc_...)." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Please enter a valid Razorpay Account ID (e.g. acc_...)." },
+        { status: 400 },
+      );
     }
     last4 = razorpayAccountId.slice(-4);
   }
@@ -120,4 +135,3 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ account, success: true }, { status: 201 });
 }
-

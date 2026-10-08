@@ -42,9 +42,6 @@
       "icon": "shield"
     }
   ],
-  "sectionOrder": [
-    "hero",
-    "features"
-  ],
+  "sectionOrder": ["hero", "features"],
   "updatedAt": "2026-09-25T06:20:00.000Z"
 }
