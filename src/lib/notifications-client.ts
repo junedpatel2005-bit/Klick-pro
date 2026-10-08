@@ -19,7 +19,7 @@ export type PortalNotification = {
   metadata?: Record<string, unknown> | null;
 };
 
-const TTL_MS = 3_000;
+const TTL_MS = 30_000;
 let cached: PortalNotification[] | null = null;
 let cachedAt = 0;
 let inflight: Promise<PortalNotification[]> | null = null;
@@ -27,13 +27,15 @@ let inflight: Promise<PortalNotification[]> | null = null;
 export function invalidateNotificationsCache() {
   cached = null;
   cachedAt = 0;
-  inflight = null;
 }
 
 export function fetchPortalNotifications(options?: {
   force?: boolean;
 }): Promise<PortalNotification[]> {
-  if (options?.force) invalidateNotificationsCache();
+  if (options?.force) {
+    cached = null;
+    cachedAt = 0;
+  }
   if (cached && Date.now() - cachedAt < TTL_MS) return Promise.resolve(cached);
   if (inflight) return inflight;
 

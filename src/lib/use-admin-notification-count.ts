@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { fetchPortalNotifications } from "@/lib/notifications-client";
 
 /**
  * Unread admin notification count.
@@ -18,9 +19,7 @@ export function useAdminNotificationCount() {
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/portal/notifications", { cache: "no-store" });
-      if (!response.ok) return;
-      const data = await response.json();
+      const data = await fetchPortalNotifications();
       if (!Array.isArray(data)) return;
       setUnreadCount(data.filter((item) => !item?.readAt).length);
     } catch {

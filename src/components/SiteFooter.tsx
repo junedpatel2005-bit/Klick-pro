@@ -95,7 +95,7 @@ function FooterCol({ title, links }: { title: string; links: { l: string; to: st
       <ul className="mt-4 space-y-2 text-sm text-white/65">
         {links.map((l) => (
           <li key={l.l}>
-            <Link href={l.to} className="hover:text-white">
+            <Link href={l.to} prefetch={false} className="hover:text-white">
               {l.l}
             </Link>
           </li>

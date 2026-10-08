@@ -180,6 +180,7 @@ export function AdminSidebar() {
         {/* Brand Header */}
         <Link
           href="/admin"
+          prefetch={false}
           title="Klick-Pro Admin"
           className={`flex items-center gap-3 px-2 py-2 group ${collapsed ? "justify-center px-0" : ""}`}
         >
@@ -224,6 +225,7 @@ export function AdminSidebar() {
                     <Link
                       key={link.href}
                       href={link.href}
+                      prefetch={false}
                       title={link.label}
                       className={`group relative flex items-center rounded-xl transition-all duration-150 ${
                         collapsed

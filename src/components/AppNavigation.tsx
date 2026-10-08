@@ -45,14 +45,62 @@ function useUnreadMessages(pathname: string) {
 }
 
 let lastNotificationPatchTime = 0;
+let sharedNotificationCount = 0;
+const notificationListeners = new Set<(count: number) => void>();
+let notificationPollerActive = false;
+let lastSharedLoadTime = 0;
+
+function notifyCount(count: number) {
+  sharedNotificationCount = count;
+  for (const listener of notificationListeners) listener(count);
+}
+
+function refreshSharedNotificationCount(force = false) {
+  const now = Date.now();
+  if (!force && now - lastSharedLoadTime < 5000) return;
+  lastSharedLoadTime = now;
+  void fetchPortalNotifications({ force }).then((notifications) => {
+    notifyCount(notifications.filter((notification) => !notification.readAt).length);
+  });
+}
+
+function ensureSharedNotificationPoller() {
+  if (typeof window === "undefined" || notificationPollerActive) return;
+  notificationPollerActive = true;
+
+  const onNotification = () => refreshSharedNotificationCount(true);
+  const onNotificationsRead = () => {
+    notifyCount(0);
+    invalidateNotificationsCache();
+  };
+  const onFocus = () => {
+    if (document.visibilityState === "visible") {
+      refreshSharedNotificationCount(false);
+    }
+  };
+
+  window.addEventListener("servio:notification", onNotification);
+  window.addEventListener("servio:notifications-read", onNotificationsRead);
+  window.addEventListener("focus", onFocus);
+  setInterval(() => {
+    if (document.visibilityState === "visible") {
+      refreshSharedNotificationCount(false);
+    }
+  }, 60_000);
+}
 
 function useUnreadNotifications(pathname: string) {
-  const [count, setCount] = useState(0);
+  const [count, setCount] = useState(sharedNotificationCount);
+
   useEffect(() => {
+    ensureSharedNotificationPoller();
+    const listener = (newCount: number) => setCount(newCount);
+    notificationListeners.add(listener);
+
     if (pathname.startsWith("/notifications")) {
-      setCount(0);
+      notifyCount(0);
       const now = Date.now();
-      if (now - lastNotificationPatchTime > 3000) {
+      if (now - lastNotificationPatchTime > 5000) {
         lastNotificationPatchTime = now;
         void fetch("/api/portal/notifications", {
           method: "PATCH",
@@ -63,35 +111,15 @@ function useUnreadNotifications(pathname: string) {
           window.dispatchEvent(new CustomEvent("servio:notifications-read"));
         });
       }
-      return;
+    } else {
+      refreshSharedNotificationCount(false);
     }
-    let active = true;
-    const load = (force = false) => {
-      void fetchPortalNotifications({ force }).then((notifications) => {
-        if (active) {
-          setCount(notifications.filter((notification) => !notification.readAt).length);
-        }
-      });
-    };
-    load();
-    const onNotification = () => load(true);
-    const onNotificationsRead = () => {
-      setCount(0);
-      invalidateNotificationsCache();
-    };
-    const onFocus = () => load(true);
-    window.addEventListener("servio:notification", onNotification);
-    window.addEventListener("servio:notifications-read", onNotificationsRead);
-    window.addEventListener("focus", onFocus);
-    const interval = setInterval(() => load(false), 20000);
+
     return () => {
-      active = false;
-      window.removeEventListener("servio:notification", onNotification);
-      window.removeEventListener("servio:notifications-read", onNotificationsRead);
-      window.removeEventListener("focus", onFocus);
-      clearInterval(interval);
+      notificationListeners.delete(listener);
     };
   }, [pathname]);
+
   return count;
 }
 
@@ -169,6 +197,7 @@ export function AppSidebar({
             <Link
               key={item.to}
               href={item.to}
+              prefetch={false}
               title={collapsed ? item.label : undefined}
               className={`group relative flex h-10 w-full items-center rounded-xl transition-colors ${
                 active
@@ -283,6 +312,7 @@ export function AppMobileNavigation({
             <Link
               key={item.label}
               href={item.to}
+              prefetch={false}
               className={`group flex flex-1 min-w-0 flex-col items-center justify-center gap-1 py-1 px-0.5 text-center transition-colors ${
                 active
                   ? "text-primary font-semibold"

@@ -48,7 +48,7 @@ const app = next({
   dev,
   hostname,
   port,
-  ...(dev && useWebpack ? { webpack: true } : {}),
+  ...(dev ? (useWebpack ? { webpack: true } : { turbopack: true }) : {}),
 });
 const handler = app.getRequestHandler();
 const allowedOrigin = process.env.REALTIME_ALLOWED_ORIGIN ?? process.env.APP_URL;

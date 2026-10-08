@@ -25,6 +25,31 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   images: { remotePatterns: [{ protocol: "https", hostname: "i.pravatar.cc" }] },
+  experimental: {
+    optimizePackageImports: [
+      "lucide-react",
+      "date-fns",
+      "lodash-es",
+      "@radix-ui/react-alert-dialog",
+      "@radix-ui/react-avatar",
+      "@radix-ui/react-checkbox",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-dropdown-menu",
+      "@radix-ui/react-label",
+      "@radix-ui/react-select",
+      "@radix-ui/react-separator",
+      "@radix-ui/react-slot",
+      "@radix-ui/react-tabs",
+      "@radix-ui/react-toggle",
+      "@radix-ui/react-tooltip",
+      "sonner",
+    ],
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
+    turbopackPluginRuntimeStrategy: "workerThreads",
+  },
   async redirects() {
     return [
       {

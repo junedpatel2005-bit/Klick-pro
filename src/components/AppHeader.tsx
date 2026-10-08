@@ -408,6 +408,7 @@ export function AppHeader({
             <div className="border-t border-border/80 p-2 bg-muted/20">
               <Link
                 href="/notifications"
+                prefetch={false}
                 onClick={() => setNotificationOpen(false)}
                 className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
               >

@@ -343,11 +343,11 @@ export function RealtimeNotifications() {
     let lastActiveCheck = 0;
     const onActiveChange = () => {
       const now = Date.now();
-      // Only check missed if at least 15s elapsed and socket is not currently connected
+      // Only check missed if at least 30s elapsed and socket is not currently connected
       if (document.visibilityState === "visible" && !socket.connected) {
-        if (now - lastActiveCheck > 15000) {
+        if (now - lastActiveCheck > 30000) {
           lastActiveCheck = now;
-          void loadMissed(true);
+          void loadMissed(false);
         }
       }
     };

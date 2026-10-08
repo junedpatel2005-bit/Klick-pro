@@ -325,7 +325,8 @@ export default function PostJob() {
         } else {
           setForm((current) => ({ ...current, jobDate: today }));
         }
-        if (typeof draft?.step === "number") setStep(draft.step);
+        // Always start at Section 1 (step 0: "Details") when opening or navigating to the page
+        setStep(0);
         if (typeof draft?.maxStep === "number") setMaxStep(draft.maxStep);
       } catch {
         // Ignore an invalid local draft and start with a blank form.
@@ -384,6 +385,22 @@ export default function PostJob() {
     if (!hydrated || editJobId) return;
     localStorage.setItem(postJobDraftKey, JSON.stringify({ form, step, maxStep }));
   }, [editJobId, form, hydrated, maxStep, step]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [step]);
+
+  const handleClearDraft = () => {
+    try {
+      localStorage.removeItem(postJobDraftKey);
+    } catch {}
+    setForm({ ...empty, jobDate: today });
+    setStep(0);
+    setMaxStep(0);
+    setMessage("");
+  };
 
   const rebalanceMilestones = (milestones: JobFormMilestone[]) => {
     if (milestones.length === 0) return milestones;
@@ -851,8 +868,23 @@ export default function PostJob() {
             : "We’re safely saving your progress so you can continue later."
         }
       />
-      <h1 className="text-3xl font-bold">Create a job</h1>
-      <p className="mt-1 text-muted-foreground">Tell qualified professionals what you need.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold">Create a job</h1>
+          <p className="mt-1 text-muted-foreground">Tell qualified professionals what you need.</p>
+        </div>
+        {hydrated && !editJobId && (form.title || form.description || form.category) && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleClearDraft}
+            className="text-xs text-muted-foreground hover:text-destructive"
+          >
+            Start fresh
+          </Button>
+        )}
+      </div>
       <ol className="mt-7 grid grid-cols-6 gap-1" aria-label="Job posting steps">
         {steps.map((label, index) => {
           const reachable = index <= maxStep;

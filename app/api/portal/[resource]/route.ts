@@ -66,6 +66,11 @@ export async function GET(
         orderBy: { createdAt: "desc" },
         take: 100,
       });
+
+      if (notifications.length === 0) {
+        return NextResponse.json([]);
+      }
+
       const projectIdFor = (href: string | null) => {
         if (!href) return null;
         const pathMatch = href.match(/^\/project\/(\d+)/);
@@ -90,20 +95,24 @@ export async function GET(
         const match = notification.href?.match(/[?&]dispute=(\d+)(?:&|$)/);
         return match ? [Number(match[1])] : [];
       });
+      const needsMilestones = notifications.some(
+        (n) => n.type.includes("MILESTONE") || n.type.includes("PAYOUT"),
+      );
       const [disputes, milestones] = await Promise.all([
-        db.projectDispute.findMany({
-          where: { id: { in: legacyDisputeIds } },
-          select: { id: true, trackingId: true },
-        }),
-        // Scoped to this user: the fuzzy title match below would otherwise
-        // read every milestone on the platform and could resolve a
-        // notification to another tenant's project.
-        db.projectMilestone.findMany({
-          where: { OR: [{ clientId: session.userId }, { professionalId: session.userId }] },
-          select: { title: true, trackingId: true },
-          orderBy: { createdAt: "desc" },
-          take: 200,
-        }),
+        legacyDisputeIds.length > 0
+          ? db.projectDispute.findMany({
+              where: { id: { in: legacyDisputeIds } },
+              select: { id: true, trackingId: true },
+            })
+          : Promise.resolve([]),
+        needsMilestones
+          ? db.projectMilestone.findMany({
+              where: { OR: [{ clientId: session.userId }, { professionalId: session.userId }] },
+              select: { title: true, trackingId: true },
+              orderBy: { createdAt: "desc" },
+              take: 200,
+            })
+          : Promise.resolve([]),
       ]);
       const disputeProjectMap = new Map(
         disputes.map((dispute) => [dispute.id, dispute.trackingId]),
@@ -130,30 +139,34 @@ export async function GET(
         return jobId ? [jobId] : [];
       });
       const [projects, directJobs] = await Promise.all([
-        db.projectTracking.findMany({
-          where: {
-            OR: [
-              ...(projectIds.length > 0 ? [{ id: { in: projectIds } }] : []),
-              ...(directJobIds.length > 0 ? [{ jobId: { in: directJobIds } }] : []),
-            ],
-          },
-          include: {
-            job: { select: { id: true, title: true, category: true, description: true } },
-            client: { select: { firstName: true, lastName: true } },
-            professional: { select: { firstName: true, lastName: true } },
-            milestones: { select: { title: true } },
-          },
-        }),
-        db.clientJob.findMany({
-          where: { id: { in: directJobIds } },
-          select: {
-            id: true,
-            title: true,
-            category: true,
-            description: true,
-            user: { select: { firstName: true, lastName: true } },
-          },
-        }),
+        projectIds.length > 0 || directJobIds.length > 0
+          ? db.projectTracking.findMany({
+              where: {
+                OR: [
+                  ...(projectIds.length > 0 ? [{ id: { in: projectIds } }] : []),
+                  ...(directJobIds.length > 0 ? [{ jobId: { in: directJobIds } }] : []),
+                ],
+              },
+              include: {
+                job: { select: { id: true, title: true, category: true, description: true } },
+                client: { select: { firstName: true, lastName: true } },
+                professional: { select: { firstName: true, lastName: true } },
+                milestones: { select: { title: true } },
+              },
+            })
+          : Promise.resolve([]),
+        directJobIds.length > 0
+          ? db.clientJob.findMany({
+              where: { id: { in: directJobIds } },
+              select: {
+                id: true,
+                title: true,
+                category: true,
+                description: true,
+                user: { select: { firstName: true, lastName: true } },
+              },
+            })
+          : Promise.resolve([]),
       ]);
       const jobToProjectTrackingMap = new Map<number, (typeof projects)[number]>();
       const projectToJobIdMap = new Map<number, number>();
