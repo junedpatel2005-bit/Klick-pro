@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { io } from "socket.io-client";
 import dynamic from "next/dynamic";
 import { moveItem } from "@/lib/move-item";
 import type { DragHandle } from "@/components/cms/CmsSortable";
@@ -181,21 +182,47 @@ export default function ProfessionalHome({
     });
   };
 
-  useEffect(() => {
-    async function loadJobs() {
-      try {
-        const response = await fetch("/api/v1/portal/professional-jobs");
-        if (!response.ok) throw new Error("Professional jobs request failed");
-        const data = (await response.json()) as { openJobs: HomeJob[] };
-        setJobs(Array.isArray(data.openJobs) ? data.openJobs : []);
-      } catch {
-        setFailed(true);
-      } finally {
-        setLoading(false);
-      }
+  const loadJobs = useCallback(async () => {
+    try {
+      const response = await fetch("/api/v1/portal/professional-jobs", { cache: "no-store" });
+      if (!response.ok) throw new Error("Professional jobs request failed");
+      const data = (await response.json()) as { openJobs: HomeJob[] };
+      setJobs(Array.isArray(data.openJobs) ? data.openJobs : []);
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
     }
-    void loadJobs();
   }, []);
+
+  useEffect(() => {
+    void loadJobs();
+
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const socket = io(origin, {
+      path: "/api/realtime",
+      withCredentials: true,
+      transports: ["websocket", "polling"],
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+    });
+
+    const onJobEvent = () => {
+      void loadJobs();
+    };
+
+    socket.on("job:posted", onJobEvent);
+    socket.on("job:created", onJobEvent);
+    socket.on("notification:new", onJobEvent);
+
+    return () => {
+      socket.off("job:posted", onJobEvent);
+      socket.off("job:created", onJobEvent);
+      socket.off("notification:new", onJobEvent);
+      socket.disconnect();
+    };
+  }, [loadJobs]);
 
   return (
     <div className="min-h-screen bg-background">

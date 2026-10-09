@@ -358,9 +358,12 @@ function ProfessionalJobsContent() {
     void loadJobs();
   }, [loadJobs]);
 
-  useRealtimeRefresh(["servio:proposal", "servio:project-update", "servio:notification"], () => {
-    void loadJobs();
-  });
+  useRealtimeRefresh(
+    ["servio:proposal", "servio:project-update", "servio:notification", "servio:job-posted"],
+    () => {
+      void loadJobs();
+    },
+  );
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

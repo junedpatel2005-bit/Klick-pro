@@ -381,12 +381,19 @@ export function RealtimeNotifications() {
       window.dispatchEvent(new CustomEvent("servio:proposal", { detail: payload }));
     };
 
+    const onJobPosted = (payload?: unknown) => {
+      window.dispatchEvent(new CustomEvent("servio:job-posted", { detail: payload }));
+      window.dispatchEvent(new CustomEvent("servio:notification"));
+    };
+
     const onReconnect = () => void loadMissed(false);
     socket.io.on("reconnect", onReconnect);
     socket.on("notification:new", onNotification);
     socket.on("message:new", onMessage);
     socket.on("project:updated", onProject);
     socket.on("proposal:new", onProposal);
+    socket.on("job:posted", onJobPosted);
+    socket.on("job:created", onJobPosted);
 
     return () => {
       socket.io.off("reconnect", onReconnect);
@@ -394,6 +401,8 @@ export function RealtimeNotifications() {
       socket.off("message:new", onMessage);
       socket.off("project:updated", onProject);
       socket.off("proposal:new", onProposal);
+      socket.off("job:posted", onJobPosted);
+      socket.off("job:created", onJobPosted);
       socket.disconnect();
       window.clearInterval(poll);
       window.removeEventListener("focus", onActiveChange);

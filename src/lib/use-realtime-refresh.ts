@@ -15,6 +15,7 @@ export type RealtimeEvent =
   | "servio:notifications-read"
   | "servio:project-update"
   | "servio:proposal"
+  | "servio:job-posted"
   | "servio:profile-updated"
   | "servio:settings-update"
   | "servio:admin-overview-update"

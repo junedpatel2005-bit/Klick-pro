@@ -20,35 +20,39 @@ export function BrandedLogoBadge({
 }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center p-4">
-      <div className="relative flex flex-col items-center justify-center text-center p-6 sm:p-7 max-w-xs sm:max-w-sm w-full rounded-3xl border border-border/80 bg-background/90 dark:bg-card/90 backdrop-blur-xl shadow-2xl shadow-indigo-500/10 animate-[scale-in_0.25s_ease-out]">
-        {/* Ambient Pulsing Aura */}
-        <div className="pointer-events-none absolute -top-8 h-32 w-32 rounded-full bg-gradient-to-tr from-indigo-500/20 via-purple-500/15 to-sky-400/20 blur-2xl animate-pulse" />
+      <div className="relative flex flex-col items-center justify-center text-center p-6 sm:p-7 max-w-xs sm:max-w-sm w-full rounded-3xl border border-border/80 bg-background/90 dark:bg-card/90 backdrop-blur-xl shadow-2xl shadow-primary/10 animate-[scale-in_0.25s_ease-out]">
+        {/* Dynamic Multi-Color Ambient Glow */}
+        <div className="pointer-events-none absolute -top-8 h-36 w-36 rounded-full bg-gradient-to-tr from-primary/30 via-violet-500/20 to-sky-400/25 blur-2xl animate-pulse" />
 
-        {/* Logo Container with Animated Rings */}
+        {/* Logo Container with Dual Orbital Rings */}
         <div className="relative mb-4 flex items-center justify-center">
-          <div className="absolute -inset-2.5 rounded-3xl border-2 border-indigo-500/20 border-t-indigo-600 border-r-indigo-500/60 animate-spin [animation-duration:1.4s]" />
-          <div className="absolute -inset-1 rounded-2xl bg-indigo-500/10 animate-ping opacity-25" />
-          <div className="relative z-10 grid h-14 w-14 place-items-center rounded-2xl border border-border/80 bg-background p-2 shadow-md shadow-indigo-500/10">
+          <div className="absolute -inset-3 rounded-full border-2 border-transparent border-t-primary border-r-violet-500/80 animate-spin [animation-duration:1.8s] drop-shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
+          <div className="absolute -inset-1.5 rounded-full border border-dashed border-sky-400/40 border-b-primary/60 animate-[spin_3s_linear_infinite_reverse]" />
+          <div className="absolute -inset-1 rounded-2xl bg-primary/10 animate-ping opacity-25" />
+          <div className="relative z-10 grid h-14 w-14 place-items-center rounded-2xl border border-white/60 dark:border-white/10 bg-gradient-to-b from-white/95 to-slate-50/90 dark:from-slate-900/90 dark:to-slate-950/95 p-2.5 shadow-md shadow-primary/10">
             <img
               src="/logo-icon.png"
               alt="Klick-Pro"
-              className="h-full w-full object-contain animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite]"
+              className="h-full w-full object-contain filter drop-shadow-sm animate-[pulse_2.2s_cubic-bezier(0.4,0,0.6,1)_infinite]"
             />
           </div>
         </div>
 
-        {/* Brand Title */}
-        <div className="flex items-center gap-1.5 mb-1">
-          <span className="font-display text-base font-extrabold tracking-tight bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-800 bg-clip-text text-transparent">
+        {/* Brand Badge */}
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-0.5 mb-1.5 backdrop-blur-md">
+          <span className="font-display text-xs font-extrabold tracking-tight bg-gradient-to-r from-primary via-violet-600 to-indigo-600 dark:from-primary dark:via-violet-400 dark:to-indigo-300 bg-clip-text text-transparent">
             Klick-Pro
           </span>
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-600 animate-ping" />
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+          </span>
         </div>
 
         {/* Dynamic Action Title with Animated Wave Dots */}
         <h3 className="font-display text-sm font-bold text-foreground tracking-tight flex items-center justify-center gap-1">
           <span>{title}</span>
-          <span className="inline-flex tracking-widest text-indigo-600 font-black">
+          <span className="inline-flex tracking-widest text-primary font-black">
             <span className="animate-[login-dot_1.2s_infinite_100ms]">.</span>
             <span className="animate-[login-dot_1.2s_infinite_250ms]">.</span>
             <span className="animate-[login-dot_1.2s_infinite_400ms]">.</span>
@@ -63,8 +67,8 @@ export function BrandedLogoBadge({
         )}
 
         {/* Sleek Gradient Shimmer Progress Bar */}
-        <div className="relative mt-3.5 h-1.5 w-32 overflow-hidden rounded-full bg-muted border border-border/60 shadow-inner">
-          <div className="h-full w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-sky-500 rounded-full animate-login-button-shimmer" />
+        <div className="relative mt-3.5 h-1.5 w-36 overflow-hidden rounded-full bg-muted border border-border/60 shadow-inner">
+          <div className="h-full w-full bg-gradient-to-r from-primary via-violet-500 to-sky-400 rounded-full animate-login-button-shimmer" />
         </div>
       </div>
     </div>

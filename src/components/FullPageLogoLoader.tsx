@@ -20,40 +20,47 @@ export function FullPageLogoLoader({
   if (!active) return null;
 
   const content = (
-    <div className="relative flex flex-col items-center justify-center text-center p-6 max-w-sm sm:max-w-md w-full animate-scale-in">
-      {/* Ambient Pulsing Aura */}
-      <div className="pointer-events-none absolute -top-10 h-44 w-44 rounded-full bg-gradient-to-tr from-indigo-500/25 via-purple-500/20 to-sky-400/25 blur-3xl animate-pulse" />
+    <div className="relative flex flex-col items-center justify-center text-center p-6 sm:p-8 max-w-sm sm:max-w-md w-full animate-scale-in">
+      {/* Dynamic Multi-Color Ambient Glow */}
+      <div className="pointer-events-none absolute -top-12 h-52 w-52 rounded-full bg-gradient-to-tr from-primary/30 via-violet-500/25 to-sky-400/30 blur-3xl animate-pulse [animation-duration:3s]" />
+      <div className="pointer-events-none absolute -bottom-10 h-40 w-40 rounded-full bg-gradient-to-br from-indigo-500/20 via-purple-500/15 to-emerald-400/20 blur-2xl animate-pulse [animation-duration:4s]" />
 
-      {/* Logo Container with Animated Rings */}
-      <div className="relative mb-6 flex items-center justify-center">
-        {/* Outer Rotating Glowing Ring */}
-        <div className="absolute -inset-2.5 rounded-3xl border-2 border-indigo-500/20 border-t-indigo-600 border-r-indigo-500/60 animate-spin [animation-duration:1.4s]" />
+      {/* Centerpiece: Dual-Ring Glassmorphic Logo Capsule */}
+      <div className="relative mb-7 flex items-center justify-center">
+        {/* Outer Orbital Ring with Gradient Glow (Clockwise) */}
+        <div className="absolute -inset-3.5 rounded-full border-2 border-transparent border-t-primary border-r-violet-500/80 animate-spin [animation-duration:1.8s] drop-shadow-[0_0_12px_rgba(99,102,241,0.5)]" />
 
-        {/* Middle Pulse Ring */}
-        <div className="absolute -inset-1 rounded-2xl bg-indigo-50/60 animate-ping opacity-25" />
+        {/* Counter-Rotating Accent Ring (Counter-Clockwise) */}
+        <div className="absolute -inset-2 rounded-full border border-dashed border-sky-400/40 border-b-primary/60 animate-[spin_3s_linear_infinite_reverse]" />
 
-        {/* Main Logo Card */}
-        <div className="relative z-10 grid h-20 w-20 place-items-center rounded-2xl border border-slate-200/90 bg-white p-2.5 shadow-xl shadow-indigo-500/10 transition-transform">
+        {/* Soft Radial Pulse Ring */}
+        <div className="absolute -inset-1 rounded-3xl bg-primary/10 animate-ping [animation-duration:2.5s] opacity-30" />
+
+        {/* Logo Card with High-End Glassmorphism */}
+        <div className="relative z-10 grid h-20 w-20 sm:h-22 sm:w-22 place-items-center rounded-2xl sm:rounded-3xl border border-white/60 dark:border-white/10 bg-gradient-to-b from-white/95 to-slate-50/90 dark:from-slate-900/90 dark:to-slate-950/95 p-3.5 shadow-2xl shadow-primary/20 backdrop-blur-xl transition-transform hover:scale-105">
           <img
             src="/logo-icon.png"
             alt="Klick-Pro"
-            className="h-full w-full object-contain animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite]"
+            className="h-full w-full object-contain filter drop-shadow-md animate-[pulse_2.2s_cubic-bezier(0.4,0,0.6,1)_infinite]"
           />
         </div>
       </div>
 
-      {/* Brand Title */}
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <span className="font-display text-xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-700 via-indigo-600 to-indigo-900 bg-clip-text text-transparent">
+      {/* Brand Identity with Live Shimmer Badge */}
+      <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 dark:bg-primary/20 px-3.5 py-1 mb-2.5 backdrop-blur-md">
+        <span className="font-display text-sm font-extrabold tracking-tight bg-gradient-to-r from-primary via-violet-600 to-indigo-600 dark:from-primary dark:via-violet-400 dark:to-indigo-300 bg-clip-text text-transparent">
           Klick-Pro
         </span>
-        <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-600 animate-ping" />
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+        </span>
       </div>
 
-      {/* Dynamic Action Title with Animated Wave Dots */}
-      <h3 className="font-display text-base sm:text-lg font-bold text-slate-900 tracking-tight flex items-center justify-center gap-1">
+      {/* Main Title with Animated Fluid Wave Dots */}
+      <h3 className="font-display text-base sm:text-lg font-bold text-foreground tracking-tight flex items-center justify-center gap-1.5">
         <span>{title}</span>
-        <span className="inline-flex tracking-widest text-indigo-600 font-black">
+        <span className="inline-flex tracking-widest text-primary font-black">
           <span className="animate-[login-dot_1.2s_infinite_100ms]">.</span>
           <span className="animate-[login-dot_1.2s_infinite_250ms]">.</span>
           <span className="animate-[login-dot_1.2s_infinite_400ms]">.</span>
@@ -62,14 +69,14 @@ export function FullPageLogoLoader({
 
       {/* Subtitle */}
       {subtitle ? (
-        <p className="mt-1.5 text-xs sm:text-sm text-slate-500 max-w-xs leading-relaxed">
+        <p className="mt-2 text-xs sm:text-sm text-muted-foreground max-w-xs leading-relaxed">
           {subtitle}
         </p>
       ) : null}
 
-      {/* Sleek Gradient Shimmer Progress Bar */}
-      <div className="relative mt-5 h-1.5 w-44 overflow-hidden rounded-full bg-slate-100 border border-slate-200/70 shadow-inner">
-        <div className="h-full w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-sky-500 rounded-full animate-login-button-shimmer" />
+      {/* Sleek Gradient Infinite Shimmer Progress Bar */}
+      <div className="relative mt-6 h-1.5 w-48 overflow-hidden rounded-full bg-muted/60 border border-border/60 shadow-inner">
+        <div className="h-full w-full bg-gradient-to-r from-primary via-violet-500 to-sky-400 rounded-full animate-login-button-shimmer" />
       </div>
     </div>
   );
@@ -77,12 +84,12 @@ export function FullPageLogoLoader({
   if (overlay) {
     return (
       <div
-        className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-slate-950/45 p-4 backdrop-blur-md transition-all duration-300 animate-fade-in ${className}`}
+        className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background/70 dark:bg-slate-950/75 p-4 backdrop-blur-xl transition-all duration-300 animate-fade-in ${className}`}
         role="status"
         aria-live="polite"
         aria-label={title}
       >
-        <div className="rounded-3xl border border-white/80 bg-white/95 p-8 shadow-2xl shadow-indigo-950/20 backdrop-blur-xl max-w-sm sm:max-w-md w-full flex flex-col items-center">
+        <div className="rounded-3xl border border-border/80 bg-card/90 dark:bg-card/95 p-6 sm:p-8 shadow-2xl shadow-primary/10 backdrop-blur-2xl max-w-sm sm:max-w-md w-full flex flex-col items-center">
           {content}
         </div>
       </div>

@@ -57,6 +57,14 @@ export function emitRealtimeProposalNew(userIds: number[], payload: { jobId: num
   for (const userId of userIds) io.to(`user:${userId}`).emit("proposal:new", payload);
 }
 
+export function emitRealtimeJobPosted(payload: { jobId: number; category?: string; title?: string }) {
+  const io = globalThis.__servioIo;
+  if (!io) return;
+  // Broadcast to all connected sockets (professionals, clients, admins)
+  (io as unknown as { emit: (ev: string, data: unknown) => void }).emit("job:posted", payload);
+  (io as unknown as { emit: (ev: string, data: unknown) => void }).emit("job:created", payload);
+}
+
 export function emitAdminEvent(event: string, payload: unknown = {}) {
   const io = globalThis.__servioIo;
   if (!io) return;

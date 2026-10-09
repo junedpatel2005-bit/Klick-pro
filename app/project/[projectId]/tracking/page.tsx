@@ -1664,55 +1664,174 @@ export default function SharedProjectTrackingPage() {
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
             <section
-              className={`rounded-2xl border p-5 shadow-soft ${
+              className={`rounded-2xl border p-5 sm:p-6 shadow-soft transition-all ${
                 needsAction(data.project.status)
-                  ? "border-amber-300/50 bg-amber-50/60"
-                  : "border-primary/20 bg-primary/5"
+                  ? "border-amber-300/60 bg-amber-50/70 dark:border-amber-500/30 dark:bg-amber-950/20"
+                  : data.project.status === "COMPLETED"
+                    ? "border-emerald-300/60 bg-emerald-50/70 dark:border-emerald-500/30 dark:bg-emerald-950/20"
+                    : "border-primary/20 bg-primary/5"
               }`}
             >
-              <div className="flex items-start gap-3">
-                <div
-                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
-                    needsAction(data.project.status)
-                      ? "bg-amber-500/15 text-amber-600"
-                      : "bg-primary/10 text-primary"
-                  }`}
-                >
-                  {needsAction(data.project.status) ? (
-                    <AlertCircle className="h-5 w-5" />
-                  ) : (
-                    <CheckCircle2 className="h-5 w-5" />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p
-                    className={`text-xs font-semibold uppercase tracking-wide ${
-                      needsAction(data.project.status) ? "text-amber-700" : "text-primary"
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                <div className="flex items-start gap-3.5 min-w-0">
+                  <div
+                    className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl shadow-xs ${
+                      needsAction(data.project.status)
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                        : data.project.status === "COMPLETED"
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                          : "bg-primary/10 text-primary"
                     }`}
                   >
-                    {needsAction(data.project.status) ? "Action required" : "Current status"}
-                  </p>
-                  <h2 className="mt-1 text-xl font-semibold">
-                    {statusHeading(data.project.status, current?.title)}
-                  </h2>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {statusText(
-                      data.project.status,
-                      isClient,
-                      client,
-                      professional,
-                      current?.title,
-                      data.revisions[0]?.note,
+                    {needsAction(data.project.status) ? (
+                      <AlertCircle className="h-5 w-5" />
+                    ) : data.project.status === "COMPLETED" ? (
+                      <CheckCircle2 className="h-5 w-5" />
+                    ) : (
+                      <Sparkles className="h-5 w-5" />
                     )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`text-xs font-bold uppercase tracking-wider ${
+                          needsAction(data.project.status)
+                            ? "text-amber-700 dark:text-amber-300"
+                            : data.project.status === "COMPLETED"
+                              ? "text-emerald-700 dark:text-emerald-300"
+                              : "text-primary"
+                        }`}
+                      >
+                        {needsAction(data.project.status) ? "Action required" : "Current status"}
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                          data.project.status === "COMPLETED"
+                            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                            : needsAction(data.project.status)
+                              ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                              : "border-primary/30 bg-primary/10 text-primary"
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            data.project.status === "COMPLETED"
+                              ? "bg-emerald-500"
+                              : needsAction(data.project.status)
+                                ? "bg-amber-500 animate-pulse"
+                                : "bg-primary animate-pulse"
+                          }`}
+                        />
+                        {label(data.project.status)}
+                      </span>
+                    </div>
+
+                    <h2 className="mt-1.5 text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                      {statusHeading(data.project.status, current?.title)}
+                    </h2>
+
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                      {statusText(
+                        data.project.status,
+                        isClient,
+                        client,
+                        professional,
+                        current?.title,
+                        data.revisions[0]?.note,
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status details & metrics strip */}
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 pt-4 border-t border-border/40">
+                <div className="rounded-xl bg-background/60 dark:bg-background/40 border border-border/50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Project Status
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-foreground truncate">
+                    {label(data.project.status)}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-background/60 dark:bg-background/40 border border-border/50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Active Milestone
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-foreground truncate" title={current?.title ?? "None"}>
+                    {current?.title ?? (data.project.status === "COMPLETED" ? "All completed" : "Pending setup")}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-background/60 dark:bg-background/40 border border-border/50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Started On
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-foreground truncate">
+                    {data.project.startedAt || data.project.acceptedAt
+                      ? new Date(data.project.startedAt || data.project.acceptedAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })
+                      : "Not started yet"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-background/60 dark:bg-background/40 border border-border/50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Target Deadline
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-foreground truncate">
+                    {data.job?.deadline
+                      ? new Date(data.job.deadline).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })
+                      : "Flexible"}
                   </p>
                 </div>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {isProfessional && data.project.status !== "COMPLETED" && (
-                  <Button variant="outline" onClick={() => setShowRequestModal(true)}>
-                    Request client
-                  </Button>
-                )}
+
+              {/* Progress bar */}
+              <div className="mt-4 pt-3 border-t border-border/40">
+                <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+                  <span className="font-medium">
+                    Overall Completion: {completed} of {data.milestones.length} milestones
+                  </span>
+                  <span className="font-bold text-foreground">
+                    {data.project.status === "COMPLETED"
+                      ? 100
+                      : data.milestones.length > 0
+                        ? Math.round((completed / data.milestones.length) * 100)
+                        : (data.project.progress ?? 0)}
+                    %
+                  </span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-500 rounded-full ${
+                      data.project.status === "COMPLETED"
+                        ? "bg-emerald-500"
+                        : "bg-primary"
+                    }`}
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.max(
+                          0,
+                          data.project.status === "COMPLETED"
+                            ? 100
+                            : data.milestones.length > 0
+                              ? Math.round((completed / data.milestones.length) * 100)
+                              : (data.project.progress ?? 0),
+                        ),
+                      )}%`,
+                    }}
+                  />
+                </div>
               </div>
             </section>
 

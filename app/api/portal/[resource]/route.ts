@@ -1231,13 +1231,20 @@ export async function GET(
       let project = null;
       if (id.success) {
         project = await db.projectTracking.findUnique({ where: { id: id.data } });
-        if (
-          session.role !== "ADMIN" &&
-          project &&
-          project.clientId !== session.userId &&
-          project.professionalId !== session.userId
-        ) {
-          project = null;
+        if (session.role !== "ADMIN" && project) {
+          const isDirect =
+            project.clientId === session.userId || project.professionalId === session.userId;
+          let isJobOwner = false;
+          if (!isDirect && project.jobId) {
+            const job = await db.clientJob.findFirst({
+              where: { id: project.jobId, userId: session.userId },
+              select: { id: true },
+            });
+            isJobOwner = Boolean(job);
+          }
+          if (!isDirect && !isJobOwner) {
+            project = null;
+          }
         }
       } else {
         project = await db.projectTracking.findFirst({
@@ -1248,12 +1255,34 @@ export async function GET(
               : { OR: [{ clientId: session.userId }, { professionalId: session.userId }] }),
           },
         });
+        if (!project && session.role === "CLIENT" && jobId.data) {
+          const job = await db.clientJob.findFirst({
+            where: { id: jobId.data, userId: session.userId },
+            select: { id: true },
+          });
+          if (job) {
+            project = await db.projectTracking.findFirst({
+              where: { jobId: jobId.data },
+              orderBy: { createdAt: "desc" },
+            });
+          }
+        }
       }
       if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
+      const isClientRole =
+        session.userId === project.clientId ||
+        (project.jobId
+          ? Boolean(
+              await db.clientJob.findFirst({
+                where: { id: project.jobId, userId: session.userId },
+                select: { id: true },
+              }),
+            )
+          : false);
       const viewerRole =
         session.role === "ADMIN"
           ? "ADMIN"
-          : session.userId === project.clientId
+          : isClientRole
             ? "CLIENT"
             : "PROFESSIONAL";
       const milestones = await db.projectMilestone.findMany({

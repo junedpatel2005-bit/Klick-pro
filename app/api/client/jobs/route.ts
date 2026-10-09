@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { notifyJobPosted } from "@/lib/marketplace-notifications";
+import { emitRealtimeJobPosted } from "@/lib/realtime";
 
 const milestoneInput = z.object({
   title: z.string().trim().min(1, "Enter a milestone title.").max(160),
@@ -302,6 +303,11 @@ export async function POST(request: NextRequest) {
     });
 
     if (job.status === "OPEN") {
+      emitRealtimeJobPosted({
+        jobId: job.id,
+        category: job.category ?? undefined,
+        title: job.title ?? undefined,
+      });
       try {
         await notifyJobPosted(job);
       } catch (notifyErr) {

@@ -19,6 +19,7 @@ import {
   ArrowUpDown,
   Check,
   X,
+  ArrowRight,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -487,13 +488,17 @@ export default function JobDetails({
         user?: { role?: "CLIENT" | "PROFESSIONAL" } | null;
       } | null;
       setViewerRole(auth?.user?.role ?? null);
+      let discoveredProjectId: number | null = null;
       const projectResponse = await fetch(
         `/api/v1/portal/project?jobId=${encodeURIComponent(jobId)}`,
       );
       if (projectResponse.ok) {
-        const projectData = (await projectResponse.json()) as { project?: { id?: number } };
-        if (projectData.project?.id) {
-          setAcceptedProjectId(projectData.project.id);
+        const projectData = (await projectResponse.json().catch(() => null)) as {
+          project?: { id?: number };
+        } | null;
+        if (projectData?.project?.id) {
+          discoveredProjectId = projectData.project.id;
+          setAcceptedProjectId(discoveredProjectId);
         }
       }
       const ownerResponse = await fetch(`/api/v1/client/jobs/${encodeURIComponent(jobId)}`);
@@ -507,7 +512,11 @@ export default function JobDetails({
           proposals: JobProposal[];
           hireRequests: JobHireRequest[];
         };
-        setJob(fromOwner(ownerJob));
+        const resolvedJob = fromOwner(ownerJob);
+        if (discoveredProjectId && !resolvedJob.projectId) {
+          resolvedJob.projectId = discoveredProjectId;
+        }
+        setJob(resolvedJob);
         setClientProposals(proposals ?? []);
         setSentHireRequests(hireRequests ?? []);
         setStatus("ready");
@@ -522,6 +531,9 @@ export default function JobDetails({
       }
       const marketplaceJob = fromMarketplace((await response.json()) as MarketplaceJob);
       marketplaceJob.status = marketplaceJob.status ?? "OPEN";
+      if (discoveredProjectId && !marketplaceJob.projectId) {
+        marketplaceJob.projectId = discoveredProjectId;
+      }
       if (auth?.user?.role === "PROFESSIONAL") {
         const proposalResponse = await fetch(
           `/api/v1/professional/proposals?jobId=${encodeURIComponent(jobId)}`,
@@ -997,6 +1009,28 @@ export default function JobDetails({
   return (
     <JobShell viewerRole={viewerRole} embedded={embedded}>
       <article className="mx-auto max-w-4xl rounded-2xl border border-border bg-card p-6 shadow-soft sm:p-8">
+        {effectiveProjectId && (
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-4 sm:p-5">
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                <Briefcase className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm sm:text-base text-foreground">
+                  Active Project Workroom
+                </p>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  This job has an ongoing project. Track progress, review deliverables, and manage milestones.
+                </p>
+              </div>
+            </div>
+            <Button size="sm" asChild className="gap-2 shrink-0">
+              <Link href={`/project/${effectiveProjectId}/tracking`}>
+                Open Project Tracking <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2 text-xs">
             {job.mainCategory && job.mainCategory !== job.category && (
@@ -2330,25 +2364,25 @@ export default function JobDetails({
           ) : (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <p className="font-medium text-muted-foreground">This is your job posting.</p>
-              {job.projectId ? (
+              {effectiveProjectId ? (
                 <div className="flex flex-wrap gap-2">
                   <Button className="w-full sm:w-auto" asChild>
-                    <Link href={`/project/${job.projectId}/tracking`}>Track Project</Link>
+                    <Link href={`/project/${effectiveProjectId}/tracking`}>Track Project</Link>
                   </Button>
                   {job.status === "CLOSED" && (
                     <Button variant="outline" className="w-full sm:w-auto" asChild>
-                      <Link href={`/project/${job.projectId}/tracking#project-feedback`}>
+                      <Link href={`/project/${effectiveProjectId}/tracking#project-feedback`}>
                         Write Review
                       </Link>
                     </Button>
                   )}
-                  {SHOW_DISPUTE_BUTTONS && job && job.projectId ? (
+                  {SHOW_DISPUTE_BUTTONS ? (
                     <Button
                       variant="outline"
                       className="w-full sm:w-auto text-destructive border-destructive/30 hover:bg-destructive/10"
                       asChild
                     >
-                      <Link href={`/project/${job.projectId}/tracking#project-dispute-center`}>
+                      <Link href={`/project/${effectiveProjectId}/tracking#project-dispute-center`}>
                         <ShieldAlert className="h-4 w-4 mr-1.5" />
                         Raise Dispute
                       </Link>
