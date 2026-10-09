@@ -416,15 +416,17 @@ export default function PostJob() {
 
   const addMilestone = () => {
     const nextIndex = form.milestones.length + 1;
+    const currentSum = form.milestones.reduce((acc, m) => acc + (Number(m.percentage) || 0), 0);
+    const remainingPct = Math.max(0, 100 - currentSum);
     const next = [
       ...form.milestones,
       {
         title: `Milestone ${nextIndex}`,
-        percentage: 0,
+        percentage: remainingPct,
         description: "",
       },
     ];
-    update("milestones", rebalanceMilestones(next));
+    update("milestones", next);
   };
 
   const getMaxPercentageForMilestone = (milestones: JobFormMilestone[], index: number) => {
@@ -1412,15 +1414,17 @@ export default function PostJob() {
 
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={addMilestone}
-                      className="gap-1.5"
-                    >
-                      <Plus className="h-4 w-4" /> Add Milestone
-                    </Button>
+                    {remainingMilestonePercentage > 0 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addMilestone}
+                        className="gap-1.5"
+                      >
+                        <Plus className="h-4 w-4" /> Add Milestone
+                      </Button>
+                    )}
                     {remainingMilestonePercentage > 0 && form.milestones.length > 0 && (
                       <Button
                         type="button"

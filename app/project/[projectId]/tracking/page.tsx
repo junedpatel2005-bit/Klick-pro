@@ -1138,21 +1138,41 @@ export default function SharedProjectTrackingPage() {
   const addDraftMilestone = () => {
     const currentSum = draftMilestones.reduce((acc, m) => acc + (Number(m.amount) || 0), 0);
     const left = Math.max(0, remainingMilestoneAmount - currentSum);
+    if (left <= 0) return;
+
+    // Calculate current percentage across existing saved milestones + draft milestones
+    const currentDraftPct = draftMilestones.reduce((acc, m) => {
+      if (m.percentage !== "" && m.percentage != null) return acc + Number(m.percentage);
+      if (totalAgreed > 0 && Number(m.amount) > 0)
+        return acc + Math.round((Number(m.amount) / totalAgreed) * 100);
+      return acc;
+    }, 0);
+
+    const existingSavedPct =
+      totalAgreed > 0 ? Math.round((totalMilestoneValue / totalAgreed) * 100) : 0;
+    const totalAllocatedPctSoFar = existingSavedPct + currentDraftPct;
+    const remainingPct = Math.max(0, Math.min(100, 100 - totalAllocatedPctSoFar));
+
+    const suggestedAmount = left;
+    const suggestedPct =
+      remainingPct > 0
+        ? remainingPct
+        : totalAgreed > 0
+          ? Math.max(0, Math.min(100, Math.round((left / totalAgreed) * 100)))
+          : 100;
+
     const nextIndex = (data?.milestones?.length ?? 0) + draftMilestones.length + 1;
-    const distribution = recommendedMilestonePercentages(draftMilestones.length + 1);
-    const suggestedPct = distribution[distribution.length - 1] ?? 100;
-    const suggestedAmount =
-      left > 0 && totalAgreed > 0 ? Math.round((left * suggestedPct) / 100) : left;
 
     setDraftMilestones((prev) => [
       ...prev,
       {
         title: `Milestone ${nextIndex}`,
-        amount: left > 0 ? suggestedAmount : "",
-        percentage: left > 0 ? suggestedPct : "",
+        amount: suggestedAmount > 0 ? suggestedAmount : "",
+        percentage: suggestedPct > 0 ? suggestedPct : "",
         description: "",
       },
     ]);
+    setMilestoneModalError(null);
   };
 
   const removeDraftMilestone = (index: number) => {
@@ -2154,9 +2174,11 @@ export default function SharedProjectTrackingPage() {
                       </p>
                     </div>
                   </div>
-                  <Button onClick={openCreateMilestoneModal} className="gap-2 shrink-0">
-                    <Plus className="h-4 w-4" /> Add Milestones
-                  </Button>
+                  {unassignedMilestoneAmount > 0 && (
+                    <Button onClick={openCreateMilestoneModal} className="gap-2 shrink-0">
+                      <Plus className="h-4 w-4" /> Add Milestones
+                    </Button>
+                  )}
                 </div>
               </section>
             )}
@@ -2671,11 +2693,13 @@ export default function SharedProjectTrackingPage() {
                       100% Budget Allocated
                     </span>
                   )}
-                  {isClient && data.project.status !== "COMPLETED" && (
-                    <Button onClick={openCreateMilestoneModal} size="sm" className="gap-1.5">
-                      <Plus className="h-4 w-4" /> Add Milestone
-                    </Button>
-                  )}
+                  {isClient &&
+                    data.project.status !== "COMPLETED" &&
+                    unassignedMilestoneAmount > 0 && (
+                      <Button onClick={openCreateMilestoneModal} size="sm" className="gap-1.5">
+                        <Plus className="h-4 w-4" /> Add Milestone
+                      </Button>
+                    )}
                 </div>
               </div>
 
@@ -4549,15 +4573,17 @@ export default function SharedProjectTrackingPage() {
             {/* Quick Actions */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addDraftMilestone}
-                  className="gap-1.5"
-                >
-                  <Plus className="h-4 w-4" /> Add Milestone
-                </Button>
+                {!isFullyAllocated && remainingInModal > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addDraftMilestone}
+                    className="gap-1.5"
+                  >
+                    <Plus className="h-4 w-4" /> Add Milestone
+                  </Button>
+                )}
                 {remainingInModal > 0 && draftMilestones.length > 0 && (
                   <Button
                     type="button"
