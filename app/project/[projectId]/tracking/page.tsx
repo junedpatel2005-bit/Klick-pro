@@ -1688,15 +1688,6 @@ export default function SharedProjectTrackingPage() {
                 </div>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                {data.viewerRole === "CLIENT" && data.project.status === "READY_TO_START" && (
-                  <Button
-                    disabled={busy === "start-work"}
-                    onClick={() => void action("start-work")}
-                  >
-                    {busy === "start-work" ? "Starting…" : "Start Work"}
-                  </Button>
-                )}
-
                 {isProfessional && data.project.status !== "COMPLETED" && (
                   <Button variant="outline" onClick={() => setShowRequestModal(true)}>
                     Request client
@@ -2059,7 +2050,11 @@ export default function SharedProjectTrackingPage() {
                 )
               ) : null}
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <Info icon={Clock3} label="Started" value={date(data.project.startedAt)} />
+                <Info
+                  icon={Clock3}
+                  label="Project start date"
+                  value={date(data.project.startedAt || data.project.acceptedAt || data.job?.jobDate)}
+                />
                 <Info icon={CalendarDays} label="Deadline" value={date(data.job?.deadline)} />
                 <Info
                   icon={AlertCircle}
@@ -5056,8 +5051,8 @@ function statusText(
 ) {
   if (status === "READY_TO_START")
     return isClient
-      ? `${professional} accepted your project. Start work when you are ready.`
-      : "The client has hired you. Waiting for the client to start work.";
+      ? `${professional} accepted your project.`
+      : "The project has been confirmed and scheduled.";
   if (status === "AWAITING_CLIENT_REVIEW")
     return isClient
       ? `${professional} submitted ${milestone ?? "work"} for your review.`
