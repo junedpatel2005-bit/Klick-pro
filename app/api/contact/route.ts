@@ -15,3 +15,7 @@ export async function POST(request: NextRequest) {
   await db.contactRequest.create({ data: parsed.data });
   return NextResponse.json({ ok: true });
 }
+
+export async function GET() {
+  return NextResponse.json({ ok: true });
+}

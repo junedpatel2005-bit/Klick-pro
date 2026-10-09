@@ -18,9 +18,11 @@ import {
 import { ExportMenu } from "@/components/reports/ExportMenu";
 import { SelectableReportTable } from "@/components/reports/SelectableReportTable";
 import { useRowSelection } from "@/hooks/use-row-selection";
+import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
 
 type RunningProject = {
   id: number;
+  jobId?: number;
   jobTitle: string | null;
   clientName: string | null;
   status: string;
@@ -38,6 +40,15 @@ type EarningsItem = {
   status: string;
   description: string;
   createdAt: string;
+  trackingId?: number;
+  invoiceNumber?: string;
+  projectTitle?: string;
+  clientName?: string;
+  milestoneTitle?: string;
+  paymentMethod?: string;
+  baseAmount?: number;
+  feeAmount?: number;
+  netAmount?: number;
 };
 
 type DateFilter = "all" | "this_month" | "last_month" | "last_90_days" | "this_year";
@@ -238,34 +249,62 @@ function ProjectsReport() {
         )
       : 0;
 
-  const handleExportCsv = () => {
-    const rowsToExport =
-      selectedList.length > 0
-        ? filteredProjects.filter((p) => selectedIds.has(p.id))
-        : filteredProjects;
-    downloadCsv(
-      "klick-pro-professional-projects",
-      [
+  const handleExportCsv = (scope?: "all" | "selected") => {
+    const isSelected = scope === "selected" || (scope === undefined && selectedList.length > 0);
+    const rowsToExport = isSelected
+      ? filteredProjects.filter((p) => selectedIds.has(p.id))
+      : filteredProjects;
+
+    if (isSelected && rowsToExport.length === 1 && rowsToExport[0]) {
+      window.open(
+        `/api/v1/portal/jobs/${rowsToExport[0].jobId || rowsToExport[0].id}/export?format=csv`,
+        "_blank",
+      );
+      return;
+    }
+
+    downloadCsvFile({
+      filename: "klick-pro-professional-projects",
+      title: "Professional Workspace · Projects & Engagements Statement",
+      metadata: [
+        {
+          label: "Scope",
+          value: isSelected
+            ? `${rowsToExport.length} Selected Projects`
+            : `All Filtered (${rowsToExport.length})`,
+        },
+        {
+          label: "Total Contract Value",
+          value: `INR ${totalContractValue.toLocaleString("en-IN")}`,
+        },
+        { label: "Active In Progress", value: activeCount },
+        { label: "Average Progress", value: `${avgProgress}%` },
+        { label: "Active Status Filter", value: statusFilter },
+        { label: "Active Date Range", value: dateFilter },
+      ],
+      headers: [
         "Project ID",
         "Job Title",
-        "Client",
+        "Client Name",
         "Status",
-        "Deadline",
-        "Budget",
         "Progress %",
+        "Timing Type",
+        "Agreed Budget",
+        "Target Deadline",
         "Accepted Date",
       ],
-      rowsToExport.map((p) => [
+      rows: rowsToExport.map((p) => [
         `#PRJ-${p.id}`,
         p.jobTitle ?? "Untitled project",
         p.clientName ?? "Client",
         displayStatus(p.status),
-        p.deadline ? formatDateSafely(p.deadline) : "—",
-        money(p),
         `${p.progress}%`,
+        p.timingType === "HOURLY" ? "Hourly" : "Fixed Price",
+        money(p),
+        p.deadline ? formatDateSafely(p.deadline) : "Flexible",
         p.acceptedAt ? formatDateSafely(p.acceptedAt) : "—",
       ]),
-    );
+    });
   };
 
   return (
@@ -379,7 +418,7 @@ function ProjectsReport() {
         <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
           <button
             type="button"
-            onClick={handleExportCsv}
+            onClick={() => handleExportCsv()}
             disabled={filteredProjects.length === 0}
             className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-background px-3 text-xs sm:text-sm font-semibold text-foreground transition hover:bg-muted disabled:opacity-50"
             title="Download CSV for Excel / Accounting"
@@ -392,6 +431,7 @@ function ProjectsReport() {
             endpoint="/api/professional/jobs/export"
             selectedIds={selectedList}
             fileBaseName="running-projects"
+            onExportCsv={handleExportCsv}
           />
         </div>
       </div>
@@ -557,22 +597,109 @@ function EarningsReport() {
   );
   const pendingTotal = pendingItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
-  const handleExportCsv = () => {
-    const rowsToExport =
-      selectedList.length > 0
-        ? filteredItems.filter((item) => selectedIds.has(item.id))
-        : filteredItems;
-    downloadCsv(
-      "klick-pro-professional-earnings",
-      ["Invoice / Txn ID", "Description", "Status", "Amount (INR)", "Date"],
-      rowsToExport.map((item) => [
-        `#INV-${item.id}`,
-        item.description ?? "Milestone earnings",
+  const handleExportCsv = (scope?: "all" | "selected") => {
+    const isSelected = scope === "selected" || (scope === undefined && selectedList.length > 0);
+    const rowsToExport = isSelected
+      ? filteredItems.filter((item) => selectedIds.has(item.id))
+      : filteredItems;
+
+    if (isSelected && rowsToExport.length === 1 && rowsToExport[0]) {
+      const item = rowsToExport[0];
+      downloadCsvFile({
+        filename: `klick-pro-payout-voucher-${item.id}`,
+        title: `Klick-Pro Official Professional Payout Voucher #${item.invoiceNumber || item.id}`,
+        metadata: [
+          { label: "Voucher / Reference Number", value: item.invoiceNumber || `#EARN-${item.id}` },
+          {
+            label: "Project Title",
+            value: item.projectTitle || `Project #${item.trackingId ?? item.id}`,
+          },
+          { label: "Milestone", value: item.milestoneTitle || item.description },
+          { label: "Client Name", value: item.clientName || "Client" },
+          { label: "Disbursement Method", value: item.paymentMethod || "Bank / Escrow" },
+          { label: "Settlement Status", value: item.status },
+          { label: "Date Recorded", value: formatDateSafely(item.createdAt) },
+          {
+            label: "Gross Service Value",
+            value: `INR ${(item.baseAmount ?? item.amount).toLocaleString("en-IN")}`,
+          },
+          {
+            label: "Platform Commission (10%)",
+            value: `INR ${(item.feeAmount ?? Math.round(item.amount * 0.1)).toLocaleString("en-IN")}`,
+          },
+          {
+            label: "Net Earnings Credited",
+            value: `INR ${(item.netAmount ?? item.amount).toLocaleString("en-IN")}`,
+          },
+        ],
+        headers: ["Line Item Description", "Amount (INR)", "Status", "Reference"],
+        rows: [
+          [
+            item.milestoneTitle || "Milestone Approved Gross Earnings",
+            item.baseAmount ?? item.amount,
+            item.status,
+            item.invoiceNumber || `#EARN-${item.id}`,
+          ],
+          [
+            "Platform Retained Service Commission",
+            -(item.feeAmount ?? Math.round(item.amount * 0.1)),
+            "Deducted",
+            "Platform Fee",
+          ],
+          [
+            "Net Payout Credited to Professional Wallet",
+            item.netAmount ?? item.amount,
+            "Settled",
+            item.paymentMethod || "Escrow",
+          ],
+        ],
+      });
+      return;
+    }
+
+    downloadCsvFile({
+      filename: "klick-pro-professional-earnings",
+      title: "Professional Earnings & Financial Settlements Statement",
+      metadata: [
+        {
+          label: "Scope",
+          value: isSelected
+            ? `${rowsToExport.length} Selected Records`
+            : `All Filtered (${rowsToExport.length})`,
+        },
+        { label: "Gross Earnings", value: `INR ${totalEarned.toLocaleString("en-IN")}` },
+        { label: "Cleared & Paid Out", value: `INR ${clearedTotal.toLocaleString("en-IN")}` },
+        { label: "Pending in Escrow", value: `INR ${pendingTotal.toLocaleString("en-IN")}` },
+        { label: "Active Status Filter", value: statusFilter },
+        { label: "Active Date Range", value: dateFilter },
+      ],
+      headers: [
+        "Voucher / Reference #",
+        "Project Title",
+        "Milestone Title",
+        "Client Name",
+        "Disbursement Method",
+        "Gross Value (INR)",
+        "Platform Commission (INR)",
+        "Net Earnings (INR)",
+        "Settlement Status",
+        "Date Recorded",
+        "Description",
+      ],
+      rows: rowsToExport.map((item) => [
+        item.invoiceNumber || `#EARN-${item.id}`,
+        item.projectTitle || `Project #${item.trackingId ?? item.id}`,
+        item.milestoneTitle || item.description,
+        item.clientName || "Client",
+        item.paymentMethod || "Bank / Escrow",
+        item.baseAmount ?? item.amount,
+        item.feeAmount ?? 0,
+        item.netAmount ?? item.amount,
         item.status,
-        item.amount,
         formatDateSafely(item.createdAt),
+        item.description ?? "Milestone earnings",
       ]),
-    );
+    });
   };
 
   return (
@@ -685,7 +812,7 @@ function EarningsReport() {
         <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
           <button
             type="button"
-            onClick={handleExportCsv}
+            onClick={() => handleExportCsv()}
             disabled={filteredItems.length === 0}
             className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-background px-3 text-xs sm:text-sm font-semibold text-foreground transition hover:bg-muted disabled:opacity-50"
             title="Download CSV for Tax & Bookkeeping"
@@ -698,6 +825,7 @@ function EarningsReport() {
             endpoint="/api/professional/earnings/export"
             selectedIds={selectedList}
             fileBaseName="professional-earnings"
+            onExportCsv={handleExportCsv}
           />
         </div>
       </div>

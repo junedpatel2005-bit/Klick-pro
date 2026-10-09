@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { notifyUsers } from "@/lib/marketplace-notifications";
+import { notifyContractAwarded, notifyUsers } from "@/lib/marketplace-notifications";
 import { emitRealtimeProjectUpdate, emitRealtimeProposalNew } from "@/lib/realtime";
 
 type Actor = { userId: number; role: "CLIENT" | "PROFESSIONAL" };
@@ -206,22 +206,20 @@ export async function respondToProjectRequest(
       description: `${actor.role === "CLIENT" ? "The client" : "The professional"} accepted the terms.`,
     },
   });
-  const clientAccepted = actor.role === "CLIENT";
-  const jobTitle = job.title ?? "Project";
-  await notifyUsers([otherPartyId], {
-    type: "REQUEST_ACCEPTED",
-    title: `${jobTitle} · ${clientAccepted ? "Congratulations! You got the project" : "Request Accepted"}`,
-    description: clientAccepted
-      ? `Congratulations! The client accepted your proposal for ${job.title ?? "the project"}. You got the project.`
-      : `Your request for ${job.title ?? "the job"} was accepted.`,
-    href: `/project/${tracking.id}/tracking`,
-    emailDetails: [
-      { label: "Project", value: job.title ?? `Project #${hireRequest.jobId}` },
-      { label: "Agreed amount", value: `₹${hireRequest.bidAmount.toLocaleString("en-IN")}` },
-      { label: "Timeline", value: hireRequest.duration },
-      { label: "Status", value: clientAccepted ? "Project awarded" : "Request accepted" },
-    ],
-  });
+
+  try {
+    await notifyContractAwarded({
+      projectId: tracking.id,
+      jobId: hireRequest.jobId,
+      jobTitle: job.title,
+      clientId: hireRequest.clientId,
+      professionalId: hireRequest.professionalId,
+      bidAmount: hireRequest.bidAmount,
+      duration: hireRequest.duration,
+    });
+  } catch (notifyErr) {
+    console.error("Failed to dispatch notifyContractAwarded:", notifyErr);
+  }
 
   emitRealtimeProposalNew([hireRequest.clientId, hireRequest.professionalId], {
     jobId: hireRequest.jobId,

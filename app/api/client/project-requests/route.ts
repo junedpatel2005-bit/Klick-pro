@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { MAX_HIRE_REQUEST_BUDGET } from "@/lib/constants/hiring";
-import { notifyUsers } from "@/lib/marketplace-notifications";
+import { notifyHireRequestSent, notifyUsers } from "@/lib/marketplace-notifications";
 import { emitRealtimeProposalNew } from "@/lib/realtime";
 
 const bodySchema = z.object({
@@ -123,26 +123,20 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  const clientUser = await db.user.findUnique({
-    where: { id: clientId },
-    select: { firstName: true, lastName: true },
-  });
-  const clientName = clientUser
-    ? `${clientUser.firstName} ${clientUser.lastName}`.trim()
-    : "A client";
-
-  await notifyUsers([professionalId], {
-    type: "NEW_HIRE_REQUEST",
-    title: `${job.title ?? "Job"} · New hire request`,
-    description: `${clientName} sent you a hire request for ${job.title ?? "a job"}.`,
-    href: `/job/${jobId}?requestId=${requestRecord.id}`,
-    emailDetails: [
-      { label: "Job", value: job.title ?? `Job #${job.id}` },
-      { label: "Offered amount", value: `₹${bidAmount.toLocaleString("en-IN")}` },
-      { label: "Timeline", value: duration },
-    ],
-  });
-  emitRealtimeProposalNew([professionalId], { jobId });
+  try {
+    await notifyHireRequestSent({
+      jobId,
+      jobTitle: job.title,
+      requestId: requestRecord.id,
+      clientId,
+      professionalId,
+      bidAmount,
+      duration,
+    });
+  } catch (notifyErr) {
+    console.error("Failed to dispatch notifyHireRequestSent:", notifyErr);
+  }
+  emitRealtimeProposalNew([professionalId, clientId], { jobId });
 
   return NextResponse.json({ request: requestRecord }, { status: 201 });
 }

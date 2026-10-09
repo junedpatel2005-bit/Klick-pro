@@ -24,6 +24,7 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@react-pdf/renderer", "pg", "bcryptjs"],
   images: { remotePatterns: [{ protocol: "https", hostname: "i.pravatar.cc" }] },
   experimental: {
     optimizePackageImports: [
@@ -48,7 +49,6 @@ const nextConfig: NextConfig = {
       dynamic: 30,
       static: 180,
     },
-    turbopackPluginRuntimeStrategy: "workerThreads",
   },
   async redirects() {
     return [

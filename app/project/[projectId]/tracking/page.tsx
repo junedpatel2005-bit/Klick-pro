@@ -1535,7 +1535,25 @@ export default function SharedProjectTrackingPage() {
                     : `Client: ${client}`}
               </p>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
+              {data.project.status === "COMPLETED" && (
+                <Button
+                  asChild
+                  size="sm"
+                  variant="secondary"
+                  className="bg-white/15 text-white hover:bg-white/25 border-white/20"
+                >
+                  <a
+                    href={`/api/v1/portal/projects/${data.project.id}/export`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Download full project record in PDF with Klick Pro branding"
+                  >
+                    <Download className="mr-1.5 h-4 w-4" />
+                    Download Project PDF
+                  </a>
+                </Button>
+              )}
               {(isClient ? data.project.professionalId : data.project.clientId) && (
                 <Link
                   href={
@@ -2205,12 +2223,14 @@ export default function SharedProjectTrackingPage() {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button asChild size="sm">
-                      <a href={`/api/v1/portal/projects/${projectId}/export`}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Download full project PDF
-                      </a>
-                    </Button>
+                    {data.project.status === "COMPLETED" && (
+                      <Button asChild size="sm">
+                        <a href={`/api/v1/portal/projects/${projectId}/export`}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Download full project PDF
+                        </a>
+                      </Button>
+                    )}
                     {SHOW_DISPUTE_BUTTONS ? (
                       <Button
                         variant="outline"

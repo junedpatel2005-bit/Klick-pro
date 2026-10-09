@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
             userId,
             clearedAt: null,
             type: {
-              notIn: ["PROPOSAL_SENT", "PROPOSAL_UPDATE_SENT", "HIRE_REQUEST_SENT"],
+              notIn: ["NEW_ACCOUNT", "VERIFICATION_REVIEWED", "ADMIN_ALERT"],
             },
           },
           orderBy: { createdAt: "desc" },

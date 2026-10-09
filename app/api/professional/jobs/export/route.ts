@@ -1,10 +1,15 @@
+import { createElement } from "react";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { ReportDocument } from "@/lib/reports/pdf/ReportDocument";
+import { JobDossierDocument } from "@/lib/reports/pdf/JobDossierDocument";
+import { fetchJobDossierData } from "@/lib/reports/pdf/job-dossier-builder";
 import { renderReportPdf, pdfResponse } from "@/lib/reports/pdf/render";
 import { parseReportRequest } from "@/lib/reports/pdf/request";
 import type { ReportColumn } from "@/lib/reports/pdf/types";
+
+export const runtime = "nodejs";
 
 async function getProfessional(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -31,40 +36,41 @@ type ProjectRow = {
   currentStage: string | null;
   jobTitle: string;
   clientName: string;
+  category: string;
+  milestonesProgress: string;
   deadline: Date | null;
-  budget: number | null;
-  timingType: string;
+  budget: string;
 };
 
 function money(value: number | null, timingType: string) {
   if (value == null) return "Amount pending";
   return timingType === "HOURLY"
-    ? `₹${value.toLocaleString("en-US")}/hr`
-    : `₹${value.toLocaleString("en-US")}`;
+    ? `INR ${value.toLocaleString("en-IN")}/hr`
+    : `INR ${value.toLocaleString("en-IN")}`;
 }
 
 const columns: ReportColumn<ProjectRow>[] = [
-  { key: "jobTitle", header: "Job title", width: 2.6, format: (row) => row.jobTitle },
-  { key: "clientName", header: "Client", width: 1.6, format: (row) => row.clientName },
-  { key: "status", header: "Status", width: 1.4, format: (row) => row.status.replaceAll("_", " ") },
   {
-    key: "acceptedAt",
-    header: "Accepted",
-    width: 1.3,
-    format: (row) => row.acceptedAt.toLocaleDateString("en-US"),
+    key: "jobTitle",
+    header: "Project Title",
+    width: 2.6,
+    format: (row) => `#JOB-${row.jobId} · ${row.jobTitle}`,
   },
+  { key: "clientName", header: "Client", width: 1.5, format: (row) => row.clientName },
+  { key: "category", header: "Category", width: 1.3, format: (row) => row.category },
+  { key: "status", header: "Status", width: 1.3, format: (row) => row.status.replaceAll("_", " ") },
   {
-    key: "deadline",
-    header: "Deadline",
-    width: 1.3,
-    format: (row) => (row.deadline ? row.deadline.toLocaleDateString("en-US") : "—"),
+    key: "milestonesProgress",
+    header: "Milestones",
+    width: 1.4,
+    format: (row) => row.milestonesProgress,
   },
   {
     key: "budget",
-    header: "Budget",
-    width: 1.4,
+    header: "Agreed Value",
+    width: 1.5,
     align: "right",
-    format: (row) => money(row.budget, row.timingType),
+    format: (row) => row.budget,
   },
   {
     key: "progress",
@@ -72,6 +78,18 @@ const columns: ReportColumn<ProjectRow>[] = [
     width: 1,
     align: "right",
     format: (row) => `${row.progress}%`,
+  },
+  {
+    key: "acceptedAt",
+    header: "Accepted",
+    width: 1.2,
+    format: (row) => row.acceptedAt.toLocaleDateString("en-IN"),
+  },
+  {
+    key: "deadline",
+    header: "Deadline",
+    width: 1.2,
+    format: (row) => (row.deadline ? row.deadline.toLocaleDateString("en-IN") : "Flexible"),
   },
 ];
 
@@ -85,20 +103,51 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid export request." }, { status: 400 });
 
   try {
+    const isSingleSelected =
+      reportRequest.scope === "selected" && reportRequest.ids && reportRequest.ids.length === 1;
+
     const tracking = await db.projectTracking.findMany({
       where: {
         professionalId: user.id,
-        status: { not: "COMPLETED" },
         ...(reportRequest.scope === "selected" ? { id: { in: reportRequest.ids ?? [] } } : {}),
+      },
+      include: {
+        milestones: true,
       },
       orderBy: { acceptedAt: "desc" },
     });
+
+    // If single project selected, return the full comprehensive Job Dossier PDF!
+    const firstProject = tracking[0];
+    if (isSingleSelected && tracking.length === 1 && firstProject) {
+      const dossierData = await fetchJobDossierData(firstProject.jobId, {
+        userId: user.id,
+        role: "PROFESSIONAL",
+      });
+
+      if (dossierData) {
+        const buffer = await renderReportPdf(
+          createElement(JobDossierDocument, { data: dossierData }) as unknown as Parameters<
+            typeof renderReportPdf
+          >[0],
+        );
+        const safeTitle = (dossierData.title || `project-${firstProject.id}`)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .slice(0, 50);
+        return pdfResponse(
+          buffer,
+          `klick-pro-engagement-${firstProject.id}-${safeTitle}-dossier.pdf`,
+        );
+      }
+    }
 
     const jobs = await db.clientJob.findMany({
       where: { id: { in: tracking.map((project) => project.jobId) } },
       select: {
         id: true,
         title: true,
+        category: true,
         deadline: true,
         budgetMin: true,
         budgetMax: true,
@@ -108,6 +157,7 @@ export async function POST(request: NextRequest) {
       },
     });
     const jobMap = new Map(jobs.map((job) => [job.id, job]));
+
     const clients = await db.user.findMany({
       where: { id: { in: jobs.map((job) => job.userId) } },
       select: { id: true, firstName: true, lastName: true },
@@ -118,6 +168,20 @@ export async function POST(request: NextRequest) {
 
     const rows: ProjectRow[] = tracking.map((project) => {
       const job = jobMap.get(project.jobId);
+      const doneMilestones = project.milestones.filter(
+        (m) => m.status === "APPROVED" || m.status === "COMPLETED",
+      ).length;
+      const progressText =
+        project.milestones.length > 0
+          ? `${doneMilestones}/${project.milestones.length} Done`
+          : `${project.progress}%`;
+
+      const budgetVal = job
+        ? job.timingType === "HOURLY"
+          ? job.hourlyRate
+          : (job.budgetMax ?? job.budgetMin)
+        : null;
+
       return {
         id: project.id,
         jobId: project.jobId,
@@ -127,20 +191,17 @@ export async function POST(request: NextRequest) {
         currentStage: project.currentStage,
         jobTitle: job?.title ?? `Job #${project.jobId}`,
         clientName: job ? (clientMap.get(job.userId) ?? "Client") : "Client",
+        category: job?.category ?? "General",
+        milestonesProgress: progressText,
         deadline: job?.deadline ?? null,
-        budget: job
-          ? job.timingType === "HOURLY"
-            ? job.hourlyRate
-            : (job.budgetMax ?? job.budgetMin)
-          : null,
-        timingType: job?.timingType ?? "FIXED",
+        budget: money(budgetVal, job?.timingType ?? "FIXED"),
       };
     });
 
     const buffer = await renderReportPdf(
       ReportDocument({
-        title: "Running projects",
-        subtitle: "Professional workspace — your active projects",
+        title: "Professional Engagements",
+        subtitle: "Professional Workspace — Active Engagements & Portfolio Progress",
         generatedFor: `${user.firstName} ${user.lastName}`,
         filterSummary:
           reportRequest.scope === "selected" ? `${rows.length} selected` : `${rows.length} total`,
@@ -151,7 +212,7 @@ export async function POST(request: NextRequest) {
       }),
     );
 
-    return pdfResponse(buffer, `running-projects-${reportRequest.scope}.pdf`);
+    return pdfResponse(buffer, `professional-projects-${reportRequest.scope}.pdf`);
   } catch (error) {
     console.error("Professional jobs export failed:", error);
     return NextResponse.json({ error: "The report could not be generated." }, { status: 500 });

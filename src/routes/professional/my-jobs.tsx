@@ -1524,7 +1524,7 @@ function ProfessionalJobsContent() {
             </div>
           )}
 
-          <div className="mt-1 grid gap-3 [&_input]:w-full [&_input]:min-w-0 [&_input]:rounded-md [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_textarea]:w-full [&_textarea]:min-w-0 [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
+          <div className="mt-2 grid gap-3.5 [&_input]:w-full [&_input]:min-w-0 [&_input]:rounded-xl [&_input]:border [&_input]:border-border [&_input]:bg-background [&_input]:px-3.5 [&_input]:py-2.5 [&_input]:text-sm [&_input]:shadow-2xs [&_input]:transition-all [&_input]:placeholder:text-muted-foreground/50 focus-within:[&_input]:border-primary focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-primary/20 [&_textarea]:w-full [&_textarea]:min-w-0 [&_textarea]:rounded-xl [&_textarea]:border [&_textarea]:border-border [&_textarea]:bg-background [&_textarea]:px-3.5 [&_textarea]:py-2.5 [&_textarea]:text-sm [&_textarea]:shadow-2xs [&_textarea]:transition-all [&_textarea]:placeholder:text-muted-foreground/50 [&_textarea]:min-h-[96px] [&_textarea]:resize-y focus-within:[&_textarea]:border-primary focus-within:[&_textarea]:ring-2 focus-within:[&_textarea]:ring-primary/20">
             <div>
               <label className="text-xs font-semibold text-foreground block mb-1">
                 Your Counter-Offer Price (₹) <span className="text-destructive">*</span>
@@ -1538,6 +1538,7 @@ function ProfessionalJobsContent() {
                   setNegotiateError(null);
                 }}
                 placeholder="Enter counter price (must differ from current bid)"
+                className={negotiateError && !negotiatePrice ? "!border-destructive !placeholder:text-destructive/60" : ""}
               />
               {negotiateTarget?.bidAmount != null &&
                 negotiatePrice.trim() !== "" &&
@@ -1558,6 +1559,7 @@ function ProfessionalJobsContent() {
                 value={negotiateDuration}
                 onChange={(event) => setNegotiateDuration(event.target.value)}
                 placeholder="Timeline (for example, 10 days)"
+                className={negotiateError && !negotiateDuration ? "!border-destructive !placeholder:text-destructive/60" : ""}
               />
             </div>
             <div>
@@ -1568,7 +1570,7 @@ function ProfessionalJobsContent() {
                 value={negotiateMessage}
                 onChange={(event) => setNegotiateMessage(event.target.value)}
                 placeholder="Explain why you are proposing these new terms..."
-                rows={3}
+                className={negotiateError && !negotiateMessage ? "!border-destructive !placeholder:text-destructive/60" : ""}
               />
             </div>
           </div>

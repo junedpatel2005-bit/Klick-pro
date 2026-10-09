@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import { notifyUsers } from "@/lib/marketplace-notifications";
+import {
+  notifyProposalSubmitted,
+  notifyProposalUpdated,
+  notifyUsers,
+} from "@/lib/marketplace-notifications";
 import { attachLastActorRole } from "@/lib/project-request-actions";
 import { emitRealtimeProposalNew } from "@/lib/realtime";
 
@@ -126,19 +130,19 @@ export async function POST(request: NextRequest) {
           coverLetter: parsed.data.coverLetter,
         },
       });
-      await notifyUsers([job.userId], {
-        type: "PROPOSAL_UPDATED",
-        title: `${job.title ?? "Project"} · Proposal Updated`,
-        description: `A professional updated their proposal for ${job.title ?? "your job"}.`,
-        href: `/job/${job.id}`,
-        emailDetails: [
-          { label: "Project", value: job.title ?? `Project #${job.id}` },
-          { label: "Proposed amount", value: `₹${bidAmount.toLocaleString("en-IN")}` },
-          { label: "Delivery time", value: parsed.data.duration },
-          { label: "Proposal message", value: parsed.data.coverLetter },
-        ],
-      });
-      emitRealtimeProposalNew([job.userId], { jobId: job.id });
+      try {
+        await notifyProposalUpdated({
+          jobId: job.id,
+          jobTitle: job.title,
+          clientId: job.userId,
+          professionalId: session.userId,
+          bidAmount,
+          duration: parsed.data.duration,
+        });
+      } catch (notifyErr) {
+        console.error("Failed to dispatch notifyProposalUpdated:", notifyErr);
+      }
+      emitRealtimeProposalNew([job.userId, session.userId], { jobId: job.id });
       return NextResponse.json({ proposal: updated });
     }
 
@@ -156,29 +160,21 @@ export async function POST(request: NextRequest) {
         origin: "PROFESSIONAL_PROPOSAL",
       },
     });
-    const professional = await db.user.findUnique({
-      where: { id: session.userId },
-      select: { firstName: true, lastName: true },
-    });
-    await notifyUsers([job.userId], {
-      type: "NEW_PROPOSAL",
-      title: `${job.title ?? "Project"} · New Proposal`,
-      description: `${professional ? `${professional.firstName} ${professional.lastName}` : "A professional"} sent a proposal for ${job.title ?? "your job"}.`,
-      href: `/job/${job.id}`,
-      emailDetails: [
-        {
-          label: "Professional",
-          value: professional
-            ? `${professional.firstName} ${professional.lastName}`.trim()
-            : "A professional",
-        },
-        { label: "Project", value: job.title ?? `Project #${job.id}` },
-        { label: "Proposed amount", value: `₹${bidAmount.toLocaleString("en-IN")}` },
-        { label: "Delivery time", value: parsed.data.duration },
-        { label: "Proposal message", value: parsed.data.coverLetter },
-      ],
-    });
-    emitRealtimeProposalNew([job.userId], { jobId: job.id });
+
+    try {
+      await notifyProposalSubmitted({
+        jobId: job.id,
+        jobTitle: job.title,
+        clientId: job.userId,
+        professionalId: session.userId,
+        bidAmount,
+        duration: parsed.data.duration,
+        coverLetter: parsed.data.coverLetter,
+      });
+    } catch (notifyErr) {
+      console.error("Failed to dispatch notifyProposalSubmitted:", notifyErr);
+    }
+    emitRealtimeProposalNew([job.userId, session.userId], { jobId: job.id });
     return NextResponse.json({ proposal }, { status: 201 });
   } catch (error) {
     console.error("professional.proposal.failed", error);

@@ -1,5 +1,5 @@
 import js from "@eslint/js";
-import prettier from "eslint-plugin-prettier/recommended";
+import prettierConfig from "eslint-config-prettier";
 import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
@@ -8,13 +8,21 @@ const config = tseslint.config(
   {
     ignores: [
       ".next/**",
-      ".project-work-files/**",
+      ".git/**",
       "**/node_modules/**",
+      ".project-work-files/**",
       "generated/**",
       "tmp/**",
-      // Agent worktree sandboxes are throwaway copies of the same sources and
-      // would otherwise quadruple every lint finding.
       ".kilo/**",
+      "public/**",
+      "data/**",
+      "docs/**",
+      "project-docs/**",
+      "prisma/migrations/**",
+      ".commandcode/**",
+      ".lovable/**",
+      "scripts/**",
+      ".eslintcache",
     ],
   },
   {
@@ -24,7 +32,8 @@ const config = tseslint.config(
     plugins: { "react-hooks": reactHooks },
     rules: { ...reactHooks.configs.recommended.rules, "@typescript-eslint/no-unused-vars": "off" },
   },
-  prettier,
+  prettierConfig,
 );
 
 export default config;
+

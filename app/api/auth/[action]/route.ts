@@ -39,7 +39,7 @@ const tokenHash = (value: string) => createHash("sha256").update(value).digest("
 const clientKey = (request: NextRequest) =>
   request.headers.get("x-forwarded-for")?.split(",")[0] ?? "local";
 const safe = (message: string, status = 400) => NextResponse.json({ error: message }, { status });
-export function publicAppOrigin(request: NextRequest) {
+function publicAppOrigin(request: NextRequest) {
   // Build links from the host the user actually registered on. This keeps local
   // emails on localhost and makes preview/production emails use their Vercel URL.
   // APP_URL is only a fallback for runtimes that do not expose the public host.
@@ -228,9 +228,34 @@ export async function GET(
       return response;
     }
   }
-  // Note: `GET /api/auth/me` is served by the sibling static route at
-  // app/api/auth/me/route.ts, which Next.js matches before this dynamic
-  // [action] segment — there is intentionally no "me" case here.
+
+  if (action === "me") {
+    const authHeader = request.headers.get("authorization");
+    const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+    const cookieHeader = request.headers.get("cookie") ?? "";
+    const tokenMatch = cookieHeader.match(new RegExp(`${sessionCookie}=([^;]+)`));
+    const token = bearerToken || tokenMatch?.[1];
+    if (!token) {
+      return NextResponse.json({ user: null });
+    }
+    try {
+      const session = await verifySession(token);
+      return NextResponse.json({
+        user: {
+          id: String(session.userId),
+          role: session.role,
+          firstName: session.firstName,
+          lastName: session.lastName,
+          email: session.email,
+          emailVerifiedAt: session.emailVerifiedAt,
+          avatarUrl: session.avatarUrl,
+        },
+      });
+    } catch {
+      return NextResponse.json({ user: null });
+    }
+  }
+
   return safe("Not found", 404);
 }
 

@@ -30,7 +30,15 @@ import {
   Wrench,
   PlusCircle,
   ShieldAlert,
+  Download,
+  FileDown,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { AppShell } from "@/components/AppShell";
 import { PageActionLoading } from "@/components/PageActionLoading";
 import { usePortalTitle } from "@/components/PortalShell";
@@ -381,6 +389,32 @@ export default function JobDetails({
   const [reopenDuration, setReopenDuration] = useState("1-3 days");
   const [reopenError, setReopenError] = useState<string | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
+  const [downloadingDossier, setDownloadingDossier] = useState<"pdf" | "csv" | null>(null);
+
+  const handleDownloadDossier = async (format: "pdf" | "csv") => {
+    try {
+      setDownloadingDossier(format);
+      const res = await fetch(`/api/v1/portal/jobs/${jobId}/export?format=${format}`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.error || "Failed to download job record");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `klick-pro-job-${jobId}-dossier.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Job dossier downloaded as ${format.toUpperCase()}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to download job dossier");
+    } finally {
+      setDownloadingDossier(null);
+    }
+  };
 
   async function handleCloseJob() {
     setStatusBusy(true);
@@ -963,37 +997,72 @@ export default function JobDetails({
   return (
     <JobShell viewerRole={viewerRole} embedded={embedded}>
       <article className="mx-auto max-w-4xl rounded-2xl border border-border bg-card p-6 shadow-soft sm:p-8">
-        <div className="flex flex-wrap gap-2 text-xs">
-          {job.mainCategory && job.mainCategory !== job.category && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2 text-xs">
+            {job.mainCategory && job.mainCategory !== job.category && (
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">
+                {job.mainCategory}
+              </span>
+            )}
+            {job.categorySegment && (
+              <span className="rounded-full bg-muted px-3 py-1 capitalize">
+                {job.categorySegment.toLowerCase()}
+              </span>
+            )}
             <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">
-              {job.mainCategory}
+              {job.category}
             </span>
-          )}
-          {job.categorySegment && (
-            <span className="rounded-full bg-muted px-3 py-1 capitalize">
-              {job.categorySegment.toLowerCase()}
+            <span className="rounded-full bg-muted px-3 py-1">
+              {job.urgency.toLowerCase()} urgency
             </span>
-          )}
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">{job.category}</span>
-          <span className="rounded-full bg-muted px-3 py-1">
-            {job.urgency.toLowerCase()} urgency
-          </span>
-          {job.status && (
-            <span
-              className={`rounded-full px-3 py-1 ${
-                job.status === "OPEN"
-                  ? "bg-success/10 text-success"
-                  : job.status === "CLOSED"
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-muted"
-              }`}
-            >
-              {job.status.toLowerCase()}
+            {job.status && (
+              <span
+                className={`rounded-full px-3 py-1 ${
+                  job.status === "OPEN"
+                    ? "bg-success/10 text-success"
+                    : job.status === "CLOSED"
+                      ? "bg-destructive/10 text-destructive"
+                      : "bg-muted"
+                }`}
+              >
+                {job.status.toLowerCase()}
+              </span>
+            )}
+            <span className="rounded-full bg-blue/10 px-3 py-1 text-blue">
+              {job.timingType === "HOURLY" ? "Hourly" : "Fixed Price"}
             </span>
+          </div>
+
+          {job.projectStatus === "COMPLETED" && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs font-medium">
+                  <FileDown className="h-3.5 w-3.5 text-primary" />
+                  {downloadingDossier
+                    ? `Preparing ${downloadingDossier.toUpperCase()}…`
+                    : "Download Job Dossier"}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem
+                  disabled={downloadingDossier !== null}
+                  onClick={() => handleDownloadDossier("pdf")}
+                  className="gap-2 cursor-pointer"
+                >
+                  <Download className="h-4 w-4 text-primary" />
+                  <span>Download as PDF Dossier</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={downloadingDossier !== null}
+                  onClick={() => handleDownloadDossier("csv")}
+                  className="gap-2 cursor-pointer"
+                >
+                  <Download className="h-4 w-4 text-emerald-600" />
+                  <span>Download as CSV Spreadsheet</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
-          <span className="rounded-full bg-blue/10 px-3 py-1 text-blue">
-            {job.timingType === "HOURLY" ? "Hourly" : "Fixed Price"}
-          </span>
         </div>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight">{job.title}</h1>
         <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
@@ -2038,16 +2107,14 @@ export default function JobDetails({
                                 return next;
                               });
                             }}
-                            className="text-[11px] font-medium text-primary hover:underline flex items-center gap-1"
+                            className="text-primary hover:text-primary/80 transition-colors p-1 rounded-md hover:bg-primary/5 flex items-center justify-center"
+                            title={expandedProposalIds.has(ownProposal.id) ? "Show less" : "Read more"}
+                            aria-label={expandedProposalIds.has(ownProposal.id) ? "Show less" : "Read more"}
                           >
                             {expandedProposalIds.has(ownProposal.id) ? (
-                              <>
-                                Show less <ChevronUp className="h-3 w-3" />
-                              </>
+                              <ChevronUp className="h-4 w-4" />
                             ) : (
-                              <>
-                                Read more <ChevronDown className="h-3 w-3" />
-                              </>
+                              <ChevronDown className="h-4 w-4" />
                             )}
                           </button>
                         )}
@@ -2713,7 +2780,7 @@ export default function JobDetails({
             </div>
           )}
 
-          <div className="mt-1 grid gap-3 [&_input]:w-full [&_input]:min-w-0 [&_input]:rounded-md [&_input]:border [&_input]:bg-background [&_input]:px-3 [&_input]:py-2 [&_textarea]:w-full [&_textarea]:min-w-0 [&_textarea]:rounded-md [&_textarea]:border [&_textarea]:bg-background [&_textarea]:px-3 [&_textarea]:py-2">
+          <div className="mt-2 grid gap-3.5 [&_input]:w-full [&_input]:min-w-0 [&_input]:rounded-xl [&_input]:border [&_input]:border-border [&_input]:bg-background [&_input]:px-3.5 [&_input]:py-2.5 [&_input]:text-sm [&_input]:shadow-2xs [&_input]:transition-all [&_input]:placeholder:text-muted-foreground/50 focus-within:[&_input]:border-primary focus-within:[&_input]:ring-2 focus-within:[&_input]:ring-primary/20 [&_textarea]:w-full [&_textarea]:min-w-0 [&_textarea]:rounded-xl [&_textarea]:border [&_textarea]:border-border [&_textarea]:bg-background [&_textarea]:px-3.5 [&_textarea]:py-2.5 [&_textarea]:text-sm [&_textarea]:shadow-2xs [&_textarea]:transition-all [&_textarea]:placeholder:text-muted-foreground/50 [&_textarea]:min-h-[96px] [&_textarea]:resize-y focus-within:[&_textarea]:border-primary focus-within:[&_textarea]:ring-2 focus-within:[&_textarea]:ring-primary/20">
             {job.timingType === "HOURLY" ? (
               <>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -2730,6 +2797,7 @@ export default function JobDetails({
                         setNegotiateError(null);
                       }}
                       placeholder="Hourly rate"
+                      className={negotiateError && !negotiateHourlyRate ? "!border-destructive !placeholder:text-destructive/60" : ""}
                     />
                   </div>
                   <div>
@@ -2745,10 +2813,11 @@ export default function JobDetails({
                         setNegotiateError(null);
                       }}
                       placeholder="Total hours"
+                      className={negotiateError && !negotiateTotalJobHours ? "!border-destructive !placeholder:text-destructive/60" : ""}
                     />
                   </div>
                 </div>
-                <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm font-semibold">
+                <p className="rounded-xl border border-primary/20 bg-primary/5 px-3.5 py-2.5 text-sm font-semibold">
                   Project total: ₹
                   {Number.isSafeInteger(Number(negotiateHourlyRate)) &&
                   Number.isSafeInteger(Number(negotiateTotalJobHours)) &&
@@ -2774,6 +2843,7 @@ export default function JobDetails({
                     setNegotiateError(null);
                   }}
                   placeholder="Enter counter price (must differ from current bid)"
+                  className={negotiateError && !negotiatePrice ? "!border-destructive !placeholder:text-destructive/60" : ""}
                 />
               </div>
             )}
@@ -2785,6 +2855,7 @@ export default function JobDetails({
                 value={negotiateDuration}
                 onChange={(event) => setNegotiateDuration(event.target.value)}
                 placeholder="Timeline (for example, 10 days)"
+                className={negotiateError && !negotiateDuration ? "!border-destructive !placeholder:text-destructive/60" : ""}
               />
             </div>
             <div>
@@ -2795,7 +2866,7 @@ export default function JobDetails({
                 value={negotiateMessage}
                 onChange={(event) => setNegotiateMessage(event.target.value)}
                 placeholder="Explain why you are proposing these new terms..."
-                rows={3}
+                className={negotiateError && !negotiateMessage ? "!border-destructive !placeholder:text-destructive/60" : ""}
               />
             </div>
           </div>

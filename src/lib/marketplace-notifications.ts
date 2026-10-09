@@ -295,7 +295,7 @@ async function jobEmailDetails(jobId: number): Promise<{
   return { details, variables };
 }
 
-async function notifyRole(
+export async function notifyRole(
   role: "ADMIN" | "CLIENT" | "PROFESSIONAL",
   notification: BroadcastNotification,
 ) {
@@ -319,7 +319,13 @@ async function notifyRole(
       ...(notification.templateVariables ?? {}),
     };
 
-    const { emailDetails: _emailDetails, ...storedNotification } = notification;
+    const storedNotification = {
+      type: notification.type,
+      title: notification.title,
+      description: notification.description,
+      href: notification.href,
+    };
+
     const recipients = await db.user.findMany({
       where: { role, isActive: true },
       select: {
@@ -335,17 +341,28 @@ async function notifyRole(
     if (!recipients.length) return;
 
     const created = await db.userNotification.createManyAndReturn({
-      data: recipients.map((recipient) => ({ userId: recipient.id, ...storedNotification })),
-    });
-    created.forEach((notification) =>
-      emitRealtimeNotification([notification.userId], {
+      data: recipients.map((recipient) => ({
+        userId: recipient.id,
         ...storedNotification,
-        id: notification.id,
-        createdAt: notification.createdAt.toISOString(),
+      })),
+    });
+    created.forEach((item) =>
+      emitRealtimeNotification([item.userId], {
+        type: item.type,
+        title: item.title,
+        description: item.description ?? "",
+        href: item.href ?? "",
+        id: item.id,
+        createdAt: item.createdAt.toISOString(),
       }),
     );
     if (role === "ADMIN") {
-      emitAdminNotification(storedNotification);
+      emitAdminNotification({
+        type: notification.type,
+        title: notification.title,
+        description: notification.description,
+        href: notification.href,
+      });
       emitAdminOverviewUpdate();
       if (storedNotification.type.includes("ACCOUNT") || storedNotification.type.includes("USER")) {
         emitAdminUsersUpdate();
@@ -434,7 +451,12 @@ export async function notifyUsers(userIds: number[], notification: BroadcastNoti
       ...(notification.templateVariables ?? {}),
     };
 
-    const { emailDetails: _storedEmailDetails, ...storedNotification } = notification;
+    const storedNotification = {
+      type: notification.type,
+      title: notification.title,
+      description: notification.description,
+      href: notification.href,
+    };
     const recipients = await db.user.findMany({
       where: { id: { in: ids }, isActive: true },
       select: {
@@ -447,14 +469,19 @@ export async function notifyUsers(userIds: number[], notification: BroadcastNoti
         emailNotificationsEnabled: true,
       },
     });
+    if (!recipients.length) return;
+
     const created = await db.userNotification.createManyAndReturn({
       data: recipients.map((recipient) => ({ userId: recipient.id, ...storedNotification })),
     });
-    created.forEach((notification) =>
-      emitRealtimeNotification([notification.userId], {
-        ...storedNotification,
-        id: notification.id,
-        createdAt: notification.createdAt.toISOString(),
+    created.forEach((item) =>
+      emitRealtimeNotification([item.userId], {
+        type: item.type,
+        title: item.title,
+        description: item.description ?? "",
+        href: item.href ?? "",
+        id: item.id,
+        createdAt: item.createdAt.toISOString(),
       }),
     );
     enqueueBackgroundJob(
@@ -713,3 +740,364 @@ export async function notifyMilestonePayoutApproved(input: {
     ],
   });
 }
+
+export async function notifyJobPosted(job: {
+  id: number;
+  title: string | null;
+  category: string | null;
+  userId: number;
+  budgetMin?: number | null;
+  budgetMax?: number | null;
+}) {
+  const jobTitle = job.title?.trim() || `Job #${job.id}`;
+  const categoryLabel = job.category?.trim() || "General Services";
+  const clientUser = await db.user.findUnique({
+    where: { id: job.userId },
+    select: { firstName: true, lastName: true },
+  });
+  const clientName = clientUser
+    ? `${clientUser.firstName} ${clientUser.lastName}`.trim()
+    : "Client";
+
+  // 1. Notify Client (confirmation)
+  await notifyUsers([job.userId], {
+    type: "JOB_POSTED",
+    title: `${jobTitle} · Job posted successfully`,
+    description: `Your job "${jobTitle}" has been posted and is now open for proposals.`,
+    href: `/job/${job.id}`,
+    templateVariables: {
+      job_title: jobTitle,
+      client_name: clientName,
+    },
+  });
+
+  // 2. Notify Admins
+  await notifyRole("ADMIN", {
+    type: "NEW_JOB",
+    title: `New job posted · ${jobTitle}`,
+    description: `Client ${clientName} posted a new job "${jobTitle}" in ${categoryLabel}.`,
+    href: `/admin/operations?job=${job.id}`,
+    templateVariables: {
+      job_title: jobTitle,
+      client_name: clientName,
+      category_name: categoryLabel,
+    },
+  });
+
+  // 3. Notify Matching Professionals in that category
+  let matchingPros: { id: number }[] = [];
+  try {
+    matchingPros = await db.user.findMany({
+      where: {
+        role: "PROFESSIONAL",
+        isActive: true,
+        id: { not: job.userId },
+        ...(job.category
+          ? {
+              OR: [
+                { professionalCategory: job.category },
+                { professionalCategoryRecord: { name: job.category } },
+                { services: { some: { category: { name: job.category } } } },
+              ],
+            }
+          : {}),
+      },
+      select: { id: true },
+      take: 50,
+    });
+  } catch (err) {
+    console.error("Failed to query matching professionals for job notification:", err);
+  }
+
+  const targetProIds = matchingPros.map((p) => p.id);
+  if (targetProIds.length > 0) {
+    await notifyUsers(targetProIds, {
+      type: "NEW_JOB",
+      title: `New job available · ${jobTitle}`,
+      description: `A new job matching your expertise was posted: "${jobTitle}" (${categoryLabel}). Submit a proposal now.`,
+      href: `/job/${job.id}`,
+      templateVariables: {
+        job_title: jobTitle,
+        category_name: categoryLabel,
+      },
+    });
+  }
+}
+
+export async function notifyProposalSubmitted(input: {
+  jobId: number;
+  jobTitle?: string | null;
+  clientId: number;
+  professionalId: number;
+  bidAmount: number;
+  duration: string;
+  coverLetter?: string | null;
+}) {
+  const jobTitle = input.jobTitle?.trim() || `Job #${input.jobId}`;
+  const proUser = await db.user.findUnique({
+    where: { id: input.professionalId },
+    select: { firstName: true, lastName: true },
+  });
+  const proName = proUser ? `${proUser.firstName} ${proUser.lastName}`.trim() : "A professional";
+
+  // 1. Notify Client
+  await notifyUsers([input.clientId], {
+    type: "NEW_PROPOSAL",
+    title: `${jobTitle} · New Proposal`,
+    description: `${proName} sent a proposal of ₹${input.bidAmount.toLocaleString("en-IN")} for ${jobTitle}.`,
+    href: `/job/${input.jobId}`,
+    emailDetails: [
+      { label: "Professional", value: proName },
+      { label: "Project", value: jobTitle },
+      { label: "Proposed amount", value: `₹${input.bidAmount.toLocaleString("en-IN")}` },
+      { label: "Delivery time", value: input.duration },
+    ],
+  });
+
+  // 2. Notify Professional (confirmation)
+  await notifyUsers([input.professionalId], {
+    type: "PROPOSAL_SENT",
+    title: `${jobTitle} · Proposal Submitted`,
+    description: `Your proposal of ₹${input.bidAmount.toLocaleString("en-IN")} for "${jobTitle}" was submitted to the client.`,
+    href: `/job/${input.jobId}`,
+  });
+
+  // 3. Notify Admins
+  await notifyRole("ADMIN", {
+    type: "NEW_PROPOSAL",
+    title: `${jobTitle} · New Proposal Submitted`,
+    description: `${proName} submitted a proposal of ₹${input.bidAmount.toLocaleString("en-IN")} for "${jobTitle}".`,
+    href: `/admin/operations?job=${input.jobId}`,
+  });
+}
+
+export async function notifyProposalUpdated(input: {
+  jobId: number;
+  jobTitle?: string | null;
+  clientId: number;
+  professionalId: number;
+  bidAmount: number;
+  duration: string;
+}) {
+  const jobTitle = input.jobTitle?.trim() || `Job #${input.jobId}`;
+  const proUser = await db.user.findUnique({
+    where: { id: input.professionalId },
+    select: { firstName: true, lastName: true },
+  });
+  const proName = proUser ? `${proUser.firstName} ${proUser.lastName}`.trim() : "A professional";
+
+  // Notify Client
+  await notifyUsers([input.clientId], {
+    type: "PROPOSAL_UPDATED",
+    title: `${jobTitle} · Proposal Updated`,
+    description: `${proName} updated their proposal for ${jobTitle} to ₹${input.bidAmount.toLocaleString("en-IN")}.`,
+    href: `/job/${input.jobId}`,
+  });
+
+  // Notify Professional (confirmation)
+  await notifyUsers([input.professionalId], {
+    type: "PROPOSAL_UPDATED",
+    title: `${jobTitle} · Proposal Updated`,
+    description: `You updated your proposal for ${jobTitle} to ₹${input.bidAmount.toLocaleString("en-IN")}.`,
+    href: `/job/${input.jobId}`,
+  });
+}
+
+export async function notifyContractAwarded(input: {
+  projectId: number;
+  jobId: number;
+  jobTitle?: string | null;
+  clientId: number;
+  professionalId: number;
+  bidAmount: number;
+  duration?: string | null;
+}) {
+  const jobTitle = input.jobTitle?.trim() || `Project #${input.projectId}`;
+  const [clientUser, proUser] = await Promise.all([
+    db.user.findUnique({
+      where: { id: input.clientId },
+      select: { firstName: true, lastName: true },
+    }),
+    db.user.findUnique({
+      where: { id: input.professionalId },
+      select: { firstName: true, lastName: true },
+    }),
+  ]);
+  const clientName = clientUser ? `${clientUser.firstName} ${clientUser.lastName}`.trim() : "Client";
+  const proName = proUser ? `${proUser.firstName} ${proUser.lastName}`.trim() : "Professional";
+  const amountStr = `₹${input.bidAmount.toLocaleString("en-IN")}`;
+
+  // 1. Notify Professional
+  await notifyUsers([input.professionalId], {
+    type: "REQUEST_ACCEPTED",
+    title: `${jobTitle} · Congratulations! You got the project`,
+    description: `Congratulations! ${clientName} accepted your proposal for ${jobTitle} (${amountStr}). The project is now active.`,
+    href: `/project/${input.projectId}/tracking`,
+    emailDetails: [
+      { label: "Project", value: jobTitle },
+      { label: "Agreed amount", value: amountStr },
+      { label: "Client", value: clientName },
+    ],
+  });
+
+  // 2. Notify Client
+  await notifyUsers([input.clientId], {
+    type: "PROJECT_STARTED",
+    title: `${jobTitle} · Project Started`,
+    description: `You hired ${proName} for ${jobTitle} (${amountStr}). The project is now ready to start.`,
+    href: `/project/${input.projectId}/tracking`,
+    emailDetails: [
+      { label: "Project", value: jobTitle },
+      { label: "Agreed amount", value: amountStr },
+      { label: "Professional", value: proName },
+    ],
+  });
+
+  // 3. Notify Admins
+  await notifyRole("ADMIN", {
+    type: "PROFESSIONAL_HIRED",
+    title: `${jobTitle} · Contract Awarded`,
+    description: `Client ${clientName} awarded project ${jobTitle} to ${proName} for ${amountStr}.`,
+    href: `/admin/operations?project=${input.projectId}`,
+  });
+}
+
+export async function notifyHireRequestSent(input: {
+  jobId: number;
+  jobTitle?: string | null;
+  requestId: number;
+  clientId: number;
+  professionalId: number;
+  bidAmount: number;
+  duration: string;
+}) {
+  const jobTitle = input.jobTitle?.trim() || `Job #${input.jobId}`;
+  const [clientUser, proUser] = await Promise.all([
+    db.user.findUnique({
+      where: { id: input.clientId },
+      select: { firstName: true, lastName: true },
+    }),
+    db.user.findUnique({
+      where: { id: input.professionalId },
+      select: { firstName: true, lastName: true },
+    }),
+  ]);
+  const clientName = clientUser ? `${clientUser.firstName} ${clientUser.lastName}`.trim() : "A client";
+  const proName = proUser ? `${proUser.firstName} ${proUser.lastName}`.trim() : "A professional";
+
+  // 1. Notify Professional
+  await notifyUsers([input.professionalId], {
+    type: "NEW_HIRE_REQUEST",
+    title: `${jobTitle} · New hire request`,
+    description: `${clientName} sent you a hire request for ${jobTitle}.`,
+    href: `/job/${input.jobId}?requestId=${input.requestId}`,
+    emailDetails: [
+      { label: "Job", value: jobTitle },
+      { label: "Offered amount", value: `₹${input.bidAmount.toLocaleString("en-IN")}` },
+      { label: "Timeline", value: input.duration },
+    ],
+  });
+
+  // 2. Notify Client (confirmation)
+  await notifyUsers([input.clientId], {
+    type: "HIRE_REQUEST_SENT",
+    title: `${jobTitle} · Hire request sent`,
+    description: `Your hire request of ₹${input.bidAmount.toLocaleString("en-IN")} was sent to ${proName} for ${jobTitle}.`,
+    href: `/job/${input.jobId}`,
+  });
+
+  // 3. Notify Admins
+  await notifyRole("ADMIN", {
+    type: "NEW_HIRE_REQUEST",
+    title: `${jobTitle} · Direct Hire Request`,
+    description: `Client ${clientName} sent a hire request to ${proName} for ${jobTitle}.`,
+    href: `/admin/operations?job=${input.jobId}`,
+  });
+}
+
+export async function notifyVerificationStatus(input: {
+  userId: number;
+  provider: string;
+  isApproved: boolean;
+}) {
+  const title = input.isApproved ? "Identity Verification Approved" : "Identity Verification Rejected";
+  const description = input.isApproved
+    ? `Your ${input.provider} verification has been approved. Your profile now shows the verified badge.`
+    : `Your ${input.provider} verification was reviewed and not approved.`;
+
+  await notifyUsers([input.userId], {
+    type: "VERIFICATION_UPDATE",
+    title,
+    description,
+    href: "/verification",
+  });
+
+  await notifyRole("ADMIN", {
+    type: "VERIFICATION_REVIEWED",
+    title: `Verification ${input.isApproved ? "Approved" : "Rejected"}`,
+    description: `User verification #${input.userId} (${input.provider}) marked as ${input.isApproved ? "APPROVED" : "REJECTED"}.`,
+    href: `/admin/verifications?userId=${input.userId}`,
+  });
+}
+
+export async function notifyVerificationSubmitted(input: {
+  userId: number;
+  provider: string;
+}) {
+  const user = await db.user.findUnique({
+    where: { id: input.userId },
+    select: { firstName: true, lastName: true, role: true },
+  });
+  const name = user ? `${user.firstName} ${user.lastName}`.trim() : `User #${input.userId}`;
+  const roleLabel = user?.role === "PROFESSIONAL" ? "Professional" : "Client";
+
+  await notifyUsers([input.userId], {
+    type: "VERIFICATION_SUBMITTED",
+    title: "Verification Submitted",
+    description: `Your ${input.provider} documents were submitted successfully and are under review.`,
+    href: "/verification",
+  });
+
+  await notifyRole("ADMIN", {
+    type: "VERIFICATION_SUBMITTED",
+    title: `New Verification Submitted · ${name}`,
+    description: `${name} (${roleLabel}) submitted identity verification documents for review.`,
+    href: `/admin/verifications?userId=${input.userId}`,
+  });
+}
+
+export async function notifyProjectCompleted(input: {
+  projectId: number;
+  jobTitle?: string | null;
+  clientId: number;
+  professionalId: number;
+}) {
+  const jobTitle = input.jobTitle?.trim() || `Project #${input.projectId}`;
+  const [clientUser, proUser] = await Promise.all([
+    db.user.findUnique({
+      where: { id: input.clientId },
+      select: { firstName: true, lastName: true },
+    }),
+    db.user.findUnique({
+      where: { id: input.professionalId },
+      select: { firstName: true, lastName: true },
+    }),
+  ]);
+  const clientName = clientUser ? `${clientUser.firstName} ${clientUser.lastName}`.trim() : "Client";
+  const proName = proUser ? `${proUser.firstName} ${proUser.lastName}`.trim() : "Professional";
+
+  await notifyUsers([input.clientId, input.professionalId], {
+    type: "PROJECT_COMPLETED",
+    title: `${jobTitle} · Project Completed`,
+    description: `Project ${jobTitle} has been successfully completed. You can now leave a review.`,
+    href: `/project/${input.projectId}/tracking`,
+  });
+
+  await notifyRole("ADMIN", {
+    type: "PROJECT_COMPLETED",
+    title: `${jobTitle} · Project Completed`,
+    description: `Project ${jobTitle} between ${clientName} and ${proName} has been marked completed.`,
+    href: `/admin/operations?project=${input.projectId}`,
+  });
+}
+

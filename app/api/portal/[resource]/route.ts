@@ -39,29 +39,22 @@ export async function GET(
   const { resource } = await params;
   try {
     if (resource === "notifications") {
-      // Historical role-wide marketplace alerts must not appear in anyone's
-      // personal inbox. Notifications now only go to the account involved in
-      // an event; admin inboxes retain operational account, verification,
-      // dispute, and finance notifications.
+      // Role-specific notifications hygiene:
+      // Clients and professionals see only their personal notifications;
+      // Admin sees administrative operational notifications and platform activities.
+      const adminOnlyTypes = ["NEW_ACCOUNT", "VERIFICATION_REVIEWED", "ADMIN_ALERT"];
       const hiddenNotificationTypes =
         session.role === "ADMIN"
-          ? ["NEW_JOB", "NEW_PROPOSAL", "JOB_POSTED", "PROFESSIONAL_HIRED"]
-          : session.role === "CLIENT"
-            ? ["NEW_PROFESSIONAL"]
-            : ["NEW_JOB"];
+          ? []
+          : [...adminOnlyTypes];
+
       const notifications = await db.userNotification.findMany({
         where: {
           userId: session.userId,
           clearedAt: null,
-          type: {
-            notIn: [
-              "PROPOSAL_SENT",
-              "PROPOSAL_UPDATE_SENT",
-              "HIRE_REQUEST_SENT",
-              ...hiddenNotificationTypes,
-            ],
-          },
-          ...(session.role === "ADMIN" ? { NOT: [{ type: { startsWith: "HIRE_" } }] } : {}),
+          ...(hiddenNotificationTypes.length > 0
+            ? { type: { notIn: hiddenNotificationTypes } }
+            : {}),
         },
         orderBy: { createdAt: "desc" },
         take: 100,
@@ -226,6 +219,7 @@ export async function GET(
 
           const hasProjectOrProposalEngagement =
             projectId !== null ||
+            jobId !== null ||
             notification.type.startsWith("PROJECT_") ||
             notification.type.startsWith("MILESTONE_") ||
             notification.type.startsWith("DISPUTE_") ||
@@ -235,7 +229,11 @@ export async function GET(
             notification.type.startsWith("NEW_PROPOSAL") ||
             notification.type.startsWith("REQUEST_") ||
             notification.type.startsWith("COUNTER_") ||
-            notification.type.startsWith("OFFER_");
+            notification.type.startsWith("OFFER_") ||
+            notification.type.startsWith("HIRE_") ||
+            notification.type.startsWith("NEW_HIRE") ||
+            notification.type === "JOB_POSTED" ||
+            notification.type === "NEW_JOB";
 
           const isProjectOrJob =
             hasProjectOrProposalEngagement || (jobId !== null && projectId !== null);
@@ -336,25 +334,56 @@ export async function GET(
         orderBy: { createdAt: "desc" },
         take: 100,
       });
-      const payments = await db.payment.findMany({
-        where: {
-          milestoneId: {
-            in: transactions
-              .map((transaction) => transaction.milestoneId)
-              .filter((id): id is number => id !== null),
+      const trackingIds = [...new Set(transactions.map((t) => t.trackingId))];
+      const milestoneIds = [
+        ...new Set(
+          transactions.map((t) => t.milestoneId).filter((id): id is number => id !== null),
+        ),
+      ];
+      const clientIds = [...new Set(transactions.map((t) => t.clientId))];
+      const proIds = [...new Set(transactions.map((t) => t.professionalId))];
+
+      const [payments, trackings, milestones, clients, pros] = await Promise.all([
+        db.payment.findMany({
+          where: {
+            milestoneId: { in: milestoneIds },
+            status: { in: ["FUNDED", "COMPLETED", "AWAITING_ADMIN_APPROVAL"] },
           },
-          status: { in: ["FUNDED", "COMPLETED", "AWAITING_ADMIN_APPROVAL"] },
-        },
-        select: {
-          id: true,
-          milestoneId: true,
-          baseAmount: true,
-          clientFeeAmount: true,
-          commissionAmount: true,
-          amount: true,
-        },
-      });
+          select: {
+            id: true,
+            milestoneId: true,
+            baseAmount: true,
+            clientFeeAmount: true,
+            commissionAmount: true,
+            professionalPayoutAmount: true,
+            amount: true,
+            provider: true,
+            razorpayPaymentId: true,
+          },
+        }),
+        db.projectTracking.findMany({
+          where: { id: { in: trackingIds } },
+          include: { job: { select: { id: true, title: true } } },
+        }),
+        db.projectMilestone.findMany({
+          where: { id: { in: milestoneIds } },
+          select: { id: true, title: true, amount: true },
+        }),
+        db.user.findMany({
+          where: { id: { in: clientIds } },
+          select: { id: true, firstName: true, lastName: true },
+        }),
+        db.user.findMany({
+          where: { id: { in: proIds } },
+          select: { id: true, firstName: true, lastName: true },
+        }),
+      ]);
+
       const paymentByMilestone = new Map(payments.map((payment) => [payment.milestoneId, payment]));
+      const trackingMap = new Map(trackings.map((t) => [t.id, t]));
+      const milestoneMap = new Map(milestones.map((m) => [m.id, m]));
+      const clientMap = new Map(clients.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
+      const proMap = new Map(pros.map((p) => [p.id, `${p.firstName} ${p.lastName}`.trim()]));
 
       // Track milestone IDs that already have a PLATFORM_COMMISSION row
       const commissionMilestoneIds = new Set(
@@ -378,13 +407,50 @@ export async function GET(
         createdAt: Date;
         updatedAt: Date;
         invoicePaymentId: number | null;
+        invoiceNumber?: string;
+        projectTitle?: string;
+        jobId?: number | null;
+        clientName?: string;
+        professionalName?: string;
+        milestoneTitle?: string;
+        paymentMethod?: string;
+        razorpayPaymentId?: string | null;
+        baseAmount?: number;
+        feeAmount?: number;
+        netAmount?: number;
       }> = [];
 
       for (const tx of transactions) {
         const payment = tx.milestoneId ? paymentByMilestone.get(tx.milestoneId) : null;
+        const tracking = trackingMap.get(tx.trackingId);
+        const milestone = tx.milestoneId ? milestoneMap.get(tx.milestoneId) : null;
+        const clientName = clientMap.get(tx.clientId) ?? "Client";
+        const professionalName = proMap.get(tx.professionalId) ?? "Professional";
+
+        const baseAmount = payment?.baseAmount ?? tx.amount;
+        const feeAmount =
+          (session.role === "PROFESSIONAL"
+            ? payment?.commissionAmount
+            : payment?.clientFeeAmount) ?? Math.round(tx.amount * 0.1);
+        const netAmount =
+          (session.role === "PROFESSIONAL"
+            ? payment?.professionalPayoutAmount
+            : payment?.baseAmount) ?? tx.amount;
+
         resultTransactions.push({
           ...tx,
           invoicePaymentId: payment?.id ?? null,
+          invoiceNumber: `INV-${new Date(tx.createdAt).getFullYear()}-${String(payment?.id || tx.id).padStart(6, "0")}`,
+          projectTitle: tracking?.job.title ?? `Project #${tx.trackingId}`,
+          jobId: tracking?.job.id ?? null,
+          clientName,
+          professionalName,
+          milestoneTitle: milestone?.title ?? tx.description,
+          paymentMethod: payment?.provider ?? "Escrow",
+          razorpayPaymentId: payment?.razorpayPaymentId ?? null,
+          baseAmount,
+          feeAmount,
+          netAmount,
         });
 
         // If this is a milestone payment and there is no separate commission row for it in DB yet,
@@ -419,6 +485,16 @@ export async function GET(
               createdAt: tx.createdAt,
               updatedAt: tx.updatedAt,
               invoicePaymentId: payment?.id ?? null,
+              invoiceNumber: `FEE-${new Date(tx.createdAt).getFullYear()}-${String(payment?.id || tx.id).padStart(6, "0")}`,
+              projectTitle: tracking?.job.title ?? `Project #${tx.trackingId}`,
+              jobId: tracking?.job.id ?? null,
+              clientName,
+              professionalName,
+              milestoneTitle: milestone?.title ?? tx.description,
+              paymentMethod: "Platform Deduct",
+              baseAmount: commissionAmount,
+              feeAmount: commissionAmount,
+              netAmount: 0,
             });
           }
         }

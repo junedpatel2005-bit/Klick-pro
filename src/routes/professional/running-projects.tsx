@@ -14,6 +14,9 @@ import {
   MapPin,
   Search,
   Sparkles,
+  FileDown,
+  FileText,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CardListSkeleton } from "@/components/LoadingSkeleton";
@@ -197,12 +200,23 @@ export default function RunningProjectsPage() {
               progress.
             </p>
           </div>
-          <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-            <p className="text-xs text-white/65">Portfolio progress</p>
-            <p className="mt-1 text-xl font-bold">
-              {averageProgress}%{" "}
-              <span className="text-sm font-medium text-white/70">average completion</span>
-            </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              asChild
+              variant="outline"
+              className="border-white/30 bg-white/10 text-white hover:bg-white/20"
+            >
+              <Link href="/professional/reports">
+                <FileText className="mr-2 h-4 w-4" /> Reports & Statements
+              </Link>
+            </Button>
+            <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
+              <p className="text-xs text-white/65">Portfolio progress</p>
+              <p className="mt-1 text-xl font-bold">
+                {averageProgress}%{" "}
+                <span className="text-sm font-medium text-white/70">average completion</span>
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -381,29 +395,31 @@ export default function RunningProjectsPage() {
                         </p>
                         <p className="mt-1 font-semibold">{money(project)}</p>
                       </div>
-                      <Button asChild>
-                        <Link
-                          href={`/project/${project.id}/tracking`}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          {project.status === "AWAITING_PROFESSIONAL_CONFIRMATION" ? (
-                            <>
-                              <span className="hidden sm:inline">Confirm completion</span>
-                              <span className="sm:hidden">Confirm</span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="hidden sm:inline">
-                                {project.status === "REVISION_REQUESTED"
-                                  ? "Open revision"
-                                  : "View workspace"}
-                              </span>
-                              <span className="sm:hidden">View</span>
-                            </>
-                          )}
-                          <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                        </Link>
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button asChild>
+                          <Link
+                            href={`/project/${project.id}/tracking`}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {project.status === "AWAITING_PROFESSIONAL_CONFIRMATION" ? (
+                              <>
+                                <span className="hidden sm:inline">Confirm completion</span>
+                                <span className="sm:hidden">Confirm</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="hidden sm:inline">
+                                  {project.status === "REVISION_REQUESTED"
+                                    ? "Open revision"
+                                    : "View workspace"}
+                                </span>
+                                <span className="sm:hidden">View</span>
+                              </>
+                            )}
+                            <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                          </Link>
+                        </Button>
+                      </div>
                     </div>
                   </div>
                   <div className="mt-5">
@@ -532,14 +548,26 @@ export default function RunningProjectsPage() {
                       </p>
                     </div>
                   </div>
-                  <Button asChild>
-                    <Link
-                      href={`/project/${project.id}/tracking`}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      View project <ArrowRight className="ml-2 h-4 w-4" />
-                    </Link>
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" asChild title="Download Full Project PDF">
+                      <a
+                        href={`/api/v1/portal/projects/${project.id}/export`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <Download className="mr-1.5 h-4 w-4 text-primary" /> PDF
+                      </a>
+                    </Button>
+                    <Button asChild>
+                      <Link
+                        href={`/project/${project.id}/tracking`}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        View project <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               </article>
             ))

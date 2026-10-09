@@ -128,11 +128,6 @@ export async function GET(
     session.userId !== project.professionalId
   )
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
-  if (!["COMPLETED", "CLOSED"].includes(project.status))
-    return NextResponse.json(
-      { error: "The full project PDF is available after project completion." },
-      { status: 409 },
-    );
 
   const [
     negotiations,

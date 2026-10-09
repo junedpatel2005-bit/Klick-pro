@@ -18,6 +18,7 @@ import {
 import { ExportMenu } from "@/components/reports/ExportMenu";
 import { SelectableReportTable } from "@/components/reports/SelectableReportTable";
 import { useRowSelection } from "@/hooks/use-row-selection";
+import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
 
 type UserRow = {
   id: number;
@@ -150,23 +151,48 @@ function UsersReport() {
   const proCount = filteredUsers.filter((u) => u.role === "PROFESSIONAL").length;
   const clientCount = filteredUsers.filter((u) => u.role === "CLIENT").length;
 
-  const handleExportCsv = () => {
-    const rowsToExport =
-      selectedList.length > 0 ? filteredUsers.filter((u) => selectedIds.has(u.id)) : filteredUsers;
-    downloadCsv(
-      "klick-pro-admin-users",
-      ["User ID", "First Name", "Last Name", "Email", "Role", "Active", "Verified", "Joined Date"],
-      rowsToExport.map((u) => [
+  const handleExportCsv = (scope?: "all" | "selected") => {
+    const isSelected = scope === "selected" || (scope === undefined && selectedList.length > 0);
+    const rowsToExport = isSelected
+      ? filteredUsers.filter((u) => selectedIds.has(u.id))
+      : filteredUsers;
+
+    downloadCsvFile({
+      filename: "klick-pro-admin-users",
+      title: "Admin Executive Oversight · User Directory & Identity Audit",
+      metadata: [
+        {
+          label: "Scope",
+          value: isSelected
+            ? `${rowsToExport.length} Selected Accounts`
+            : `All Filtered (${rowsToExport.length})`,
+        },
+        { label: "Total Platform Accounts", value: totalCount },
+        { label: "Verified Accounts", value: verifiedCount },
+        { label: "Professionals", value: proCount },
+        { label: "Clients", value: clientCount },
+        { label: "Active Role Filter", value: roleFilter },
+        { label: "Active Date Range", value: dateFilter },
+      ],
+      headers: [
+        "User ID",
+        "Full Name",
+        "Email Address",
+        "System Role",
+        "Account Active",
+        "Identity Verified",
+        "Registration Date",
+      ],
+      rows: rowsToExport.map((u) => [
         `#USR-${u.id}`,
-        u.firstName,
-        u.lastName,
+        `${u.firstName} ${u.lastName}`.trim(),
         u.email,
         u.role,
-        u.isActive ? "Yes" : "No",
-        u.isVerified ? "Yes" : "No",
+        u.isActive ? "Active" : "Suspended",
+        u.isVerified ? "Verified" : "Unverified",
         formatDateSafely(u.createdAt),
       ]),
-    );
+    });
   };
 
   return (
@@ -279,7 +305,7 @@ function UsersReport() {
         <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
           <button
             type="button"
-            onClick={handleExportCsv}
+            onClick={() => handleExportCsv()}
             disabled={filteredUsers.length === 0}
             className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
             title="Download CSV for Excel"
@@ -292,6 +318,7 @@ function UsersReport() {
             endpoint="/api/admin/reports/users"
             selectedIds={selectedList}
             fileBaseName="admin-users"
+            onExportCsv={handleExportCsv}
           />
         </div>
       </div>
@@ -459,13 +486,35 @@ function JobsReport() {
   ).length;
   const openJobs = filteredJobs.filter((j) => j.status.toUpperCase() === "OPEN").length;
 
-  const handleExportCsv = () => {
+  const handleExportCsv = (scope?: "all" | "selected") => {
+    const isSelected = scope === "selected" || (scope === undefined && selectedList.length > 0);
     const rowsToExport =
       selectedList.length > 0 ? filteredJobs.filter((j) => selectedIds.has(j.id)) : filteredJobs;
-    downloadCsv(
-      "klick-pro-admin-jobs",
-      ["Job ID", "Title", "Client Name", "Category", "Status", "Created Date"],
-      rowsToExport.map((j) => [
+
+    if (isSelected && rowsToExport.length === 1 && rowsToExport[0]) {
+      window.open(`/api/v1/portal/jobs/${rowsToExport[0].id}/export?format=csv`, "_blank");
+      return;
+    }
+
+    downloadCsvFile({
+      filename: "klick-pro-admin-jobs",
+      title: "Admin Executive Oversight · Marketplace Postings & Listings Audit",
+      metadata: [
+        {
+          label: "Scope",
+          value: isSelected
+            ? `${rowsToExport.length} Selected Postings`
+            : `All Filtered (${rowsToExport.length})`,
+        },
+        { label: "Total Platform Postings", value: totalJobs },
+        { label: "Active In Progress", value: runningJobs },
+        { label: "Completed Engagements", value: completedJobs },
+        { label: "Open Marketplace Jobs", value: openJobs },
+        { label: "Active Status Filter", value: statusFilter },
+        { label: "Active Date Range", value: dateFilter },
+      ],
+      headers: ["Job ID", "Title", "Client Name", "Category", "Listing Status", "Creation Date"],
+      rows: rowsToExport.map((j) => [
         `#JOB-${j.id}`,
         j.title ?? "Untitled job",
         `${j.user?.firstName ?? ""} ${j.user?.lastName ?? ""}`.trim() || "Client",
@@ -473,7 +522,7 @@ function JobsReport() {
         j.status,
         formatDateSafely(j.createdAt),
       ]),
-    );
+    });
   };
 
   return (
@@ -586,7 +635,7 @@ function JobsReport() {
         <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
           <button
             type="button"
-            onClick={handleExportCsv}
+            onClick={() => handleExportCsv()}
             disabled={filteredJobs.length === 0}
             className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
             title="Download CSV for Excel"
@@ -599,6 +648,7 @@ function JobsReport() {
             endpoint="/api/admin/reports/jobs"
             selectedIds={selectedList}
             fileBaseName="admin-jobs"
+            onExportCsv={handleExportCsv}
           />
         </div>
       </div>
@@ -785,21 +835,71 @@ function FinanceReport() {
     .filter((r) => r.kind === "Payout")
     .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
-  const handleExportCsv = () => {
+  const handleExportCsv = (scope?: "all" | "selected") => {
+    const isSelected = scope === "selected" || (scope === undefined && selectedList.length > 0);
     const rowsToExport =
       selectedList.length > 0 ? filteredRows.filter((r) => selectedIds.has(r.id)) : filteredRows;
-    downloadCsv(
-      "klick-pro-admin-financial-audit",
-      [
-        "Reference",
-        "Kind",
-        "Transaction Type",
-        "Amount (INR)",
-        "Status",
-        "Parties Involved",
-        "Timestamp",
+
+    if (isSelected && rowsToExport.length === 1 && rowsToExport[0]) {
+      const r = rowsToExport[0];
+      downloadCsvFile({
+        filename: `klick-pro-admin-voucher-${r.id}`,
+        title: `Admin Oversight · Settlement Voucher #${r.id}`,
+        metadata: [
+          { label: "Transaction ID", value: `#TXN-${r.id}` },
+          { label: "Transfer Kind", value: r.kind },
+          { label: "Transaction Type", value: r.type },
+          { label: "Gross Amount", value: `INR ${r.amount.toLocaleString("en-IN")}` },
+          { label: "Settlement Status", value: r.status },
+          { label: "Parties Involved", value: r.party },
+          {
+            label: "Recorded Timestamp",
+            value: formatDateSafely(r.createdAt, {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          },
+        ],
+        headers: ["Audit Entry", "Value", "Settlement Status"],
+        rows: [
+          ["Platform Transaction Reference", `#TXN-${r.id}`, r.status],
+          ["Flow Category & Type", `${r.kind} (${r.type})`, "Verified"],
+          ["Disbursed Amount", `INR ${r.amount.toLocaleString("en-IN")}`, r.status],
+          ["Associated Platform Parties", r.party, "Audited"],
+        ],
+      });
+      return;
+    }
+
+    downloadCsvFile({
+      filename: "klick-pro-admin-financial-audit",
+      title: "Admin Executive Oversight · Financial Settlements & Reconciliation Ledger",
+      metadata: [
+        {
+          label: "Scope",
+          value: isSelected
+            ? `${rowsToExport.length} Selected Transactions`
+            : `All Filtered (${rowsToExport.length})`,
+        },
+        { label: "Gross Volume (GMV)", value: `INR ${totalVolume.toLocaleString("en-IN")}` },
+        { label: "Payment Volume", value: `INR ${paymentVolume.toLocaleString("en-IN")}` },
+        { label: "Payout Volume", value: `INR ${payoutVolume.toLocaleString("en-IN")}` },
+        { label: "Active Flow Filter", value: kindFilter },
+        { label: "Active Date Range", value: dateFilter },
       ],
-      rowsToExport.map((r) => [
+      headers: [
+        "Transaction ID",
+        "Transfer Kind",
+        "Transaction Type",
+        "Gross Amount (INR)",
+        "Settlement Status",
+        "Parties Involved",
+        "Timestamp Recorded",
+      ],
+      rows: rowsToExport.map((r) => [
         `#TXN-${r.id}`,
         r.kind,
         r.type,
@@ -814,7 +914,7 @@ function FinanceReport() {
           minute: "2-digit",
         }),
       ]),
-    );
+    });
   };
 
   return (
@@ -926,7 +1026,7 @@ function FinanceReport() {
         <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
           <button
             type="button"
-            onClick={handleExportCsv}
+            onClick={() => handleExportCsv()}
             disabled={filteredRows.length === 0}
             className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
             title="Download CSV for Financial Reconciliation"
@@ -939,6 +1039,7 @@ function FinanceReport() {
             endpoint="/api/admin/reports/finance"
             selectedIds={selectedList}
             fileBaseName="admin-finance"
+            onExportCsv={handleExportCsv}
           />
         </div>
       </div>

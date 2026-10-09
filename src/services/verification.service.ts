@@ -7,6 +7,10 @@ import {
   emitRealtimeNotification,
 } from "@/lib/realtime";
 import {
+  notifyVerificationStatus,
+  notifyVerificationSubmitted,
+} from "@/lib/marketplace-notifications";
+import {
   AuthBridgeAdapter,
   authBridgeAdapter,
 } from "@/lib/verification/adapters/authbridge.adapter";
@@ -133,6 +137,7 @@ export class VerificationService {
     });
 
     emitAdminVerificationsUpdate({ userId: user.id });
+    await notifyVerificationSubmitted({ userId: user.id, provider: "Persona" });
 
     return {
       enabled: true,
@@ -186,6 +191,7 @@ export class VerificationService {
     });
 
     emitAdminVerificationsUpdate({ userId: user.id });
+    await notifyVerificationSubmitted({ userId: user.id, provider: "PAN" });
 
     return result;
   }
@@ -235,6 +241,7 @@ export class VerificationService {
     });
 
     emitAdminVerificationsUpdate({ userId: user.id });
+    await notifyVerificationSubmitted({ userId: user.id, provider: "Aadhaar" });
 
     return result;
   }
@@ -526,14 +533,11 @@ export class VerificationService {
       })
       .catch(() => null);
 
-    // Notify user in real time
-    emitRealtimeNotification([existing.userId], {
-      title: isApproved ? "Identity Verification Approved" : "Identity Verification Rejected",
-      description: isApproved
-        ? `Your ${existing.provider} verification has been approved. Your profile now shows the verified badge.`
-        : `Your ${existing.provider} verification was reviewed and not approved.`,
-      href: "/verification",
-      type: "VERIFICATION_UPDATE",
+    // Notify user and admins, persisting in database and emitting realtime socket
+    await notifyVerificationStatus({
+      userId: existing.userId,
+      provider: existing.provider,
+      isApproved,
     });
 
     emitAdminVerificationsUpdate({ userId: existing.userId, status });

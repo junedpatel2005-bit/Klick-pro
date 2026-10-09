@@ -20,12 +20,14 @@ export function ExportMenu({
   fileBaseName,
   className,
   triggerClassName,
+  onExportCsv,
 }: {
   endpoint: string;
   selectedIds: number[];
   fileBaseName: string;
   className?: string;
   triggerClassName?: string;
+  onExportCsv?: (scope: "all" | "selected") => void;
 }) {
   const [pageSize, setPageSize] = useState<ReportPageSize>("A4");
   const [orientation, setOrientation] = useState<ReportOrientation>("portrait");
@@ -124,7 +126,7 @@ export function ExportMenu({
             className="gap-2"
           >
             <Download className="h-4 w-4" />
-            {downloading === "all" ? "Preparing…" : "Download all"}
+            {downloading === "all" ? "Preparing PDF…" : "Download PDF (All)"}
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={downloading !== null || selectedIds.length === 0}
@@ -136,9 +138,36 @@ export function ExportMenu({
           >
             <Download className="h-4 w-4" />
             {downloading === "selected"
-              ? "Preparing…"
-              : `Download selected${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
+              ? "Preparing PDF…"
+              : `Download PDF (${selectedIds.length} selected)`}
           </DropdownMenuItem>
+          {onExportCsv && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Spreadsheet format</DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  onExportCsv("all");
+                }}
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Download CSV (All)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={selectedIds.length === 0}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  onExportCsv("selected");
+                }}
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Download CSV ({selectedIds.length} selected)
+              </DropdownMenuItem>
+            </>
+          )}
           {error ? <p className="px-2 py-1.5 text-xs text-destructive">{error}</p> : null}
         </DropdownMenuContent>
       </DropdownMenu>

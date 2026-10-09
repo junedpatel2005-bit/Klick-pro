@@ -18,18 +18,24 @@ import {
 import { ExportMenu } from "@/components/reports/ExportMenu";
 import { SelectableReportTable } from "@/components/reports/SelectableReportTable";
 import { useRowSelection } from "@/hooks/use-row-selection";
+import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
 
 type Job = {
   id: number;
   title: string | null;
+  description?: string | null;
+  category?: string | null;
   status: "DRAFT" | "OPEN" | "RUNNING" | "COMPLETED" | "CLOSED";
   projectId: number | null;
   budgetMin: number | null;
   budgetMax: number | null;
   hourlyRate: number | null;
   timingType: string;
+  agreedAmount?: number | null;
   locationAddress: string | null;
+  createdAt?: string;
   updatedAt: string;
+  milestoneStats?: { total: number; completed: number; remaining: number } | null;
 };
 
 type Payment = {
@@ -40,6 +46,17 @@ type Payment = {
   status: string;
   description: string;
   createdAt: string;
+  trackingId?: number;
+  invoiceNumber?: string;
+  projectTitle?: string;
+  professionalName?: string;
+  milestoneTitle?: string;
+  paymentMethod?: string;
+  razorpayPaymentId?: string | null;
+  baseAmount?: number;
+  feeAmount?: number;
+  netAmount?: number;
+  grossAmount?: number;
 };
 
 type DateFilter = "all" | "this_month" | "last_month" | "last_90_days" | "this_year";
@@ -186,21 +203,68 @@ function ProjectsReport() {
     0,
   );
 
-  const handleExportCsv = () => {
-    const rowsToExport =
-      selectedList.length > 0 ? filteredJobs.filter((j) => selectedIds.has(j.id)) : filteredJobs;
-    downloadCsv(
-      "klick-pro-client-projects",
-      ["Job ID", "Title", "Status", "Budget Estimate", "Location", "Last Updated"],
-      rowsToExport.map((j) => [
+  const handleExportCsv = (scope?: "all" | "selected") => {
+    const isSelected = scope === "selected" || (scope === undefined && selectedList.length > 0);
+    const rowsToExport = isSelected
+      ? filteredJobs.filter((j) => selectedIds.has(j.id))
+      : filteredJobs;
+
+    if (isSelected && rowsToExport.length === 1 && rowsToExport[0]) {
+      window.open(`/api/v1/portal/jobs/${rowsToExport[0].id}/export?format=csv`, "_blank");
+      return;
+    }
+
+    downloadCsvFile({
+      filename: "klick-pro-client-projects",
+      title: "Client Workspace · Posted Projects & Jobs Statement",
+      metadata: [
+        {
+          label: "Scope",
+          value: isSelected
+            ? `${rowsToExport.length} Selected Projects`
+            : `All Filtered (${rowsToExport.length})`,
+        },
+        { label: "Estimated Scope Value", value: `INR ${totalBudgetEst.toLocaleString("en-IN")}` },
+        { label: "Active Filter Status", value: statusFilter },
+        { label: "Active Date Range", value: dateFilter },
+      ],
+      headers: [
+        "Job ID",
+        "Title",
+        "Description",
+        "Category",
+        "Status",
+        "Contract Type",
+        "Hourly Rate",
+        "Budget Min (INR)",
+        "Budget Max (INR)",
+        "Budget Estimate",
+        "Milestones Completed",
+        "Total Milestones",
+        "Location",
+        "Linked Project",
+        "Created Date",
+        "Last Updated Date",
+      ],
+      rows: rowsToExport.map((j) => [
         `#JOB-${j.id}`,
-        j.title ?? "Untitled job",
+        j.title ?? "Untitled Job",
+        j.description ?? "No description",
+        j.category ?? "General",
         readableStatus(j.status),
-        jobBudget(j),
+        j.timingType === "HOURLY" ? "Hourly" : "Fixed Price",
+        j.hourlyRate != null ? `INR ${j.hourlyRate}/hr` : "—",
+        j.budgetMin ?? "—",
+        j.budgetMax ?? "—",
+        j.agreedAmount != null ? `INR ${j.agreedAmount.toLocaleString("en-IN")}` : jobBudget(j),
+        j.milestoneStats?.completed ?? 0,
+        j.milestoneStats?.total ?? 0,
         j.locationAddress ?? "Remote",
+        j.projectId ? `#PRJ-${j.projectId}` : "None",
+        formatDateSafely(j.createdAt),
         formatDateSafely(j.updatedAt),
       ]),
-    );
+    });
   };
 
   return (
@@ -313,7 +377,7 @@ function ProjectsReport() {
         <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
           <button
             type="button"
-            onClick={handleExportCsv}
+            onClick={() => handleExportCsv()}
             disabled={filteredJobs.length === 0}
             className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-background px-3 text-xs sm:text-sm font-semibold text-foreground transition hover:bg-muted disabled:opacity-50"
             title="Download CSV for Excel / Accounting"
@@ -326,6 +390,7 @@ function ProjectsReport() {
             endpoint="/api/client/jobs/export"
             selectedIds={selectedList}
             fileBaseName="client-projects"
+            onExportCsv={handleExportCsv}
           />
         </div>
       </div>
@@ -479,23 +544,109 @@ function PaymentsReport() {
   );
   const pendingTotal = pendingPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  const handleExportCsv = () => {
-    const rowsToExport =
-      selectedList.length > 0
-        ? filteredPayments.filter((p) => selectedIds.has(p.id))
-        : filteredPayments;
-    downloadCsv(
-      "klick-pro-client-payments",
-      ["Invoice / Txn ID", "Description", "Type", "Status", "Amount (INR)", "Date"],
-      rowsToExport.map((p) => [
-        `#INV-${p.id}`,
-        p.description ?? "Service payment",
+  const handleExportCsv = (scope?: "all" | "selected") => {
+    const isSelected = scope === "selected" || (scope === undefined && selectedList.length > 0);
+    const rowsToExport = isSelected
+      ? filteredPayments.filter((p) => selectedIds.has(p.id))
+      : filteredPayments;
+
+    if (isSelected && rowsToExport.length === 1 && rowsToExport[0]) {
+      const p = rowsToExport[0];
+      downloadCsvFile({
+        filename: `klick-pro-payment-voucher-${p.id}`,
+        title: `Klick-Pro Official Payment Receipt & Settlement Voucher #${p.invoiceNumber || p.id}`,
+        metadata: [
+          { label: "Voucher / Invoice Number", value: p.invoiceNumber || `#INV-${p.id}` },
+          { label: "Project Title", value: p.projectTitle || `Project #${p.trackingId ?? p.id}` },
+          { label: "Milestone", value: p.milestoneTitle || p.description },
+          { label: "Recipient / Professional", value: p.professionalName || "Professional" },
+          { label: "Payment Method", value: p.paymentMethod || "Escrow" },
+          { label: "Gateway Ref / Order ID", value: p.razorpayPaymentId || "Verified" },
+          { label: "Settlement Status", value: p.status },
+          { label: "Transaction Date", value: formatDateSafely(p.createdAt) },
+          {
+            label: "Gross Disbursed",
+            value: `INR ${(p.grossAmount ?? p.amount).toLocaleString("en-IN")}`,
+          },
+          {
+            label: "Platform Service Fee",
+            value: `INR ${(p.feeAmount ?? 0).toLocaleString("en-IN")}`,
+          },
+          {
+            label: "Net Milestone Amount",
+            value: `INR ${(p.netAmount ?? p.amount).toLocaleString("en-IN")}`,
+          },
+        ],
+        headers: ["Line Item Description", "Charged Amount (INR)", "Status", "Reference"],
+        rows: [
+          [
+            p.milestoneTitle || "Milestone Escrow Base Amount",
+            p.netAmount ?? p.amount,
+            p.status,
+            p.invoiceNumber || `#INV-${p.id}`,
+          ],
+          [
+            "Platform Service Fee (Escrow & Verification)",
+            p.feeAmount ?? 0,
+            "Deducted",
+            "Platform Fee",
+          ],
+          [
+            "Total Charged & Disbursed",
+            p.grossAmount ?? p.amount,
+            "Settled",
+            p.paymentMethod || "Escrow",
+          ],
+        ],
+      });
+      return;
+    }
+
+    downloadCsvFile({
+      filename: "klick-pro-client-payments",
+      title: "Client Financial Disbursements & Invoices Statement",
+      metadata: [
+        {
+          label: "Scope",
+          value: isSelected
+            ? `${rowsToExport.length} Selected Records`
+            : `All Filtered (${rowsToExport.length})`,
+        },
+        { label: "Total Disbursed", value: `INR ${totalAmount.toLocaleString("en-IN")}` },
+        { label: "Cleared & Settled", value: `INR ${clearedTotal.toLocaleString("en-IN")}` },
+        { label: "In Escrow / Hold", value: `INR ${pendingTotal.toLocaleString("en-IN")}` },
+        { label: "Active Status Filter", value: statusFilter },
+        { label: "Active Date Range", value: dateFilter },
+      ],
+      headers: [
+        "Invoice / Voucher #",
+        "Project Title",
+        "Milestone Title",
+        "Professional Payee",
+        "Transaction Type",
+        "Payment Method",
+        "Total Paid (INR)",
+        "Service Fee (INR)",
+        "Milestone Net (INR)",
+        "Settlement Status",
+        "Disbursement Date",
+        "Description",
+      ],
+      rows: rowsToExport.map((p) => [
+        p.invoiceNumber || `#INV-${p.id}`,
+        p.projectTitle || `Project #${p.trackingId ?? p.id}`,
+        p.milestoneTitle || p.description,
+        p.professionalName || "Professional",
         p.type,
+        p.paymentMethod || "Escrow",
+        p.grossAmount ?? p.amount,
+        p.feeAmount ?? 0,
+        p.netAmount ?? p.amount,
         p.status,
-        p.amount,
         formatDateSafely(p.createdAt),
+        p.description ?? "Milestone service payment",
       ]),
-    );
+    });
   };
 
   return (
@@ -615,7 +766,7 @@ function PaymentsReport() {
         <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
           <button
             type="button"
-            onClick={handleExportCsv}
+            onClick={() => handleExportCsv()}
             disabled={filteredPayments.length === 0}
             className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-background px-3 text-xs sm:text-sm font-semibold text-foreground transition hover:bg-muted disabled:opacity-50"
             title="Download CSV for Excel / Accounting"
@@ -628,6 +779,7 @@ function PaymentsReport() {
             endpoint="/api/client/payments/export"
             selectedIds={selectedList}
             fileBaseName="client-payments"
+            onExportCsv={handleExportCsv}
           />
         </div>
       </div>

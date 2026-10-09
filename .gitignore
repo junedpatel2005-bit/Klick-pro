@@ -59,3 +59,4 @@ clients-credentials.json
 
 # Local-only scratch output (credential dumps, exports).
 .local/
+.eslintcache

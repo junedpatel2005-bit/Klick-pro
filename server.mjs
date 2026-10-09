@@ -35,15 +35,6 @@ const hostname = process.env.HOSTNAME ?? "localhost";
 const port = Number(process.env.PORT ?? 3000);
 const useWebpack = process.env.NEXT_WEBPACK === "1" || process.env.NEXT_WEBPACK === "true";
 
-// Next.js caches the app/api route list here. It goes stale when routes are
-// added, which makes every API request 404 until the dev server is restarted.
-// Deleting it before next() starts forces a rebuild. Dev only: production
-// builds regenerate it at build time.
-if (dev) {
-  try {
-    rmSync(".next/dev/types/routes.d.ts", { force: true });
-  } catch {}
-}
 const app = next({
   dev,
   hostname,

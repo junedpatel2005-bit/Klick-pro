@@ -14,7 +14,26 @@ function isTrustedStateChangingRequest(request: NextRequest) {
   if (origin === request.nextUrl.origin) return true;
 
   const appUrl = process.env.APP_URL;
-  return appUrl ? origin === appUrl : false;
+  if (appUrl && origin === appUrl) return true;
+
+  try {
+    const originHost = new URL(origin).host;
+    const requestHost =
+      request.headers.get("x-forwarded-host") ||
+      request.headers.get("host") ||
+      request.nextUrl.host;
+    if (originHost === requestHost) return true;
+    if (
+      (originHost.startsWith("localhost:") || originHost.startsWith("127.0.0.1:")) &&
+      (requestHost.startsWith("localhost:") || requestHost.startsWith("127.0.0.1:"))
+    ) {
+      return true;
+    }
+  } catch {
+    // Malformed origin URL or unparseable headers: reject state change
+  }
+
+  return false;
 }
 
 function isAuthenticatedPage(pathname: string) {
@@ -75,15 +94,30 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // The email-verification gate lives in app/(portal)/layout.tsx, which has the
-  // full session row. It cannot run here: emailVerifiedAt is not in the JWT.
-
   const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-request-id", requestId);
-  // Lets server layouts know the current path (app/admin/layout.tsx uses it to
-  // skip its guard on the login screen).
   requestHeaders.set("x-pathname", pathname);
+
+  // Canonical rewrite for /api/v1/* calls to existing /api/* handlers
+  // (except routes that physically exist under app/api/v1)
+  if (pathname.startsWith("/api/v1/")) {
+    const isDedicatedV1 =
+      pathname.startsWith("/api/v1/linked-accounts") ||
+      pathname.startsWith("/api/v1/messages") ||
+      pathname.startsWith("/api/v1/professionals");
+
+    if (!isDedicatedV1) {
+      const rewrittenPath = pathname.replace(/^\/api\/v1\//, "/api/");
+      const rewrittenUrl = new URL(rewrittenPath + request.nextUrl.search, request.url);
+      requestHeaders.set("x-pathname", rewrittenPath);
+      const rewriteResponse = NextResponse.rewrite(rewrittenUrl, {
+        request: { headers: requestHeaders },
+      });
+      rewriteResponse.headers.set("x-request-id", requestId);
+      return rewriteResponse;
+    }
+  }
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("x-request-id", requestId);

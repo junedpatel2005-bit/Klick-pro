@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
+import { notifyJobPosted } from "@/lib/marketplace-notifications";
 
 const milestoneInput = z.object({
   title: z.string().trim().min(1, "Enter a milestone title.").max(160),
@@ -299,11 +300,20 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    if (job.status === "OPEN") {
+      try {
+        await notifyJobPosted(job);
+      } catch (notifyErr) {
+        console.error("Failed to dispatch job posted notification:", notifyErr);
+      }
+    }
+
     return NextResponse.json({ job }, { status: 201 });
   } catch (error) {
     console.error("Failed to create job:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to post job." },
+      { error: "Failed to post job. Please check all details and try again." },
       { status: 500 },
     );
   }

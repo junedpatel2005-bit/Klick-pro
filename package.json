@@ -8,7 +8,7 @@
     "dev:webpack": "cross-env NEXT_WEBPACK=1 node server.mjs",
     "build": "prisma migrate deploy && next build",
     "start": "cross-env NODE_ENV=production node server.mjs",
-    "lint": "eslint .",
+    "lint": "eslint . --cache",
     "typecheck": "tsc --noEmit",
     "check:razorpay": "tsx scripts/check-razorpay-sandbox.ts",
     "db:seed": "tsx prisma/seed.ts",

@@ -7,6 +7,7 @@ import {
   notifyDisputeContested,
   notifyDisputeMessage,
   notifyDisputeRaised,
+  notifyProjectCompleted,
   notifyUsers,
 } from "@/lib/marketplace-notifications";
 import {
@@ -1111,13 +1112,16 @@ export async function POST(request: NextRequest) {
         "Project completed and closed",
         "All milestones were approved and the client successfully closed the project.",
       );
-      const jobTitle = project.job?.title?.trim() || `Project #${project.id}`;
-      await notifyUsers([project.professionalId], {
-        type: "PROJECT_COMPLETED",
-        title: `${jobTitle} · Project closed and completed`,
-        description: "The client approved all deliverables and closed the project.",
-        href: `/project/${project.id}/tracking`,
-      });
+      try {
+        await notifyProjectCompleted({
+          projectId: project.id,
+          jobTitle: project.job?.title,
+          clientId: project.clientId,
+          professionalId: project.professionalId,
+        });
+      } catch (notifyErr) {
+        console.error("Failed to dispatch notifyProjectCompleted:", notifyErr);
+      }
     }
     if (input.action === "confirm-project-completion") {
       if (project.status !== "AWAITING_PROFESSIONAL_CONFIRMATION")
@@ -1148,13 +1152,16 @@ export async function POST(request: NextRequest) {
         "The professional confirmed project completion after the client requested confirmation.",
         { progress: 100 },
       );
-      const jobTitle = project.job?.title?.trim() || `Project #${project.id}`;
-      await notifyUsers([project.clientId], {
-        type: "PROJECT_COMPLETED",
-        title: `${jobTitle} · Project completed`,
-        description: "The professional confirmed that your project is complete.",
-        href: `/project/${project.id}/tracking`,
-      });
+      try {
+        await notifyProjectCompleted({
+          projectId: project.id,
+          jobTitle: project.job?.title,
+          clientId: project.clientId,
+          professionalId: project.professionalId,
+        });
+      } catch (notifyErr) {
+        console.error("Failed to dispatch notifyProjectCompleted:", notifyErr);
+      }
     }
     if (input.action === "reopen-project") {
       if (project.clientId !== session.userId) {

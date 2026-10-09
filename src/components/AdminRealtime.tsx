@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { io } from "socket.io-client";
 import { toast } from "sonner";
-import { ArrowRight, CircleCheck, X } from "lucide-react";
+import { ArrowRight, CircleCheck, CheckCheck, X } from "lucide-react";
 
 import {
   dismissAllNotificationsWithAnimation,
@@ -76,9 +76,11 @@ export function AdminRealtime() {
                 <button
                   type="button"
                   onClick={() => void dismissAllNotificationsWithAnimation()}
-                  className="rounded-lg px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                  className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                  title="Dismiss all"
+                  aria-label="Dismiss all"
                 >
-                  Dismiss all
+                  <CheckCheck className="h-4 w-4" />
                 </button>
                 {notification.href && (
                   <button

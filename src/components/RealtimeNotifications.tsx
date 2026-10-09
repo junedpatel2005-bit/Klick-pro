@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   ArrowRight,
   BellRing,
+  CheckCheck,
   CircleCheck,
   FileText,
   Flag,
@@ -157,9 +158,11 @@ export function RealtimeNotifications() {
                 <button
                   type="button"
                   onClick={() => void dismissAllNotificationsWithAnimation()}
-                  className="rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                  title="Dismiss all"
+                  aria-label="Dismiss all"
                 >
-                  Dismiss all
+                  <CheckCheck className="h-4 w-4" />
                 </button>
                 {notification.href && (
                   <button
@@ -252,9 +255,11 @@ export function RealtimeNotifications() {
               <button
                 type="button"
                 onClick={() => void dismissAllNotificationsWithAnimation()}
-                className="rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                title="Dismiss all"
+                aria-label="Dismiss all"
               >
-                Dismiss all
+                <CheckCheck className="h-4 w-4" />
               </button>
               <button
                 type="button"

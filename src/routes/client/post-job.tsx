@@ -700,12 +700,17 @@ export default function PostJob() {
       const data = await r.json().catch(() => null);
       if (!r.ok) {
         setErrors(data?.fields ?? {});
-        setMessage(
-          data?.error ??
-            (r.status >= 500
-              ? `Server error (${r.status}). Please try again or check database migrations.`
-              : "Could not save the job."),
-        );
+        let friendlyMsg = data?.error ?? "Could not save the job.";
+        if (
+          friendlyMsg.includes("PrismaClientValidationError") ||
+          friendlyMsg.includes("Invalid `") ||
+          friendlyMsg.includes("Unknown argument") ||
+          friendlyMsg.includes("invocation in") ||
+          r.status >= 500
+        ) {
+          friendlyMsg = "Unable to post job right now. Please verify all details and try again.";
+        }
+        setMessage(friendlyMsg);
         const focus = Object.keys(data?.fields ?? {})[0];
         const focusStep =
           focus && ["title", "category", "description"].includes(focus)
@@ -1749,8 +1754,16 @@ function Field({
   return (
     <label className="block text-sm font-medium">
       {label}
-      <div className="mt-2">{children}</div>
-      {error && <span className="mt-1 block text-sm text-destructive">{error}</span>}
+      <div
+        className={`mt-2 ${
+          error
+            ? "[&_input]:border-destructive [&_input]:placeholder:text-destructive/60 [&_input]:focus-visible:ring-destructive/30 [&_textarea]:border-destructive [&_textarea]:placeholder:text-destructive/60 [&_textarea]:focus-visible:ring-destructive/30 [&_select]:border-destructive"
+            : ""
+        }`}
+      >
+        {children}
+      </div>
+      {error && <span className="mt-1 block text-sm font-medium text-destructive">{error}</span>}
     </label>
   );
 }
