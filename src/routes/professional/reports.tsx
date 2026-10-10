@@ -19,6 +19,11 @@ import { ExportMenu } from "@/components/reports/ExportMenu";
 import { SelectableReportTable } from "@/components/reports/SelectableReportTable";
 import { useRowSelection } from "@/hooks/use-row-selection";
 import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
+import {
+  DateRangeFilter,
+  type DatePreset,
+  isWithinCustomDateRange,
+} from "@/components/reports/DateRangeFilter";
 
 type RunningProject = {
   id: number;
@@ -151,7 +156,9 @@ function ProjectsReport() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   const loadData = () => {
     setLoading(true);
@@ -227,10 +234,15 @@ function ProjectsReport() {
         String(project.id).includes(search);
       const matchesStatus =
         statusFilter === "ALL" || project.status.toUpperCase() === statusFilter.toUpperCase();
-      const matchesDate = isWithinDateRange(project.acceptedAt, dateFilter);
+      const matchesDate = isWithinCustomDateRange(
+        project.acceptedAt || project.deadline,
+        datePreset,
+        startDate,
+        endDate,
+      );
       return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [projects, search, statusFilter, dateFilter]);
+  }, [projects, search, statusFilter, datePreset, startDate, endDate]);
 
   const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
     useRowSelection(filteredProjects);
@@ -280,7 +292,7 @@ function ProjectsReport() {
         { label: "Active In Progress", value: activeCount },
         { label: "Average Progress", value: `${avgProgress}%` },
         { label: "Active Status Filter", value: statusFilter },
-        { label: "Active Date Range", value: dateFilter },
+        { label: "Active Date Range", value: datePreset },
       ],
       headers: [
         "Project ID",
@@ -401,17 +413,14 @@ function ProjectsReport() {
               <option value="RUNNING">Running</option>
             </select>
 
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-              className="h-10 rounded-xl border border-border bg-background px-3 text-xs sm:text-sm font-medium text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="all">All Dates</option>
-              <option value="this_month">This Month</option>
-              <option value="last_month">Last Month</option>
-              <option value="last_90_days">Last 90 Days</option>
-              <option value="this_year">This Year</option>
-            </select>
+            <DateRangeFilter
+              preset={datePreset}
+              onPresetChange={setDatePreset}
+              startDate={startDate}
+              onStartDateChange={setStartDate}
+              endDate={endDate}
+              onEndDateChange={setEndDate}
+            />
           </div>
         </div>
 
@@ -431,6 +440,7 @@ function ProjectsReport() {
             endpoint="/api/professional/jobs/export"
             selectedIds={selectedList}
             fileBaseName="running-projects"
+            emptyMessage="Select project first"
             onExportCsv={handleExportCsv}
           />
         </div>
@@ -550,7 +560,9 @@ function EarningsReport() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   const loadData = () => {
     setLoading(true);
@@ -575,10 +587,10 @@ function EarningsReport() {
         String(item.id).includes(search);
       const matchesStatus =
         statusFilter === "ALL" || item.status.toUpperCase() === statusFilter.toUpperCase();
-      const matchesDate = isWithinDateRange(item.createdAt, dateFilter);
+      const matchesDate = isWithinCustomDateRange(item.createdAt, datePreset, startDate, endDate);
       return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [items, search, statusFilter, dateFilter]);
+  }, [items, search, statusFilter, datePreset, startDate, endDate]);
 
   const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
     useRowSelection(filteredItems);
@@ -641,13 +653,7 @@ function EarningsReport() {
             item.invoiceNumber || `#EARN-${item.id}`,
           ],
           [
-            "Platform Retained Service Commission",
-            -(item.feeAmount ?? Math.round(item.amount * 0.1)),
-            "Deducted",
-            "Platform Fee",
-          ],
-          [
-            "Net Payout Credited to Professional Wallet",
+            "Payment Credited to Professional Wallet",
             item.netAmount ?? item.amount,
             "Settled",
             item.paymentMethod || "Escrow",
@@ -667,11 +673,11 @@ function EarningsReport() {
             ? `${rowsToExport.length} Selected Records`
             : `All Filtered (${rowsToExport.length})`,
         },
-        { label: "Gross Earnings", value: `INR ${totalEarned.toLocaleString("en-IN")}` },
+        { label: "Earnings Total", value: `INR ${totalEarned.toLocaleString("en-IN")}` },
         { label: "Cleared & Paid Out", value: `INR ${clearedTotal.toLocaleString("en-IN")}` },
         { label: "Pending in Escrow", value: `INR ${pendingTotal.toLocaleString("en-IN")}` },
         { label: "Active Status Filter", value: statusFilter },
-        { label: "Active Date Range", value: dateFilter },
+        { label: "Active Date Range", value: datePreset },
       ],
       headers: [
         "Voucher / Reference #",
@@ -679,9 +685,7 @@ function EarningsReport() {
         "Milestone Title",
         "Client Name",
         "Disbursement Method",
-        "Gross Value (INR)",
-        "Platform Commission (INR)",
-        "Net Earnings (INR)",
+        "Earnings Amount (INR)",
         "Settlement Status",
         "Date Recorded",
         "Description",
@@ -693,8 +697,6 @@ function EarningsReport() {
         item.clientName || "Client",
         item.paymentMethod || "Bank / Escrow",
         item.baseAmount ?? item.amount,
-        item.feeAmount ?? 0,
-        item.netAmount ?? item.amount,
         item.status,
         formatDateSafely(item.createdAt),
         item.description ?? "Milestone earnings",
@@ -795,17 +797,14 @@ function EarningsReport() {
               <option value="PENDING">Pending Approval</option>
             </select>
 
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-              className="h-10 rounded-xl border border-border bg-background px-3 text-xs sm:text-sm font-medium text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="all">All Dates</option>
-              <option value="this_month">This Month</option>
-              <option value="last_month">Last Month</option>
-              <option value="last_90_days">Last 90 Days</option>
-              <option value="this_year">This Year</option>
-            </select>
+            <DateRangeFilter
+              preset={datePreset}
+              onPresetChange={setDatePreset}
+              startDate={startDate}
+              onStartDateChange={setStartDate}
+              endDate={endDate}
+              onEndDateChange={setEndDate}
+            />
           </div>
         </div>
 
@@ -825,6 +824,7 @@ function EarningsReport() {
             endpoint="/api/professional/earnings/export"
             selectedIds={selectedList}
             fileBaseName="professional-earnings"
+            emptyMessage="Select payout first"
             onExportCsv={handleExportCsv}
           />
         </div>

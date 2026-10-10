@@ -83,14 +83,79 @@ export async function GET(
   }
   if (resource === "users") {
     try {
-      let allTrackings: { clientId: number; professionalId: number; status: string }[] = [];
-      try {
-        allTrackings = await db.projectTracking.findMany({
+      const allTrackings = await db.projectTracking
+        .findMany({
           select: { clientId: true, professionalId: true, status: true },
-        });
-      } catch (trackErr) {
-        console.error("Failed to load project trackings for user stats:", trackErr);
-      }
+        })
+        .catch(() => [] as Array<{ clientId: number | null; professionalId: number | null; status: string }>);
+
+      const rawUsers = await db.user.findMany({
+        select: {
+          id: true,
+          username: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+          role: true,
+          isActive: true,
+          isVerified: true,
+          emailVerifiedAt: true,
+          createdAt: true,
+          averageRating: true,
+          reviewCount: true,
+          professionalCity: true,
+          address: true,
+          serviceArea: true,
+          companyName: true,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const [
+        jobCounts,
+        proposalCounts,
+        wallets,
+        topupSums,
+        withdrawalSums,
+      ] = await Promise.all([
+        db.clientJob
+          .groupBy({
+            by: ["userId"],
+            _count: { id: true },
+          })
+          .catch(() => [] as Array<{ userId: number; _count: { id: number } }>),
+        db.projectRequest
+          .groupBy({
+            by: ["professionalId"],
+            _count: { id: true },
+          })
+          .catch(() => [] as Array<{ professionalId: number; _count: { id: number } }>),
+        db.wallet
+          .findMany({
+            select: { id: true, userId: true, balance: true, pendingBalance: true },
+          })
+          .catch(() => [] as Array<{ id: number; userId: number; balance: number; pendingBalance: number }>),
+        db.walletTransaction
+          .groupBy({
+            by: ["walletId"],
+            where: {
+              type: "WALLET_TOP_UP",
+              status: "COMPLETED",
+            },
+            _sum: { amount: true },
+          })
+          .catch(() => [] as Array<{ walletId: number; _sum: { amount: number | null } }>),
+        db.projectWithdrawal
+          .groupBy({
+            by: ["professionalId"],
+            where: {
+              status: { in: ["COMPLETED", "PAID", "PROCESSED"] },
+            },
+            _sum: { amount: true },
+          })
+          .catch(() => [] as Array<{ professionalId: number; _sum: { amount: number | null } }>),
+      ]);
 
       const trackingsByClient = new Map<
         number,
@@ -126,27 +191,11 @@ export async function GET(
         }
       }
 
-      const rawUsers = await db.user.findMany({
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          phone: true,
-          role: true,
-          isActive: true,
-          isVerified: true,
-          emailVerifiedAt: true,
-          createdAt: true,
-          averageRating: true,
-          reviewCount: true,
-          professionalCity: true,
-          address: true,
-          serviceArea: true,
-          companyName: true,
-        },
-        orderBy: { createdAt: "desc" },
-      });
+      const jobCountMap = new Map(jobCounts.map((j) => [j.userId, j._count.id]));
+      const proposalCountMap = new Map(proposalCounts.map((p) => [p.professionalId, p._count.id]));
+      const walletByUserId = new Map(wallets.map((w) => [w.userId, w]));
+      const topupByWalletId = new Map(topupSums.map((t) => [t.walletId, t._sum.amount ?? 0]));
+      const withdrawalByProId = new Map(withdrawalSums.map((w) => [w.professionalId, w._sum.amount ?? 0]));
 
       const users = rawUsers.map((u) => {
         const isClient = u.role === "CLIENT";
@@ -159,8 +208,21 @@ export async function GET(
         const location =
           u.professionalCity?.trim() || u.address?.trim() || u.serviceArea?.trim() || "";
 
+        const wallet = walletByUserId.get(u.id);
+        const walletBalance = wallet ? wallet.balance : 0;
+        const totalTopUp = wallet ? (topupByWalletId.get(wallet.id) ?? 0) : 0;
+        const totalWithdrawals = withdrawalByProId.get(u.id) ?? 0;
+        const jobsCount = isClient ? (jobCountMap.get(u.id) ?? 0) : 0;
+        const proposalsCount = !isClient ? (proposalCountMap.get(u.id) ?? 0) : 0;
+        const createdAtDate = u.createdAt ? new Date(u.createdAt) : new Date();
+        const daysActive = Math.max(
+          1,
+          Math.floor((Date.now() - createdAtDate.getTime()) / (1000 * 60 * 60 * 24)),
+        );
+
         return {
           id: u.id,
+          username: u.username ?? null,
           firstName: u.firstName ?? "",
           lastName: u.lastName ?? "",
           email: u.email ?? "",
@@ -170,6 +232,12 @@ export async function GET(
           isVerified: Boolean(u.isVerified),
           emailVerifiedAt: u.emailVerifiedAt ? u.emailVerifiedAt.toISOString() : null,
           createdAt: u.createdAt ? u.createdAt.toISOString() : new Date().toISOString(),
+          daysActive,
+          jobsCount,
+          proposalsCount,
+          walletBalance,
+          totalTopUp,
+          totalWithdrawals,
           averageRating: Number(u.averageRating) || 0,
           reviewCount: Number(u.reviewCount) || 0,
           completedProjects: stats.completed,

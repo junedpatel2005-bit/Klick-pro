@@ -20,13 +20,11 @@ import {
   Loader2,
   LockKeyhole,
   Percent,
-  Plus,
   ReceiptText,
   ShieldCheck,
   Smartphone,
   Sparkles,
   WalletCards,
-  Zap,
 } from "lucide-react";
 import { CardListSkeleton } from "@/components/LoadingSkeleton";
 import { PageActionLoading } from "@/components/PageActionLoading";
@@ -120,7 +118,6 @@ export default function ClientEarnings() {
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawMessage, setWithdrawMessage] = useState("");
   const [actionBusy, setActionBusy] = useState<string | null>(null);
-  const [shortcutAmount, setShortcutAmount] = useState("");
   const [visibleCount, setVisibleCount] = useState(10);
 
   // Profile Linked Accounts
@@ -139,15 +136,6 @@ export default function ClientEarnings() {
       setWithdrawMethod("CARD");
       setWithdrawDestination(acc.accountNumber ?? "");
     }
-  }
-
-  async function runShortcutTopUp() {
-    const amt = Number(shortcutAmount) || Number(topUpAmount);
-    if (!amt || amt <= 0) return;
-    setWalletMessage("");
-    // Shortcuts must go through the same Razorpay checkout as a manual top-up.
-    // A shortcut is only a pre-filled amount, not a way to skip payment.
-    await startTopUp(amt);
   }
 
   function loadWallet() {
@@ -320,7 +308,6 @@ export default function ClientEarnings() {
                   `✓ ₹${(data?.amount ?? topUp).toLocaleString("en-IN")} added to your wallet successfully!`,
                 );
                 setTopUpAmount("");
-                setShortcutAmount("");
                 loadWallet();
               } else {
                 setWalletMessage(data?.error ?? "Wallet funding verification failed.");
@@ -342,7 +329,6 @@ export default function ClientEarnings() {
                       `✓ ₹${(checkData?.amount ?? topUp).toLocaleString("en-IN")} added to your wallet successfully!`,
                     );
                     setTopUpAmount("");
-                    setShortcutAmount("");
                     loadWallet();
                     break;
                   }
@@ -374,7 +360,6 @@ export default function ClientEarnings() {
                     `✓ ₹${(statusData?.amount ?? topUp).toLocaleString("en-IN")} added to your wallet successfully!`,
                   );
                   setTopUpAmount("");
-                  setShortcutAmount("");
                   loadWallet();
                   return;
                 }
@@ -698,55 +683,6 @@ export default function ClientEarnings() {
                     <LockKeyhole className="h-3.5 w-3.5 text-indigo-600" /> UPI, Netbanking &amp;
                     Cards
                   </span>
-                </div>
-
-                {/* Shortcuts Box */}
-                <div className="mt-3.5 rounded-xl border border-border/80 bg-muted/30 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                      <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
-                      Shortcuts
-                    </span>
-                    <span className="text-[10px] text-muted-foreground font-medium">
-                      Direct Razorpay Process
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="flex h-9 min-w-0 flex-1 items-center rounded-lg border border-input bg-background px-2.5 focus-within:border-primary">
-                      <span className="mr-1.5 text-xs font-medium text-muted-foreground">₹</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={shortcutAmount}
-                        onChange={(e) => setShortcutAmount(e.target.value)}
-                        placeholder={
-                          topUpAmount
-                            ? `Use ₹${Number(topUpAmount).toLocaleString("en-IN")}`
-                            : "Enter amount"
-                        }
-                        className="h-full w-full bg-transparent text-xs font-medium outline-none placeholder:text-muted-foreground/60"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void runShortcutTopUp()}
-                      disabled={
-                        (!Number(shortcutAmount) && !Number(topUpAmount)) ||
-                        actionBusy === "shortcut"
-                      }
-                      className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-foreground px-3.5 text-xs font-semibold text-background shadow-xs hover:bg-foreground/90 transition disabled:opacity-50"
-                    >
-                      {actionBusy === "shortcut" ? (
-                        <>
-                          <Loader2 className="h-3 w-3 animate-spin" /> Adding…
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="h-3.5 w-3.5" /> Add
-                        </>
-                      )}
-                    </button>
-                  </div>
                 </div>
               </div>
             </div>
@@ -1339,18 +1275,14 @@ export default function ClientEarnings() {
       <PageActionLoading
         active={actionBusy !== null}
         title={
-          actionBusy === "shortcut"
-            ? "Adding Funds to Wallet…"
-            : actionBusy === "topup"
-              ? "Connecting to payment gateway…"
-              : "Submitting withdrawal request…"
+          actionBusy === "topup"
+            ? "Connecting to payment gateway…"
+            : "Submitting withdrawal request…"
         }
         description={
-          actionBusy === "shortcut"
-            ? "Processing Razorpay transaction and crediting your wallet balance."
-            : actionBusy === "topup"
-              ? "Preparing secure checkout with Razorpay."
-              : "Sending your withdrawal request to admin review."
+          actionBusy === "topup"
+            ? "Preparing secure checkout with Razorpay."
+            : "Sending your withdrawal request to admin review."
         }
       />
     </div>

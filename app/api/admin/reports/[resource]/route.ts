@@ -25,14 +25,105 @@ async function requireAdmin(request: NextRequest) {
 }
 
 type UserRow = {
+  id: number;
+  username?: string | null;
   firstName: string;
   lastName: string;
   email: string;
+  phone?: string | null;
   role: string;
   isActive: boolean;
   isVerified: boolean;
   createdAt: Date;
+  daysActive: number;
+  jobsCount: number;
+  walletBalance: number;
+  totalTopUp: number;
+  totalWithdrawals: number;
 };
+
+function getUserColumns(isAllClients: boolean, isAllPros: boolean): ReportColumn<UserRow>[] {
+  const activityHeader = isAllClients
+    ? "Jobs Posted"
+    : isAllPros
+      ? "Proposals / Bids"
+      : "Jobs / Bids";
+
+  return [
+    {
+      key: "name",
+      header: isAllClients
+        ? "Client / Identity"
+        : isAllPros
+          ? "Professional / Identity"
+          : "User / Identity",
+      width: 2.3,
+      format: (row) =>
+        `#USR-${row.id} · ${row.firstName} ${row.lastName}${row.username ? ` (@${row.username})` : ""}${row.phone ? ` · ${row.phone}` : ` · ${row.email}`}`,
+    },
+    { key: "role", header: "Role", width: 1, format: (row) => row.role },
+    {
+      key: "status",
+      header: "Status",
+      width: 1,
+      format: (row) => (row.isActive ? "Active" : "Suspended"),
+    },
+    {
+      key: "verified",
+      header: "KYC",
+      width: 0.9,
+      format: (row) => (row.isVerified ? "Verified" : "Unverified"),
+    },
+    {
+      key: "daysActive",
+      header: "Days Active",
+      width: 1.1,
+      align: "right",
+      format: (row) => `${row.daysActive} d`,
+    },
+    {
+      key: "jobs",
+      header: activityHeader,
+      width: 1.2,
+      align: "right",
+      format: (row) =>
+        isAllClients
+          ? `${row.jobsCount} posted`
+          : isAllPros
+            ? `${row.jobsCount} bids`
+            : row.role === "CLIENT"
+              ? `${row.jobsCount} jobs`
+              : `${row.jobsCount} bids`,
+    },
+    {
+      key: "topup",
+      header: "Total Top-Up",
+      width: 1.3,
+      align: "right",
+      format: (row) => `₹${row.totalTopUp.toLocaleString("en-IN")}`,
+    },
+    {
+      key: "withdrawn",
+      header: "Withdrawals",
+      width: 1.3,
+      align: "right",
+      format: (row) => `₹${row.totalWithdrawals.toLocaleString("en-IN")}`,
+    },
+    {
+      key: "balance",
+      header: "Wallet Bal",
+      width: 1.2,
+      align: "right",
+      format: (row) => `₹${row.walletBalance.toLocaleString("en-IN")}`,
+    },
+    {
+      key: "joined",
+      header: "Registered",
+      width: 1.2,
+      format: (row) => row.createdAt.toLocaleDateString("en-IN"),
+    },
+  ];
+}
 
 type JobRow = {
   id: number;
@@ -56,25 +147,6 @@ type FinanceRow = {
   party: string;
   createdAt: Date;
 };
-
-const userColumns: ReportColumn<UserRow>[] = [
-  { key: "name", header: "Name", width: 2, format: (row) => `${row.firstName} ${row.lastName}` },
-  { key: "email", header: "Email", width: 2.4, format: (row) => row.email },
-  { key: "role", header: "Role", width: 1.2, format: (row) => row.role },
-  { key: "active", header: "Active", width: 1, format: (row) => (row.isActive ? "Yes" : "No") },
-  {
-    key: "verified",
-    header: "Verified",
-    width: 1,
-    format: (row) => (row.isVerified ? "Yes" : "No"),
-  },
-  {
-    key: "joined",
-    header: "Joined",
-    width: 1.3,
-    format: (row) => row.createdAt.toLocaleDateString("en-IN"),
-  },
-];
 
 const jobColumns: ReportColumn<JobRow>[] = [
   {
@@ -174,16 +246,19 @@ export async function POST(
 
     let title: string;
     let subtitle: string;
+    let downloadFilename = `klick-pro-admin-${resource}-report.pdf`;
     let document: ReturnType<typeof ReportDocument>;
 
     if (resource === "users") {
-      const users = await db.user.findMany({
+      const rawUsers = await db.user.findMany({
         where: selectedOnly ? { id: { in: ids } } : {},
         select: {
           id: true,
+          username: true,
           firstName: true,
           lastName: true,
           email: true,
+          phone: true,
           role: true,
           isActive: true,
           isVerified: true,
@@ -192,9 +267,111 @@ export async function POST(
         orderBy: { createdAt: "desc" },
         take: selectedOnly ? undefined : 500,
       });
-      title = "Users & Professionals Audit";
-      subtitle = "Admin Oversight — Registered Platform Accounts";
-      document = buildDocument(title, subtitle, userColumns, users, reportRequest, selectedOnly);
+
+      const [jobCounts, proposalCounts, wallets, topupSums, withdrawalSums] =
+        await Promise.all([
+          db.clientJob
+            .groupBy({
+              by: ["userId"],
+              _count: { id: true },
+            })
+            .catch(() => [] as Array<{ userId: number; _count: { id: number } }>),
+          db.projectRequest
+            .groupBy({
+              by: ["professionalId"],
+              _count: { id: true },
+            })
+            .catch(() => [] as Array<{ professionalId: number; _count: { id: number } }>),
+          db.wallet
+            .findMany({
+              select: { id: true, userId: true, balance: true },
+            })
+            .catch(() => [] as Array<{ id: number; userId: number; balance: number }>),
+          db.walletTransaction
+            .groupBy({
+              by: ["walletId"],
+              where: { type: "WALLET_TOP_UP", status: "COMPLETED" },
+              _sum: { amount: true },
+            })
+            .catch(() => [] as Array<{ walletId: number; _sum: { amount: number | null } }>),
+          db.projectWithdrawal
+            .groupBy({
+              by: ["professionalId"],
+              where: { status: { in: ["COMPLETED", "PAID", "PROCESSED"] } },
+              _sum: { amount: true },
+            })
+            .catch(() => [] as Array<{ professionalId: number; _sum: { amount: number | null } }>),
+        ]);
+
+      const jobCountMap = new Map(jobCounts.map((j) => [j.userId, j._count.id]));
+      const proposalCountMap = new Map(proposalCounts.map((p) => [p.professionalId, p._count.id]));
+      const walletByUserId = new Map(wallets.map((w) => [w.userId, w]));
+      const topupByWalletId = new Map(topupSums.map((t) => [t.walletId, t._sum.amount ?? 0]));
+      const withdrawalByProId = new Map(
+        withdrawalSums.map((w) => [w.professionalId, w._sum.amount ?? 0]),
+      );
+
+      const isAllClients = rawUsers.length > 0 && rawUsers.every((u) => u.role === "CLIENT");
+      const isAllPros = rawUsers.length > 0 && rawUsers.every((u) => u.role === "PROFESSIONAL");
+
+      const users: UserRow[] = rawUsers.map((u) => {
+        const wallet = walletByUserId.get(u.id);
+        const walletBalance = wallet ? wallet.balance : 0;
+        const totalTopUp = wallet ? (topupByWalletId.get(wallet.id) ?? 0) : 0;
+        const totalWithdrawals = withdrawalByProId.get(u.id) ?? 0;
+        const jobsCount =
+          u.role === "CLIENT" ? (jobCountMap.get(u.id) ?? 0) : (proposalCountMap.get(u.id) ?? 0);
+        const daysActive = Math.max(
+          1,
+          Math.floor((Date.now() - new Date(u.createdAt).getTime()) / (1000 * 60 * 60 * 24)),
+        );
+
+        return {
+          id: u.id,
+          username: u.username ?? null,
+          firstName: u.firstName ?? "",
+          lastName: u.lastName ?? "",
+          email: u.email ?? "",
+          phone: u.phone ?? null,
+          role: u.role,
+          isActive: u.isActive,
+          isVerified: u.isVerified,
+          createdAt: u.createdAt,
+          daysActive,
+          jobsCount,
+          walletBalance,
+          totalTopUp,
+          totalWithdrawals,
+        };
+      });
+
+      if (isAllClients) {
+        title = "Klick-Pro Admin — Client Compliance & Operations Audit";
+        subtitle = "Executive Oversight — Registered Client Accounts & Job Volume";
+      } else if (isAllPros) {
+        title = "Klick-Pro Admin — Professional Compliance & Earnings Audit";
+        subtitle = "Executive Oversight — Verified Service Professionals & Payout Activity";
+      } else {
+        title = "Klick-Pro Admin — Platform Accounts & Compliance Audit";
+        subtitle = "Executive Oversight — Registered Client & Professional Accounts";
+      }
+
+      const columns = getUserColumns(isAllClients, isAllPros);
+      document = buildDocument(title, subtitle, columns, users, reportRequest, selectedOnly);
+
+      if (selectedOnly && rawUsers.length === 1 && rawUsers[0]) {
+        const u = rawUsers[0];
+        const uname = (u.username || `${u.firstName}-${u.lastName}`)
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]/g, "_");
+        downloadFilename = `klick-pro-admin-${uname}-report.pdf`;
+      } else if (isAllClients) {
+        downloadFilename = `klick-pro-admin-clients-report.pdf`;
+      } else if (isAllPros) {
+        downloadFilename = `klick-pro-admin-professionals-report.pdf`;
+      } else {
+        downloadFilename = `klick-pro-admin-users-report.pdf`;
+      }
     } else if (resource === "jobs") {
       const jobs = await db.clientJob.findMany({
         where: selectedOnly ? { id: { in: ids } } : {},
@@ -320,7 +497,7 @@ export async function POST(
     }
 
     const buffer = await renderReportPdf(document);
-    return pdfResponse(buffer, `${resource}-report-${reportRequest.scope}.pdf`);
+    return pdfResponse(buffer, downloadFilename);
   } catch (error) {
     console.error("Admin report export failed:", error);
     return NextResponse.json(

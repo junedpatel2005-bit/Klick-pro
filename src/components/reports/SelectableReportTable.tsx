@@ -72,8 +72,24 @@ export function SelectableReportTable<T extends { id: number }>({
       </TableHeader>
       <TableBody>
         {rows.map((row) => (
-          <TableRow key={row.id} data-state={selectedIds.has(row.id) ? "selected" : undefined}>
-            <TableCell>
+          <TableRow
+            key={row.id}
+            data-state={selectedIds.has(row.id) ? "selected" : undefined}
+            onClick={(e) => {
+              const target = e.target as HTMLElement | null;
+              if (
+                target &&
+                target.closest(
+                  'button, a, input[type="text"], [role="button"], select, textarea, [data-prevent-row-select]',
+                )
+              ) {
+                return;
+              }
+              onToggle(row.id);
+            }}
+            className="cursor-pointer transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/40 select-none data-[state=selected]:bg-indigo-50/40 dark:data-[state=selected]:bg-indigo-950/25"
+          >
+            <TableCell onClick={(e) => e.stopPropagation()}>
               <Checkbox
                 checked={selectedIds.has(row.id)}
                 onCheckedChange={() => onToggle(row.id)}

@@ -317,6 +317,7 @@ export async function GET(
             jobId,
             isProject: isProjectOrJob,
             projectTitle: resolvedTitle,
+            projectStatus: matchedProject?.status ?? null,
             clientName,
             professionalName,
           };

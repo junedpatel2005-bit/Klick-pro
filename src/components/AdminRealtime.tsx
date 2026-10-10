@@ -103,7 +103,7 @@ export function AdminRealtime() {
             </div>
           </div>
         ),
-        { duration: 6500 },
+        { duration: 6500, unstyled: true },
       );
     },
     [router],

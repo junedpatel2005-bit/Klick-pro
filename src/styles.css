@@ -609,3 +609,16 @@ body:has(.cms-live-editable) button {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Sonner toast styling: eliminate double-background artifact and ensure crisp sizing */
+[data-sonner-toaster] [data-sonner-toast] {
+  box-shadow: none !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast]:has([data-notification-toast="true"]) {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}

@@ -54,24 +54,10 @@ const columns: ReportColumn<PaymentRow>[] = [
   },
   {
     key: "grossAmount",
-    header: "Total Paid",
-    width: 1.3,
+    header: "Amount Paid",
+    width: 1.6,
     align: "right",
     format: (row) => row.grossAmount,
-  },
-  {
-    key: "feeAmount",
-    header: "Service Fee",
-    width: 1.2,
-    align: "right",
-    format: (row) => row.feeAmount,
-  },
-  {
-    key: "netAmount",
-    header: "Milestone Net",
-    width: 1.3,
-    align: "right",
-    format: (row) => row.netAmount,
   },
   { key: "status", header: "Status", width: 1.2, format: (row) => row.status },
   {
@@ -112,7 +98,11 @@ export async function POST(request: NextRequest) {
             typeof renderReportPdf
           >[0],
         );
-        return pdfResponse(buffer, `klick-pro-voucher-${receiptData.invoiceNumber}.pdf`);
+        const safeJobName = (receiptData.jobTitle || "payment")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+        return pdfResponse(buffer, `klick-pro-${safeJobName}-${receiptData.invoiceNumber}.pdf`);
       }
     }
 
@@ -137,7 +127,11 @@ export async function POST(request: NextRequest) {
             typeof renderReportPdf
           >[0],
         );
-        return pdfResponse(buffer, `klick-pro-voucher-${receiptData.invoiceNumber}.pdf`);
+        const safeJobName = (receiptData.jobTitle || "payment")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+        return pdfResponse(buffer, `klick-pro-${safeJobName}-${receiptData.invoiceNumber}.pdf`);
       }
     }
 

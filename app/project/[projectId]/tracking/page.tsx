@@ -366,6 +366,12 @@ export default function SharedProjectTrackingPage() {
       setActiveTab("milestones");
     } else if (tab === "timeline") {
       setActiveTab("timeline");
+      setTimeout(() => {
+        const el = document.getElementById("timeline");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 100);
     } else if (tab === "uploads") {
       setActiveTab("uploads");
     }
@@ -3488,7 +3494,7 @@ export default function SharedProjectTrackingPage() {
           </TabsContent>
 
           {/* Timeline Tab */}
-          <TabsContent value="timeline">
+          <TabsContent value="timeline" id="timeline">
             <section className="overflow-hidden rounded-2xl border border-primary/10 bg-card shadow-soft">
               <div className="border-b border-border bg-[linear-gradient(120deg,var(--color-ink),var(--color-primary))] px-6 py-5 text-white">
                 <div className="flex flex-wrap items-end justify-between gap-3">

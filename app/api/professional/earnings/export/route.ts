@@ -55,24 +55,10 @@ const columns: ReportColumn<EarningsRow>[] = [
   },
   {
     key: "grossAmount",
-    header: "Gross (INR)",
-    width: 1.3,
+    header: "Amount (INR)",
+    width: 1.5,
     align: "right",
     format: (row) => row.grossAmount,
-  },
-  {
-    key: "commissionAmount",
-    header: "Commission",
-    width: 1.2,
-    align: "right",
-    format: (row) => row.commissionAmount,
-  },
-  {
-    key: "netAmount",
-    header: "Net Earned",
-    width: 1.3,
-    align: "right",
-    format: (row) => row.netAmount,
   },
   { key: "status", header: "Status", width: 1.1, format: (row) => row.status },
   {
@@ -115,7 +101,11 @@ export async function POST(request: NextRequest) {
             typeof renderReportPdf
           >[0],
         );
-        return pdfResponse(buffer, `klick-pro-payout-${receiptData.invoiceNumber}.pdf`);
+        const safeJobName = (receiptData.jobTitle || "earnings")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+        return pdfResponse(buffer, `klick-pro-${safeJobName}-${receiptData.invoiceNumber}.pdf`);
       }
     }
 

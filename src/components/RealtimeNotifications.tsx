@@ -185,7 +185,7 @@ export function RealtimeNotifications() {
             </div>
           </div>
         ),
-        { duration: 6500 },
+        { duration: 6500, unstyled: true },
       );
     },
     [router],
@@ -279,7 +279,7 @@ export function RealtimeNotifications() {
             </div>
           </div>
         ),
-        { duration: 7500 },
+        { duration: 7500, unstyled: true },
       );
     },
     [showNotification, router],

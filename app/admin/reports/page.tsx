@@ -19,16 +19,30 @@ import { ExportMenu } from "@/components/reports/ExportMenu";
 import { SelectableReportTable } from "@/components/reports/SelectableReportTable";
 import { useRowSelection } from "@/hooks/use-row-selection";
 import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
+import {
+  DateRangeFilter,
+  type DatePreset,
+  isWithinCustomDateRange,
+} from "@/components/reports/DateRangeFilter";
 
 type UserRow = {
   id: number;
+  username?: string | null;
   firstName: string;
   lastName: string;
   email: string;
+  phone?: string | null;
   role: "CLIENT" | "PROFESSIONAL" | "ADMIN";
   isActive: boolean;
   isVerified: boolean;
   createdAt: string;
+  daysActive?: number;
+  jobsCount?: number;
+  proposalsCount?: number;
+  walletBalance?: number;
+  totalTopUp?: number;
+  totalWithdrawals?: number;
+  completedProjects?: number;
 };
 
 type JobRow = {
@@ -114,7 +128,11 @@ function UsersReport() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
-  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [verificationFilter, setVerificationFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   useEffect(() => {
     void fetch("/api/v1/admin/data/users", { cache: "no-store" })
@@ -136,10 +154,27 @@ function UsersReport() {
         user.email.toLowerCase().includes(search.toLowerCase()) ||
         String(user.id).includes(search);
       const matchesRole = roleFilter === "ALL" || user.role === roleFilter;
-      const matchesDate = isWithinDateRange(user.createdAt, dateFilter);
-      return matchesSearch && matchesRole && matchesDate;
+      const matchesVerification =
+        verificationFilter === "ALL" ||
+        (verificationFilter === "VERIFIED" ? user.isVerified : !user.isVerified);
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        (statusFilter === "ACTIVE" ? user.isActive : !user.isActive);
+      const matchesDate = isWithinCustomDateRange(
+        user.createdAt,
+        datePreset,
+        startDate,
+        endDate,
+      );
+      return (
+        matchesSearch &&
+        matchesRole &&
+        matchesVerification &&
+        matchesStatus &&
+        matchesDate
+      );
     });
-  }, [users, search, roleFilter, dateFilter]);
+  }, [users, search, roleFilter, verificationFilter, statusFilter, datePreset, startDate, endDate]);
 
   const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
     useRowSelection(filteredUsers);
@@ -148,8 +183,12 @@ function UsersReport() {
   // KPIs
   const totalCount = filteredUsers.length;
   const verifiedCount = filteredUsers.filter((u) => u.isVerified).length;
+  const activeCount = filteredUsers.filter((u) => u.isActive).length;
   const proCount = filteredUsers.filter((u) => u.role === "PROFESSIONAL").length;
   const clientCount = filteredUsers.filter((u) => u.role === "CLIENT").length;
+  const totalTopUp = filteredUsers.reduce((sum, u) => sum + (u.totalTopUp ?? 0), 0);
+  const totalWithdrawals = filteredUsers.reduce((sum, u) => sum + (u.totalWithdrawals ?? 0), 0);
+  const totalWalletBalance = filteredUsers.reduce((sum, u) => sum + (u.walletBalance ?? 0), 0);
 
   const handleExportCsv = (scope?: "all" | "selected") => {
     const isSelected = scope === "selected" || (scope === undefined && selectedList.length > 0);
@@ -159,7 +198,7 @@ function UsersReport() {
 
     downloadCsvFile({
       filename: "klick-pro-admin-users",
-      title: "Admin Executive Oversight · User Directory & Identity Audit",
+      title: "Admin Executive Oversight · User Directory & Financial Audit",
       metadata: [
         {
           label: "Scope",
@@ -169,101 +208,155 @@ function UsersReport() {
         },
         { label: "Total Platform Accounts", value: totalCount },
         { label: "Verified Accounts", value: verifiedCount },
-        { label: "Professionals", value: proCount },
-        { label: "Clients", value: clientCount },
+        { label: "Active Accounts", value: activeCount },
+        { label: "Total Wallet Top-Up Volume", value: `INR ${totalTopUp.toLocaleString("en-IN")}` },
+        { label: "Total Withdrawals Processed", value: `INR ${totalWithdrawals.toLocaleString("en-IN")}` },
+        { label: "Circulating Wallet Balance", value: `INR ${totalWalletBalance.toLocaleString("en-IN")}` },
         { label: "Active Role Filter", value: roleFilter },
-        { label: "Active Date Range", value: dateFilter },
+        { label: "Active Verification Filter", value: verificationFilter },
+        { label: "Active Status Filter", value: statusFilter },
+        { label: "Active Date Range", value: datePreset },
       ],
       headers: [
         "User ID",
         "Full Name",
         "Email Address",
+        "Phone Number",
         "System Role",
-        "Account Active",
+        "Account Status",
         "Identity Verified",
         "Registration Date",
+        "Days Active on Platform",
+        "Jobs Posted",
+        "Proposals / Bids",
+        "Completed Projects",
+        "Total Wallet Top-Up (INR)",
+        "Total Withdrawals (INR)",
+        "Current Wallet Balance (INR)",
       ],
       rows: rowsToExport.map((u) => [
         `#USR-${u.id}`,
         `${u.firstName} ${u.lastName}`.trim(),
         u.email,
+        u.phone || "—",
         u.role,
         u.isActive ? "Active" : "Suspended",
         u.isVerified ? "Verified" : "Unverified",
         formatDateSafely(u.createdAt),
+        `${u.daysActive ?? 1} days`,
+        u.jobsCount ?? 0,
+        u.proposalsCount ?? 0,
+        u.completedProjects ?? 0,
+        u.totalTopUp ?? 0,
+        u.totalWithdrawals ?? 0,
+        u.walletBalance ?? 0,
       ]),
     });
   };
 
   return (
     <div className="space-y-6">
-      {/* 4 KPI Cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Total Accounts</span>
-            <Users className="h-4 w-4 text-indigo-600" />
+      {/* 6 Executive KPI Cards */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Accounts</span>
+            <Users className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
           </div>
           {loading ? (
-            <div className="mt-2 h-8 w-20 rounded-lg bg-slate-200 animate-pulse" />
+            <div className="mt-2 h-7 w-16 rounded-lg bg-slate-200 dark:bg-slate-800 animate-pulse" />
           ) : (
-            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            <div className="mt-2 font-display text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
               {totalCount}
             </div>
           )}
-          <p className="mt-1 text-xs text-slate-500">Registered users</p>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
+            {clientCount} Clients · {proCount} Pros
+          </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">
-              Verified Identity
-            </span>
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Verified</span>
+            <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           </div>
           {loading ? (
-            <div className="mt-2 h-8 w-20 rounded-lg bg-slate-200 animate-pulse" />
+            <div className="mt-2 h-7 w-16 rounded-lg bg-slate-200 dark:bg-slate-800 animate-pulse" />
           ) : (
-            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-emerald-600 sm:text-3xl">
+            <div className="mt-2 font-display text-xl sm:text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
               {verifiedCount}
             </div>
           )}
-          <p className="mt-1 text-xs text-slate-500">KYC / Identity verified</p>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+            {totalCount > 0 ? Math.round((verifiedCount / totalCount) * 100) : 0}% KYC verified
+          </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Professionals</span>
-            <Briefcase className="h-4 w-4 text-primary" />
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Active Status</span>
+            <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           </div>
           {loading ? (
-            <div className="mt-2 h-8 w-20 rounded-lg bg-slate-200 animate-pulse" />
+            <div className="mt-2 h-7 w-16 rounded-lg bg-slate-200 dark:bg-slate-800 animate-pulse" />
           ) : (
-            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              {proCount}
+            <div className="mt-2 font-display text-xl sm:text-2xl font-bold tracking-tight text-blue-600 dark:text-blue-400">
+              {activeCount}
             </div>
           )}
-          <p className="mt-1 text-xs text-slate-500">Service providers</p>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+            {totalCount - activeCount} suspended
+          </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Clients</span>
-            <CircleDollarSign className="h-4 w-4 text-indigo-600" />
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Top-Ups</span>
+            <ArrowDownToLine className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
           </div>
           {loading ? (
-            <div className="mt-2 h-8 w-20 rounded-lg bg-slate-200 animate-pulse" />
+            <div className="mt-2 h-7 w-16 rounded-lg bg-slate-200 dark:bg-slate-800 animate-pulse" />
           ) : (
-            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              {clientCount}
+            <div className="mt-2 font-display text-lg sm:text-xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400 truncate">
+              ₹{totalTopUp.toLocaleString("en-IN")}
             </div>
           )}
-          <p className="mt-1 text-xs text-slate-500">Hiring employers</p>
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Total deposits</p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Withdrawals</span>
+            <Landmark className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          </div>
+          {loading ? (
+            <div className="mt-2 h-7 w-16 rounded-lg bg-slate-200 dark:bg-slate-800 animate-pulse" />
+          ) : (
+            <div className="mt-2 font-display text-lg sm:text-xl font-bold tracking-tight text-amber-600 dark:text-amber-400 truncate">
+              ₹{totalWithdrawals.toLocaleString("en-IN")}
+            </div>
+          )}
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Paid to pros</p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Wallet Bal</span>
+            <CircleDollarSign className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+          </div>
+          {loading ? (
+            <div className="mt-2 h-7 w-16 rounded-lg bg-slate-200 dark:bg-slate-800 animate-pulse" />
+          ) : (
+            <div className="mt-2 font-display text-lg sm:text-xl font-bold tracking-tight text-purple-600 dark:text-purple-400 truncate">
+              ₹{totalWalletBalance.toLocaleString("en-IN")}
+            </div>
+          )}
+          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">In circulation</p>
         </div>
       </div>
 
       {/* Control Bar */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between shadow-xs">
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:flex-row sm:items-center sm:justify-between shadow-xs">
         <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1 max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -272,7 +365,7 @@ function UsersReport() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, email, or user ID…"
-              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600"
+              className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 pl-9 pr-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-indigo-600 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-600"
             />
           </div>
 
@@ -280,7 +373,7 @@ function UsersReport() {
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs sm:text-sm font-medium text-slate-800 focus:border-indigo-600 focus:bg-white focus:outline-none"
+              className="h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200 focus:border-indigo-600 focus:bg-white dark:focus:bg-slate-800 focus:outline-none"
             >
               <option value="ALL">All Roles</option>
               <option value="PROFESSIONAL">Professionals</option>
@@ -289,42 +382,69 @@ function UsersReport() {
             </select>
 
             <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-              className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs sm:text-sm font-medium text-slate-800 focus:border-indigo-600 focus:bg-white focus:outline-none"
+              value={verificationFilter}
+              onChange={(e) => setVerificationFilter(e.target.value)}
+              className="h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200 focus:border-indigo-600 focus:bg-white dark:focus:bg-slate-800 focus:outline-none"
             >
-              <option value="all">All Time</option>
-              <option value="this_month">This Month</option>
-              <option value="last_month">Last Month</option>
-              <option value="last_90_days">Last 90 Days</option>
-              <option value="this_year">This Year</option>
+              <option value="ALL">All Verification</option>
+              <option value="VERIFIED">KYC Verified Only</option>
+              <option value="UNVERIFIED">Unverified Only</option>
             </select>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200 focus:border-indigo-600 focus:bg-white dark:focus:bg-slate-800 focus:outline-none"
+            >
+              <option value="ALL">All Status</option>
+              <option value="ACTIVE">Active Accounts</option>
+              <option value="SUSPENDED">Suspended Accounts</option>
+            </select>
+
+            <DateRangeFilter
+              preset={datePreset}
+              onPresetChange={setDatePreset}
+              startDate={startDate}
+              onStartDateChange={setStartDate}
+              endDate={endDate}
+              onEndDateChange={setEndDate}
+            />
           </div>
         </div>
 
-        <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+        <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
           <button
             type="button"
             onClick={() => handleExportCsv()}
             disabled={filteredUsers.length === 0}
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition disabled:opacity-50"
             title="Download CSV for Excel"
           >
             <ArrowDownToLine className="h-4 w-4" />
             <span>CSV</span>
           </button>
 
-          <ExportMenu
-            endpoint="/api/admin/reports/users"
-            selectedIds={selectedList}
-            fileBaseName="admin-users"
-            onExportCsv={handleExportCsv}
-          />
+          {(() => {
+            const singleSelectedUser =
+              selectedList.length === 1 ? users.find((u) => u.id === selectedList[0]) : null;
+            const userFileBaseName = singleSelectedUser
+              ? `admin-${(singleSelectedUser.username || `${singleSelectedUser.firstName}-${singleSelectedUser.lastName}`).toLowerCase().replace(/[^a-z0-9_-]/g, "_")}`
+              : "admin-users";
+            return (
+              <ExportMenu
+                endpoint="/api/admin/reports/users"
+                selectedIds={selectedList}
+                fileBaseName={userFileBaseName}
+                emptyMessage="Select user first"
+                onExportCsv={handleExportCsv}
+              />
+            );
+          })()}
         </div>
       </div>
 
       {/* Statement Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs [&_th]:text-slate-500 [&_th]:bg-slate-50/80 [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/70">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs [&_th]:text-slate-500 [&_th]:bg-slate-50/80 dark:[&_th]:bg-slate-800/40 dark:[&_th]:text-slate-400 [&_tr]:border-slate-100 dark:[&_tr]:border-slate-800">
         <SelectableReportTable
           loading={loading}
           rows={filteredUsers}
@@ -337,36 +457,46 @@ function UsersReport() {
           columns={[
             {
               key: "id",
-              header: "Reference",
+              header: "Ref #",
               render: (user) => (
-                <span className="font-mono text-xs font-semibold text-slate-400">
+                <span className="font-mono text-xs font-semibold text-slate-400 whitespace-nowrap">
                   #USR-{user.id}
                 </span>
               ),
             },
             {
               key: "name",
-              header: "User Name",
+              header: "User & Contact",
               render: (user) => (
-                <div>
-                  <span className="font-semibold text-slate-900">
+                <div className="flex items-center gap-1.5 whitespace-nowrap text-xs">
+                  <span className="font-semibold text-slate-900 dark:text-white">
                     {user.firstName} {user.lastName}
                   </span>
-                  <p className="text-xs text-slate-400">{user.email}</p>
+                  {user.username && (
+                    <span className="text-[11px] text-indigo-500 font-mono">@{user.username}</span>
+                  )}
+                  <span className="text-slate-300 dark:text-slate-600">·</span>
+                  <span className="text-slate-500 font-mono text-[11px]">{user.email}</span>
+                  {user.phone && (
+                    <>
+                      <span className="text-slate-300 dark:text-slate-600">·</span>
+                      <span className="text-slate-500 font-mono text-[11px]">{user.phone}</span>
+                    </>
+                  )}
                 </div>
               ),
             },
             {
               key: "role",
-              header: "Account Role",
+              header: "Role",
               render: (user) => (
                 <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                  className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                     user.role === "PROFESSIONAL"
-                      ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                      ? "bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800"
                       : user.role === "CLIENT"
-                        ? "bg-purple-50 text-purple-700 border border-purple-200"
-                        : "bg-slate-100 text-slate-800 border border-slate-200"
+                        ? "bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800"
+                        : "bg-slate-100 text-slate-800 border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700"
                   }`}
                 >
                   {user.role}
@@ -375,16 +505,16 @@ function UsersReport() {
             },
             {
               key: "verified",
-              header: "KYC Verified",
+              header: "KYC",
               render: (user) => (
                 <span
-                  className={`inline-flex items-center gap-1 text-xs font-semibold ${
-                    user.isVerified ? "text-emerald-600" : "text-slate-400"
+                  className={`inline-flex items-center whitespace-nowrap gap-1 text-xs font-semibold ${
+                    user.isVerified ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
                   }`}
                 >
                   <span
                     className={`h-1.5 w-1.5 rounded-full ${
-                      user.isVerified ? "bg-emerald-500" : "bg-slate-300"
+                      user.isVerified ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"
                     }`}
                   />
                   {user.isVerified ? "Verified" : "Unverified"}
@@ -396,8 +526,10 @@ function UsersReport() {
               header: "Status",
               render: (user) => (
                 <span
-                  className={`text-xs font-semibold ${
-                    user.isActive ? "text-slate-700" : "text-rose-600"
+                  className={`text-xs font-semibold whitespace-nowrap ${
+                    user.isActive
+                      ? "text-slate-700 dark:text-slate-300"
+                      : "text-rose-600 dark:text-rose-400"
                   }`}
                 >
                   {user.isActive ? "Active" : "Suspended"}
@@ -406,10 +538,64 @@ function UsersReport() {
             },
             {
               key: "joined",
-              header: "Joined Date",
+              header: "Registration & Active",
+              render: (user) => (
+                <div className="flex items-center gap-1.5 whitespace-nowrap text-xs">
+                  <span className="text-slate-700 dark:text-slate-300 font-medium">
+                    {formatDateSafely(user.createdAt)}
+                  </span>
+                  <span className="rounded-md bg-indigo-50 dark:bg-indigo-950/50 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
+                    {user.daysActive ?? 1}d active
+                  </span>
+                </div>
+              ),
+            },
+            {
+              key: "activity",
+              header: "Job Activity",
+              render: (user) => (
+                <div className="whitespace-nowrap text-xs text-slate-700 dark:text-slate-300">
+                  {user.role === "CLIENT" ? (
+                    <span className="font-medium">{user.jobsCount ?? 0} jobs posted</span>
+                  ) : user.role === "PROFESSIONAL" ? (
+                    <span>
+                      <strong>{user.proposalsCount ?? 0}</strong> bids ·{" "}
+                      <strong>{user.completedProjects ?? 0}</strong> done
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">Internal</span>
+                  )}
+                </div>
+              ),
+            },
+            {
+              key: "topup",
+              header: "Total Top-Up",
               align: "right",
               render: (user) => (
-                <span className="text-xs text-slate-500">{formatDateSafely(user.createdAt)}</span>
+                <span className="font-mono text-xs font-semibold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                  ₹{(user.totalTopUp ?? 0).toLocaleString("en-IN")}
+                </span>
+              ),
+            },
+            {
+              key: "withdrawals",
+              header: "Withdrawals",
+              align: "right",
+              render: (user) => (
+                <span className="font-mono text-xs font-semibold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                  ₹{(user.totalWithdrawals ?? 0).toLocaleString("en-IN")}
+                </span>
+              ),
+            },
+            {
+              key: "balance",
+              header: "Wallet Bal",
+              align: "right",
+              render: (user) => (
+                <span className="font-mono text-xs font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                  ₹{(user.walletBalance ?? 0).toLocaleString("en-IN")}
+                </span>
               ),
             },
           ]}
@@ -417,19 +603,19 @@ function UsersReport() {
       </div>
 
       {/* Period Reconciliation Summary */}
-      <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between text-xs text-slate-500">
+      <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-4 sm:flex-row sm:items-center sm:justify-between text-xs text-slate-500 dark:text-slate-400">
         <div>
-          Showing <span className="font-semibold text-slate-900">{filteredUsers.length}</span> of{" "}
-          <span className="font-semibold text-slate-900">{users.length}</span> accounts.
+          Showing <span className="font-semibold text-slate-900 dark:text-white">{filteredUsers.length}</span> of{" "}
+          <span className="font-semibold text-slate-900 dark:text-white">{users.length}</span> accounts.
           {selectedList.length > 0 && (
-            <span className="ml-2 font-semibold text-indigo-600">
+            <span className="ml-2 font-semibold text-indigo-600 dark:text-indigo-400">
               ({selectedList.length} rows selected for export)
             </span>
           )}
         </div>
         <div className="font-mono">
           Identity Verified Rate:{" "}
-          <span className="font-bold text-slate-900">
+          <span className="font-bold text-slate-900 dark:text-white">
             {totalCount > 0 ? Math.round((verifiedCount / totalCount) * 100) : 0}%
           </span>
         </div>
@@ -443,7 +629,9 @@ function JobsReport() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   useEffect(() => {
     void fetch("/api/v1/admin/data/jobs", { cache: "no-store" })
@@ -466,10 +654,10 @@ function JobsReport() {
         String(job.id).includes(search);
       const matchesStatus =
         statusFilter === "ALL" || job.status.toUpperCase() === statusFilter.toUpperCase();
-      const matchesDate = isWithinDateRange(job.createdAt, dateFilter);
+      const matchesDate = isWithinCustomDateRange(job.createdAt, datePreset, startDate, endDate);
       return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [jobs, search, statusFilter, dateFilter]);
+  }, [jobs, search, statusFilter, datePreset, startDate, endDate]);
 
   const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
     useRowSelection(filteredJobs);
@@ -511,7 +699,7 @@ function JobsReport() {
         { label: "Completed Engagements", value: completedJobs },
         { label: "Open Marketplace Jobs", value: openJobs },
         { label: "Active Status Filter", value: statusFilter },
-        { label: "Active Date Range", value: dateFilter },
+        { label: "Active Date Range", value: datePreset },
       ],
       headers: ["Job ID", "Title", "Client Name", "Category", "Listing Status", "Creation Date"],
       rows: rowsToExport.map((j) => [
@@ -618,17 +806,14 @@ function JobsReport() {
               <option value="CLOSED">Closed</option>
             </select>
 
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-              className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs sm:text-sm font-medium text-slate-800 focus:border-indigo-600 focus:bg-white focus:outline-none"
-            >
-              <option value="all">All Time</option>
-              <option value="this_month">This Month</option>
-              <option value="last_month">Last Month</option>
-              <option value="last_90_days">Last 90 Days</option>
-              <option value="this_year">This Year</option>
-            </select>
+            <DateRangeFilter
+              preset={datePreset}
+              onPresetChange={setDatePreset}
+              startDate={startDate}
+              onStartDateChange={setStartDate}
+              endDate={endDate}
+              onEndDateChange={setEndDate}
+            />
           </div>
         </div>
 
@@ -648,6 +833,7 @@ function JobsReport() {
             endpoint="/api/admin/reports/jobs"
             selectedIds={selectedList}
             fileBaseName="admin-jobs"
+            emptyMessage="Select project first"
             onExportCsv={handleExportCsv}
           />
         </div>
@@ -747,7 +933,9 @@ function FinanceReport() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState("ALL");
-  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   useEffect(() => {
     void fetch("/api/v1/admin/data/finance", { cache: "no-store" })
@@ -817,10 +1005,10 @@ function FinanceReport() {
         String(row.id).includes(search);
       const matchesKind =
         kindFilter === "ALL" || row.kind.toUpperCase() === kindFilter.toUpperCase();
-      const matchesDate = isWithinDateRange(row.createdAt, dateFilter);
+      const matchesDate = isWithinCustomDateRange(row.createdAt, datePreset, startDate, endDate);
       return matchesSearch && matchesKind && matchesDate;
     });
-  }, [rows, search, kindFilter, dateFilter]);
+  }, [rows, search, kindFilter, datePreset, startDate, endDate]);
 
   const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
     useRowSelection(filteredRows);
@@ -888,7 +1076,7 @@ function FinanceReport() {
         { label: "Payment Volume", value: `INR ${paymentVolume.toLocaleString("en-IN")}` },
         { label: "Payout Volume", value: `INR ${payoutVolume.toLocaleString("en-IN")}` },
         { label: "Active Flow Filter", value: kindFilter },
-        { label: "Active Date Range", value: dateFilter },
+        { label: "Active Date Range", value: datePreset },
       ],
       headers: [
         "Transaction ID",
@@ -1009,17 +1197,14 @@ function FinanceReport() {
               <option value="PAYOUT">Bank Payouts</option>
             </select>
 
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-              className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs sm:text-sm font-medium text-slate-800 focus:border-indigo-600 focus:bg-white focus:outline-none"
-            >
-              <option value="all">All Time</option>
-              <option value="this_month">This Month</option>
-              <option value="last_month">Last Month</option>
-              <option value="last_90_days">Last 90 Days</option>
-              <option value="this_year">This Year</option>
-            </select>
+            <DateRangeFilter
+              preset={datePreset}
+              onPresetChange={setDatePreset}
+              startDate={startDate}
+              onStartDateChange={setStartDate}
+              endDate={endDate}
+              onEndDateChange={setEndDate}
+            />
           </div>
         </div>
 
@@ -1039,6 +1224,7 @@ function FinanceReport() {
             endpoint="/api/admin/reports/finance"
             selectedIds={selectedList}
             fileBaseName="admin-finance"
+            emptyMessage="Select transaction first"
             onExportCsv={handleExportCsv}
           />
         </div>
@@ -1151,54 +1337,59 @@ export default function AdminReportsPage() {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs">
-        <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+      <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-6 sm:p-8 text-white shadow-xl">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.18),transparent_50%)] pointer-events-none" />
+        <div className="relative z-10 flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
           <div>
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-700">
-              <FileText className="h-3.5 w-3.5" /> Enterprise Audit Center
+            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-300">
+              <FileText className="h-3.5 w-3.5 text-indigo-400" />
+              <span>Enterprise Audit & Intelligence</span>
             </div>
-            <h1 className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            <h1 className="mt-3 font-display text-2xl font-bold tracking-tight text-white sm:text-3xl">
               Platform Reports & Audit Ledgers
             </h1>
-            <p className="mt-1 text-sm text-slate-500 max-w-2xl">
+            <p className="mt-1.5 text-sm text-slate-300 max-w-2xl leading-relaxed">
               Official compliance records of platform accounts, active marketplace job volume, and
               reconciled gross settlement transactions.
             </p>
           </div>
 
-          <div className="flex gap-1.5 rounded-2xl border border-slate-200 bg-slate-50 p-1.5">
+          <div className="flex flex-nowrap shrink-0 items-center gap-1.5 overflow-x-auto rounded-2xl border border-white/10 bg-white/5 p-1.5 backdrop-blur-sm whitespace-nowrap">
             <button
               type="button"
               onClick={() => setTab("finance")}
-              className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition ${
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition ${
                 tab === "finance"
-                  ? "bg-white text-indigo-700 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-white text-slate-950 shadow-md font-bold"
+                  : "text-slate-300 hover:text-white hover:bg-white/10"
               }`}
             >
-              Financial Ledger
+              <Landmark className="h-4 w-4" />
+              <span>Financial Ledger</span>
             </button>
             <button
               type="button"
               onClick={() => setTab("jobs")}
-              className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition ${
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition ${
                 tab === "jobs"
-                  ? "bg-white text-indigo-700 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-white text-slate-950 shadow-md font-bold"
+                  : "text-slate-300 hover:text-white hover:bg-white/10"
               }`}
             >
-              Jobs & Projects
+              <Briefcase className="h-4 w-4" />
+              <span>Jobs & Projects</span>
             </button>
             <button
               type="button"
               onClick={() => setTab("users")}
-              className={`rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition ${
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition ${
                 tab === "users"
-                  ? "bg-white text-indigo-700 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-white text-slate-950 shadow-md font-bold"
+                  : "text-slate-300 hover:text-white hover:bg-white/10"
               }`}
             >
-              User Accounts
+              <Users className="h-4 w-4" />
+              <span>User Accounts</span>
             </button>
           </div>
         </div>

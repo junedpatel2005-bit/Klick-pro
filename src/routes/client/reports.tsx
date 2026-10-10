@@ -19,6 +19,11 @@ import { ExportMenu } from "@/components/reports/ExportMenu";
 import { SelectableReportTable } from "@/components/reports/SelectableReportTable";
 import { useRowSelection } from "@/hooks/use-row-selection";
 import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
+import {
+  DateRangeFilter,
+  type DatePreset,
+  isWithinCustomDateRange,
+} from "@/components/reports/DateRangeFilter";
 
 type Job = {
   id: number;
@@ -161,7 +166,9 @@ function ProjectsReport() {
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
-  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   const loadData = () => {
     setLoading(true);
@@ -185,10 +192,15 @@ function ProjectsReport() {
         (job.title && job.title.toLowerCase().includes(search.toLowerCase())) ||
         String(job.id).includes(search);
       const matchesStatus = statusFilter === "ALL" || job.status === statusFilter;
-      const matchesDate = isWithinDateRange(job.updatedAt, dateFilter);
+      const matchesDate = isWithinCustomDateRange(
+        job.updatedAt || job.createdAt,
+        datePreset,
+        startDate,
+        endDate,
+      );
       return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [jobs, search, statusFilter, dateFilter]);
+  }, [jobs, search, statusFilter, datePreset, startDate, endDate]);
 
   const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
     useRowSelection(filteredJobs);
@@ -226,7 +238,7 @@ function ProjectsReport() {
         },
         { label: "Estimated Scope Value", value: `INR ${totalBudgetEst.toLocaleString("en-IN")}` },
         { label: "Active Filter Status", value: statusFilter },
-        { label: "Active Date Range", value: dateFilter },
+        { label: "Active Date Range", value: datePreset },
       ],
       headers: [
         "Job ID",
@@ -360,17 +372,14 @@ function ProjectsReport() {
               <option value="CLOSED">Closed</option>
             </select>
 
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-              className="h-10 rounded-xl border border-border bg-background px-3 text-xs sm:text-sm font-medium text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="all">All Dates</option>
-              <option value="this_month">This Month</option>
-              <option value="last_month">Last Month</option>
-              <option value="last_90_days">Last 90 Days</option>
-              <option value="this_year">This Year</option>
-            </select>
+            <DateRangeFilter
+              preset={datePreset}
+              onPresetChange={setDatePreset}
+              startDate={startDate}
+              onStartDateChange={setStartDate}
+              endDate={endDate}
+              onEndDateChange={setEndDate}
+            />
           </div>
         </div>
 
@@ -390,6 +399,7 @@ function ProjectsReport() {
             endpoint="/api/client/jobs/export"
             selectedIds={selectedList}
             fileBaseName="client-projects"
+            emptyMessage="Select project first"
             onExportCsv={handleExportCsv}
           />
         </div>
@@ -500,7 +510,9 @@ function PaymentsReport() {
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
-  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [datePreset, setDatePreset] = useState<DatePreset>("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   const loadData = () => {
     setLoading(true);
@@ -524,10 +536,10 @@ function PaymentsReport() {
         (item.description && item.description.toLowerCase().includes(search.toLowerCase())) ||
         String(item.id).includes(search);
       const matchesStatus = statusFilter === "ALL" || item.status.toUpperCase() === statusFilter;
-      const matchesDate = isWithinDateRange(item.createdAt, dateFilter);
+      const matchesDate = isWithinCustomDateRange(item.createdAt, datePreset, startDate, endDate);
       return matchesSearch && matchesStatus && matchesDate;
     });
-  }, [payments, search, statusFilter, dateFilter]);
+  }, [payments, search, statusFilter, datePreset, startDate, endDate]);
 
   const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
     useRowSelection(filteredPayments);
@@ -616,7 +628,7 @@ function PaymentsReport() {
         { label: "Cleared & Settled", value: `INR ${clearedTotal.toLocaleString("en-IN")}` },
         { label: "In Escrow / Hold", value: `INR ${pendingTotal.toLocaleString("en-IN")}` },
         { label: "Active Status Filter", value: statusFilter },
-        { label: "Active Date Range", value: dateFilter },
+        { label: "Active Date Range", value: datePreset },
       ],
       headers: [
         "Invoice / Voucher #",
@@ -625,9 +637,7 @@ function PaymentsReport() {
         "Professional Payee",
         "Transaction Type",
         "Payment Method",
-        "Total Paid (INR)",
-        "Service Fee (INR)",
-        "Milestone Net (INR)",
+        "Amount (INR)",
         "Settlement Status",
         "Disbursement Date",
         "Description",
@@ -640,8 +650,6 @@ function PaymentsReport() {
         p.type,
         p.paymentMethod || "Escrow",
         p.grossAmount ?? p.amount,
-        p.feeAmount ?? 0,
-        p.netAmount ?? p.amount,
         p.status,
         formatDateSafely(p.createdAt),
         p.description ?? "Milestone service payment",
@@ -749,17 +757,14 @@ function PaymentsReport() {
               <option value="PENDING">Pending Approval</option>
             </select>
 
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-              className="h-10 rounded-xl border border-border bg-background px-3 text-xs sm:text-sm font-medium text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="all">All Dates</option>
-              <option value="this_month">This Month</option>
-              <option value="last_month">Last Month</option>
-              <option value="last_90_days">Last 90 Days</option>
-              <option value="this_year">This Year</option>
-            </select>
+            <DateRangeFilter
+              preset={datePreset}
+              onPresetChange={setDatePreset}
+              startDate={startDate}
+              onStartDateChange={setStartDate}
+              endDate={endDate}
+              onEndDateChange={setEndDate}
+            />
           </div>
         </div>
 
@@ -779,6 +784,7 @@ function PaymentsReport() {
             endpoint="/api/client/payments/export"
             selectedIds={selectedList}
             fileBaseName="client-payments"
+            emptyMessage="Select payment first"
             onExportCsv={handleExportCsv}
           />
         </div>

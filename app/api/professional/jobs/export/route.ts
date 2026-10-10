@@ -134,11 +134,8 @@ export async function POST(request: NextRequest) {
         const safeTitle = (dossierData.title || `project-${firstProject.id}`)
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
-          .slice(0, 50);
-        return pdfResponse(
-          buffer,
-          `klick-pro-engagement-${firstProject.id}-${safeTitle}-dossier.pdf`,
-        );
+          .replace(/^-+|-+$/g, "");
+        return pdfResponse(buffer, `klick-pro-${safeTitle}.pdf`);
       }
     }
 

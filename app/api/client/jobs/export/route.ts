@@ -108,8 +108,8 @@ export async function POST(request: NextRequest) {
         const safeTitle = (dossierData.title || `job-${jobId}`)
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
-          .slice(0, 50);
-        return pdfResponse(buffer, `klick-pro-job-${jobId}-${safeTitle}-dossier.pdf`);
+          .replace(/^-+|-+$/g, "");
+        return pdfResponse(buffer, `klick-pro-${safeTitle}.pdf`);
       }
     }
 
@@ -142,7 +142,11 @@ export async function POST(request: NextRequest) {
             typeof renderReportPdf
           >[0],
         );
-        return pdfResponse(buffer, `klick-pro-job-${firstJob.id}-dossier.pdf`);
+        const safeTitle = (dossierData.title || `job-${firstJob.id}`)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+        return pdfResponse(buffer, `klick-pro-${safeTitle}.pdf`);
       }
     }
 

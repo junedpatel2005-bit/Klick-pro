@@ -228,13 +228,15 @@ export function InvoiceDocument({
   grossAmount,
   commissionAmount,
   netAmount,
-  grossLabel = "Gross amount",
+  grossLabel = "Amount",
   feeLabel = "Platform commission",
-  netLabel = "Net payable",
+  netLabel = "Total Amount",
   lineDescription = "Gross payment collected from client",
   note,
   currency,
   paymentReference,
+  jobTitle,
+  showCommission = false,
 }: {
   invoiceNumber: string;
   issuedAt: Date;
@@ -244,7 +246,7 @@ export function InvoiceDocument({
   billedTo: InvoiceParty;
   paidTo: InvoiceParty;
   grossAmount: number;
-  commissionAmount: number;
+  commissionAmount?: number;
   netAmount: number;
   grossLabel?: string;
   feeLabel?: string;
@@ -253,6 +255,8 @@ export function InvoiceDocument({
   note?: string;
   currency: string;
   paymentReference?: string | null;
+  jobTitle?: string;
+  showCommission?: boolean;
 }) {
   const money = (amount: number) => `${currency} ${amount.toLocaleString("en-IN")}`;
 
@@ -264,7 +268,12 @@ export function InvoiceDocument({
             <View style={styles.brandMark}>
               <Text style={styles.brandMarkText}>K</Text>
             </View>
-            <Text style={styles.brandName}>{from.name}</Text>
+            <Text style={styles.brandName}>Klick-Pro</Text>
+            {jobTitle ? (
+              <Text style={{ fontSize: 9.5, fontWeight: "bold", color: reportTheme.cta, marginTop: 2 }}>
+                Job: {jobTitle}
+              </Text>
+            ) : null}
             {from.tagline ? <Text style={styles.brandTag}>{from.tagline}</Text> : null}
           </View>
           <View>
@@ -321,14 +330,16 @@ export function InvoiceDocument({
               <Text style={styles.summaryLabel}>{grossLabel}</Text>
               <Text style={styles.summaryValue}>{money(grossAmount)}</Text>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>{feeLabel}</Text>
-              <Text style={styles.summaryValue}>-{money(commissionAmount)}</Text>
-            </View>
+            {showCommission && commissionAmount && commissionAmount > 0 ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>{feeLabel}</Text>
+                <Text style={styles.summaryValue}>-{money(commissionAmount)}</Text>
+              </View>
+            ) : null}
             <View style={styles.summaryDivider} />
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>{netLabel}</Text>
-              <Text style={styles.totalValue}>{money(netAmount)}</Text>
+              <Text style={styles.totalValue}>{money(grossAmount)}</Text>
             </View>
           </View>
         </View>
@@ -337,7 +348,7 @@ export function InvoiceDocument({
           <Text style={styles.noteTitle}>Note</Text>
           <Text style={styles.noteText}>
             {note ??
-              "This invoice reflects a milestone payment processed through the Klick-Pro marketplace. The net payable amount is the sum released to the professional after deducting the platform commission from the gross amount collected from the client."}
+              "This invoice reflects a verified milestone payment processed through the Klick-Pro platform."}
           </Text>
         </View>
 
