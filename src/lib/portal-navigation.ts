@@ -24,7 +24,7 @@ export const clientItems: NavigationItem[] = [
   { to: "/reports", icon: FileBarChart, label: "Reports" },
   { to: "/reviews", icon: Star, label: "Reviews" },
   { to: "/messages", icon: MessageSquare, label: "Messages" },
-  { to: "/earnings", icon: Wallet, label: "Earnings" },
+  { to: "/earnings", icon: Wallet, label: "Wallet" },
   { to: "/verification", icon: BadgeCheck, label: "Verification" },
   { to: "/notifications", icon: BellRing, label: "Notifications" },
 ];

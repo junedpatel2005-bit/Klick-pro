@@ -44,7 +44,7 @@ export type LinkedAccount = {
 
 export function LinkedAccountsCard({
   title = "Linked Accounts",
-  description = "Save your Bank, UPI, Razorpay, or Debit Card once for 1-click earnings & payout requests.",
+  description = "Save your Bank, UPI, or Razorpay account once for 1-click earnings & payout requests.",
   className = "",
 }: {
   title?: string;
@@ -58,7 +58,7 @@ export function LinkedAccountsCard({
   const [actionBusyId, setActionBusyId] = useState<number | null>(null);
 
   // Form State
-  const [accountType, setAccountType] = useState<"BANK" | "UPI" | "CARD" | "RAZORPAY">("BANK");
+  const [accountType, setAccountType] = useState<"BANK" | "UPI" | "RAZORPAY">("BANK");
   const [accountHolder, setAccountHolder] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [confirmAccountNumber, setConfirmAccountNumber] = useState("");
@@ -125,12 +125,6 @@ export function LinkedAccountsCard({
         toast.error("Please enter a valid UPI ID (e.g. yourname@oksbi).");
         return;
       }
-    } else if (accountType === "CARD") {
-      const cleanCard = accountNumber.replace(/\s/g, "");
-      if (cleanCard.length < 15) {
-        toast.error("Debit card number must be 16 digits.");
-        return;
-      }
     } else if (accountType === "RAZORPAY") {
       if (!razorpayAccountId || razorpayAccountId.length < 5) {
         toast.error("Please enter a valid Razorpay Account ID.");
@@ -150,7 +144,6 @@ export function LinkedAccountsCard({
           ifscCode: ifscCode.trim().toUpperCase() || undefined,
           bankName: bankName.trim() || undefined,
           upiId: upiId.trim().toLowerCase() || undefined,
-          cardBank: cardBank.trim() || undefined,
           razorpayAccountId: razorpayAccountId.trim() || undefined,
           isDefault,
         }),
@@ -177,8 +170,12 @@ export function LinkedAccountsCard({
 
     setActionBusyId(id);
     try {
-      const res = await fetch(`/api/v1/linked-accounts/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete account.");
+      const res = await fetch(`/api/v1/linked-accounts/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Failed to delete account.");
       toast.success("Linked account removed.");
       await fetchAccounts();
     } catch (err) {
@@ -191,12 +188,17 @@ export function LinkedAccountsCard({
   const handleSetDefault = async (id: number) => {
     setActionBusyId(id);
     try {
-      const res = await fetch(`/api/v1/linked-accounts/${id}`, { method: "PATCH" });
-      if (!res.ok) throw new Error("Failed to set default.");
+      const res = await fetch(`/api/v1/linked-accounts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isDefault: true }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Failed to set default.");
       toast.success("Default payout account updated.");
       await fetchAccounts();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Error updating default.");
+      toast.error(err instanceof Error ? err.message : "Failed to set default.");
     } finally {
       setActionBusyId(null);
     }
@@ -373,7 +375,7 @@ export function LinkedAccountsCard({
           </DialogHeader>
 
           {/* Account Type Selector */}
-          <div className="grid grid-cols-4 gap-1.5 pt-1">
+          <div className="grid grid-cols-3 gap-1.5 pt-1">
             <button
               type="button"
               onClick={() => setAccountType("BANK")}
@@ -397,18 +399,6 @@ export function LinkedAccountsCard({
             >
               <Smartphone className="h-4 w-4 mb-1" />
               UPI ID
-            </button>
-            <button
-              type="button"
-              onClick={() => setAccountType("CARD")}
-              className={`flex flex-col items-center justify-center p-2 rounded-xl border text-xs font-semibold transition ${
-                accountType === "CARD"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              <CreditCard className="h-4 w-4 mb-1" />
-              Debit Card
             </button>
             <button
               type="button"
@@ -525,52 +515,7 @@ export function LinkedAccountsCard({
               </>
             )}
 
-            {/* CARD FORM */}
-            {accountType === "CARD" && (
-              <>
-                <div className="space-y-1">
-                  <Label htmlFor="cardHolder" className="text-xs font-semibold">
-                    Cardholder Name
-                  </Label>
-                  <Input
-                    id="cardHolder"
-                    value={accountHolder}
-                    onChange={(e) => setAccountHolder(e.target.value)}
-                    placeholder="Full name printed on debit card"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="cardBank" className="text-xs font-semibold">
-                    Issuing Bank
-                  </Label>
-                  <Input
-                    id="cardBank"
-                    value={cardBank}
-                    onChange={(e) => setCardBank(e.target.value)}
-                    placeholder="e.g. HDFC Bank, ICICI Bank"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="cardNumber" className="text-xs font-semibold">
-                    16-Digit Debit Card Number
-                  </Label>
-                  <Input
-                    id="cardNumber"
-                    maxLength={19}
-                    value={accountNumber}
-                    onChange={(e) => {
-                      const raw = e.target.value.replace(/\D/g, "").slice(0, 16);
-                      const formatted = raw.match(/.{1,4}/g)?.join(" ") ?? raw;
-                      setAccountNumber(formatted);
-                    }}
-                    placeholder="e.g. 4532 1123 8890 1234"
-                    required
-                  />
-                </div>
-              </>
-            )}
+
 
             {/* RAZORPAY FORM */}
             {accountType === "RAZORPAY" && (

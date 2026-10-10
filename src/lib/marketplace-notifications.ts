@@ -759,17 +759,8 @@ export async function notifyJobPosted(job: {
     ? `${clientUser.firstName} ${clientUser.lastName}`.trim()
     : "Client";
 
-  // 1. Notify Client (confirmation)
-  await notifyUsers([job.userId], {
-    type: "JOB_POSTED",
-    title: `${jobTitle} · Job posted successfully`,
-    description: `Your job "${jobTitle}" has been posted and is now open for proposals.`,
-    href: `/job/${job.id}`,
-    templateVariables: {
-      job_title: jobTitle,
-      client_name: clientName,
-    },
-  });
+  // Client already sees the UI toast message upon posting.
+  // Admins and category professionals are notified below.
 
   // 2. Notify Admins
   await notifyRole("ADMIN", {

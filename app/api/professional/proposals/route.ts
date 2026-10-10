@@ -114,12 +114,13 @@ export async function POST(request: NextRequest) {
         jobId: job.id,
         professionalId: session.userId,
         origin: "PROFESSIONAL_PROPOSAL",
-        status: "PENDING",
+        status: { in: ["PENDING", "REJECTED"] },
       },
-      select: { id: true },
+      select: { id: true, status: true },
     });
 
     if (existing) {
+      const isReapply = existing.status === "REJECTED";
       const updated = await db.projectRequest.update({
         where: { id: existing.id },
         data: {
@@ -128,19 +129,32 @@ export async function POST(request: NextRequest) {
           totalJobHours: job.timingType === "HOURLY" ? parsed.data.totalJobHours : null,
           duration: parsed.data.duration,
           coverLetter: parsed.data.coverLetter,
+          status: "PENDING",
         },
       });
       try {
-        await notifyProposalUpdated({
-          jobId: job.id,
-          jobTitle: job.title,
-          clientId: job.userId,
-          professionalId: session.userId,
-          bidAmount,
-          duration: parsed.data.duration,
-        });
+        if (isReapply) {
+          await notifyProposalSubmitted({
+            jobId: job.id,
+            jobTitle: job.title,
+            clientId: job.userId,
+            professionalId: session.userId,
+            bidAmount,
+            duration: parsed.data.duration,
+            coverLetter: parsed.data.coverLetter,
+          });
+        } else {
+          await notifyProposalUpdated({
+            jobId: job.id,
+            jobTitle: job.title,
+            clientId: job.userId,
+            professionalId: session.userId,
+            bidAmount,
+            duration: parsed.data.duration,
+          });
+        }
       } catch (notifyErr) {
-        console.error("Failed to dispatch notifyProposalUpdated:", notifyErr);
+        console.error("Failed to dispatch proposal notification:", notifyErr);
       }
       emitRealtimeProposalNew([job.userId, session.userId], { jobId: job.id });
       return NextResponse.json({ proposal: updated });

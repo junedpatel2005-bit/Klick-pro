@@ -9,7 +9,22 @@ function isTrustedStateChangingRequest(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith("/api/webhooks/")) return true;
 
   const origin = request.headers.get("origin");
-  if (!origin) return false;
+  if (!origin) {
+    const secFetchSite = request.headers.get("sec-fetch-site");
+    if (secFetchSite === "same-origin") return true;
+
+    const referer = request.headers.get("referer");
+    if (referer) {
+      try {
+        const refererOrigin = new URL(referer).origin;
+        if (refererOrigin === request.nextUrl.origin) return true;
+        const appUrl = process.env.APP_URL;
+      } catch {
+        // Ignore invalid referer URL string
+      }
+    }
+    return false;
+  }
 
   if (origin === request.nextUrl.origin) return true;
 

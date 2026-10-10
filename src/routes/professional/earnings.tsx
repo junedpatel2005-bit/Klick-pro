@@ -29,6 +29,13 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { PageActionLoading } from "@/components/PageActionLoading";
 type Transaction = {
   id: number;
@@ -68,7 +75,7 @@ type Withdrawal = {
   createdAt: string;
 };
 
-type PayoutMethod = "BANK" | "UPI" | "CARD";
+type PayoutMethod = "BANK" | "UPI";
 
 function parseDestinationSummary(destinationLabel: string | null, destinationType?: string) {
   if (!destinationLabel) return { label: "Payout destination", icon: Building2 };
@@ -144,13 +151,14 @@ type LinkedAccount = {
   isDefault: boolean;
 };
 
-type StatKey = "available" | "total" | "commission" | "month" | "reserved";
+type StatKey = "available" | "total" | "month" | "reserved";
 export default function Earnings() {
   const [items, setItems] = useState<Transaction[] | null>(null);
   const [completedJobs, setCompletedJobs] = useState<CompletedJob[] | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [amount, setAmount] = useState("");
   const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>("BANK");
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
 
   // Profile Linked Accounts
   const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
@@ -167,11 +175,6 @@ export default function Earnings() {
   const [upiId, setUpiId] = useState("");
   const [upiHolder, setUpiHolder] = useState("");
 
-  // Card Form State
-  const [cardHolder, setCardHolder] = useState("");
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardBank, setCardBank] = useState("");
-
   const [saveDetailsForFuture, setSaveDetailsForFuture] = useState(true);
   const [showRazorpayAdvanced, setShowRazorpayAdvanced] = useState(false);
   const [message, setMessage] = useState("");
@@ -182,9 +185,7 @@ export default function Earnings() {
   const [selectedStat, setSelectedStat] = useState<StatKey | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(10);
-  const [historyFilter, setHistoryFilter] = useState<
-    "all" | "milestones" | "commissions" | "disputes"
-  >("all");
+  const [historyFilter, setHistoryFilter] = useState<"all" | "milestones" | "disputes">("all");
 
   function applyLinkedAccount(acc: LinkedAccount) {
     if (acc.accountType === "BANK") {
@@ -198,11 +199,6 @@ export default function Earnings() {
       setPayoutMethod("UPI");
       setUpiId(acc.upiId ?? "");
       setUpiHolder(acc.accountHolder ?? "");
-    } else if (acc.accountType === "CARD") {
-      setPayoutMethod("CARD");
-      setCardHolder(acc.accountHolder ?? "");
-      setCardNumber(acc.accountNumber ?? "");
-      setCardBank(acc.cardBank ?? acc.bankName ?? "");
     } else if (acc.accountType === "RAZORPAY") {
       setRazorpayAccountId(acc.razorpayAccountId ?? "");
     }
@@ -223,9 +219,6 @@ export default function Earnings() {
         if (parsed.ifscCode) setIfscCode(parsed.ifscCode);
         if (parsed.upiId) setUpiId(parsed.upiId);
         if (parsed.upiHolder) setUpiHolder(parsed.upiHolder);
-        if (parsed.cardHolder) setCardHolder(parsed.cardHolder);
-        if (parsed.cardNumber) setCardNumber(parsed.cardNumber);
-        if (parsed.cardBank) setCardBank(parsed.cardBank);
       }
     } catch {
       // ignore
@@ -288,7 +281,6 @@ export default function Earnings() {
       milestones: (items ?? []).filter(
         (i) => i.type !== "PLATFORM_COMMISSION" && i.type !== "DISPUTE_PAYOUT",
       ).length,
-      commissions: (items ?? []).filter((i) => i.type === "PLATFORM_COMMISSION").length,
       disputes: (items ?? []).filter((i) => i.type === "DISPUTE_PAYOUT").length,
     }),
     [items],
@@ -298,9 +290,6 @@ export default function Earnings() {
       (items ?? []).filter((i) => {
         if (historyFilter === "milestones") {
           return i.type !== "PLATFORM_COMMISSION" && i.type !== "DISPUTE_PAYOUT";
-        }
-        if (historyFilter === "commissions") {
-          return i.type === "PLATFORM_COMMISSION";
         }
         if (historyFilter === "disputes") {
           return i.type === "DISPUTE_PAYOUT";
@@ -320,13 +309,7 @@ export default function Earnings() {
   const isUpiValid =
     upiId.trim().includes("@") && upiId.trim().length >= 4 && upiHolder.trim().length >= 2;
 
-  const isCardValid =
-    cardHolder.trim().length >= 2 &&
-    cardNumber.replace(/\s/g, "").length >= 15 &&
-    cardBank.trim().length >= 2;
-
-  const isFormValid =
-    payoutMethod === "BANK" ? isBankValid : payoutMethod === "UPI" ? isUpiValid : isCardValid;
+  const isFormValid = payoutMethod === "BANK" ? isBankValid : isUpiValid;
 
   const minAmt = wallet?.minWithdrawalAmount ?? 500;
   const isAmountValid =
@@ -351,18 +334,11 @@ export default function Earnings() {
           accountNumber: accountNumber.trim(),
           ifsc: ifscCode.trim().toUpperCase(),
         });
-      } else if (payoutMethod === "UPI") {
+      } else {
         destinationLabel = JSON.stringify({
           type: "UPI",
           upiId: upiId.trim().toLowerCase(),
           upiHolder: upiHolder.trim(),
-        });
-      } else {
-        destinationLabel = JSON.stringify({
-          type: "CARD",
-          cardHolder: cardHolder.trim(),
-          cardNumber: cardNumber.trim().replace(/\s/g, ""),
-          cardBank: cardBank.trim(),
         });
       }
 
@@ -378,9 +354,6 @@ export default function Earnings() {
               ifscCode,
               upiId,
               upiHolder,
-              cardHolder,
-              cardNumber,
-              cardBank,
             }),
           );
         } catch {
@@ -405,6 +378,7 @@ export default function Earnings() {
       );
       if (r.ok) {
         setAmount("");
+        setWithdrawDialogOpen(false);
         load();
       }
     } finally {
@@ -487,7 +461,7 @@ export default function Earnings() {
         <div className="h-72 animate-pulse rounded-2xl bg-muted" />
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Stat
               icon={WalletCards}
               label="Available balance"
@@ -500,13 +474,6 @@ export default function Earnings() {
               label="Total earned"
               onClick={() => setSelectedStat("total")}
               value={`₹${wallet.total.toLocaleString()}`}
-            />
-            <Stat
-              icon={ReceiptText}
-              label="Commission deducted"
-              onClick={() => setSelectedStat("commission")}
-              value={`₹${wallet.commission.toLocaleString()}`}
-              tone="amber"
             />
             <Stat
               icon={Clock3}
@@ -565,21 +532,6 @@ export default function Earnings() {
               )}
             </div>
           </section>
-          <section className="rounded-2xl border border-border bg-card p-5 shadow-soft">
-            <h2 className="font-display text-xl font-semibold">Commission deduction breakdown</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Commission is deducted from each completed Razorpay payment before earnings become
-              available.
-            </p>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <Breakdown
-                label="Gross completed payments"
-                value={wallet.grossTotal ?? wallet.total + wallet.commission}
-              />
-              <Breakdown label="Platform commission" value={wallet.commission} tone="amber" />
-              <Breakdown label="Net professional earnings" value={wallet.total} tone="success" />
-            </div>
-          </section>
           <div className="grid gap-6 xl:grid-cols-[1.25fr_.75fr]">
             <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
               <div className="flex items-center justify-between border-b border-border p-5">
@@ -596,7 +548,6 @@ export default function Earnings() {
                   [
                     { key: "all", label: "All", count: tabCounts.all },
                     { key: "milestones", label: "Milestones", count: tabCounts.milestones },
-                    { key: "commissions", label: "Commissions", count: tabCounts.commissions },
                     { key: "disputes", label: "Disputes", count: tabCounts.disputes },
                   ] as const
                 ).map((tab) => (
@@ -773,361 +724,16 @@ export default function Earnings() {
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between rounded-xl bg-muted/40 p-3 border border-border/60">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Available balance</p>
-                    <p className="font-semibold text-foreground text-sm">
-                      ₹{wallet.available.toLocaleString("en-IN")}
-                    </p>
-                  </div>
-                  {wallet.available >= (wallet.minWithdrawalAmount ?? 500) && (
-                    <button
-                      type="button"
-                      onClick={() => setAmount(String(wallet.available))}
-                      className="text-xs font-semibold text-primary hover:underline"
-                    >
-                      Withdraw full balance
-                    </button>
-                  )}
+                <div className="rounded-xl bg-muted/40 p-4 border border-border/60">
+                  <p className="text-xs text-muted-foreground">Available balance</p>
+                  <p className="font-display text-2xl font-bold text-foreground mt-1">
+                    ₹{wallet.available.toLocaleString("en-IN")}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Transfer directly to your verified bank account or UPI ID.
+                  </p>
                 </div>
 
-                {/* Amount Input */}
-                <div>
-                  <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
-                    Withdrawal Amount (₹)
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
-                      ₹
-                    </span>
-                    <input
-                      className="h-11 w-full rounded-xl border border-input bg-background pl-8 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                      type="number"
-                      min={wallet.minWithdrawalAmount ?? 500}
-                      max={wallet.available}
-                      placeholder={`Min ₹${(wallet.minWithdrawalAmount ?? 500).toLocaleString("en-IN")}`}
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                    />
-                  </div>
-                  {amount && Number(amount) < (wallet.minWithdrawalAmount ?? 500) && (
-                    <p className="mt-1 text-xs font-medium text-amber-600">
-                      Minimum withdrawal amount is ₹
-                      {(wallet.minWithdrawalAmount ?? 500).toLocaleString("en-IN")}.
-                    </p>
-                  )}
-                  {amount && Number(amount) > wallet.available && (
-                    <p className="mt-1 text-xs font-medium text-rose-600">
-                      Amount exceeds available balance of ₹
-                      {wallet.available.toLocaleString("en-IN")}.
-                    </p>
-                  )}
-                </div>
-
-                {/* Profile Linked Account Selector */}
-                <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                      <Landmark className="h-3.5 w-3.5 text-primary" />
-                      Profile Linked Account
-                    </label>
-                    <Link
-                      href="/professional-profile"
-                      className="text-[11px] font-medium text-primary hover:underline"
-                    >
-                      Manage accounts →
-                    </Link>
-                  </div>
-
-                  {linkedAccounts.length > 0 ? (
-                    <div className="space-y-2">
-                      <div className="relative">
-                        <select
-                          className="h-10 w-full appearance-none rounded-xl border border-input bg-background px-3 pr-8 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                          value={selectedLinkedAccountId}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setSelectedLinkedAccountId(val);
-                            const found = linkedAccounts.find((a) => a.id === val);
-                            if (found) {
-                              applyLinkedAccount(found);
-                            }
-                          }}
-                        >
-                          <option value="">-- Select saved account or type details below --</option>
-                          {linkedAccounts.map((acc) => {
-                            const label =
-                              acc.accountType === "BANK"
-                                ? `Bank: ${acc.bankName || "Bank Account"} (•••• ${acc.last4 || "••••"})`
-                                : acc.accountType === "UPI"
-                                  ? `UPI: ${acc.upiId || "UPI"} (•••• ${acc.last4 || "••••"})`
-                                  : acc.accountType === "CARD"
-                                    ? `Card: ${acc.cardBank || "Debit Card"} (•••• ${acc.last4 || "••••"})`
-                                    : `Razorpay: ${acc.razorpayAccountId || "Account"} (•••• ${acc.last4 || "••••"})`;
-                            return (
-                              <option key={acc.id} value={acc.id}>
-                                {acc.isDefault ? `★ [Default] ${label}` : label}
-                              </option>
-                            );
-                          })}
-                        </select>
-                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      </div>
-
-                      {selectedLinkedAccountId && (
-                        <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 px-2.5 py-1.5 border border-emerald-500/20 text-[11px] text-emerald-700 dark:text-emerald-300">
-                          <span className="font-medium flex items-center gap-1.5">
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Auto-filled from profile
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedLinkedAccountId("")}
-                            className="text-[10px] text-muted-foreground hover:text-foreground underline"
-                          >
-                            Reset selection
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between rounded-lg bg-background/60 p-2.5 border border-border/60 text-[11px] text-muted-foreground">
-                      <span>No saved accounts in profile yet.</span>
-                      <Link
-                        href="/professional-profile"
-                        className="font-semibold text-primary hover:underline ml-2"
-                      >
-                        + Link Account
-                      </Link>
-                    </div>
-                  )}
-                </div>
-
-                {/* Payout Method Tabs */}
-                <div>
-                  <label className="block text-xs font-semibold text-foreground/80 mb-2">
-                    Select Payout Method
-                  </label>
-                  <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted/70 p-1 text-xs font-semibold">
-                    <button
-                      type="button"
-                      onClick={() => setPayoutMethod("BANK")}
-                      className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg transition-all ${
-                        payoutMethod === "BANK"
-                          ? "bg-background text-foreground shadow-xs border border-border"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <Building2 className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">Bank A/C</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPayoutMethod("UPI")}
-                      className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg transition-all ${
-                        payoutMethod === "UPI"
-                          ? "bg-background text-foreground shadow-xs border border-border"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <Smartphone className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">UPI</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPayoutMethod("CARD")}
-                      className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg transition-all ${
-                        payoutMethod === "CARD"
-                          ? "bg-background text-foreground shadow-xs border border-border"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <CreditCard className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">Debit Card</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Form Fields: BANK */}
-                {payoutMethod === "BANK" && (
-                  <div className="space-y-3 pt-1">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                        Bank Name
-                      </label>
-                      <input
-                        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        placeholder="e.g. State Bank of India, HDFC Bank, ICICI"
-                        value={bankName}
-                        onChange={(e) => setBankName(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                        Account Holder Name
-                      </label>
-                      <input
-                        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        placeholder="Full name as per bank passbook"
-                        value={accountHolder}
-                        onChange={(e) => setAccountHolder(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                        Account Number
-                      </label>
-                      <input
-                        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        placeholder="e.g. 102938475612"
-                        value={accountNumber}
-                        onChange={(e) => setAccountNumber(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                        Confirm Account Number
-                      </label>
-                      <input
-                        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        placeholder="Re-enter bank account number"
-                        value={confirmAccountNumber}
-                        onChange={(e) => setConfirmAccountNumber(e.target.value)}
-                      />
-                      {confirmAccountNumber && (
-                        <p
-                          className={`mt-1 text-[11px] font-medium ${
-                            accountNumber === confirmAccountNumber
-                              ? "text-emerald-600"
-                              : "text-rose-500"
-                          }`}
-                        >
-                          {accountNumber === confirmAccountNumber
-                            ? "✓ Account numbers match"
-                            : "✗ Account numbers do not match"}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                        IFSC Code
-                      </label>
-                      <input
-                        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs font-mono uppercase focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        placeholder="e.g. SBIN0001234 (11 characters)"
-                        maxLength={11}
-                        value={ifscCode}
-                        onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
-                      />
-                      {ifscCode && ifscCode.length < 11 && (
-                        <p className="mt-1 text-[11px] text-amber-600">
-                          IFSC must be exactly 11 characters ({ifscCode.length}/11).
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Form Fields: UPI */}
-                {payoutMethod === "UPI" && (
-                  <div className="space-y-3 pt-1">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                        Registered Name
-                      </label>
-                      <input
-                        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        placeholder="Name linked with your UPI ID"
-                        value={upiHolder}
-                        onChange={(e) => setUpiHolder(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                        UPI ID (Virtual Payment Address)
-                      </label>
-                      <input
-                        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        placeholder="e.g. yourname@oksbi, 9876543210@paytm"
-                        value={upiId}
-                        onChange={(e) => setUpiId(e.target.value.toLowerCase())}
-                      />
-                      {upiId && !upiId.includes("@") && (
-                        <p className="mt-1 text-[11px] text-amber-600">
-                          Please include a valid UPI handle (must contain &apos;@&apos;).
-                        </p>
-                      )}
-                    </div>
-                    <div className="rounded-xl bg-primary/5 p-2.5 border border-primary/10 text-[11px] text-muted-foreground">
-                      Funds will be transferred directly to your UPI-linked bank account upon
-                      review.
-                    </div>
-                  </div>
-                )}
-
-                {/* Form Fields: DEBIT CARD */}
-                {payoutMethod === "CARD" && (
-                  <div className="space-y-3 pt-1">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                        Cardholder Name
-                      </label>
-                      <input
-                        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        placeholder="Full name printed on debit card"
-                        value={cardHolder}
-                        onChange={(e) => setCardHolder(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                        16-Digit Debit Card Number
-                      </label>
-                      <input
-                        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        placeholder="e.g. 4532 1123 8890 1234"
-                        maxLength={19}
-                        value={cardNumber}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/\D/g, "").slice(0, 16);
-                          const formatted = raw.match(/.{1,4}/g)?.join(" ") ?? raw;
-                          setCardNumber(formatted);
-                        }}
-                      />
-                      {cardNumber && cardNumber.replace(/\s/g, "").length < 16 && (
-                        <p className="mt-1 text-[11px] text-amber-600">
-                          Debit card number must be 16 digits (
-                          {cardNumber.replace(/\s/g, "").length}/16).
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                        Issuing Bank
-                      </label>
-                      <input
-                        className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        placeholder="e.g. HDFC Bank, ICICI Bank, SBI"
-                        value={cardBank}
-                        onChange={(e) => setCardBank(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Remember details checkbox */}
-                <label className="flex items-center gap-2 cursor-pointer pt-1">
-                  <input
-                    type="checkbox"
-                    checked={saveDetailsForFuture}
-                    onChange={(e) => setSaveDetailsForFuture(e.target.checked)}
-                    className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    Save payout details for future withdrawals
-                  </span>
-                </label>
-
-                {/* Status Message */}
                 {message && (
                   <div
                     className={`rounded-xl p-3 text-xs font-medium border ${
@@ -1140,24 +746,22 @@ export default function Earnings() {
                   </div>
                 )}
 
-                {/* Submit Button */}
                 <Button
-                  className="mt-2 w-full gap-2 font-semibold"
-                  disabled={!canSubmit}
-                  onClick={() => void withdraw()}
+                  className="w-full gap-2 font-semibold h-11"
+                  disabled={wallet.available < (wallet.minWithdrawalAmount ?? 500)}
+                  onClick={() => {
+                    setMessage("");
+                    setWithdrawDialogOpen(true);
+                  }}
                 >
-                  {actionBusy === "withdraw" ? (
-                    "Submitting request..."
-                  ) : (
-                    <>
-                      Request withdrawal <ArrowUpRight className="h-4 w-4" />
-                    </>
-                  )}
+                  Request withdrawal <ArrowUpRight className="h-4 w-4" />
                 </Button>
 
-                <p className="text-[11px] text-center text-muted-foreground">
-                  Payouts are verified and transferred directly to your account within 24 hours.
-                </p>
+                {wallet.available < (wallet.minWithdrawalAmount ?? 500) && (
+                  <p className="text-xs text-center text-muted-foreground">
+                    Minimum balance of ₹{(wallet.minWithdrawalAmount ?? 500).toLocaleString("en-IN")} required to request withdrawal.
+                  </p>
+                )}
               </section>
 
               {/* Optional Advanced Razorpay Account Accordion */}
@@ -1264,6 +868,347 @@ export default function Earnings() {
           </div>
         </>
       )}
+
+      {/* Withdrawal Request Modal Dialog */}
+      <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Request Withdrawal</DialogTitle>
+            <DialogDescription>
+              Enter the amount you wish to withdraw and select your payout destination.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between rounded-xl bg-muted/40 p-3 border border-border/60">
+              <div>
+                <p className="text-xs text-muted-foreground">Available balance</p>
+                <p className="font-semibold text-foreground text-sm">
+                  ₹{wallet?.available.toLocaleString("en-IN")}
+                </p>
+              </div>
+              {wallet && wallet.available >= (wallet.minWithdrawalAmount ?? 500) && (
+                <button
+                  type="button"
+                  onClick={() => setAmount(String(wallet.available))}
+                  className="text-xs font-semibold text-primary hover:underline"
+                >
+                  Withdraw full balance
+                </button>
+              )}
+            </div>
+
+            {/* Amount Input */}
+            <div>
+              <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
+                Withdrawal Amount (₹)
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
+                  ₹
+                </span>
+                <input
+                  className="h-11 w-full rounded-xl border border-input bg-background pl-8 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  type="number"
+                  min={wallet?.minWithdrawalAmount ?? 500}
+                  max={wallet?.available ?? 0}
+                  placeholder={`Min ₹${(wallet?.minWithdrawalAmount ?? 500).toLocaleString("en-IN")}`}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
+              </div>
+              {amount && Number(amount) < (wallet?.minWithdrawalAmount ?? 500) && (
+                <p className="mt-1 text-xs font-medium text-amber-600">
+                  Minimum withdrawal amount is ₹
+                  {(wallet?.minWithdrawalAmount ?? 500).toLocaleString("en-IN")}.
+                </p>
+              )}
+              {amount && wallet && Number(amount) > wallet.available && (
+                <p className="mt-1 text-xs font-medium text-rose-600">
+                  Amount exceeds available balance of ₹
+                  {wallet.available.toLocaleString("en-IN")}.
+                </p>
+              )}
+            </div>
+
+            {/* Profile Linked Account Selector */}
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Landmark className="h-3.5 w-3.5 text-primary" />
+                  Profile Linked Account
+                </label>
+                <Link
+                  href="/professional-profile"
+                  className="text-[11px] font-medium text-primary hover:underline"
+                >
+                  Manage accounts →
+                </Link>
+              </div>
+
+              {linkedAccounts.filter((a) => a.accountType === "BANK" || a.accountType === "UPI").length > 0 ? (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <select
+                      className="h-10 w-full appearance-none rounded-xl border border-input bg-background px-3 pr-8 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      value={selectedLinkedAccountId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedLinkedAccountId(val);
+                        const found = linkedAccounts.find((a) => a.id === val);
+                        if (found) {
+                          applyLinkedAccount(found);
+                        }
+                      }}
+                    >
+                      <option value="">-- Select saved account or type details below --</option>
+                      {linkedAccounts
+                        .filter((a) => a.accountType === "BANK" || a.accountType === "UPI")
+                        .map((acc) => {
+                          const label =
+                            acc.accountType === "BANK"
+                              ? `Bank: ${acc.bankName || "Bank Account"} (•••• ${acc.last4 || "••••"})`
+                              : `UPI: ${acc.upiId || "UPI"} (•••• ${acc.last4 || "••••"})`;
+                          return (
+                            <option key={acc.id} value={acc.id}>
+                              {acc.isDefault ? `★ [Default] ${label}` : label}
+                            </option>
+                          );
+                        })}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  </div>
+
+                  {selectedLinkedAccountId && (
+                    <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 px-2.5 py-1.5 border border-emerald-500/20 text-[11px] text-emerald-700 dark:text-emerald-300">
+                      <span className="font-medium flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Auto-filled from profile
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedLinkedAccountId("")}
+                        className="text-[10px] text-muted-foreground hover:text-foreground underline"
+                      >
+                        Reset selection
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between rounded-lg bg-background/60 p-2.5 border border-border/60 text-[11px] text-muted-foreground">
+                  <span>No saved accounts in profile yet.</span>
+                  <Link
+                    href="/professional-profile"
+                    className="font-semibold text-primary hover:underline ml-2"
+                  >
+                    + Link Account
+                  </Link>
+                </div>
+              )}
+            </div>
+
+            {/* Payout Method Tabs (BANK and UPI only) */}
+            <div>
+              <label className="block text-xs font-semibold text-foreground/80 mb-2">
+                Select Payout Method
+              </label>
+              <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted/70 p-1 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setPayoutMethod("BANK")}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg transition-all ${
+                    payoutMethod === "BANK"
+                      ? "bg-background text-foreground shadow-xs border border-border"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Building2 className="h-3.5 w-3.5 shrink-0" />
+                  <span>Bank Account</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayoutMethod("UPI")}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg transition-all ${
+                    payoutMethod === "UPI"
+                      ? "bg-background text-foreground shadow-xs border border-border"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                  <span>UPI ID</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Form Fields: BANK */}
+            {payoutMethod === "BANK" && (
+              <div className="space-y-3 pt-1">
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                    Bank Name
+                  </label>
+                  <input
+                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="e.g. State Bank of India, HDFC Bank, ICICI"
+                    value={bankName}
+                    onChange={(e) => setBankName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                    Account Holder Name
+                  </label>
+                  <input
+                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="Full name as per bank passbook"
+                    value={accountHolder}
+                    onChange={(e) => setAccountHolder(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                    Account Number
+                  </label>
+                  <input
+                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="e.g. 102938475612"
+                    value={accountNumber}
+                    onChange={(e) => setAccountNumber(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                    Confirm Account Number
+                  </label>
+                  <input
+                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="Re-enter bank account number"
+                    value={confirmAccountNumber}
+                    onChange={(e) => setConfirmAccountNumber(e.target.value)}
+                  />
+                  {confirmAccountNumber && (
+                    <p
+                      className={`mt-1 text-[11px] font-medium ${
+                        accountNumber === confirmAccountNumber
+                          ? "text-emerald-600"
+                          : "text-rose-500"
+                      }`}
+                    >
+                      {accountNumber === confirmAccountNumber
+                        ? "✓ Account numbers match"
+                        : "✗ Account numbers do not match"}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                    IFSC Code
+                  </label>
+                  <input
+                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs font-mono uppercase focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="e.g. SBIN0001234 (11 characters)"
+                    maxLength={11}
+                    value={ifscCode}
+                    onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
+                  />
+                  {ifscCode && ifscCode.length < 11 && (
+                    <p className="mt-1 text-[11px] text-amber-600">
+                      IFSC must be exactly 11 characters ({ifscCode.length}/11).
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Form Fields: UPI */}
+            {payoutMethod === "UPI" && (
+              <div className="space-y-3 pt-1">
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                    Registered Name
+                  </label>
+                  <input
+                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="Name linked with your UPI ID"
+                    value={upiHolder}
+                    onChange={(e) => setUpiHolder(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                    UPI ID (Virtual Payment Address)
+                  </label>
+                  <input
+                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="e.g. yourname@oksbi, 9876543210@paytm"
+                    value={upiId}
+                    onChange={(e) => setUpiId(e.target.value.toLowerCase())}
+                  />
+                  {upiId && !upiId.includes("@") && (
+                    <p className="mt-1 text-[11px] text-amber-600">
+                      Please include a valid UPI handle (must contain &apos;@&apos;).
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-xl bg-primary/5 p-2.5 border border-primary/10 text-[11px] text-muted-foreground">
+                  Funds will be transferred directly to your UPI-linked bank account upon
+                  review.
+                </div>
+              </div>
+            )}
+
+            {/* Remember details checkbox */}
+            <label className="flex items-center gap-2 cursor-pointer pt-1">
+              <input
+                type="checkbox"
+                checked={saveDetailsForFuture}
+                onChange={(e) => setSaveDetailsForFuture(e.target.checked)}
+                className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+              />
+              <span className="text-xs text-muted-foreground">
+                Save payout details for future withdrawals
+              </span>
+            </label>
+
+            {/* Status Message inside dialog */}
+            {message && (
+              <div
+                className={`rounded-xl p-3 text-xs font-medium border ${
+                  message.includes("success") || message.includes("submitted")
+                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20"
+                    : "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20"
+                }`}
+              >
+                {message}
+              </div>
+            )}
+
+            {/* Submit & Cancel Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setWithdrawDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={!canSubmit}
+                onClick={() => void withdraw()}
+              >
+                {actionBusy === "withdraw" ? (
+                  "Submitting..."
+                ) : (
+                  <>
+                    Confirm & Request <ArrowUpRight className="h-4 w-4 ml-1" />
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {selectedTransaction ? (
         <div
           className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"
@@ -1367,7 +1312,9 @@ function PaymentDetails({ detail }: { detail: PaymentDetail }) {
       </div>
       <div className="space-y-3 rounded-2xl border border-border p-5 text-sm">
         <DetailRow label="Client milestone payment" value={money(detail.baseAmount)} />
-        <DetailRow label="Platform commission" value={money(detail.commissionAmount)} />
+        {detail.commissionAmount > 0 && (
+          <DetailRow label="Platform commission" value={money(detail.commissionAmount)} />
+        )}
         <DetailRow label="Net earnings" value={money(detail.professionalPayoutAmount)} />
         <DetailRow
           label="Payment method"
@@ -1453,20 +1400,8 @@ function StatDetailsModal({
     total: {
       title: "Total earned",
       value: `₹${wallet.total.toLocaleString("en-IN")}`,
-      description: "Completed professional earnings after commission deductions.",
-      rows: [
-        [
-          "Gross earnings",
-          `₹${(wallet.grossTotal ?? wallet.total + wallet.commission).toLocaleString("en-IN")}`,
-        ],
-        ["Commission deducted", `₹${wallet.commission.toLocaleString("en-IN")}`],
-      ],
-    },
-    commission: {
-      title: "Commission deducted",
-      value: `₹${wallet.commission.toLocaleString("en-IN")}`,
-      description: "The platform commission deducted from completed payments.",
-      rows: [["Net professional earnings", `₹${wallet.total.toLocaleString("en-IN")}`]],
+      description: "Completed professional earnings recorded from projects.",
+      rows: [["Total earned", `₹${wallet.total.toLocaleString("en-IN")}`]],
     },
     month: {
       title: "This month",

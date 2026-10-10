@@ -104,7 +104,11 @@ export default function AdminSettingsPage() {
     toast.info("Changes reset to saved values.");
   }
 
-  const commissionRate = formValues["commission_rate"] || "20";
+  const isCommissionEnabled =
+    formValues["commission_enabled"] === "true" ||
+    formValues["commission_enabled"] === "1" ||
+    formValues["commission_enabled"] === "on";
+  const commissionRate = formValues["commission_rate"] || "10";
   const disputeLimit = formValues["dispute_limit"] || "5";
   const maxDisputeRounds = formValues["max_dispute_rounds"] || "5";
   const minWithdrawal = formValues["min_withdrawal_amount"] || "500";
@@ -173,12 +177,34 @@ export default function AdminSettingsPage() {
         <div className="grid gap-6">
           {/* Quick Stat Pill Preview */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <div className="rounded-xl border border-indigo-200/80 bg-indigo-50/50 p-3.5">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">
+            <div
+              className={`rounded-xl border p-3.5 ${
+                isCommissionEnabled
+                  ? "border-indigo-200/80 bg-indigo-50/50"
+                  : "border-slate-200/80 bg-slate-50/50"
+              }`}
+            >
+              <p
+                className={`text-[11px] font-bold uppercase tracking-wider ${
+                  isCommissionEnabled ? "text-indigo-700" : "text-slate-600"
+                }`}
+              >
                 Platform Commission
               </p>
-              <p className="mt-1 text-2xl font-black text-indigo-900">{commissionRate}%</p>
-              <p className="text-[10px] text-indigo-600 mt-0.5">Applied on milestone releases</p>
+              <p
+                className={`mt-1 text-2xl font-black ${
+                  isCommissionEnabled ? "text-indigo-900" : "text-slate-700"
+                }`}
+              >
+                {isCommissionEnabled ? `${commissionRate}%` : "OFF"}
+              </p>
+              <p
+                className={`text-[10px] mt-0.5 ${
+                  isCommissionEnabled ? "text-indigo-600" : "text-slate-500"
+                }`}
+              >
+                {isCommissionEnabled ? "Deduction enabled" : "Zero commission cut"}
+              </p>
             </div>
             <div
               className={`rounded-xl border p-3.5 ${
@@ -251,6 +277,38 @@ export default function AdminSettingsPage() {
             </div>
 
             <div className="grid md:grid-cols-2 gap-6">
+              {/* Commission ON/OFF Toggle */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 md:col-span-2">
+                <div>
+                  <Label htmlFor="commission_enabled" className="text-xs font-bold text-slate-900 block">
+                    Turn Platform Commission On / Off
+                  </Label>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    When turned ON, platform commission is deducted from milestone payouts. When turned OFF, zero commission is cut (100% payout to professional, 0% platform fee to client).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-bold ${isCommissionEnabled ? "text-indigo-600" : "text-slate-500"}`}>
+                    {isCommissionEnabled ? "COMMISSION ON" : "COMMISSION OFF"}
+                  </span>
+                  <button
+                    id="commission_enabled"
+                    type="button"
+                    onClick={() =>
+                      handleValueChange("commission_enabled", isCommissionEnabled ? "false" : "true")
+                    }
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 ${
+                      isCommissionEnabled ? "bg-indigo-600" : "bg-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        isCommissionEnabled ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
               {/* Commission Percentage */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">

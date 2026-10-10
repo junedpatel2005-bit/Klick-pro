@@ -109,9 +109,9 @@ export default function ClientEarnings() {
   >(null);
   const [paymentDetailsError, setPaymentDetailsError] = useState("");
   const [historyFilter, setHistoryFilter] = useState<
-    "all" | "milestones" | "commissions" | "deposits" | "failed"
+    "all" | "milestones" | "deposits" | "failed"
   >("all");
-  const [withdrawMethod, setWithdrawMethod] = useState<"BANK" | "CARD" | "UPI">("BANK");
+  const [withdrawMethod, setWithdrawMethod] = useState<"BANK" | "UPI">("BANK");
   const [withdrawDestination, setWithdrawDestination] = useState("");
   const [bankAccount, setBankAccount] = useState("");
   const [bankIfsc, setBankIfsc] = useState("");
@@ -132,9 +132,6 @@ export default function ClientEarnings() {
     } else if (acc.accountType === "UPI") {
       setWithdrawMethod("UPI");
       setWithdrawDestination(acc.upiId ?? "");
-    } else if (acc.accountType === "CARD") {
-      setWithdrawMethod("CARD");
-      setWithdrawDestination(acc.accountNumber ?? "");
     }
   }
 
@@ -514,12 +511,6 @@ export default function ClientEarnings() {
         if (historyFilter === "milestones") {
           return item.kind === "payment" && item.payment.type !== "PLATFORM_COMMISSION";
         }
-        if (historyFilter === "commissions") {
-          return (
-            (item.kind === "payment" && item.payment.type === "PLATFORM_COMMISSION") ||
-            (item.kind === "topup" && item.transaction.type === "PLATFORM_COMMISSION")
-          );
-        }
         if (historyFilter === "deposits") {
           return item.kind === "topup" && item.transaction.type === "WALLET_TOP_UP";
         }
@@ -695,7 +686,7 @@ export default function ClientEarnings() {
                 </div>
                 <h2 className="mt-4 font-display text-2xl font-semibold">Get your money back</h2>
                 <p className="mt-1 max-w-md text-sm leading-6 text-muted-foreground">
-                  Withdraw unused wallet balance to your bank account, card, or UPI. Requests are
+                  Withdraw unused wallet balance to your bank account or UPI. Requests are
                   reviewed before payout.
                 </p>
                 <p className="mt-4 text-sm text-muted-foreground">
@@ -788,7 +779,6 @@ export default function ClientEarnings() {
                   {(
                     [
                       { key: "BANK", label: "Bank account", icon: Landmark },
-                      { key: "CARD", label: "Card", icon: CreditCard },
                       { key: "UPI", label: "UPI", icon: Smartphone },
                     ] as const
                   ).map((method) => (
@@ -823,11 +813,7 @@ export default function ClientEarnings() {
                     className="mt-3 h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none"
                     value={withdrawDestination}
                     onChange={(event) => setWithdrawDestination(event.target.value)}
-                    placeholder={
-                      withdrawMethod === "CARD"
-                        ? "Debit / Credit Card number (16 digits)"
-                        : "UPI ID (e.g. username@okhdfcbank, 9876543210@paytm)"
-                    }
+                    placeholder="UPI ID (e.g. username@okhdfcbank, 9876543210@paytm)"
                   />
                 )}
                 <div className="mt-3 flex gap-2">
@@ -916,7 +902,6 @@ export default function ClientEarnings() {
                   [
                     { key: "all", label: "All", count: tabCounts.all },
                     { key: "milestones", label: "Milestones", count: tabCounts.milestones },
-                    { key: "commissions", label: "Commissions", count: tabCounts.commissions },
                     { key: "deposits", label: "Deposits", count: tabCounts.deposits },
                     { key: "failed", label: "Failed", count: tabCounts.failed },
                   ] as const

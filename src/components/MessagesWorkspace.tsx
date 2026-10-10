@@ -7,6 +7,7 @@ import { io } from "socket.io-client";
 import {
   Briefcase,
   CheckCheck,
+  ChevronDown,
   ExternalLink,
   Mail,
   MessageCircle,
@@ -511,29 +512,21 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
                 >
                   <div
                     className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full font-semibold border ${
-                      !admin && (contact.role === "ADMIN" || contact.isAdminTeam)
-                        ? "bg-gradient-to-tr from-indigo-600 to-indigo-800 text-white shadow-xs border-indigo-700"
-                        : admin
-                          ? contact.role === "PROFESSIONAL"
-                            ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                            : "bg-sky-50 text-sky-700 border-sky-200"
-                          : "bg-primary/15 text-primary border-primary/20"
+                      admin
+                        ? contact.role === "PROFESSIONAL"
+                          ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                          : "bg-sky-50 text-sky-700 border-sky-200"
+                        : "bg-primary/15 text-primary border-primary/20"
                     }`}
                   >
-                    {!admin && (contact.role === "ADMIN" || contact.isAdminTeam) ? (
-                      <ShieldCheck className="h-6 w-6 text-white" />
-                    ) : (
-                      <>
-                        {initials(contact.name)}
-                        {contact.avatarUrl && (
-                          <img
-                            src={contact.avatarUrl}
-                            alt=""
-                            className="absolute h-full w-full rounded-full object-cover"
-                            onError={(event) => event.currentTarget.remove()}
-                          />
-                        )}
-                      </>
+                    {initials(contact.name)}
+                    {contact.avatarUrl && (
+                      <img
+                        src={contact.avatarUrl}
+                        alt=""
+                        className="absolute h-full w-full rounded-full object-cover"
+                        onError={(event) => event.currentTarget.remove()}
+                      />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -541,20 +534,11 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
                       <div className="flex items-center gap-1.5 min-w-0">
                         <p
                           className={`shrink-0 text-sm font-semibold truncate ${
-                            !admin && (contact.role === "ADMIN" || contact.isAdminTeam)
-                              ? "text-indigo-600 dark:text-indigo-400 font-bold"
-                              : admin
-                                ? "text-slate-900"
-                                : ""
+                            admin ? "text-slate-900" : ""
                           }`}
                         >
                           {contact.name}
                         </p>
-                        {!admin && (contact.role === "ADMIN" || contact.isAdminTeam) && (
-                          <span className="shrink-0 rounded-full bg-indigo-500/15 px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-300">
-                            Support
-                          </span>
-                        )}
                         {admin && (
                           <span
                             className={`shrink-0 rounded-full px-1.5 py-0.2 text-[9px] font-semibold border ${
@@ -635,10 +619,7 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
                       className={`truncate text-xs ${admin ? "text-slate-500" : "text-muted-foreground"}`}
                     >
                       {capitalizeFirst(
-                        contact.lastMessage?.body ??
-                          (!admin && (contact.role === "ADMIN" || contact.isAdminTeam)
-                            ? "Official KLICK-PRO Help & Support"
-                            : "Start a conversation"),
+                        contact.lastMessage?.body ?? "Start a conversation",
                       )}
                     </p>
                   </div>
@@ -680,111 +661,100 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
               <header
                 className={`flex flex-wrap items-center justify-between gap-3 border-b p-4 sm:p-5 ${admin ? "border-slate-200 bg-white" : "border-border"}`}
               >
-                {!admin && isSelectedAdmin ? (
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-800 text-white shadow-xs font-semibold">
-                      <ShieldCheck className="h-6 w-6 text-white" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate font-semibold text-indigo-600 dark:text-indigo-400">
-                          KLICK-PRO Team
-                        </p>
-                        <span className="rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
-                          Official Support
-                        </span>
-                      </div>
-                      <p className="truncate text-xs text-muted-foreground">
-                        Direct support line with KLICK-PRO team
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className={`grid h-11 w-11 shrink-0 place-items-center rounded-full font-semibold border ${
-                        admin
-                          ? selected.role === "PROFESSIONAL"
-                            ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                            : "bg-sky-50 text-sky-700 border-sky-200"
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={`grid h-11 w-11 shrink-0 place-items-center rounded-full font-semibold border ${
+                      admin
+                        ? selected.role === "PROFESSIONAL"
+                          ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                          : "bg-sky-50 text-sky-700 border-sky-200"
+                        : isSelectedAdmin
+                          ? "bg-indigo-600 text-white"
                           : "bg-primary/15 text-primary"
-                      }`}
-                    >
-                      {initials(selected.name)}
-                      {selected.avatarUrl && (
-                        <img
-                          src={selected.avatarUrl}
-                          alt=""
-                          className="h-full w-full rounded-full object-cover"
-                          onError={(event) => event.currentTarget.remove()}
-                        />
+                    }`}
+                  >
+                    {isSelectedAdmin ? (
+                      <ShieldCheck className="h-6 w-6 text-white" />
+                    ) : (
+                      <>
+                        {initials(selected.name)}
+                        {selected.avatarUrl && (
+                          <img
+                            src={selected.avatarUrl}
+                            alt=""
+                            className="h-full w-full rounded-full object-cover"
+                            onError={(event) => event.currentTarget.remove()}
+                          />
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className={`truncate font-bold ${admin ? "text-slate-900" : ""}`}>
+                        {selected.name}
+                      </p>
+                      {currentProject && (
+                        <span
+                          className="truncate text-xs font-normal text-muted-foreground hidden sm:inline"
+                          title={currentProject.title}
+                        >
+                          ({currentProject.title})
+                        </span>
                       )}
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                          admin
+                            ? selected.role === "PROFESSIONAL"
+                              ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                              : "bg-sky-50 text-sky-700 border-sky-200"
+                            : isSelectedAdmin
+                              ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800"
+                              : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {isSelectedAdmin
+                          ? "Official Support"
+                          : selected.role === "PROFESSIONAL"
+                            ? "Professional"
+                            : "Client"}
+                      </span>
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className={`truncate font-bold ${admin ? "text-slate-900" : ""}`}>
-                          {selected.name}
-                        </p>
-                        {currentProject && (
+
+                    {admin ? (
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                        {selected.email && (
                           <span
-                            className="truncate text-xs font-normal text-muted-foreground hidden sm:inline"
-                            title={currentProject.title}
+                            className="flex items-center gap-1 truncate"
+                            title={selected.email}
                           >
-                            ({currentProject.title})
+                            <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                            {selected.email}
                           </span>
                         )}
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
-                            admin
-                              ? selected.role === "PROFESSIONAL"
-                                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                                : "bg-sky-50 text-sky-700 border-sky-200"
-                              : "bg-muted text-muted-foreground"
-                          }`}
+                        {selected.phone && (
+                          <span className="flex items-center gap-1" title={selected.phone}>
+                            <Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                            {selected.phone}
+                          </span>
+                        )}
+                        <Link
+                          href={`/admin/users/${selected.id}`}
+                          className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-700 transition"
                         >
-                          {selected.role === "ADMIN"
-                            ? "Admin support"
-                            : selected.role === "PROFESSIONAL"
-                              ? "Professional"
-                              : "Client"}
-                        </span>
+                          Profile <ExternalLink className="h-3 w-3" />
+                        </Link>
                       </div>
-
-                      {admin ? (
-                        <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                          {selected.email && (
-                            <span
-                              className="flex items-center gap-1 truncate"
-                              title={selected.email}
-                            >
-                              <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                              {selected.email}
-                            </span>
-                          )}
-                          {selected.phone && (
-                            <span className="flex items-center gap-1" title={selected.phone}>
-                              <Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                              {selected.phone}
-                            </span>
-                          )}
-                          <Link
-                            href={`/admin/users/${selected.id}`}
-                            className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-700 transition"
-                          >
-                            Profile <ExternalLink className="h-3 w-3" />
-                          </Link>
+                    ) : (
+                      currentProject && (
+                        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground sm:hidden truncate">
+                          <Briefcase className="h-3 w-3 shrink-0 text-primary" />
+                          <span className="truncate font-medium">{currentProject.title}</span>
                         </div>
-                      ) : (
-                        currentProject && (
-                          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground sm:hidden truncate">
-                            <Briefcase className="h-3 w-3 shrink-0 text-primary" />
-                            <span className="truncate font-medium">{currentProject.title}</span>
-                          </div>
-                        )
-                      )}
-                    </div>
+                      )
+                    )}
                   </div>
-                )}
+                </div>
 
                 {/* Right Area of Header: Percentage, Milestones, or Project Completed */}
                 {!admin && isSelectedAdmin ? (
@@ -889,41 +859,52 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
               {/* Multi-Project Switcher Bar (when 2 or more projects exist with this contact) */}
               {selected.projects && selected.projects.length > 1 && (
                 <div
-                  className={`flex items-center gap-2 border-b px-4 py-2 text-xs overflow-x-auto ${
-                    admin ? "border-slate-200 bg-slate-50/70" : "border-border bg-muted/30"
+                  className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2.5 text-xs ${
+                    admin ? "border-slate-200 bg-slate-50/80" : "border-border bg-muted/40"
                   }`}
                 >
-                  <span
-                    className={`shrink-0 font-medium ${admin ? "text-slate-600" : "text-muted-foreground"}`}
-                  >
-                    Connected Projects ({selected.projects.length}):
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    {selected.projects.map((proj) => {
-                      const isCurrent = currentProject?.id === proj.id;
-                      return (
-                        <button
-                          key={proj.id}
-                          type="button"
-                          onClick={() => setSelectedProjectId(proj.id)}
-                          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
-                            isCurrent
-                              ? admin
-                                ? "border-indigo-200 bg-indigo-50 text-indigo-700 font-semibold shadow-2xs"
-                                : "border-primary/30 bg-primary/10 text-primary shadow-xs"
-                              : admin
-                                ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                : "border-transparent bg-muted text-muted-foreground hover:text-foreground"
-                          }`}
-                        >
-                          <span className="truncate max-w-[140px]">{proj.title}</span>
-                          <span className="text-[10px] opacity-75">
-                            • {proj.isCompleted ? "Completed" : `${proj.progress}%`}
-                          </span>
-                        </button>
-                      );
-                    })}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex items-center gap-1.5 shrink-0 font-medium text-muted-foreground">
+                      <Briefcase className="h-3.5 w-3.5 text-primary" />
+                      <span>Project Thread:</span>
+                    </div>
+                    <div className="relative inline-block min-w-[200px] max-w-[320px]">
+                      <select
+                        value={currentProject?.id || ""}
+                        onChange={(e) => setSelectedProjectId(Number(e.target.value))}
+                        aria-label="Select connected project thread"
+                        className={`w-full appearance-none rounded-md border py-1.5 pl-3 pr-8 text-xs font-medium cursor-pointer transition focus:outline-hidden focus:ring-2 ${
+                          admin
+                            ? "border-slate-200 bg-white text-slate-900 hover:border-slate-300 focus:ring-indigo-500/20"
+                            : "border-border bg-card text-foreground hover:border-primary/40 focus:ring-primary/20"
+                        }`}
+                      >
+                        {selected.projects.map((proj) => (
+                          <option key={proj.id} value={proj.id}>
+                            {proj.title} • {proj.isCompleted ? "Completed" : `${proj.progress}%`}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    </div>
                   </div>
+
+                  {currentProject && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] text-muted-foreground">
+                        {selected.projects.length} connected projects
+                      </span>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${
+                          currentProject.isCompleted
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400"
+                            : "border-primary/20 bg-primary/10 text-primary"
+                        }`}
+                      >
+                        {currentProject.isCompleted ? "Completed" : `${currentProject.progress}% in progress`}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -954,7 +935,7 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
                           {!admin && isSelectedAdmin && !isMine && (
                             <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-indigo-400">
                               <ShieldCheck className="h-3.5 w-3.5" />
-                              <span>KLICK-PRO Team</span>
+                              <span>{selected.name || "KLICK-PRO Team"}</span>
                             </div>
                           )}
                           {admin && !isMine && (

@@ -194,7 +194,6 @@ export async function GET(request: NextRequest) {
       ...(contactIds ?? []),
       ...adminConversationContactIds,
       ...conversationPartnerIds,
-      ...(primaryAdmin && session.role !== "ADMIN" ? [primaryAdmin.id] : []),
     ]),
   ];
   const contacts = await db.user.findMany({
@@ -245,11 +244,9 @@ export async function GET(request: NextRequest) {
     return {
       ...contact,
       name:
-        isContactAdmin && session.role !== "ADMIN"
-          ? "KLICK-PRO Team"
-          : `${contact.firstName} ${contact.lastName}`.trim() ||
-            contact.email ||
-            `User #${contact.id}`,
+        `${contact.firstName} ${contact.lastName}`.trim() ||
+        contact.email ||
+        `User #${contact.id}`,
       isAdminTeam: isContactAdmin,
       conversationId: conversation?.id ?? null,
       lastMessage: conversation?.messages[0] ?? null,
@@ -283,11 +280,6 @@ export async function GET(request: NextRequest) {
     };
   });
   contactRows.sort((first, second) => {
-    // For regular users, pin KLICK-PRO Team to the very top of contact list!
-    if (session.role !== "ADMIN") {
-      if (first.isAdminTeam && !second.isAdminTeam) return -1;
-      if (!first.isAdminTeam && second.isAdminTeam) return 1;
-    }
     // Users with unread messages come first
     if (second.unreadCount > 0 !== first.unreadCount > 0) {
       return second.unreadCount > 0 ? 1 : -1;

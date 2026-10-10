@@ -11,10 +11,16 @@ export const DEFAULT_PLATFORM_SETTINGS: Record<
   string,
   { value: string; description: string; category: "FINANCE" | "DISPUTES" | "GENERAL" | "SECURITY" }
 > = {
+  commission_enabled: {
+    value: "false",
+    description:
+      "When ON, platform commission is deducted from milestone releases and payments. When OFF, zero commission is cut.",
+    category: "FINANCE",
+  },
   commission_rate: {
     value: "10",
     description:
-      "Professional-side fee percentage on milestone payouts. The client-side fee is a separate fixed 10%, so 10% here means a 20% total platform take.",
+      "Professional-side fee percentage on milestone payouts when commission is turned ON.",
     category: "FINANCE",
   },
   max_dispute_rounds: {
@@ -57,14 +63,25 @@ export async function getPlatformSetting(key: string, fallback?: string): Promis
   return fallback ?? DEFAULT_PLATFORM_SETTINGS[key]?.value ?? "";
 }
 
+export async function isCommissionEnabled(): Promise<boolean> {
+  try {
+    const raw = await getPlatformSetting("commission_enabled", "false");
+    return raw === "true" || raw === "1" || raw === "on";
+  } catch {
+    return false;
+  }
+}
+
 export async function getPlatformCommissionRate(): Promise<number> {
   try {
+    const enabled = await isCommissionEnabled();
+    if (!enabled) return 0;
     const raw = await getPlatformSetting("commission_rate", "10");
     const parsed = parseFloat(raw);
     if (isNaN(parsed) || parsed < 0) return 0.1;
     return parsed > 1 ? parsed / 100 : parsed;
   } catch {
-    return 0.1;
+    return 0;
   }
 }
 

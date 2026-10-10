@@ -422,6 +422,8 @@ export async function GET(
       }> = [];
 
       for (const tx of transactions) {
+        if (tx.type === "PLATFORM_COMMISSION") continue;
+
         const payment = tx.milestoneId ? paymentByMilestone.get(tx.milestoneId) : null;
         const tracking = trackingMap.get(tx.trackingId);
         const milestone = tx.milestoneId ? milestoneMap.get(tx.milestoneId) : null;
@@ -429,14 +431,8 @@ export async function GET(
         const professionalName = proMap.get(tx.professionalId) ?? "Professional";
 
         const baseAmount = payment?.baseAmount ?? tx.amount;
-        const feeAmount =
-          (session.role === "PROFESSIONAL"
-            ? payment?.commissionAmount
-            : payment?.clientFeeAmount) ?? Math.round(tx.amount * 0.1);
-        const netAmount =
-          (session.role === "PROFESSIONAL"
-            ? payment?.professionalPayoutAmount
-            : payment?.baseAmount) ?? tx.amount;
+        const feeAmount = 0;
+        const netAmount = tx.amount;
 
         resultTransactions.push({
           ...tx,
@@ -453,52 +449,6 @@ export async function GET(
           feeAmount,
           netAmount,
         });
-
-        // If this is a milestone payment and there is no separate commission row for it in DB yet,
-        // dynamically generate the second entry (commission entry) so each payment shows 2 entries!
-        if (
-          tx.milestoneId &&
-          tx.type !== "PLATFORM_COMMISSION" &&
-          !commissionMilestoneIds.has(tx.milestoneId)
-        ) {
-          const commissionAmount =
-            session.role === "PROFESSIONAL"
-              ? payment?.commissionAmount || Math.round(tx.amount * 0.1)
-              : payment?.clientFeeAmount || Math.round(tx.amount * 0.1);
-
-          if (commissionAmount > 0) {
-            const cleanTitle = tx.description.replace(
-              /^Milestone (?:paid and instantly credited to professional|payment approved by client · Awaiting admin release|payout approved|payment): /i,
-              "",
-            );
-            resultTransactions.push({
-              id: -(tx.id * 1000 + 1),
-              trackingId: tx.trackingId,
-              milestoneId: tx.milestoneId,
-              completionId: tx.completionId,
-              clientId: tx.clientId,
-              professionalId: tx.professionalId,
-              amount: commissionAmount,
-              currency: tx.currency || "INR",
-              type: "PLATFORM_COMMISSION",
-              status: tx.status,
-              description: `Platform commission (10%): ${cleanTitle}`,
-              createdAt: tx.createdAt,
-              updatedAt: tx.updatedAt,
-              invoicePaymentId: payment?.id ?? null,
-              invoiceNumber: `FEE-${new Date(tx.createdAt).getFullYear()}-${String(payment?.id || tx.id).padStart(6, "0")}`,
-              projectTitle: tracking?.job.title ?? `Project #${tx.trackingId}`,
-              jobId: tracking?.job.id ?? null,
-              clientName,
-              professionalName,
-              milestoneTitle: milestone?.title ?? tx.description,
-              paymentMethod: "Platform Deduct",
-              baseAmount: commissionAmount,
-              feeAmount: commissionAmount,
-              netAmount: 0,
-            });
-          }
-        }
       }
 
       return NextResponse.json(resultTransactions);

@@ -6,15 +6,28 @@
 export const CLIENT_FEE_RATE = 0.1;
 export const PROFESSIONAL_FEE_RATE = 0.1;
 
-export function calculateMilestoneMoney(baseAmount: number, customProfessionalFeeRate?: number) {
+export function calculateMilestoneMoney(
+  baseAmount: number,
+  customProfessionalFeeRate?: number,
+  customClientFeeRate?: number,
+) {
+  const isZeroCommission = customProfessionalFeeRate === 0;
+
   const professionalRate =
     typeof customProfessionalFeeRate === "number" &&
     !isNaN(customProfessionalFeeRate) &&
     customProfessionalFeeRate >= 0
       ? customProfessionalFeeRate
-      : PROFESSIONAL_FEE_RATE;
+      : (isZeroCommission ? 0 : PROFESSIONAL_FEE_RATE);
 
-  const clientFeeAmount = Math.ceil(baseAmount * CLIENT_FEE_RATE);
+  const clientRate =
+    typeof customClientFeeRate === "number" &&
+    !isNaN(customClientFeeRate) &&
+    customClientFeeRate >= 0
+      ? customClientFeeRate
+      : (isZeroCommission ? 0 : CLIENT_FEE_RATE);
+
+  const clientFeeAmount = Math.ceil(baseAmount * clientRate);
   const professionalFeeAmount = Math.ceil(baseAmount * professionalRate);
   const clientChargeAmount = baseAmount + clientFeeAmount;
   const professionalPayoutAmount = Math.max(0, baseAmount - professionalFeeAmount);

@@ -526,7 +526,22 @@ export default function JobDetails({
 
       const response = await fetch(`/api/v1/marketplace/job?id=${encodeURIComponent(jobId)}`);
       if (!response.ok) {
-        if (response.status === 404) return setStatus("missing");
+        if (response.status === 404) {
+          try {
+            const proposalCheck = await fetch(
+              `/api/v1/professional/proposals?jobId=${encodeURIComponent(jobId)}`,
+            );
+            if (proposalCheck.ok) {
+              const pData = (await proposalCheck.json()) as { projectId?: number | null };
+              if (pData?.projectId) {
+                window.location.replace(`/project/${pData.projectId}/tracking`);
+              }
+            }
+          } catch {
+            // Ignore error and fall back to missing status
+          }
+          return setStatus("missing");
+        }
         throw new Error("Unable to load job");
       }
       const marketplaceJob = fromMarketplace((await response.json()) as MarketplaceJob);
@@ -2247,6 +2262,21 @@ export default function JobDetails({
                     >
                       <ArrowUpDown className="h-3.5 w-3.5 mr-1" /> Modify Proposal
                     </Button>
+                  ) : ownProposal.status === "REJECTED" ? (
+                    <Button
+                      size="sm"
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium h-8 px-3 text-xs shadow-xs"
+                      onClick={() => {
+                        setProposalPrice(String(ownProposal.bidAmount || ""));
+                        setProposalHourlyRate(String(ownProposal.hourlyRate || ""));
+                        setProposalTotalJobHours(String(ownProposal.totalJobHours || ""));
+                        setProposalDuration(ownProposal.duration || "");
+                        setProposalMessage(ownProposal.coverLetter || "");
+                        setShowProposalForm(true);
+                      }}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 mr-1" /> Re-apply
+                    </Button>
                   ) : (
                     <Button
                       size="sm"
@@ -2545,21 +2575,22 @@ export default function JobDetails({
                 </p>
               )}
             </div>
-            <div>
-              <label className="text-xs font-semibold text-foreground block mb-1">
-                Message to Client <span className="text-destructive">*</span>
-              </label>
-              <textarea
-                value={proposalMessage}
-                minLength={10}
-                onChange={(event) => {
-                  setProposalMessage(event.target.value);
-                  setProposalError(null);
-                }}
-                placeholder="Explain your approach, experience, and why you are a good fit..."
-                rows={5}
-              />
-            </div>
+              <div>
+                <label className="text-xs font-semibold text-foreground block mb-1">
+                  Message to Client <span className="text-destructive">*</span>
+                </label>
+                <textarea
+                  value={proposalMessage}
+                  minLength={10}
+                  onChange={(event) => {
+                    setProposalMessage(event.target.value);
+                    setProposalError(null);
+                  }}
+                  placeholder="Explain your approach, experience, and why you are a good fit..."
+                  rows={5}
+                  className="w-full min-h-[120px] resize-y rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </div>
             {proposalError && <p className="text-sm text-destructive">{proposalError}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="outline" onClick={() => setShowProposalForm(false)}>

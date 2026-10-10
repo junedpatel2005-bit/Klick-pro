@@ -55,11 +55,11 @@ export function AppHeader({
       words: ["dashboard", "home", "workspace"],
     },
     {
-      label: "Earnings",
-      hint: "Payments and earnings",
+      label: role === "PROFESSIONAL" ? "Earnings" : "Wallet",
+      hint: role === "PROFESSIONAL" ? "Payments and earnings" : "Wallet and payments",
       icon: Wallet,
       href: "/earnings",
-      words: ["earning", "earnings", "money", "payment", "wallet"],
+      words: ["earning", "earnings", "money", "payment", "wallet", "funds"],
     },
     {
       label: "Projects",

@@ -518,14 +518,18 @@ function OperationsContent() {
       (data?.disputes ?? []).filter((dispute) => {
         const text =
           `${dispute.issueType} ${dispute.message} ${dispute.reporterRole}`.toLowerCase();
-        return (
-          text.includes(query.toLowerCase()) &&
-          (filter === "ALL" || dispute.status === filter || dispute.priority === filter)
-        );
+        const matchesQuery = text.includes(query.toLowerCase());
+        const isOpen = dispute.status !== "RESOLVED" && dispute.status !== "CLOSED";
+        const matchesFilter =
+          filter === "ALL" ||
+          (filter === "OPEN" ? isOpen : dispute.status === filter) ||
+          dispute.priority === filter;
+        return matchesQuery && matchesFilter;
       }),
     [data, query, filter],
   );
-  const openDisputes = data?.disputes.filter((item) => item.status === "OPEN").length ?? 0;
+  const openDisputes =
+    data?.disputes.filter((item) => item.status !== "RESOLVED" && item.status !== "CLOSED").length ?? 0;
   const runningProjects = data?.jobs.filter((item) => item.status === "RUNNING").length ?? 0;
   const completedProjects = data?.jobs.filter((item) => item.status === "COMPLETED").length ?? 0;
   const options =
