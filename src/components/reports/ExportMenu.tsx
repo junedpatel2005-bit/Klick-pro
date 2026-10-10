@@ -59,7 +59,7 @@ export function ExportMenu({
 
       const blob = await response.blob();
       const contentDisposition = response.headers.get("content-disposition");
-      let filename = `klick-pro-${fileBaseName.replace(/^klick-pro-/, "")}-selected-${new Date().toISOString().slice(0, 10)}.pdf`;
+      let filename = `klick-pro-${fileBaseName.replace(/^klick-pro-/, "")}.pdf`;
 
       if (contentDisposition) {
         const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);

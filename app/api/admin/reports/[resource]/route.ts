@@ -5,6 +5,7 @@ import { sessionCookie, verifySession } from "@/lib/auth";
 import { ReportDocument } from "@/lib/reports/pdf/ReportDocument";
 import { JobDossierDocument } from "@/lib/reports/pdf/JobDossierDocument";
 import { InvoiceDocument } from "@/lib/reports/pdf/InvoiceDocument";
+import { UserDossierDocument, type UserDossierData } from "@/lib/reports/pdf/UserDossierDocument";
 import { fetchJobDossierData } from "@/lib/reports/pdf/job-dossier-builder";
 import { fetchPaymentReceiptData } from "@/lib/reports/pdf/payment-receipt-builder";
 import { renderReportPdf, pdfResponse } from "@/lib/reports/pdf/render";
@@ -263,6 +264,9 @@ export async function POST(
           isActive: true,
           isVerified: true,
           createdAt: true,
+          professionalCity: true,
+          address: true,
+          companyName: true,
         },
         orderBy: { createdAt: "desc" },
         take: selectedOnly ? undefined : 500,
@@ -360,12 +364,112 @@ export async function POST(
       document = buildDocument(title, subtitle, columns, users, reportRequest, selectedOnly);
 
       if (selectedOnly && rawUsers.length === 1 && rawUsers[0]) {
-        const u = rawUsers[0];
-        const uname = (u.username || `${u.firstName}-${u.lastName}`)
+        const firstUser = rawUsers[0];
+        const [userJobs, userProposals, userTrackings] = await Promise.all([
+          db.clientJob.findMany({
+            where: { userId: firstUser.id },
+            orderBy: { createdAt: "desc" },
+            take: 100,
+            select: {
+              id: true,
+              title: true,
+              category: true,
+              budgetMin: true,
+              budgetMax: true,
+              hourlyRate: true,
+              timingType: true,
+              status: true,
+              createdAt: true,
+            },
+          }),
+          db.projectRequest.findMany({
+            where: { professionalId: firstUser.id },
+            include: {
+              job: { select: { id: true, title: true, category: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 100,
+          }),
+          db.projectTracking.findMany({
+            where:
+              firstUser.role === "CLIENT"
+                ? { clientId: firstUser.id }
+                : { professionalId: firstUser.id },
+            select: { id: true, status: true },
+          }),
+        ]);
+
+        const wallet = walletByUserId.get(firstUser.id);
+        const walletBalance = wallet ? wallet.balance : 0;
+        const totalTopUp = wallet ? (topupByWalletId.get(wallet.id) ?? 0) : 0;
+        const totalWithdrawals = withdrawalByProId.get(firstUser.id) ?? 0;
+        const daysActive = Math.max(
+          1,
+          Math.floor(
+            (Date.now() - new Date(firstUser.createdAt).getTime()) / (1000 * 60 * 60 * 24),
+          ),
+        );
+
+        const dossierData: UserDossierData = {
+          userId: firstUser.id,
+          username: firstUser.username,
+          firstName: firstUser.firstName,
+          lastName: firstUser.lastName,
+          email: firstUser.email,
+          phone: firstUser.phone,
+          role: firstUser.role as "CLIENT" | "PROFESSIONAL" | "ADMIN",
+          isActive: firstUser.isActive,
+          isVerified: firstUser.isVerified,
+          createdAt: new Date(firstUser.createdAt).toLocaleDateString("en-IN", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          }),
+          daysActive,
+          location: firstUser.professionalCity || firstUser.address || null,
+          companyName: firstUser.companyName || null,
+          walletBalance,
+          totalTopUp,
+          totalWithdrawals,
+          completedProjectsCount: userTrackings.filter((t) => t.status === "COMPLETED").length,
+          jobs: userJobs.map((j) => ({
+            id: j.id,
+            title: j.title || "Untitled Job",
+            category: j.category || "General",
+            budget:
+              j.timingType === "HOURLY"
+                ? `₹${j.hourlyRate?.toLocaleString("en-IN") || 0}/hr`
+                : j.budgetMin && j.budgetMax
+                  ? `₹${j.budgetMin.toLocaleString("en-IN")} – ₹${j.budgetMax.toLocaleString("en-IN")}`
+                  : `₹${(j.budgetMax || j.budgetMin || 0).toLocaleString("en-IN")}`,
+            status: j.status,
+            createdAt: new Date(j.createdAt).toLocaleDateString("en-IN"),
+          })),
+          proposals: userProposals.map((p) => ({
+            id: p.id,
+            jobId: p.job?.id || p.jobId,
+            jobTitle: p.job?.title || `Job #${p.jobId}`,
+            category: p.job?.category || "General",
+            bidAmount: `₹${p.bidAmount.toLocaleString("en-IN")}`,
+            status: p.status,
+            createdAt: new Date(p.createdAt).toLocaleDateString("en-IN"),
+          })),
+        };
+
+        const uname = (firstUser.username || `${firstUser.firstName}-${firstUser.lastName}`)
           .toLowerCase()
           .replace(/[^a-z0-9_-]/g, "_");
-        downloadFilename = `klick-pro-admin-${uname}-report.pdf`;
-      } else if (isAllClients) {
+        const singleFilename = `klick-pro-admin-${uname}.pdf`;
+
+        const buffer = await renderReportPdf(
+          createElement(UserDossierDocument, { data: dossierData }) as unknown as Parameters<
+            typeof renderReportPdf
+          >[0],
+        );
+        return pdfResponse(buffer, singleFilename);
+      }
+
+      if (isAllClients) {
         downloadFilename = `klick-pro-admin-clients-report.pdf`;
       } else if (isAllPros) {
         downloadFilename = `klick-pro-admin-professionals-report.pdf`;
