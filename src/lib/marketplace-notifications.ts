@@ -706,7 +706,7 @@ export async function notifyMilestonePayoutApproved(input: {
     type: "MILESTONE_PAYOUT_APPROVED",
     title: `${jobTitle} · Milestone payout released`,
     description: `Admin approved the payout for ${input.milestoneTitle}. ${payout} has been added to your wallet.`,
-    href: "/professional/earnings",
+    href,
     templateVariables: {
       milestone_title: input.milestoneTitle,
       payout_amount: payout,

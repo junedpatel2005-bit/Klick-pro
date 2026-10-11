@@ -1,5 +1,6 @@
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { reportTheme } from "./theme";
+import { getBrandLogoBase64 } from "./brand-logo";
 
 export type UserDossierJob = {
   id: number;
@@ -305,11 +306,16 @@ export function UserDossierDocument({ data }: { data: UserDossierData }) {
       <Page size="A4" style={styles.page} wrap>
         {/* Header - Role specific title, showing ONLY client or ONLY professional */}
         <View style={styles.header} fixed>
-          <Text style={styles.brand}>
-            {isClient
-              ? "KLICK-PRO · CLIENT AUDIT DOSSIER"
-              : "KLICK-PRO · PROFESSIONAL AUDIT DOSSIER"}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 }}>
+            {getBrandLogoBase64() ? (
+              <Image src={getBrandLogoBase64()} style={{ width: 14, height: 14, objectFit: "contain" }} />
+            ) : null}
+            <Text style={styles.brand}>
+              {isClient
+                ? "KLICK-PRO · CLIENT AUDIT DOSSIER"
+                : "KLICK-PRO · PROFESSIONAL AUDIT DOSSIER"}
+            </Text>
+          </View>
           <Text style={styles.headerTitle}>
             {isClient
               ? "Client Account & Marketplace Project Audit"

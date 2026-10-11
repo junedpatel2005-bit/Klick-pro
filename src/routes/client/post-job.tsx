@@ -869,6 +869,7 @@ export default function PostJob() {
     if (defaultOption) {
       void chooseLocation(defaultOption.key, defaultOption.address, defaultOption.label);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationOptions, form.locationAddress]);
 
   const activeSavedKey =

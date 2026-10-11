@@ -267,7 +267,7 @@ export default function Earnings() {
       load();
     };
     window.addEventListener("servio:linked-accounts-updated", handleLinkedUpdated);
-    return () => window.removeEventListener("servio:linked-accounts-updated", handleLinkedUpdated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useRealtimeRefresh(["servio:project-update", "servio:notification", "servio:proposal"], load);
   const thisMonth = useMemo(

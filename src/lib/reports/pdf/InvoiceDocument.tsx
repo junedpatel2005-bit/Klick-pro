@@ -1,5 +1,6 @@
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { reportTheme } from "./theme";
+import { getBrandLogoBase64 } from "./brand-logo";
 
 const styles = StyleSheet.create({
   page: {
@@ -15,20 +16,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
   },
-  brandMark: {
-    width: 30,
-    height: 30,
-    borderRadius: 6,
-    backgroundColor: reportTheme.ink,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  brandMarkText: {
-    color: reportTheme.cta,
-    fontSize: 13,
-    fontWeight: "bold",
-  },
+
   brandName: {
     fontSize: 12,
     fontWeight: "bold",
@@ -206,8 +194,9 @@ const styles = StyleSheet.create({
   },
 });
 
-function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(date);
+function formatDate(date: Date | string) {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(d);
 }
 
 export type InvoiceParty = {
@@ -258,17 +247,20 @@ export function InvoiceDocument({
   jobTitle?: string;
   showCommission?: boolean;
 }) {
-  const money = (amount: number) => `${currency} ${amount.toLocaleString("en-IN")}`;
+  const money = (amount?: number | null) => `${currency} ${(amount ?? 0).toLocaleString("en-IN")}`;
+  const brandLogo = getBrandLogoBase64();
 
   return (
     <Document title={`Invoice ${invoiceNumber}`}>
       <Page size="A4" style={styles.page}>
         <View style={styles.topRow}>
           <View>
-            <View style={styles.brandMark}>
-              <Text style={styles.brandMarkText}>K</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 6 }}>
+              {brandLogo ? (
+                <Image src={brandLogo} style={{ width: 28, height: 28, objectFit: "contain" }} />
+              ) : null}
+              <Text style={styles.brandName}>Klick-Pro</Text>
             </View>
-            <Text style={styles.brandName}>Klick-Pro</Text>
             {jobTitle ? (
               <Text style={{ fontSize: 9.5, fontWeight: "bold", color: reportTheme.cta, marginTop: 2 }}>
                 Job: {jobTitle}
@@ -339,7 +331,7 @@ export function InvoiceDocument({
             <View style={styles.summaryDivider} />
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>{netLabel}</Text>
-              <Text style={styles.totalValue}>{money(grossAmount)}</Text>
+              <Text style={styles.totalValue}>{money(showCommission ? netAmount : grossAmount)}</Text>
             </View>
           </View>
         </View>

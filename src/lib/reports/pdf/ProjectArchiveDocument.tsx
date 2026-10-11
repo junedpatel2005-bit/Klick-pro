@@ -1,5 +1,6 @@
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { reportTheme } from "./theme";
+import { getBrandLogoBase64 } from "./brand-logo";
 
 export type ArchiveField = { label: string; value: string };
 export type ArchiveEntry = {
@@ -217,9 +218,15 @@ function Section({ title, entries }: { title: string; entries: ArchiveEntry[] })
 }
 
 function Header({ data }: { data: ProjectArchiveData }) {
+  const brandLogo = getBrandLogoBase64();
   return (
     <View style={styles.header} fixed>
-      <Text style={styles.brand}>Klick-Pro project record</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 }}>
+        {brandLogo ? (
+          <Image src={brandLogo} style={{ width: 14, height: 14, objectFit: "contain" }} />
+        ) : null}
+        <Text style={styles.brand}>Klick-Pro project record</Text>
+      </View>
       <Text style={styles.title}>Completed project details</Text>
       <Text style={styles.headerMeta}>
         Project #{data.projectId} - Generated for {data.generatedFor}

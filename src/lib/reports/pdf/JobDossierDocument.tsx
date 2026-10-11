@@ -1,5 +1,6 @@
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { reportTheme } from "./theme";
+import { getBrandLogoBase64 } from "./brand-logo";
 
 export type KeyValuePair = { label: string; value: string };
 
@@ -249,7 +250,12 @@ export function JobDossierDocument({ data }: { data: JobDossierData }) {
       <Page size="A4" style={styles.page} wrap>
         {/* Header */}
         <View style={styles.header} fixed>
-          <Text style={styles.brand}>Klick-Pro · Official Job & Project Dossier</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 }}>
+            {getBrandLogoBase64() ? (
+              <Image src={getBrandLogoBase64()} style={{ width: 14, height: 14, objectFit: "contain" }} />
+            ) : null}
+            <Text style={styles.brand}>Klick-Pro · Official Job & Project Dossier</Text>
+          </View>
           <Text style={styles.headerTitle}>Job Specification & Execution Statement</Text>
           <Text style={styles.headerMeta}>
             Listing #{data.jobId} · Generated for {data.generatedFor} ({data.viewerRole}) ·{" "}

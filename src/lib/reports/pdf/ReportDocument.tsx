@@ -1,5 +1,6 @@
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { reportTheme } from "./theme";
+import { getBrandLogoBase64 } from "./brand-logo";
 import type { ReportColumn, ReportOrientation, ReportPageSize } from "./types";
 
 const styles = StyleSheet.create({
@@ -109,9 +110,15 @@ export function ReportHeader({
   generatedFor?: string;
   filterSummary?: string;
 }) {
+  const brandLogo = getBrandLogoBase64();
   return (
     <View style={styles.header} fixed>
-      <Text style={styles.brand}>Klick-Pro report</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+        {brandLogo ? (
+          <Image src={brandLogo} style={{ width: 14, height: 14, objectFit: "contain" }} />
+        ) : null}
+        <Text style={styles.brand}>Klick-Pro report</Text>
+      </View>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.meta}>
         {subtitle} · Generated {formatGeneratedAt()}
