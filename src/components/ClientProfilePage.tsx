@@ -26,8 +26,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AddressMapPicker } from "@/components/AddressMapPicker";
 import { PhoneVerification } from "@/components/PhoneVerification";
+import { LinkedAccountsCard } from "@/components/LinkedAccountsCard";
 
-type Location = { id: number; label: string; address: string };
+type Location = { id: number; label: string; address: string; isPrimary?: boolean };
 type Data = {
   account: {
     firstName: string;
@@ -45,7 +46,7 @@ type Data = {
     savedLocations: Location[];
   } | null;
 };
-const emptyLocation = { label: "", address: "" };
+const emptyLocation = { label: "", address: "", isPrimary: false };
 
 export function ClientProfilePage() {
   const router = useRouter();
@@ -174,7 +175,11 @@ export function ClientProfilePage() {
         {
           method: isEditing ? "PATCH" : "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ label: location.label, address: location.address }),
+          body: JSON.stringify({
+            label: location.label,
+            address: location.address,
+            isPrimary: location.isPrimary,
+          }),
         },
       );
       const result = (await response.json()) as { error?: string };
@@ -186,6 +191,24 @@ export function ClientProfilePage() {
       setMessage(error instanceof Error ? error.message : "Unable to save location.");
     } finally {
       setLocationSaving(false);
+    }
+  }
+  async function setAsDefault(item: Location) {
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/v1/profile/locations/${item.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ label: item.label, address: item.address, isPrimary: true }),
+      });
+      if (!response.ok) {
+        const result = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(result?.error ?? "Unable to set default location.");
+      }
+      setMessage(`"${item.label}" set as your default location.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to set default location.");
     }
   }
   async function deleteLocation() {
@@ -407,10 +430,27 @@ export function ClientProfilePage() {
                 className="flex flex-col justify-between gap-3 rounded-lg border p-4 sm:flex-row sm:items-center"
               >
                 <div>
-                  <p className="font-medium">{item.label}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium">{item.label}</p>
+                    {item.isPrimary && (
+                      <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary border border-primary/20">
+                        Default
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground">{item.address}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {!item.isPrimary && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void setAsDefault(item)}
+                    >
+                      Set as default
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="outline"
@@ -437,6 +477,12 @@ export function ClientProfilePage() {
             </Button>
           </div>
         )}
+      </Section>
+      <Section
+        title="Bank & UPI Accounts"
+        description="Save your Bank Account or UPI ID for fast wallet withdrawals, refunds, and payouts."
+      >
+        <LinkedAccountsCard />
       </Section>
       <Dialog open={location !== null} onOpenChange={(open) => !open && setLocation(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -469,6 +515,19 @@ export function ClientProfilePage() {
                     )
                   }
                 />
+                <label className="flex items-center gap-2 text-sm font-medium cursor-pointer pt-1">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(location.isPrimary)}
+                    onChange={(e) =>
+                      setLocation((current) =>
+                        current ? { ...current, isPrimary: e.target.checked } : current,
+                      )
+                    }
+                    className="rounded border-input text-primary focus:ring-primary size-4"
+                  />
+                  <span>Set as default address for jobs</span>
+                </label>
               </>
             )}
             <DialogFooter>

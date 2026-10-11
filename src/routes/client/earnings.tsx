@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import { CardListSkeleton } from "@/components/LoadingSkeleton";
 import { PageActionLoading } from "@/components/PageActionLoading";
+import { formatReadableLabel } from "@/lib/utils";
+import { LinkedAccountsCard } from "@/components/LinkedAccountsCard";
 type Payment = {
   id: number;
   amount: number;
@@ -189,6 +191,11 @@ export default function ClientEarnings() {
       .finally(() => setPaymentsLoading(false));
     loadWallet();
     loadLinkedAccounts();
+    const handleLinkedUpdated = () => {
+      loadLinkedAccounts();
+    };
+    window.addEventListener("servio:linked-accounts-updated", handleLinkedUpdated);
+    return () => window.removeEventListener("servio:linked-accounts-updated", handleLinkedUpdated);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useRealtimeRefresh(["servio:project-update", "servio:notification", "servio:proposal"], () => {
@@ -678,6 +685,13 @@ export default function ClientEarnings() {
               </div>
             </div>
           </section>
+
+          {/* Saved Bank & UPI Accounts */}
+          <LinkedAccountsCard
+            title="Saved Bank & UPI Accounts"
+            description="Manage your linked bank accounts and UPI IDs for quick withdrawals and refunds."
+          />
+
           <section className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-soft">
             <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-start">
               <div>
@@ -877,7 +891,7 @@ export default function ClientEarnings() {
                         <span
                           className={`text-xs font-semibold ${withdrawal.status === "COMPLETED" ? "text-success" : withdrawal.status === "FAILED" ? "text-destructive" : "text-warning"}`}
                         >
-                          {withdrawal.status}
+                          {formatReadableLabel(withdrawal.status)}
                         </span>
                       </div>
                     ))}
@@ -1028,7 +1042,7 @@ export default function ClientEarnings() {
                               ? "Payout completed"
                               : item.payment.status === "FUNDED"
                                 ? "Awaiting admin payout"
-                                : item.payment.status}
+                                : formatReadableLabel(item.payment.status)}
                           </span>
                         </div>
                       </div>

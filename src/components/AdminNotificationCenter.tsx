@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchPortalNotifications, invalidateNotificationsCache } from "@/lib/notifications-client";
+import { formatReadableLabel } from "@/lib/utils";
 import {
   Activity,
   AlertTriangle,
@@ -228,7 +229,15 @@ export function AdminNotificationCenter() {
     setLoading(true);
     try {
       const data = (await fetchPortalNotifications({ force: true })) as Notification[];
-      setItems(Array.isArray(data) ? data : []);
+      const filtered = Array.isArray(data)
+        ? data.filter(
+            (item) =>
+              item.type !== "NEW_JOB" &&
+              item.type !== "NEW_PROPOSAL" &&
+              item.type !== "JOB_POSTED",
+          )
+        : [];
+      setItems(filtered);
       setError(false);
     } catch {
       setError(true);
@@ -1052,8 +1061,8 @@ export function AdminNotificationCenter() {
                   <span className="flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
                     Status:{" "}
-                    <strong className="text-slate-900 uppercase">
-                      {timeline.project.status.replaceAll("_", " ")}
+                    <strong className="text-slate-900 font-semibold">
+                      {formatReadableLabel(timeline.project.status)}
                     </strong>
                   </span>
                   <span>{timeline.project.progress}% completed</span>

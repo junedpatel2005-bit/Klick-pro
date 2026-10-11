@@ -63,6 +63,7 @@ import {
   DisputeMessage,
 } from "@/components/ProjectDisputeCenter";
 import { toast } from "sonner";
+import { formatReadableLabel } from "@/lib/utils";
 
 type Person = { firstName: string | null; lastName: string | null } | null;
 export type DraftMilestone = {
@@ -198,7 +199,7 @@ const label = (status: string) =>
     AWAITING_PROFESSIONAL_CONFIRMATION: "Awaiting Professional Confirmation",
     REOPEN_REQUESTED: "Reopen Requested",
     COMPLETED: "Completed",
-  })[status] ?? status.replaceAll("_", " ");
+  })[status] ?? formatReadableLabel(status);
 const date = (value?: string | null) =>
   value
     ? new Date(value).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
@@ -3535,8 +3536,8 @@ export default function SharedProjectTrackingPage() {
                             {event.description || "Activity recorded for this project."}
                           </p>
                         </div>
-                        <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          {event.type?.replaceAll("_", " ") ?? "Activity"}
+                        <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold tracking-wide text-muted-foreground">
+                          {formatReadableLabel(event.type) || "Activity"}
                         </span>
                       </div>
                       {event.stage && (
@@ -4084,12 +4085,6 @@ export default function SharedProjectTrackingPage() {
                               ₹{approvalSuccess.professionalReceives.toLocaleString("en-IN")}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Platform service fee</span>
-                            <span className="font-medium text-foreground">
-                              ₹{clientFee.toLocaleString("en-IN")}
-                            </span>
-                          </div>
                           {!offlinePayment && (
                             <div className="flex items-center justify-between border-t border-border pt-2 text-xs">
                               <span className="text-muted-foreground">Remaining balance</span>
@@ -4188,12 +4183,6 @@ export default function SharedProjectTrackingPage() {
                             <span>Milestone deliverable amount</span>
                             <span className="font-semibold text-foreground">
                               ₹{approvalMilestone.amount.toLocaleString("en-IN")}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-muted-foreground">
-                            <span>Client service fee {offlinePayment ? "" : "(10%)"}</span>
-                            <span className="font-semibold text-foreground">
-                              ₹{clientFee.toLocaleString("en-IN")}
                             </span>
                           </div>
                           <div className="flex justify-between border-t border-border/60 pt-2.5 text-sm font-semibold">

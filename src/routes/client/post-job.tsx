@@ -288,19 +288,32 @@ export default function PostJob() {
       .then(
         (
           data: {
+            account?: {
+              address?: string | null;
+            } | null;
             profile?: {
               address?: string | null;
+              savedLocations?: SavedLocation[];
             } | null;
           } | null,
         ) => {
           if (!data) return;
-          const address = data.profile?.address ?? "";
-          setPrimary(address);
+          const address = (data.profile?.address || data.account?.address || "").trim();
           if (address) {
+            setPrimary(address);
             setForm((current) => {
               if (current.locationAddress) return current;
               void chooseLocation("primary", address, "Primary address");
               return { ...current, locationLabel: "Primary address", locationAddress: address };
+            });
+          }
+          if (Array.isArray(data.profile?.savedLocations) && data.profile.savedLocations.length > 0) {
+            setSavedLocations((prev) => {
+              const map = new Map<number, SavedLocation>();
+              for (const loc of [...prev, ...(data.profile?.savedLocations ?? [])]) {
+                if (loc && loc.id) map.set(loc.id, loc);
+              }
+              return Array.from(map.values());
             });
           }
         },
@@ -308,7 +321,17 @@ export default function PostJob() {
       .catch(() => {});
     void fetch("/api/v1/profile/locations")
       .then((r) => (r.ok ? r.json() : { locations: [] }))
-      .then((data: { locations?: SavedLocation[] }) => setSavedLocations(data.locations ?? []))
+      .then((data: { locations?: SavedLocation[] }) => {
+        if (Array.isArray(data.locations) && data.locations.length > 0) {
+          setSavedLocations((prev) => {
+            const map = new Map<number, SavedLocation>();
+            for (const loc of [...prev, ...data.locations!]) {
+              if (loc && loc.id) map.set(loc.id, loc);
+            }
+            return Array.from(map.values());
+          });
+        }
+      })
       .catch(() => setSavedLocations([]));
     const edit = editJobId;
     if (!edit) {
@@ -418,15 +441,28 @@ export default function PostJob() {
     const nextIndex = form.milestones.length + 1;
     const currentSum = form.milestones.reduce((acc, m) => acc + (Number(m.percentage) || 0), 0);
     const remainingPct = Math.max(0, 100 - currentSum);
-    const next = [
-      ...form.milestones,
-      {
-        title: `Milestone ${nextIndex}`,
-        percentage: remainingPct,
-        description: "",
-      },
-    ];
-    update("milestones", next);
+
+    if (remainingPct > 0) {
+      const next = [
+        ...form.milestones,
+        {
+          title: `Milestone ${nextIndex}`,
+          percentage: remainingPct,
+          description: "",
+        },
+      ];
+      update("milestones", next);
+    } else {
+      const appended = [
+        ...form.milestones,
+        {
+          title: `Milestone ${nextIndex}`,
+          percentage: 0,
+          description: "",
+        },
+      ];
+      update("milestones", rebalanceMilestones(appended));
+    }
   };
 
   const getMaxPercentageForMilestone = (milestones: JobFormMilestone[], index: number) => {
@@ -782,27 +818,58 @@ export default function PostJob() {
     if (!segment && activeTopCategory) setSegment(activeTopCategory.segment);
   }, [segment, activeTopCategory]);
   const locationOptions = useMemo(() => {
-    const list: Array<{ key: string; label: string; address: string }> = [];
-    const trimmedPrimary = primary?.trim() ?? "";
-    if (trimmedPrimary) {
-      list.push({ key: "primary", label: "Primary address", address: trimmedPrimary });
-    }
+    const list: Array<{
+      key: string;
+      label: string;
+      address: string;
+      isDefault: boolean;
+    }> = [];
+    const seenAddresses = new Set<string>();
+
     for (const location of savedLocations) {
       const trimmedAddress = location.address?.trim() ?? "";
       if (!trimmedAddress) continue;
-      if (trimmedPrimary && trimmedAddress.toLowerCase() === trimmedPrimary.toLowerCase()) continue;
+      const lower = trimmedAddress.toLowerCase();
+      if (seenAddresses.has(lower)) continue;
+      seenAddresses.add(lower);
+
+      const label = location.label?.trim()
+        ? location.label.trim()
+        : location.isPrimary
+          ? "Primary address"
+          : "Saved address";
+
       list.push({
         key: `saved-${location.id}`,
-        label: location.isPrimary
-          ? "Primary address"
-          : /^primary address$/i.test(location.label)
-            ? "Saved address"
-            : location.label || "Saved address",
+        label,
         address: trimmedAddress,
+        isDefault: Boolean(location.isPrimary),
       });
     }
+
+    const trimmedPrimary = primary?.trim() ?? "";
+    if (trimmedPrimary && !seenAddresses.has(trimmedPrimary.toLowerCase())) {
+      list.unshift({
+        key: "primary",
+        label: "Primary profile address",
+        address: trimmedPrimary,
+        isDefault: list.every((item) => !item.isDefault),
+      });
+    }
+
+    // Ensure the default location is placed first
+    list.sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
+
     return list;
   }, [primary, savedLocations]);
+
+  useEffect(() => {
+    if (form.locationAddress || locationOptions.length === 0) return;
+    const defaultOption = locationOptions.find((opt) => opt.isDefault) || locationOptions[0];
+    if (defaultOption) {
+      void chooseLocation(defaultOption.key, defaultOption.address, defaultOption.label);
+    }
+  }, [locationOptions, form.locationAddress]);
 
   const activeSavedKey =
     selectedSavedLocationKey ||
@@ -1414,17 +1481,15 @@ export default function PostJob() {
 
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                   <div className="flex flex-wrap gap-2">
-                    {remainingMilestonePercentage > 0 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={addMilestone}
-                        className="gap-1.5"
-                      >
-                        <Plus className="h-4 w-4" /> Add Milestone
-                      </Button>
-                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addMilestone}
+                      className="gap-1.5 font-semibold text-primary border-primary/30 hover:bg-primary/10"
+                    >
+                      <Plus className="h-4 w-4" /> Add Milestone
+                    </Button>
                     {remainingMilestonePercentage > 0 && form.milestones.length > 0 && (
                       <Button
                         type="button"
@@ -1496,12 +1561,22 @@ export default function PostJob() {
               </p>
             ) : (
               <>
-                {locationOptions.length > 0 && (
+                {locationOptions.length > 0 ? (
                   <div className="space-y-2">
                     <div className="space-y-1.5">
-                      <label htmlFor="saved-job-location" className="text-sm font-medium">
-                        Choose a saved location
-                      </label>
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="saved-job-location" className="text-sm font-medium">
+                          Choose a saved location ({locationOptions.length} from profile)
+                        </label>
+                        <a
+                          href="/client-profile"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline font-medium"
+                        >
+                          Manage Profile Locations &rarr;
+                        </a>
+                      </div>
                       <select
                         id="saved-job-location"
                         value={activeSavedKey}
@@ -1511,7 +1586,8 @@ export default function PostJob() {
                         <option value="">Select a saved address</option>
                         {locationOptions.map((option) => (
                           <option key={option.key} value={option.key}>
-                            {option.label} — {option.address}
+                            {option.label}
+                            {option.isDefault ? " (Default)" : ""} — {option.address}
                           </option>
                         ))}
                       </select>
@@ -1535,6 +1611,11 @@ export default function PostJob() {
                           >
                             <MapPin className="size-3.5 shrink-0 text-primary" />
                             <span>{option.label}</span>
+                            {option.isDefault && (
+                              <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                                Default
+                              </span>
+                            )}
                             <span className="max-w-[200px] truncate text-xs opacity-75 sm:max-w-xs">
                               ({option.address})
                             </span>
@@ -1542,6 +1623,21 @@ export default function PostJob() {
                         );
                       })}
                     </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-dashed border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="size-4 text-muted-foreground shrink-0" />
+                      <span>No saved addresses found in your profile yet.</span>
+                    </div>
+                    <a
+                      href="/client-profile"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-primary hover:underline shrink-0"
+                    >
+                      Add saved locations in Profile &rarr;
+                    </a>
                   </div>
                 )}
                 <div

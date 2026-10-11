@@ -204,10 +204,7 @@ export function AdminRealtime() {
       const normTitle = (payload.title || "").toLowerCase().trim();
       const normDesc = (payload.description || "").toLowerCase().trim().slice(0, 40);
       const normHref = (payload.href || "").split("?")[0];
-      const key =
-        payload.id != null
-          ? `id:${payload.id}`
-          : `${normTitle}|${normDesc}|${normHref}`;
+      const key = `${normTitle}|${normDesc}|${normHref}`;
 
       const lastSeen = seenKeys.current.get(key);
       if (lastSeen && now - lastSeen < 12000) {
@@ -257,7 +254,6 @@ export function AdminRealtime() {
     };
 
     socket.on("admin:notification", onAdminNotification);
-    socket.on("notification:new", onAdminNotification);
     socket.on("admin:verifications-update", onVerificationsUpdate);
     socket.on("admin:operations-update", onOperationsUpdate);
     socket.on("admin:users-update", onUsersUpdate);
@@ -267,7 +263,6 @@ export function AdminRealtime() {
 
     return () => {
       socket.off("admin:notification", onAdminNotification);
-      socket.off("notification:new", onAdminNotification);
       socket.off("admin:verifications-update", onVerificationsUpdate);
       socket.off("admin:operations-update", onOperationsUpdate);
       socket.off("admin:users-update", onUsersUpdate);

@@ -24,6 +24,7 @@ import {
   type DatePreset,
   isWithinCustomDateRange,
 } from "@/components/reports/DateRangeFilter";
+import { formatReadableLabel } from "@/lib/utils";
 
 type UserRow = {
   id: number;
@@ -1036,9 +1037,9 @@ function FinanceReport() {
         metadata: [
           { label: "Transaction ID", value: `#TXN-${r.id}` },
           { label: "Transfer Kind", value: r.kind },
-          { label: "Transaction Type", value: r.type },
+          { label: "Transaction Type", value: formatReadableLabel(r.type) },
           { label: "Gross Amount", value: `INR ${r.amount.toLocaleString("en-IN")}` },
-          { label: "Settlement Status", value: r.status },
+          { label: "Settlement Status", value: formatReadableLabel(r.status) },
           { label: "Parties Involved", value: r.party },
           {
             label: "Recorded Timestamp",
@@ -1053,9 +1054,9 @@ function FinanceReport() {
         ],
         headers: ["Audit Entry", "Value", "Settlement Status"],
         rows: [
-          ["Platform Transaction Reference", `#TXN-${r.id}`, r.status],
-          ["Flow Category & Type", `${r.kind} (${r.type})`, "Verified"],
-          ["Disbursed Amount", `INR ${r.amount.toLocaleString("en-IN")}`, r.status],
+          ["Platform Transaction Reference", `#TXN-${r.id}`, formatReadableLabel(r.status)],
+          ["Flow Category & Type", `${r.kind} (${formatReadableLabel(r.type)})`, "Verified"],
+          ["Disbursed Amount", `INR ${r.amount.toLocaleString("en-IN")}`, formatReadableLabel(r.status)],
           ["Associated Platform Parties", r.party, "Audited"],
         ],
       });
@@ -1090,9 +1091,9 @@ function FinanceReport() {
       rows: rowsToExport.map((r) => [
         `#TXN-${r.id}`,
         r.kind,
-        r.type,
+        formatReadableLabel(r.type),
         r.amount,
-        r.status,
+        formatReadableLabel(r.status),
         r.party,
         formatDateSafely(r.createdAt, {
           day: "2-digit",
@@ -1270,8 +1271,8 @@ function FinanceReport() {
               key: "type",
               header: "Type",
               render: (row) => (
-                <span className="text-xs uppercase font-medium text-slate-500">
-                  {row.type?.replace(/_/g, " ")}
+                <span className="text-xs font-medium text-slate-700">
+                  {formatReadableLabel(row.type)}
                 </span>
               ),
             },

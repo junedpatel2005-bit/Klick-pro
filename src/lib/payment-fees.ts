@@ -1,9 +1,6 @@
-// The platform takes a fee from both sides of the deal. These are separate
-// rates, not halves of one number: CLIENT_FEE_RATE is charged to the client and
-// PROFESSIONAL_FEE_RATE is the fallback for the professional side (overridable by
-// the `commission_rate` platform setting). At 0.1 each the platform keeps 20% in
-// total on a milestone.
-export const CLIENT_FEE_RATE = 0.1;
+// Platform commission is deducted from the professional payout when enabled by Admin.
+// Client service fees have been eliminated: clients are charged strictly the milestone amount.
+export const CLIENT_FEE_RATE = 0;
 export const PROFESSIONAL_FEE_RATE = 0.1;
 
 export function calculateMilestoneMoney(
@@ -18,14 +15,14 @@ export function calculateMilestoneMoney(
     !isNaN(customProfessionalFeeRate) &&
     customProfessionalFeeRate >= 0
       ? customProfessionalFeeRate
-      : (isZeroCommission ? 0 : PROFESSIONAL_FEE_RATE);
+      : (isZeroCommission ? 0 : 0);
 
   const clientRate =
     typeof customClientFeeRate === "number" &&
     !isNaN(customClientFeeRate) &&
     customClientFeeRate >= 0
       ? customClientFeeRate
-      : (isZeroCommission ? 0 : CLIENT_FEE_RATE);
+      : 0;
 
   const clientFeeAmount = Math.ceil(baseAmount * clientRate);
   const professionalFeeAmount = Math.ceil(baseAmount * professionalRate);

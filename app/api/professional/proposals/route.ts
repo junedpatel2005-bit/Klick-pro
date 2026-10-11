@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
       } catch (notifyErr) {
         console.error("Failed to dispatch proposal notification:", notifyErr);
       }
-      emitRealtimeProposalNew([job.userId, session.userId], { jobId: job.id });
+      emitRealtimeProposalNew([job.userId], { jobId: job.id });
       return NextResponse.json({ proposal: updated });
     }
 
@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
     } catch (notifyErr) {
       console.error("Failed to dispatch notifyProposalSubmitted:", notifyErr);
     }
-    emitRealtimeProposalNew([job.userId, session.userId], { jobId: job.id });
+    emitRealtimeProposalNew([job.userId], { jobId: job.id });
     return NextResponse.json({ proposal }, { status: 201 });
   } catch (error) {
     console.error("professional.proposal.failed", error);

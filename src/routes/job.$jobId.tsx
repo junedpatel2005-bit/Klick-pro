@@ -524,6 +524,11 @@ export default function JobDetails({
       }
       if (ownerResponse.status !== 404) throw new Error("Unable to load job");
 
+      if (discoveredProjectId && auth?.user?.role === "PROFESSIONAL") {
+        window.location.replace(`/project/${discoveredProjectId}/tracking`);
+        return;
+      }
+
       const response = await fetch(`/api/v1/marketplace/job?id=${encodeURIComponent(jobId)}`);
       if (!response.ok) {
         if (response.status === 404) {
@@ -535,10 +540,15 @@ export default function JobDetails({
               const pData = (await proposalCheck.json()) as { projectId?: number | null };
               if (pData?.projectId) {
                 window.location.replace(`/project/${pData.projectId}/tracking`);
+                return;
               }
             }
           } catch {
             // Ignore error and fall back to missing status
+          }
+          if (discoveredProjectId) {
+            window.location.replace(`/project/${discoveredProjectId}/tracking`);
+            return;
           }
           return setStatus("missing");
         }
@@ -595,6 +605,8 @@ export default function JobDetails({
           );
           if (proposalData.projectId) {
             setOwnProposalProjectId(proposalData.projectId);
+            window.location.replace(`/project/${proposalData.projectId}/tracking`);
+            return;
           }
           if (proposalData.proposal) {
             setProposalPrice(String(proposalData.proposal.bidAmount));

@@ -37,6 +37,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PageActionLoading } from "@/components/PageActionLoading";
+import { formatReadableLabel } from "@/lib/utils";
+import { LinkedAccountsCard } from "@/components/LinkedAccountsCard";
 type Transaction = {
   id: number;
   amount: number;
@@ -259,7 +261,14 @@ export default function Earnings() {
       })
       .catch(() => setLinkedAccounts([]));
   };
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+    const handleLinkedUpdated = () => {
+      load();
+    };
+    window.addEventListener("servio:linked-accounts-updated", handleLinkedUpdated);
+    return () => window.removeEventListener("servio:linked-accounts-updated", handleLinkedUpdated);
+  }, []);
   useRealtimeRefresh(["servio:project-update", "servio:notification", "servio:proposal"], load);
   const thisMonth = useMemo(
     () =>
@@ -627,7 +636,9 @@ export default function Earnings() {
                             ? "Commission cut (10%)"
                             : i.type === "DISPUTE_PAYOUT"
                               ? "Dispute payout"
-                              : "Milestone earning"}
+                              : i.type === "MILESTONE_EARNING"
+                                ? "Milestone earning"
+                                : formatReadableLabel(i.type)}
                         </span>
                       </div>
                       <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
@@ -764,6 +775,12 @@ export default function Earnings() {
                 )}
               </section>
 
+              {/* Saved Bank & UPI Accounts Card */}
+              <LinkedAccountsCard
+                title="Payout Bank & UPI Accounts"
+                description="Manage saved bank accounts & UPI IDs for fast withdrawal settlements."
+              />
+
               {/* Optional Advanced Razorpay Account Accordion */}
               <div className="rounded-2xl border border-border/70 bg-card/60 p-4">
                 <button
@@ -815,7 +832,7 @@ export default function Earnings() {
                             ₹{w.amount.toLocaleString("en-IN")}
                           </p>
                           <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider ${
                               w.status === "COMPLETED"
                                 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
                                 : w.status === "FAILED"
@@ -826,7 +843,7 @@ export default function Earnings() {
                             {w.status === "COMPLETED" && <CheckCircle2 className="h-3 w-3" />}
                             {w.status === "PENDING" && <Clock className="h-3 w-3" />}
                             {w.status === "FAILED" && <X className="h-3 w-3" />}
-                            {w.status}
+                            {formatReadableLabel(w.status)}
                           </span>
                         </div>
                         <div className="flex items-start gap-1.5 text-xs text-muted-foreground">

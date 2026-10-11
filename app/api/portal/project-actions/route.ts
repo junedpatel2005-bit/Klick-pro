@@ -292,6 +292,7 @@ export async function POST(request: NextRequest) {
         "PROJECT_COMPLETION_REQUESTED",
         "PROJECT_COMPLETED",
         "PROFESSIONAL_REQUEST",
+        "DISPUTE_RAISED",
       ]);
       if (!dedicatedNotificationTypes.has(type)) {
         const activityDetails = [

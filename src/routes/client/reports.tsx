@@ -24,6 +24,7 @@ import {
   type DatePreset,
   isWithinCustomDateRange,
 } from "@/components/reports/DateRangeFilter";
+import { formatReadableLabel } from "@/lib/utils";
 
 type Job = {
   id: number;
@@ -828,8 +829,8 @@ function PaymentsReport() {
               key: "type",
               header: "Type",
               render: (payment) => (
-                <span className="text-xs uppercase font-medium text-muted-foreground">
-                  {payment.type?.replace(/_/g, " ") ?? "Payment"}
+                <span className="text-xs font-medium text-foreground">
+                  {formatReadableLabel(payment.type) || "Payment"}
                 </span>
               ),
             },
@@ -843,7 +844,7 @@ function PaymentsReport() {
                   )}`}
                 >
                   <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                  {payment.status}
+                  {formatReadableLabel(payment.status)}
                 </span>
               ),
             },

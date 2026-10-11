@@ -13,6 +13,7 @@ import {
 import { sendNotificationEmail } from "@/lib/email";
 import { sendSms, resolveSmsTemplate } from "@/lib/sms/engine";
 import { enqueueBackgroundJob } from "@/lib/background-jobs";
+import { formatReadableLabel } from "@/lib/utils";
 
 type BroadcastNotification = {
   type: string;
@@ -205,7 +206,7 @@ async function projectEmailDetails(projectId: number): Promise<{
     { label: "Project", value: projectTitle },
     { label: "Project amount", value: amountStr },
     { label: "Project timeline", value: request?.duration?.trim() || "Not specified" },
-    { label: "Status", value: project.status.replaceAll("_", " ") },
+    { label: "Status", value: formatReadableLabel(project.status) },
     { label: "Progress", value: `${project.progress}%` },
     { label: "Current stage", value: project.currentStage?.trim() || "Not specified" },
     { label: "Preferred job date", value: date(job?.jobDate) },
@@ -760,20 +761,7 @@ export async function notifyJobPosted(job: {
     : "Client";
 
   // Client already sees the UI toast message upon posting.
-  // Admins and category professionals are notified below.
-
-  // 2. Notify Admins
-  await notifyRole("ADMIN", {
-    type: "NEW_JOB",
-    title: `New job posted · ${jobTitle}`,
-    description: `Client ${clientName} posted a new job "${jobTitle}" in ${categoryLabel}.`,
-    href: `/admin/operations?job=${job.id}`,
-    templateVariables: {
-      job_title: jobTitle,
-      client_name: clientName,
-      category_name: categoryLabel,
-    },
-  });
+  // Matching professionals in that category are notified below
 
   // 3. Notify Matching Professionals in that category
   let matchingPros: { id: number }[] = [];
@@ -845,21 +833,6 @@ export async function notifyProposalSubmitted(input: {
     ],
   });
 
-  // 2. Notify Professional (confirmation)
-  await notifyUsers([input.professionalId], {
-    type: "PROPOSAL_SENT",
-    title: `${jobTitle} · Proposal Submitted`,
-    description: `Your proposal of ₹${input.bidAmount.toLocaleString("en-IN")} for "${jobTitle}" was submitted to the client.`,
-    href: `/job/${input.jobId}`,
-  });
-
-  // 3. Notify Admins
-  await notifyRole("ADMIN", {
-    type: "NEW_PROPOSAL",
-    title: `${jobTitle} · New Proposal Submitted`,
-    description: `${proName} submitted a proposal of ₹${input.bidAmount.toLocaleString("en-IN")} for "${jobTitle}".`,
-    href: `/admin/operations?job=${input.jobId}`,
-  });
 }
 
 export async function notifyProposalUpdated(input: {
@@ -882,14 +855,6 @@ export async function notifyProposalUpdated(input: {
     type: "PROPOSAL_UPDATED",
     title: `${jobTitle} · Proposal Updated`,
     description: `${proName} updated their proposal for ${jobTitle} to ₹${input.bidAmount.toLocaleString("en-IN")}.`,
-    href: `/job/${input.jobId}`,
-  });
-
-  // Notify Professional (confirmation)
-  await notifyUsers([input.professionalId], {
-    type: "PROPOSAL_UPDATED",
-    title: `${jobTitle} · Proposal Updated`,
-    description: `You updated your proposal for ${jobTitle} to ₹${input.bidAmount.toLocaleString("en-IN")}.`,
     href: `/job/${input.jobId}`,
   });
 }
@@ -918,7 +883,7 @@ export async function notifyContractAwarded(input: {
   const proName = proUser ? `${proUser.firstName} ${proUser.lastName}`.trim() : "Professional";
   const amountStr = `₹${input.bidAmount.toLocaleString("en-IN")}`;
 
-  // 1. Notify Professional
+  // 1. Notify Professional only (the client accepted the contract, so client does not need a self-notification)
   await notifyUsers([input.professionalId], {
     type: "REQUEST_ACCEPTED",
     title: `${jobTitle} · Congratulations! You got the project`,
@@ -929,27 +894,6 @@ export async function notifyContractAwarded(input: {
       { label: "Agreed amount", value: amountStr },
       { label: "Client", value: clientName },
     ],
-  });
-
-  // 2. Notify Client
-  await notifyUsers([input.clientId], {
-    type: "PROJECT_STARTED",
-    title: `${jobTitle} · Project Started`,
-    description: `You hired ${proName} for ${jobTitle} (${amountStr}). The project is now ready to start.`,
-    href: `/project/${input.projectId}/tracking`,
-    emailDetails: [
-      { label: "Project", value: jobTitle },
-      { label: "Agreed amount", value: amountStr },
-      { label: "Professional", value: proName },
-    ],
-  });
-
-  // 3. Notify Admins
-  await notifyRole("ADMIN", {
-    type: "PROFESSIONAL_HIRED",
-    title: `${jobTitle} · Contract Awarded`,
-    description: `Client ${clientName} awarded project ${jobTitle} to ${proName} for ${amountStr}.`,
-    href: `/admin/operations?project=${input.projectId}`,
   });
 }
 
@@ -989,21 +933,6 @@ export async function notifyHireRequestSent(input: {
     ],
   });
 
-  // 2. Notify Client (confirmation)
-  await notifyUsers([input.clientId], {
-    type: "HIRE_REQUEST_SENT",
-    title: `${jobTitle} · Hire request sent`,
-    description: `Your hire request of ₹${input.bidAmount.toLocaleString("en-IN")} was sent to ${proName} for ${jobTitle}.`,
-    href: `/job/${input.jobId}`,
-  });
-
-  // 3. Notify Admins
-  await notifyRole("ADMIN", {
-    type: "NEW_HIRE_REQUEST",
-    title: `${jobTitle} · Direct Hire Request`,
-    description: `Client ${clientName} sent a hire request to ${proName} for ${jobTitle}.`,
-    href: `/admin/operations?job=${input.jobId}`,
-  });
 }
 
 export async function notifyVerificationStatus(input: {
@@ -1084,11 +1013,5 @@ export async function notifyProjectCompleted(input: {
     href: `/project/${input.projectId}/tracking`,
   });
 
-  await notifyRole("ADMIN", {
-    type: "PROJECT_COMPLETED",
-    title: `${jobTitle} · Project Completed`,
-    description: `Project ${jobTitle} between ${clientName} and ${proName} has been marked completed.`,
-    href: `/admin/operations?project=${input.projectId}`,
-  });
 }
 

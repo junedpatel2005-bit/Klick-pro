@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppSkeleton } from "@/components/LoadingSkeleton";
+import { formatReadableLabel } from "@/lib/utils";
 
 type Verification = {
   status: string;
@@ -276,7 +277,7 @@ export default function Verification() {
             <p className="text-xs font-semibold uppercase tracking-wide text-white/65">
               Verification status
             </p>
-            <p className="mt-1 text-lg font-bold">{status.replaceAll("_", " ")}</p>
+            <p className="mt-1 text-lg font-bold">{formatReadableLabel(status)}</p>
           </div>
         </div>
       </section>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchPortalNotifications, invalidateNotificationsCache } from "@/lib/notifications-client";
+import { formatReadableLabel } from "@/lib/utils";
 import {
   Activity,
   AlertTriangle,
@@ -249,7 +250,7 @@ function getProjectStatusBadge(status?: string | null) {
     };
   }
   return {
-    label: s.replace(/_/g, " "),
+    label: formatReadableLabel(s),
     className:
       "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800/70",
     dotClass: "bg-indigo-500",
@@ -1195,8 +1196,8 @@ export function NotificationInbox({ admin: _isAdmin = false }: { admin?: boolean
                   <span className="flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
                     Status:{" "}
-                    <strong className="text-slate-900 dark:text-white uppercase">
-                      {timeline.project.status.replaceAll("_", " ")}
+                    <strong className="text-slate-900 dark:text-white font-semibold">
+                      {formatReadableLabel(timeline.project.status)}
                     </strong>
                   </span>
                   <span>{timeline.project.progress}% completed</span>

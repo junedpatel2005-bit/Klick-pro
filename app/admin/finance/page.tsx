@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { formatReadableLabel } from "@/lib/utils";
 import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageActionLoading } from "@/components/PageActionLoading";
@@ -456,8 +457,8 @@ export default function AdminFinancePage() {
         date: w.createdAt,
         title: "Professional Withdrawal",
         categoryOrRef: w.destinationLabel
-          ? `${w.destinationType} (${w.destinationLabel})`
-          : w.destinationType || "Bank Transfer",
+          ? `${formatReadableLabel(w.destinationType)} (${w.destinationLabel})`
+          : formatReadableLabel(w.destinationType) || "Bank Transfer",
         milestoneInfo: null,
         remainingAmount: null,
         clientName: null,
@@ -481,7 +482,7 @@ export default function AdminFinancePage() {
         kind: "LEDGER",
         refId: tx.id,
         date: tx.createdAt,
-        title: tx.projectTitle || tx.type.replaceAll("_", " "),
+        title: tx.projectTitle || formatReadableLabel(tx.type),
         categoryOrRef: tx.description,
         milestoneInfo: tx.milestoneTitle || null,
         remainingAmount: null,
@@ -2378,8 +2379,8 @@ function LedgerDrawer({
               <span className="font-mono text-xs font-bold text-slate-900 bg-white border border-slate-200 px-2 py-0.5 rounded-lg shadow-2xs">
                 Ledger #{ledger.id}
               </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
-                {ledger.type.replaceAll("_", " ")}
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                {formatReadableLabel(ledger.type)}
               </span>
               <StatusBadge status={ledger.status} />
             </div>
@@ -2505,7 +2506,7 @@ function LedgerDrawer({
             </div>
             <div className="flex justify-between py-1 border-b border-slate-100">
               <span className="text-slate-500">Event Type:</span>
-              <span className="font-mono text-slate-800">{ledger.type}</span>
+              <span className="font-medium text-slate-800">{formatReadableLabel(ledger.type)}</span>
             </div>
             <div className="flex justify-between py-1">
               <span className="text-slate-500">Recorded At:</span>

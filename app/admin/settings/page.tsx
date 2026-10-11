@@ -309,48 +309,50 @@ export default function AdminSettingsPage() {
                   </button>
                 </div>
               </div>
-              {/* Commission Percentage */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="commission_rate" className="text-xs font-semibold text-slate-800">
-                    Platform Commission Rate (%)
-                  </Label>
-                  <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-xs font-bold text-indigo-800">
-                    {commissionRate}%
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Input
-                    id="commission_rate"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={commissionRate}
-                    onChange={(e) => handleValueChange("commission_rate", e.target.value)}
-                    className="h-10 text-sm font-semibold"
-                  />
-                  <div className="flex items-center gap-1">
-                    {[10, 15, 20, 25].map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => handleValueChange("commission_rate", String(preset))}
-                        className={`rounded-lg border px-2.5 py-1 text-xs font-bold transition ${
-                          commissionRate === String(preset)
-                            ? "border-indigo-600 bg-indigo-50 text-indigo-700"
-                            : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
-                        }`}
-                      >
-                        {preset}%
-                      </button>
-                    ))}
+              {/* Commission Percentage - hidden when commission is OFF, auto-shown when ON */}
+              {isCommissionEnabled && (
+                <div className="space-y-3 animate-in fade-in-50 duration-200">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="commission_rate" className="text-xs font-semibold text-slate-800">
+                      Platform Commission Rate (%)
+                    </Label>
+                    <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-xs font-bold text-indigo-800">
+                      {commissionRate}%
+                    </span>
                   </div>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      id="commission_rate"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={commissionRate}
+                      onChange={(e) => handleValueChange("commission_rate", e.target.value)}
+                      className="h-10 text-sm font-semibold"
+                    />
+                    <div className="flex items-center gap-1">
+                      {[10, 15, 20, 25].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => handleValueChange("commission_rate", String(preset))}
+                          className={`rounded-lg border px-2.5 py-1 text-xs font-bold transition ${
+                            commissionRate === String(preset)
+                              ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                              : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          {preset}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Percentage automatically deducted as platform earnings when a milestone payout is
+                    released to the professional.
+                  </p>
                 </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Percentage automatically deducted as platform earnings when a milestone payout is
-                  released to the professional.
-                </p>
-              </div>
+              )}
 
               {/* Min Withdrawal Amount */}
               <div className="space-y-3">

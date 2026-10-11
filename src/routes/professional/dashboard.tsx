@@ -15,7 +15,7 @@ import {
   Star,
   UserRound,
 } from "lucide-react";
-import { capitalizeFirst } from "@/lib/utils";
+import { capitalizeFirst, formatReadableLabel } from "@/lib/utils";
 
 type DashboardData = {
   professional: {
@@ -136,7 +136,7 @@ export default function ProfessionalDashboard() {
 
   const professional = data.professional;
   const name = `${professional.firstName} ${professional.lastName}`.trim();
-  const availability = professional.availabilityStatus.replaceAll("_", " ");
+  const availability = formatReadableLabel(professional.availabilityStatus);
 
   return (
     <div className="space-y-6">

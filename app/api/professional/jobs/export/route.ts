@@ -8,6 +8,7 @@ import { fetchJobDossierData } from "@/lib/reports/pdf/job-dossier-builder";
 import { renderReportPdf, pdfResponse } from "@/lib/reports/pdf/render";
 import { parseReportRequest } from "@/lib/reports/pdf/request";
 import type { ReportColumn } from "@/lib/reports/pdf/types";
+import { formatReadableLabel } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -58,7 +59,7 @@ const columns: ReportColumn<ProjectRow>[] = [
   },
   { key: "clientName", header: "Client", width: 1.5, format: (row) => row.clientName },
   { key: "category", header: "Category", width: 1.3, format: (row) => row.category },
-  { key: "status", header: "Status", width: 1.3, format: (row) => row.status.replaceAll("_", " ") },
+  { key: "status", header: "Status", width: 1.3, format: (row) => formatReadableLabel(row.status) },
   {
     key: "milestonesProgress",
     header: "Milestones",

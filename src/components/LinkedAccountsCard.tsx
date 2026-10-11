@@ -158,6 +158,9 @@ export function LinkedAccountsCard({
       setDialogOpen(false);
       resetForm();
       await fetchAccounts();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("servio:linked-accounts-updated"));
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error saving account.");
     } finally {
@@ -178,6 +181,9 @@ export function LinkedAccountsCard({
       if (!res.ok) throw new Error(data?.error || "Failed to delete account.");
       toast.success("Linked account removed.");
       await fetchAccounts();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("servio:linked-accounts-updated"));
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error removing account.");
     } finally {
@@ -197,6 +203,9 @@ export function LinkedAccountsCard({
       if (!res.ok) throw new Error(data?.error || "Failed to set default.");
       toast.success("Default payout account updated.");
       await fetchAccounts();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("servio:linked-accounts-updated"));
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to set default.");
     } finally {

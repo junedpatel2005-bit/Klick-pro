@@ -222,36 +222,110 @@ export async function GET(request: NextRequest) {
     _count: { _all: true },
   });
   const unreadCounts = new Map(unreadBySender.map((item) => [item.senderId, item._count._all]));
-  const contactRows = contacts.map((contact) => {
-    const isContactAdmin = contact.role === "ADMIN";
-    const conversation = conversations.find(
-      (item) =>
-        (session.role === "ADMIN" &&
-          ((allAdminIds.has(item.userAId) && item.userBId === contact.id) ||
-            (allAdminIds.has(item.userBId) && item.userAId === contact.id))) ||
-        (item.userAId === session.userId && item.userBId === contact.id) ||
-        (item.userAId === contact.id && item.userBId === session.userId),
-    );
-    const userProjects = allUserProjects.filter((p) =>
-      session.role === "CLIENT" ? p.professionalId === contact.id : p.clientId === contact.id,
-    );
-    const runningProject =
-      userProjects.find((p) => p.status === "IN_PROGRESS") ??
-      userProjects.find((p) => !p.isCompleted && p.status !== "CLOSED") ??
-      userProjects[0] ??
-      null;
 
-    return {
-      ...contact,
-      name:
-        `${contact.firstName} ${contact.lastName}`.trim() ||
-        contact.email ||
-        `User #${contact.id}`,
-      isAdminTeam: isContactAdmin,
-      conversationId: conversation?.id ?? null,
-      lastMessage: conversation?.messages[0] ?? null,
-      unreadCount: unreadCounts.get(contact.id) ?? 0,
-      projects: userProjects.map((p) => ({
+  type ContactRowItem = {
+    id: number;
+    conversationKey: string;
+    name: string;
+    firstName: string;
+    lastName: string;
+    avatarUrl: string | null;
+    role: "CLIENT" | "PROFESSIONAL" | "ADMIN";
+    isAdminTeam: boolean;
+    email: string | null;
+    phone: string | null;
+    conversationId: string | null;
+    lastMessage: { body: string; createdAt: string } | null;
+    unreadCount: number;
+    projectId: number | null;
+    projectTitle: string | null;
+    projects?: Array<{
+      id: number;
+      jobId: number;
+      title: string;
+      category: string | null;
+      status: string;
+      progress: number;
+      completedMilestones: number;
+      totalMilestones: number;
+      isCompleted: boolean;
+      updatedAt: string;
+    }>;
+    activeProject: {
+      id: number;
+      jobId: number;
+      title: string;
+      category: string | null;
+      status: string;
+      progress: number;
+      completedMilestones: number;
+      totalMilestones: number;
+      isCompleted: boolean;
+      updatedAt: string;
+    } | null;
+  };
+
+  const contactRows: ContactRowItem[] = [];
+
+  if (session.role === "ADMIN") {
+    for (const contact of contacts) {
+      const isContactAdmin = contact.role === "ADMIN";
+      const conversation = conversations.find(
+        (item) =>
+          (allAdminIds.has(item.userAId) && item.userBId === contact.id) ||
+          (allAdminIds.has(item.userBId) && item.userAId === contact.id),
+      );
+      contactRows.push({
+        id: contact.id,
+        conversationKey: `user_${contact.id}`,
+        name:
+          `${contact.firstName} ${contact.lastName}`.trim() ||
+          contact.email ||
+          `User #${contact.id}`,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        avatarUrl: contact.avatarUrl,
+        role: contact.role,
+        isAdminTeam: isContactAdmin,
+        email: contact.email,
+        phone: contact.phone,
+        conversationId: conversation?.id ?? null,
+        lastMessage: (conversation?.messages[0] as { body: string; createdAt: string } | undefined) ?? null,
+        unreadCount: unreadCounts.get(contact.id) ?? 0,
+        projectId: null,
+        projectTitle: null,
+        activeProject: null,
+      });
+    }
+  } else {
+    // Client or Professional: generate project-wise entries so if 2 projects exist, they show as 2 separate chats!
+    const partnerIdsWithProjects = new Set<number>();
+
+    for (const p of allUserProjects) {
+      const partnerId = session.role === "CLIENT" ? p.professionalId : p.clientId;
+      const partner = contacts.find((c) => c.id === partnerId);
+      if (!partner) continue;
+      partnerIdsWithProjects.add(partnerId);
+
+      const minId = Math.min(session.userId, partner.id);
+      const maxId = Math.max(session.userId, partner.id);
+      const projectSpecificConvId = `conv_${minId}_${maxId}_p${p.id}`;
+
+      const conversation =
+        conversations.find((item) => item.id === projectSpecificConvId) ??
+        conversations.find(
+          (item) =>
+            ((item.userAId === session.userId && item.userBId === partner.id) ||
+              (item.userAId === partner.id && item.userBId === session.userId)) &&
+            item.job === p.job?.title,
+        ) ??
+        conversations.find(
+          (item) =>
+            (item.userAId === session.userId && item.userBId === partner.id) ||
+            (item.userAId === partner.id && item.userBId === session.userId),
+        );
+
+      const projectSummary = {
         id: p.id,
         jobId: p.jobId,
         title: p.job?.title ?? `Project #${p.jobId}`,
@@ -262,23 +336,66 @@ export async function GET(request: NextRequest) {
         totalMilestones: p.totalMilestones,
         isCompleted: p.isCompleted,
         updatedAt: p.updatedAt.toISOString(),
-      })),
-      activeProject: runningProject
-        ? {
-            id: runningProject.id,
-            jobId: runningProject.jobId,
-            title: runningProject.job?.title ?? `Project #${runningProject.jobId}`,
-            category: runningProject.job?.category ?? null,
-            status: runningProject.status,
-            progress: runningProject.calcProgress,
-            completedMilestones: runningProject.completedMilestones,
-            totalMilestones: runningProject.totalMilestones,
-            isCompleted: runningProject.isCompleted,
-            updatedAt: runningProject.updatedAt.toISOString(),
-          }
-        : null,
-    };
-  });
+      };
+
+      contactRows.push({
+        id: partner.id,
+        conversationKey: `project_${p.id}`,
+        name:
+          `${partner.firstName} ${partner.lastName}`.trim() ||
+          partner.email ||
+          `User #${partner.id}`,
+        firstName: partner.firstName,
+        lastName: partner.lastName,
+        avatarUrl: partner.avatarUrl,
+        role: partner.role,
+        isAdminTeam: false,
+        email: partner.email,
+        phone: partner.phone,
+        conversationId: conversation?.id ?? null,
+        lastMessage: (conversation?.messages[0] as { body: string; createdAt: string } | undefined) ?? null,
+        unreadCount: unreadCounts.get(partner.id) ?? 0,
+        projectId: p.id,
+        projectTitle: projectSummary.title,
+        activeProject: projectSummary,
+        projects: [projectSummary],
+      });
+    }
+
+    // Also include contacts without projects (e.g. Official Support or direct messages)
+    for (const contact of contacts) {
+      if (!partnerIdsWithProjects.has(contact.id) || contact.role === "ADMIN") {
+        const isContactAdmin = contact.role === "ADMIN";
+        const conversation = conversations.find(
+          (item) =>
+            (item.userAId === session.userId && item.userBId === contact.id) ||
+            (item.userAId === contact.id && item.userBId === session.userId),
+        );
+        contactRows.push({
+          id: contact.id,
+          conversationKey: `user_${contact.id}`,
+          name: isContactAdmin
+            ? "KLICK-PRO Official Support"
+            : `${contact.firstName} ${contact.lastName}`.trim() ||
+              contact.email ||
+              `User #${contact.id}`,
+          firstName: contact.firstName,
+          lastName: contact.lastName,
+          avatarUrl: contact.avatarUrl,
+          role: contact.role,
+          isAdminTeam: isContactAdmin,
+          email: contact.email,
+          phone: contact.phone,
+          conversationId: conversation?.id ?? null,
+          lastMessage: (conversation?.messages[0] as { body: string; createdAt: string } | undefined) ?? null,
+          unreadCount: unreadCounts.get(contact.id) ?? 0,
+          projectId: null,
+          projectTitle: isContactAdmin ? "Support Assistance" : null,
+          activeProject: null,
+        });
+      }
+    }
+  }
   contactRows.sort((first, second) => {
     // Users with unread messages come first
     if (second.unreadCount > 0 !== first.unreadCount > 0) {
@@ -427,17 +544,29 @@ export async function POST(request: NextRequest) {
     ? await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } })
     : [];
   const adminIdsArray = supportAdmins.map((a) => a.id);
-  const existing = await db.socketConversation.findFirst({
-    where: isSupportChat
-      ? {
-          OR: [
-            { userAId: { in: adminIdsArray }, userBId: recipientId },
-            { userAId: recipientId, userBId: { in: adminIdsArray } },
-            pairWhere(session.userId, recipientId),
-          ],
-        }
-      : pairWhere(session.userId, recipientId),
-  });
+  const minId = Math.min(session.userId, recipientId);
+  const maxId = Math.max(session.userId, recipientId);
+  const projectSpecificConvId = activeProject ? `conv_${minId}_${maxId}_p${activeProject.id}` : null;
+
+  let existing = null;
+  if (projectSpecificConvId) {
+    existing = await db.socketConversation.findUnique({
+      where: { id: projectSpecificConvId },
+    });
+  }
+  if (!existing) {
+    existing = await db.socketConversation.findFirst({
+      where: isSupportChat
+        ? {
+            OR: [
+              { userAId: { in: adminIdsArray }, userBId: recipientId },
+              { userAId: recipientId, userBId: { in: adminIdsArray } },
+              pairWhere(session.userId, recipientId),
+            ],
+          }
+        : pairWhere(session.userId, recipientId),
+    });
+  }
   const resolvedJob = isSupportChat
     ? "KLICK-PRO Support"
     : body.job?.trim() || activeProject?.job?.title?.trim() || "Project conversation";
@@ -445,7 +574,7 @@ export async function POST(request: NextRequest) {
     existing ??
     (await db.socketConversation.create({
       data: {
-        id: randomUUID(),
+        id: projectSpecificConvId ?? randomUUID(),
         userAId: session.userId,
         userBId: recipientId,
         userAName:

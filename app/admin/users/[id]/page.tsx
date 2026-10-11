@@ -26,6 +26,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatReadableLabel } from "@/lib/utils";
 
 type UserDetail = {
   id: number;
@@ -725,7 +726,7 @@ export default function AdminUserDetailPage() {
                               : "bg-indigo-50 text-indigo-700 border-indigo-200"
                         }`}
                       >
-                        {proj.status.replace(/_/g, " ")}
+                        {formatReadableLabel(proj.status)}
                       </span>
                       <Link
                         href={`/project/${proj.id}/tracking`}

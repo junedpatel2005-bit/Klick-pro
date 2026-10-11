@@ -15,3 +15,14 @@ export function capitalizeFirst(value: string | null | undefined): string {
     value.slice(firstIndex + 1)
   );
 }
+
+export function formatReadableLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  const cleaned = value.trim().replace(/_/g, " ");
+  if (/[a-z]/.test(cleaned) && /[A-Z]/.test(cleaned) && !value.includes("_")) {
+    return cleaned;
+  }
+  return cleaned
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}

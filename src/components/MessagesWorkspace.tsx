@@ -16,7 +16,7 @@ import {
   Send,
   ShieldCheck,
 } from "lucide-react";
-import { capitalizeFirst } from "@/lib/utils";
+import { capitalizeFirst, formatReadableLabel } from "@/lib/utils";
 
 export type ContactProject = {
   id: number;
@@ -33,6 +33,7 @@ export type ContactProject = {
 
 export type Contact = {
   id: number;
+  conversationKey: string;
   name: string;
   firstName: string;
   lastName: string;
@@ -44,6 +45,8 @@ export type Contact = {
   isAdminTeam?: boolean;
   email?: string | null;
   phone?: string | null;
+  projectId?: number | null;
+  projectTitle?: string | null;
   projects?: ContactProject[];
   activeProject?: ContactProject | null;
 };
@@ -86,7 +89,7 @@ function formatProjectStatus(status: string) {
     case "CLOSED":
       return "Closed";
     default:
-      return status.replace(/_/g, " ");
+      return formatReadableLabel(status);
   }
 }
 
@@ -132,6 +135,7 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
   const queryProjectId = searchParams.get("projectId") || searchParams.get("project");
 
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(
     queryUserId && Number.isSafeInteger(Number(queryUserId)) ? Number(queryUserId) : null,
   );
@@ -155,6 +159,20 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
     if (!response.ok) throw new Error("Unable to load messages.");
     const data = (await response.json()) as { contacts: Contact[] };
     setContacts(data.contacts);
+    setSelectedKey((currentKey) => {
+      if (currentKey && data.contacts.some((c) => c.conversationKey === currentKey)) {
+        return currentKey;
+      }
+      if (queryProjectId && Number.isSafeInteger(Number(queryProjectId))) {
+        const matchProj = data.contacts.find((c) => c.projectId === Number(queryProjectId));
+        if (matchProj) return matchProj.conversationKey;
+      }
+      if (queryUserId && Number.isSafeInteger(Number(queryUserId))) {
+        const matchUser = data.contacts.find((c) => c.id === Number(queryUserId));
+        if (matchUser) return matchUser.conversationKey;
+      }
+      return data.contacts[0]?.conversationKey ?? null;
+    });
     setSelectedId((current) => {
       if (current && data.contacts.some((c) => c.id === current)) return current;
       if (queryUserId && Number.isSafeInteger(Number(queryUserId))) {
@@ -163,7 +181,7 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
       }
       return data.contacts[0]?.id ?? null;
     });
-  }, [queryUserId]);
+  }, [queryUserId, queryProjectId]);
 
   useEffect(() => {
     void Promise.all([
@@ -267,6 +285,25 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
     return () => clearTimeout(timer);
   }, [admin, search, queryUserId]);
 
+  const selected = useMemo(() => {
+    if (!contacts.length) return null;
+    if (selectedKey) {
+      const match = contacts.find((contact) => contact.conversationKey === selectedKey);
+      if (match) return match;
+    }
+    if (selectedId) {
+      if (selectedProjectId) {
+        const match = contacts.find(
+          (contact) => contact.id === selectedId && contact.projectId === selectedProjectId,
+        );
+        if (match) return match;
+      }
+      const match = contacts.find((contact) => contact.id === selectedId);
+      if (match) return match;
+    }
+    return contacts[0] ?? null;
+  }, [contacts, selectedKey, selectedId, selectedProjectId]);
+
   const visibleContacts = useMemo(
     () =>
       contacts.filter((contact) => {
@@ -275,7 +312,7 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
             adminTab === "ALL_CHATS" &&
             !contact.conversationId &&
             !contact.lastMessage &&
-            contact.id !== selectedId
+            contact.id !== selected?.id
           ) {
             return false;
           }
@@ -285,25 +322,21 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
         const q = search.toLowerCase();
         return (
           contact.name.toLowerCase().includes(q) ||
-          (contact.email && contact.email.toLowerCase().includes(q)) ||
-          (contact.phone && contact.phone.includes(q))
+          Boolean(contact.projectTitle && contact.projectTitle.toLowerCase().includes(q)) ||
+          Boolean(contact.email && contact.email.toLowerCase().includes(q)) ||
+          Boolean(contact.phone && contact.phone.includes(q))
         );
       }),
-    [admin, adminTab, contacts, search, selectedId],
+    [admin, adminTab, contacts, search, selected?.id],
   );
 
-  const selected = contacts.find((contact) => contact.id === selectedId) ?? null;
   const isSelectedAdmin = selected?.role === "ADMIN" || Boolean(selected?.isAdminTeam);
 
   // Compute the current active project for the selected contact
   const currentProject = useMemo(() => {
     if (!selected) return null;
-    if (selectedProjectId && selected.projects?.length) {
-      const match = selected.projects.find((project) => project.id === selectedProjectId);
-      if (match) return match;
-    }
     return selected.activeProject ?? selected.projects?.[0] ?? null;
-  }, [selected, selectedProjectId]);
+  }, [selected]);
 
   useEffect(() => {
     if (admin && selected) {
@@ -490,141 +523,128 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
             {loading ? (
               <p className="p-4 text-sm text-muted-foreground">Loading contacts…</p>
             ) : visibleContacts.length ? (
-              visibleContacts.map((contact) => (
-                <button
-                  type="button"
-                  key={contact.id}
-                  onClick={() => {
-                    setSelectedId(contact.id);
-                    if (contact.activeProject) {
-                      setSelectedProjectId(contact.activeProject.id);
-                    }
-                  }}
-                  className={`flex w-full items-start gap-3 rounded-2xl p-3 text-left transition ${
-                    selectedId === contact.id
-                      ? admin
-                        ? "bg-indigo-50/80 border border-indigo-200/80 text-indigo-950 font-semibold shadow-2xs"
-                        : "bg-primary/10"
-                      : admin
-                        ? "border border-transparent hover:bg-slate-50 text-slate-700"
-                        : "hover:bg-muted"
-                  }`}
-                >
-                  <div
-                    className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full font-semibold border ${
-                      admin
-                        ? contact.role === "PROFESSIONAL"
-                          ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                          : "bg-sky-50 text-sky-700 border-sky-200"
-                        : "bg-primary/15 text-primary border-primary/20"
+              visibleContacts.map((contact) => {
+                const isSelected =
+                  selected?.conversationKey === contact.conversationKey ||
+                  (!selected && contact.conversationKey === visibleContacts[0]?.conversationKey);
+                const primaryTitle =
+                  contact.projectTitle ||
+                  (contact.isAdminTeam ? "KLICK-PRO Support" : contact.name);
+                const collaboratorName = contact.projectTitle
+                  ? contact.name
+                  : contact.isAdminTeam
+                    ? "Official Support"
+                    : contact.email || "Direct Chat";
+
+                return (
+                  <button
+                    type="button"
+                    key={contact.conversationKey}
+                    onClick={() => {
+                      setSelectedKey(contact.conversationKey);
+                      setSelectedId(contact.id);
+                      setSelectedProjectId(contact.projectId ?? contact.activeProject?.id ?? null);
+                    }}
+                    className={`flex w-full items-start gap-3 rounded-2xl p-3 text-left transition ${
+                      isSelected
+                        ? admin
+                          ? "bg-indigo-50/80 border border-indigo-200/80 text-indigo-950 font-semibold shadow-2xs"
+                          : "bg-primary/10 border border-primary/20 text-foreground"
+                        : admin
+                          ? "border border-transparent hover:bg-slate-50 text-slate-700"
+                          : "border border-transparent hover:bg-muted text-muted-foreground"
                     }`}
                   >
-                    {initials(contact.name)}
-                    {contact.avatarUrl && (
-                      <img
-                        src={contact.avatarUrl}
-                        alt=""
-                        className="absolute h-full w-full rounded-full object-cover"
-                        onError={(event) => event.currentTarget.remove()}
-                      />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                    <div
+                      className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full font-semibold border ${
+                        admin
+                          ? contact.role === "PROFESSIONAL"
+                            ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                            : "bg-sky-50 text-sky-700 border-sky-200"
+                          : contact.isAdminTeam
+                            ? "bg-indigo-600 text-white border-indigo-700"
+                            : "bg-primary/15 text-primary border-primary/20"
+                      }`}
+                    >
+                      {contact.isAdminTeam ? (
+                        <ShieldCheck className="h-5 w-5" />
+                      ) : (
+                        <>
+                          {initials(contact.name)}
+                          {contact.avatarUrl && (
+                            <img
+                              src={contact.avatarUrl}
+                              alt=""
+                              className="absolute h-full w-full rounded-full object-cover"
+                              onError={(event) => event.currentTarget.remove()}
+                            />
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        {/* Top Line: Project Name */}
                         <p
-                          className={`shrink-0 text-sm font-semibold truncate ${
-                            admin ? "text-slate-900" : ""
+                          className={`truncate text-sm font-bold ${
+                            admin ? "text-slate-900" : "text-foreground"
+                          }`}
+                          title={primaryTitle}
+                        >
+                          {primaryTitle}
+                        </p>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {contact.lastMessage && (
+                            <span
+                              className={`text-[10px] ${admin ? "text-slate-400" : "text-muted-foreground"}`}
+                            >
+                              {new Date(contact.lastMessage.createdAt).toLocaleDateString()}
+                            </span>
+                          )}
+                          {contact.unreadCount > 0 && (
+                            <span
+                              className={`grid h-5 min-w-5 place-items-center rounded-full px-1 text-[10px] font-bold ${admin ? "bg-indigo-600 text-white" : "bg-primary text-primary-foreground"}`}
+                            >
+                              {contact.unreadCount > 99 ? "99+" : contact.unreadCount}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Down Line: Collaborator Name */}
+                      <div className="mt-0.5 flex items-center gap-1.5 min-w-0">
+                        <p
+                          className={`truncate text-xs font-medium ${
+                            admin ? "text-slate-600" : "text-muted-foreground"
                           }`}
                         >
-                          {contact.name}
+                          {collaboratorName}
                         </p>
-                        {admin && (
+                        {contact.role && !contact.isAdminTeam && (
                           <span
-                            className={`shrink-0 rounded-full px-1.5 py-0.2 text-[9px] font-semibold border ${
+                            className={`shrink-0 rounded px-1.5 py-0.2 text-[9px] font-semibold border ${
                               contact.role === "PROFESSIONAL"
-                                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                                : "bg-sky-50 text-sky-700 border-sky-200"
+                                ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800"
+                                : "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
                             }`}
                           >
                             {contact.role === "PROFESSIONAL" ? "Pro" : "Client"}
                           </span>
                         )}
-                        {/* Show project name in bracket next to the contact name */}
-                        {contact.activeProject && (
-                          <span
-                            className="truncate text-xs font-normal text-muted-foreground"
-                            title={contact.activeProject.title}
-                          >
-                            ({contact.activeProject.title})
-                          </span>
-                        )}
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {contact.lastMessage && (
-                          <span
-                            className={`text-[10px] ${admin ? "text-slate-400" : "text-muted-foreground"}`}
-                          >
-                            {new Date(contact.lastMessage.createdAt).toLocaleDateString()}
-                          </span>
+
+                      <p
+                        className={`mt-1 truncate text-xs ${admin ? "text-slate-500" : "text-muted-foreground"}`}
+                      >
+                        {capitalizeFirst(
+                          contact.lastMessage?.body ?? "Start a conversation",
                         )}
-                        {contact.unreadCount > 0 && (
-                          <span
-                            className={`grid h-5 min-w-5 place-items-center rounded-full px-1 text-[10px] font-bold ${admin ? "bg-indigo-600 text-white" : "bg-primary text-primary-foreground"}`}
-                          >
-                            {contact.unreadCount > 99 ? "99+" : contact.unreadCount}
-                          </span>
-                        )}
-                      </div>
+                      </p>
                     </div>
-
-                    {/* Milestone & Completion Status Badge on Sidebar */}
-                    {contact.activeProject && (
-                      <div className="my-1 flex items-center gap-1.5 overflow-hidden">
-                        {contact.activeProject.isCompleted ? (
-                          <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
-                            <CheckCheck className="h-3 w-3 stroke-[3]" />
-                            Project Completed
-                          </span>
-                        ) : (
-                          <span
-                            className={`inline-flex max-w-full items-center gap-1 truncate rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${projectStatusColor(contact.activeProject.status, admin)}`}
-                            title={`${contact.activeProject.progress}% • ${contact.activeProject.totalMilestones > 0 ? `${contact.activeProject.completedMilestones}/${contact.activeProject.totalMilestones} milestones completed` : formatProjectStatus(contact.activeProject.status)}`}
-                          >
-                            <Briefcase className="h-3 w-3 shrink-0" />
-                            <span className="truncate">
-                              {contact.activeProject.progress}%
-                              {contact.activeProject.totalMilestones > 0
-                                ? ` • ${contact.activeProject.completedMilestones}/${contact.activeProject.totalMilestones} milestones`
-                                : ` • ${formatProjectStatus(contact.activeProject.status)}`}
-                            </span>
-                          </span>
-                        )}
-                        {contact.projects && contact.projects.length > 1 && (
-                          <span
-                            className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
-                            title={`${contact.projects.length} connected projects`}
-                          >
-                            +{contact.projects.length - 1}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {admin && contact.email && !contact.activeProject && (
-                      <p className="truncate text-[11px] text-slate-400">{contact.email}</p>
-                    )}
-
-                    <p
-                      className={`truncate text-xs ${admin ? "text-slate-500" : "text-muted-foreground"}`}
-                    >
-                      {capitalizeFirst(
-                        contact.lastMessage?.body ?? "Start a conversation",
-                      )}
-                    </p>
-                  </div>
-                </button>
-              ))
+                  </button>
+                );
+              })
             ) : (
               <div className="p-6 text-center">
                 <div
@@ -659,22 +679,24 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
           {selected ? (
             <>
               <header
-                className={`flex flex-wrap items-center justify-between gap-3 border-b p-4 sm:p-5 ${admin ? "border-slate-200 bg-white" : "border-border"}`}
+                className={`flex flex-wrap items-center justify-between gap-3 border-b px-5 py-3.5 ${
+                  admin ? "border-slate-200 bg-white" : "border-border bg-card/80"
+                }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div
-                    className={`grid h-11 w-11 shrink-0 place-items-center rounded-full font-semibold border ${
+                    className={`grid h-10 w-10 shrink-0 place-items-center rounded-full font-semibold border ${
                       admin
                         ? selected.role === "PROFESSIONAL"
                           ? "bg-indigo-50 text-indigo-700 border-indigo-200"
                           : "bg-sky-50 text-sky-700 border-sky-200"
                         : isSelectedAdmin
                           ? "bg-indigo-600 text-white"
-                          : "bg-primary/15 text-primary"
+                          : "bg-primary/15 text-primary border-primary/20"
                     }`}
                   >
                     {isSelectedAdmin ? (
-                      <ShieldCheck className="h-6 w-6 text-white" />
+                      <ShieldCheck className="h-5 w-5 text-white" />
                     ) : (
                       <>
                         {initials(selected.name)}
@@ -689,19 +711,12 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
                       </>
                     )}
                   </div>
+
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className={`truncate font-bold ${admin ? "text-slate-900" : ""}`}>
+                      <p className={`truncate text-sm font-bold ${admin ? "text-slate-900" : "text-foreground"}`}>
                         {selected.name}
                       </p>
-                      {currentProject && (
-                        <span
-                          className="truncate text-xs font-normal text-muted-foreground hidden sm:inline"
-                          title={currentProject.title}
-                        >
-                          ({currentProject.title})
-                        </span>
-                      )}
                       <span
                         className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
                           admin
@@ -710,7 +725,9 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
                               : "bg-sky-50 text-sky-700 border-sky-200"
                             : isSelectedAdmin
                               ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800"
-                              : "bg-muted text-muted-foreground"
+                              : selected.role === "PROFESSIONAL"
+                                ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20"
+                                : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20"
                         }`}
                       >
                         {isSelectedAdmin
@@ -721,117 +738,21 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
                       </span>
                     </div>
 
-                    {admin ? (
-                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                        {selected.email && (
-                          <span
-                            className="flex items-center gap-1 truncate"
-                            title={selected.email}
-                          >
-                            <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                            {selected.email}
-                          </span>
-                        )}
-                        {selected.phone && (
-                          <span className="flex items-center gap-1" title={selected.phone}>
-                            <Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                            {selected.phone}
-                          </span>
-                        )}
-                        <Link
-                          href={`/admin/users/${selected.id}`}
-                          className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-700 transition"
-                        >
-                          Profile <ExternalLink className="h-3 w-3" />
-                        </Link>
-                      </div>
-                    ) : (
-                      currentProject && (
-                        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground sm:hidden truncate">
-                          <Briefcase className="h-3 w-3 shrink-0 text-primary" />
-                          <span className="truncate font-medium">{currentProject.title}</span>
-                        </div>
-                      )
-                    )}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                      <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">Active</span>
+                      {admin && selected.email && (
+                        <>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-[11px] text-slate-400 truncate max-w-[200px]">{selected.email}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Right Area of Header: Percentage, Milestones, or Project Completed */}
-                {!admin && isSelectedAdmin ? (
-                  <div className="ml-auto flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-                    <ShieldCheck className="h-4 w-4" />
-                    <span>Verified Support</span>
-                  </div>
-                ) : currentProject ? (
-                  <div className="flex items-center gap-3 ml-auto flex-wrap">
-                    {currentProject.isCompleted ? (
-                      <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 px-3.5 py-1.5 text-emerald-800 dark:text-emerald-300 shadow-2xs">
-                        <div className="grid h-5 w-5 place-items-center rounded-full bg-emerald-500 text-white">
-                          <CheckCheck className="h-3 w-3 stroke-[3]" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold leading-tight">Project Completed</p>
-                          <p className="text-[10px] opacity-80 mt-0.5">
-                            {currentProject.totalMilestones > 0
-                              ? `${currentProject.totalMilestones}/${currentProject.totalMilestones} milestones completed`
-                              : "100% completed"}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div
-                        className={`flex items-center gap-3 rounded-2xl border px-3.5 py-1.5 shadow-2xs ${
-                          admin
-                            ? "border-slate-200 bg-slate-50/80 text-slate-800"
-                            : "border-border bg-muted/40 text-foreground"
-                        }`}
-                      >
-                        {/* Progress percentage & visual bar */}
-                        <div className="flex flex-col justify-center">
-                          <div className="flex items-center justify-between gap-3 text-xs font-semibold leading-tight">
-                            <span
-                              className={`text-[11px] ${admin ? "text-slate-500" : "text-muted-foreground"}`}
-                            >
-                              Progress
-                            </span>
-                            <span className="text-primary font-bold">
-                              {currentProject.progress}%
-                            </span>
-                          </div>
-                          <div className="mt-1 h-1.5 w-24 sm:w-28 overflow-hidden rounded-full bg-background border border-border/40">
-                            <div
-                              className="h-full rounded-full bg-primary transition-all duration-500"
-                              style={{
-                                width: `${Math.min(Math.max(currentProject.progress, 0), 100)}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Divider */}
-                        <div className="h-6 w-px bg-border shrink-0" />
-
-                        {/* Milestone completion count */}
-                        <div className="flex flex-col justify-center text-left">
-                          <p className="text-xs font-semibold leading-tight">
-                            {currentProject.totalMilestones > 0
-                              ? `${currentProject.completedMilestones} of ${currentProject.totalMilestones} milestones completed`
-                              : "No milestones yet"}
-                          </p>
-                          <p
-                            className={`text-[10px] ${admin ? "text-slate-500" : "text-muted-foreground"} mt-0.5`}
-                          >
-                            Status:{" "}
-                            <span
-                              className={`font-medium ${admin ? "text-slate-900" : "text-foreground"}`}
-                            >
-                              {formatProjectStatus(currentProject.status)}
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
+                <div className="flex items-center gap-2 ml-auto">
+                  {currentProject && (
                     <Link
                       href={`/project/${currentProject.id}/tracking`}
                       className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
@@ -841,72 +762,19 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
                       }`}
                     >
                       <ExternalLink className="h-3.5 w-3.5 text-primary" />
-                      <span className="hidden sm:inline">View Tracking</span>
-                      <span className="sm:hidden">Tracking</span>
+                      <span>Project Tracking</span>
                     </Link>
-                    {admin && <ShieldCheck className="h-5 w-5 text-indigo-600" />}
-                  </div>
-                ) : (
-                  admin && (
-                    <div className="ml-auto flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-                      <ShieldCheck className="h-4 w-4 text-indigo-600" />
-                      <span>Official Support Thread</span>
-                    </div>
-                  )
-                )}
-              </header>
-
-              {/* Multi-Project Switcher Bar (when 2 or more projects exist with this contact) */}
-              {selected.projects && selected.projects.length > 1 && (
-                <div
-                  className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2.5 text-xs ${
-                    admin ? "border-slate-200 bg-slate-50/80" : "border-border bg-muted/40"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="flex items-center gap-1.5 shrink-0 font-medium text-muted-foreground">
-                      <Briefcase className="h-3.5 w-3.5 text-primary" />
-                      <span>Project Thread:</span>
-                    </div>
-                    <div className="relative inline-block min-w-[200px] max-w-[320px]">
-                      <select
-                        value={currentProject?.id || ""}
-                        onChange={(e) => setSelectedProjectId(Number(e.target.value))}
-                        aria-label="Select connected project thread"
-                        className={`w-full appearance-none rounded-md border py-1.5 pl-3 pr-8 text-xs font-medium cursor-pointer transition focus:outline-hidden focus:ring-2 ${
-                          admin
-                            ? "border-slate-200 bg-white text-slate-900 hover:border-slate-300 focus:ring-indigo-500/20"
-                            : "border-border bg-card text-foreground hover:border-primary/40 focus:ring-primary/20"
-                        }`}
-                      >
-                        {selected.projects.map((proj) => (
-                          <option key={proj.id} value={proj.id}>
-                            {proj.title} • {proj.isCompleted ? "Completed" : `${proj.progress}%`}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    </div>
-                  </div>
-
-                  {currentProject && (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[11px] text-muted-foreground">
-                        {selected.projects.length} connected projects
-                      </span>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold border ${
-                          currentProject.isCompleted
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400"
-                            : "border-primary/20 bg-primary/10 text-primary"
-                        }`}
-                      >
-                        {currentProject.isCompleted ? "Completed" : `${currentProject.progress}% in progress`}
-                      </span>
-                    </div>
+                  )}
+                  {admin && (
+                    <Link
+                      href={`/admin/users/${selected.id}`}
+                      className="inline-flex items-center gap-1 rounded-xl border border-indigo-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 transition"
+                    >
+                      Profile <ExternalLink className="h-3 w-3" />
+                    </Link>
                   )}
                 </div>
-              )}
+              </header>
 
               <div
                 className={`flex-1 space-y-3 overflow-y-auto p-4 sm:p-6 ${admin ? "bg-slate-50/60" : "bg-muted/30"}`}
