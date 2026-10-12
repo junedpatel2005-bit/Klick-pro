@@ -145,84 +145,76 @@ export function RealtimeNotifications() {
           <div
             data-notification-toast="true"
             data-notification-id={String(t)}
-            className="group relative w-full max-w-sm rounded-2xl border border-border/80 bg-background/95 p-4 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.22)] dark:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.6)] backdrop-blur-2xl ring-1 ring-black/5 dark:ring-white/10 transition-all duration-200 animate-in fade-in-50 slide-in-from-top-3"
+            className="group relative flex w-full max-w-sm items-start gap-3 rounded-xl border border-border/80 bg-background/95 p-3.5 shadow-lg shadow-black/5 dark:shadow-black/30 backdrop-blur-xl transition-all duration-200 hover:border-foreground/20 hover:shadow-xl"
           >
-            {/* Top glowing ambient gradient bar */}
-            <div className={`absolute top-0 inset-x-4 h-0.5 rounded-full ${visual.accentGradient} opacity-90`} />
+            {/* Minimal Icon Badge */}
+            <div
+              className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg shadow-xs ${visual.iconClass}`}
+            >
+              <VisualIcon className="h-4 w-4" />
+            </div>
 
-            {/* Header: Live Indicator & Category chip + Close */}
-            <div className="flex items-center justify-between mb-2.5">
+            {/* Clickable Content Body */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                if (notification.href) {
+                  void dismissSingleNotificationWithAnimation(
+                    t,
+                    notification.id,
+                    notification.href,
+                    (target) => router.push(target),
+                  );
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && notification.href) {
+                  void dismissSingleNotificationWithAnimation(
+                    t,
+                    notification.id,
+                    notification.href,
+                    (target) => router.push(target),
+                  );
+                }
+              }}
+              className={`min-w-0 flex-1 text-left ${notification.href ? "cursor-pointer" : ""}`}
+            >
               <div className="flex items-center gap-1.5">
-                <span className="relative flex h-2 w-2">
-                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${visual.pulseColor}`} />
-                  <span className={`relative inline-flex rounded-full h-2 w-2 ${visual.dotColor}`} />
-                </span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <span className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
                   {visual.categoryLabel}
                 </span>
+                <span className="text-[10px] text-muted-foreground/60">· Just now</span>
               </div>
-              <button
-                type="button"
-                onClick={() => void dismissSingleNotificationWithAnimation(t, notification.id)}
-                className="flex h-6 w-6 items-center justify-center rounded-lg text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-                aria-label="Dismiss notification"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+              <div className="mt-0.5">{titleContent}</div>
+              {notification.description && (
+                <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground leading-snug">
+                  {capitalizeFirst(notification.description)}
+                </p>
+              )}
+              {notification.href && (
+                <div className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-primary group-hover:underline">
+                  <span>{actionLabel}</span>
+                  <ArrowRight className="h-3 w-3" />
+                </div>
+              )}
             </div>
 
-            {/* Main content */}
-            <div className="flex items-start gap-3">
-              <div
-                className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-xs ${visual.iconClass}`}
-              >
-                <VisualIcon className="h-4.5 w-4.5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                {titleContent}
-                {notification.description && (
-                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground leading-relaxed">
-                    {capitalizeFirst(notification.description)}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Action Row */}
-            <div className="mt-3.5 flex items-center justify-between pt-2.5 border-t border-border/50 text-xs">
-              <span className="text-[10px] font-medium text-muted-foreground/60">Just now</span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => void dismissAllNotificationsWithAnimation()}
-                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-                  title="Dismiss all"
-                  aria-label="Dismiss all"
-                >
-                  <CheckCheck className="h-3.5 w-3.5" />
-                </button>
-                {notification.href && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void dismissSingleNotificationWithAnimation(
-                        t,
-                        notification.id,
-                        notification.href,
-                        (target) => router.push(target),
-                      );
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 font-semibold text-xs text-primary-foreground shadow-xs hover:bg-primary/90 transition-all cursor-pointer active:scale-95"
-                  >
-                    <span>{actionLabel}</span>
-                    <ArrowRight className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-            </div>
+            {/* Subtle Close Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void dismissSingleNotificationWithAnimation(t, notification.id);
+              }}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+              aria-label="Dismiss notification"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         ),
-        { duration: 6500, unstyled: true },
+        { duration: 5500, unstyled: true },
       );
     },
     [router],
@@ -246,82 +238,69 @@ export function RealtimeNotifications() {
           <div
             data-notification-toast="true"
             data-notification-id={String(t)}
-            className="group relative w-full max-w-sm rounded-2xl border border-border/80 bg-background/95 p-4 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.22)] dark:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.6)] backdrop-blur-2xl ring-1 ring-black/5 dark:ring-white/10 transition-all duration-200 animate-in fade-in-50 slide-in-from-top-3"
+            className="group relative flex w-full max-w-sm items-start gap-3 rounded-xl border border-border/80 bg-background/95 p-3.5 shadow-lg shadow-black/5 dark:shadow-black/30 backdrop-blur-xl transition-all duration-200 hover:border-foreground/20 hover:shadow-xl"
           >
-            {/* Top glowing ambient gradient bar */}
-            <div className="absolute top-0 inset-x-4 h-0.5 rounded-full bg-gradient-to-r from-primary/50 via-primary to-primary/50 opacity-90" />
-
-            {/* Header: Live Indicator & Category chip + Close */}
-            <div className="flex items-center justify-between mb-2.5">
-              <div className="flex items-center gap-1.5">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-primary" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-                </span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Updates ({totalCount})
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => void dismissSingleNotificationWithAnimation(t)}
-                className="flex h-6 w-6 items-center justify-center rounded-lg text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-                aria-label="Dismiss notification"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+            <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary border border-primary/20 shadow-xs">
+              <BellRing className="h-4 w-4" />
             </div>
 
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary border border-primary/20 shadow-xs">
-                <BellRing className="h-4.5 w-4.5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="rounded-xl bg-muted/40 p-2.5 border border-border/50">
-                  <p className="text-xs font-bold text-foreground truncate">
-                    {capitalizeFirst(latest.title)}
-                  </p>
-                  {latest.description && (
-                    <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
-                      {capitalizeFirst(latest.description)}
-                    </p>
-                  )}
-                </div>
-                <p className="mt-1.5 text-[11px] text-muted-foreground font-medium">
-                  + {totalCount - 1} other update{totalCount > 2 ? "s" : ""} in inbox
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-3.5 flex items-center justify-between pt-2.5 border-t border-border/50 text-xs">
-              <button
-                type="button"
-                onClick={() => void dismissAllNotificationsWithAnimation()}
-                className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-                title="Dismiss all"
-                aria-label="Dismiss all"
-              >
-                <CheckCheck className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                void dismissSingleNotificationWithAnimation(
+                  t,
+                  undefined,
+                  "/notifications",
+                  (target) => router.push(target),
+                );
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
                   void dismissSingleNotificationWithAnimation(
                     t,
                     undefined,
                     "/notifications",
                     (target) => router.push(target),
                   );
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 font-semibold text-xs text-primary-foreground shadow-xs hover:bg-primary/90 transition-all cursor-pointer active:scale-95"
-              >
+                }
+              }}
+              className="min-w-0 flex-1 text-left cursor-pointer"
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold tracking-wide text-primary uppercase">
+                  Notifications ({totalCount})
+                </span>
+                <span className="text-[10px] text-muted-foreground/60">· Just now</span>
+              </div>
+              <p className="mt-0.5 text-sm font-semibold text-foreground truncate">
+                {capitalizeFirst(latest.title)}
+              </p>
+              {latest.description && (
+                <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                  {capitalizeFirst(latest.description)}
+                </p>
+              )}
+              <div className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-primary group-hover:underline">
                 <span>View all ({totalCount})</span>
                 <ArrowRight className="h-3 w-3" />
-              </button>
+              </div>
             </div>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void dismissSingleNotificationWithAnimation(t);
+              }}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+              aria-label="Dismiss notification"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         ),
-        { duration: 7500, unstyled: true },
+        { duration: 6500, unstyled: true },
       );
     },
     [showNotification, router],
