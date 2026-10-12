@@ -2890,93 +2890,93 @@ export default function SharedProjectTrackingPage() {
               {/* Milestones Cards List */}
               <div className="mt-6 space-y-4">
                 {data.milestones.map((m, index) => {
-                  const overdueDays = milestoneOverdueDays(m);
-                  const milestoneUploads = data.uploads.filter(
-                    (upload) => upload.milestoneId === m.id,
-                  );
-                  const hasSubmittedWork =
-                    milestoneUploads.length > 0 ||
-                    m.status === "AWAITING_CLIENT_REVIEW" ||
-                    Boolean(m.submittedAt);
-                  const pct = totalAgreed > 0 ? Math.round((m.amount / totalAgreed) * 100) : 0;
-                  const isApproved =
-                    m.status === "APPROVED" ||
-                    m.status === "COMPLETED" ||
-                    m.payment?.status === "COMPLETED" ||
-                    m.payment?.status === "FUNDED" ||
-                    m.status === "AWAITING_ADMIN_APPROVAL";
-                  const isAwaitingReview = m.status === "AWAITING_CLIENT_REVIEW";
-                  const isAwaitingAdmin = false;
-                  const isRevision = m.status === "REVISION_REQUESTED";
-                  const isPrecedingApproved =
-                    index === 0 ||
-                    data.milestones
-                      .slice(0, index)
-                      .every(
-                        (prev) =>
-                          prev.status === "APPROVED" ||
-                          prev.status === "COMPLETED" ||
-                          prev.payment?.status === "COMPLETED" ||
-                          prev.payment?.status === "FUNDED",
-                      );
-                  const isCurrentActive = current?.id === m.id;
-                  const isInProgress =
-                    m.status === "IN_PROGRESS" ||
-                    (!isApproved &&
-                      !isAwaitingReview &&
-                      !isRevision &&
-                      isPrecedingApproved &&
-                      isCurrentActive);
-                  const isEligibleToWork =
-                    !isApproved &&
-                    (["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status) ||
-                      isPrecedingApproved);
+                    const overdueDays = milestoneOverdueDays(m);
+                    const milestoneUploads = data.uploads.filter(
+                      (upload) => upload.milestoneId === m.id,
+                    );
+                    const hasSubmittedWork =
+                      milestoneUploads.length > 0 ||
+                      m.status === "AWAITING_CLIENT_REVIEW" ||
+                      Boolean(m.submittedAt);
+                    const pct = totalAgreed > 0 ? Math.round((m.amount / totalAgreed) * 100) : 0;
+                    const isApproved =
+                      m.status === "APPROVED" ||
+                      m.status === "COMPLETED" ||
+                      m.payment?.status === "COMPLETED" ||
+                      m.payment?.status === "FUNDED" ||
+                      m.status === "AWAITING_ADMIN_APPROVAL";
+                    const isAwaitingReview = m.status === "AWAITING_CLIENT_REVIEW";
+                    const isAwaitingAdmin = false;
+                    const isRevision = m.status === "REVISION_REQUESTED";
+                    const isPrecedingApproved =
+                      index === 0 ||
+                      data.milestones
+                        .slice(0, index)
+                        .every(
+                          (prev) =>
+                            prev.status === "APPROVED" ||
+                            prev.status === "COMPLETED" ||
+                            prev.payment?.status === "COMPLETED" ||
+                            prev.payment?.status === "FUNDED",
+                        );
+                    const isCurrentActive = current?.id === m.id;
+                    const isInProgress =
+                      m.status === "IN_PROGRESS" ||
+                      (!isApproved &&
+                        !isAwaitingReview &&
+                        !isRevision &&
+                        isPrecedingApproved &&
+                        isCurrentActive);
+                    const isEligibleToWork =
+                      !isApproved &&
+                      (["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status) ||
+                        isPrecedingApproved);
 
-                  const isTargetMilestone = queryMilestoneId === String(m.id);
+                    const isTargetMilestone = queryMilestoneId === String(m.id);
 
-                  return (
-                    <div
-                      key={m.id}
-                      id={`milestone-${m.id}`}
-                      className={`relative rounded-2xl border bg-card p-5 sm:p-6 shadow-xs transition-all hover:shadow-soft space-y-4 scroll-mt-24 ${
-                        isTargetMilestone
-                          ? "ring-2 ring-primary ring-offset-2 ring-offset-background border-primary/60 shadow-lg"
-                          : isApproved
-                            ? "border-emerald-500/30 hover:border-emerald-500/50"
-                            : isAwaitingAdmin
-                              ? "border-indigo-500/30 hover:border-indigo-500/50"
-                              : isAwaitingReview
-                                ? "border-purple-500/30 hover:border-purple-500/50"
-                                : isRevision
-                                  ? "border-rose-500/30 hover:border-rose-500/50"
-                                  : isInProgress
-                                    ? "border-amber-500/30 hover:border-amber-500/50"
-                                    : "border-border"
-                      }`}
-                    >
-                      {/* Top Row: Index, Title, Amount & Status */}
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                        <div className="flex items-start gap-3">
-                          <span
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${
-                              isApproved
-                                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                                : isAwaitingAdmin
-                                  ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
-                                  : isAwaitingReview
-                                    ? "bg-purple-500/10 text-purple-700 dark:text-purple-400"
+                    return (
+                      <div
+                        key={m.id}
+                        id={`milestone-${m.id}`}
+                        className={`relative rounded-2xl border bg-card p-5 sm:p-6 shadow-xs transition-all hover:shadow-soft space-y-4 scroll-mt-24 ${
+                          isTargetMilestone
+                            ? "ring-2 ring-primary ring-offset-2 ring-offset-background border-primary/60 shadow-lg"
+                            : isApproved
+                              ? "border-emerald-500/30 hover:border-emerald-500/50"
+                              : isAwaitingAdmin
+                                ? "border-indigo-500/30 hover:border-indigo-500/50"
+                                : isAwaitingReview
+                                  ? "border-purple-500/30 hover:border-purple-500/50"
+                                  : isRevision
+                                    ? "border-rose-500/30 hover:border-rose-500/50"
                                     : isInProgress
-                                      ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                                      : "bg-primary/10 text-primary"
-                            }`}
-                          >
-                            {index + 1}
-                          </span>
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="font-bold text-base sm:text-lg text-foreground">
-                                {m.title}
-                              </h3>
+                                      ? "border-amber-500/30 hover:border-amber-500/50"
+                                      : "border-border"
+                        }`}
+                      >
+                        {/* Top Row: Index, Title, Amount & Status */}
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                            <span
+                              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${
+                                isApproved
+                                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                                  : isAwaitingAdmin
+                                    ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
+                                    : isAwaitingReview
+                                      ? "bg-purple-500/10 text-purple-700 dark:text-purple-400"
+                                      : isInProgress
+                                        ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                        : "bg-primary/10 text-primary"
+                              }`}
+                            >
+                              {index + 1}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="font-bold text-base sm:text-lg text-foreground break-words line-clamp-2">
+                                  {m.title}
+                                </h3>
                               {isTargetMilestone && (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-primary text-primary-foreground px-2.5 py-0.5 text-[11px] font-bold shadow-xs animate-pulse">
                                   <Flag className="h-3 w-3" />

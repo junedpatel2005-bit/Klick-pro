@@ -123,18 +123,18 @@ export function RealtimeNotifications() {
       if (notification.title.includes(" · ")) {
         const [projectName, ...actionParts] = notification.title.split(" · ");
         titleContent = (
-          <div className="flex flex-col gap-0.5">
-            <span className="font-bold text-foreground text-sm leading-snug">
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span className="font-bold text-foreground text-sm leading-snug break-words line-clamp-2">
               {capitalizeFirst(projectName)}
             </span>
-            <span className="text-xs font-semibold text-primary">
+            <span className="text-xs font-semibold text-primary break-words line-clamp-1">
               {capitalizeFirst(actionParts.join(" · "))}
             </span>
           </div>
         );
       } else {
         titleContent = (
-          <span className="font-bold text-foreground text-sm leading-snug">
+          <span className="font-bold text-foreground text-sm leading-snug break-words line-clamp-2">
             {capitalizeFirst(notification.title)}
           </span>
         );
