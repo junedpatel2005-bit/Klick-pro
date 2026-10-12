@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
+import { toast } from "sonner";
 import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import {
   AlertCircle,
@@ -151,7 +152,22 @@ export default function ClientEarnings() {
             withdrawals?: Withdrawal[];
             minWithdrawalAmount?: number;
           } | null,
-        ) =>
+        ) => {
+          const bal = data?.wallet?.balance ?? data?.available ?? 0;
+          if (bal < 0) {
+            try {
+              const alreadyAlerted = window.sessionStorage.getItem("klickpro_negative_wallet_alerted");
+              if (!alreadyAlerted) {
+                window.sessionStorage.setItem("klickpro_negative_wallet_alerted", "true");
+                toast.error(
+                  `Your wallet balance is -₹${Math.abs(bal).toLocaleString("en-IN")}. Please add funds to clear your dues.`,
+                  { duration: 7000 },
+                );
+              }
+            } catch {
+              // ignore session storage access errors
+            }
+          }
           setWallet(
             data && {
               balance: data.wallet?.balance ?? 0,
@@ -161,7 +177,8 @@ export default function ClientEarnings() {
               withdrawals: data.withdrawals ?? [],
               minWithdrawalAmount: data.minWithdrawalAmount,
             },
-          ),
+          );
+        },
       )
       .catch(() => setWallet(null))
       .finally(() => setWalletLoading(false));

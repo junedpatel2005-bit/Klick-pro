@@ -128,6 +128,9 @@ export default function Login() {
           window.setTimeout(() => window.location.assign("/verify"), 900);
         return;
       }
+      try {
+        window.sessionStorage.removeItem("klickpro_negative_wallet_alerted");
+      } catch {}
       window.location.assign(getPostLoginRedirect(result.redirect));
     } catch (caught) {
       setError(
@@ -201,6 +204,9 @@ export default function Login() {
           window.setTimeout(() => window.location.assign("/verify"), 900);
         return;
       }
+      try {
+        window.sessionStorage.removeItem("klickpro_negative_wallet_alerted");
+      } catch {}
       window.location.assign(getPostLoginRedirect(result.redirect));
     } catch {
       setError("Unable to sign in. Please check your connection and try again.");

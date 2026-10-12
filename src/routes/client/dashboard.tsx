@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   ArrowRight,
   BellRing,
@@ -18,6 +20,7 @@ import { capitalizeFirst } from "@/lib/utils";
 
 type DashboardData = {
   user: { firstName: string; averageRating: number; phoneVerifiedAt: string | null };
+  walletBalance?: number;
   spent: number;
   projectSummary: { total: number; open: number; running: number; drafts: number };
   jobs: {
@@ -64,6 +67,7 @@ function formatBudget(job: DashboardData["jobs"][number]) {
 }
 
 export default function Dashboard() {
+  const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"proposals" | "hireRequests">("proposals");
@@ -83,12 +87,34 @@ export default function Dashboard() {
       setData(nextData);
       setError(null);
       lastLoadedRef.current = Date.now();
+
+      // Alert once per login session if client wallet is in minus
+      if (nextData.walletBalance !== undefined && nextData.walletBalance < 0) {
+        try {
+          const alreadyAlerted = window.sessionStorage.getItem("klickpro_negative_wallet_alerted");
+          if (!alreadyAlerted) {
+            window.sessionStorage.setItem("klickpro_negative_wallet_alerted", "true");
+            toast.error(
+              `Your wallet balance is -₹${Math.abs(nextData.walletBalance).toLocaleString("en-IN")}. Please add funds to clear your dues.`,
+              {
+                duration: 7000,
+                action: {
+                  label: "Clear Dues",
+                  onClick: () => router.push("/client/earnings"),
+                },
+              },
+            );
+          }
+        } catch {
+          // ignore session storage access errors
+        }
+      }
     } catch {
       setError("Sign in as a client to view your dashboard.");
     } finally {
       inFlightRef.current = false;
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     setPhoneReminderDismissed(

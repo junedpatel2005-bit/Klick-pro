@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   try {
     if (role !== "CLIENT")
       return NextResponse.json({ error: "Client access required" }, { status: 403 });
-    const [user, jobs, proposals, hireRequests, notifications, spent, runningProjects] =
+    const [user, jobs, proposals, hireRequests, notifications, spent, runningProjects, wallet] =
       await Promise.all([
         db.user.findUniqueOrThrow({
           where: { id: userId },
@@ -58,6 +58,10 @@ export async function GET(request: NextRequest) {
           where: { clientId: userId, status: { not: "COMPLETED" } },
           select: { jobId: true },
         }),
+        db.wallet.findUnique({
+          where: { userId },
+          select: { balance: true },
+        }),
       ]);
     const runningJobIds = new Set(runningProjects.map((project) => project.jobId));
     const professionalIds = [
@@ -79,6 +83,7 @@ export async function GET(request: NextRequest) {
     }));
     return NextResponse.json({
       user,
+      walletBalance: wallet?.balance ?? 0,
       jobs: jobsWithStatus.slice(0, 4),
       projectSummary: {
         total: jobsWithStatus.length,
