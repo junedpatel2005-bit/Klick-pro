@@ -1416,22 +1416,15 @@ export async function GET(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
       const activeDispute = disputes.find((d) => d.status !== "RESOLVED") ?? null;
-      const dispute = activeDispute ?? disputes[0] ?? null;
-      const disputeLimitStr = await getPlatformSetting("dispute_limit", "5");
-      const configuredDisputeLimit = Math.max(1, parseInt(disputeLimitStr, 10) || 5);
+      const dispute = activeDispute;
       const disputeCount = disputes.length;
-      // If this specific contract already has more disputes than the global limit
-      // (e.g. 4 disputes were raised when limit was 5, but admin lowered limit to 3),
-      // we show disputeCount (4) so it displays "4 of 4 Used" instead of "4 of 3 Used",
-      // while canRaiseDispute is false because disputeCount >= configuredDisputeLimit.
-      const effectiveDisputeLimit = Math.max(configuredDisputeLimit, disputeCount);
-      const canRaiseDispute = disputeCount < configuredDisputeLimit && !activeDispute;
+      const canRaiseDispute = !activeDispute;
 
       const disputeIds = disputes.map((d) => d.id);
       const rawDisputeMessages =
-        disputeIds.length > 0
+        activeDispute
           ? await db.projectDisputeMessage.findMany({
-              where: { disputeId: { in: disputeIds } },
+              where: { disputeId: activeDispute.id },
               orderBy: { createdAt: "asc" },
             })
           : [];
@@ -1466,7 +1459,6 @@ export async function GET(
         dispute,
         disputes,
         disputeCount,
-        disputeLimit: effectiveDisputeLimit,
         canRaiseDispute,
         disputeMessages,
       });

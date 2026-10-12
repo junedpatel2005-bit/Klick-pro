@@ -102,21 +102,13 @@ export async function getMinWithdrawalAmount(): Promise<number> {
 }
 
 export async function isAutopayEnabled(): Promise<boolean> {
-  try {
-    const raw = await getPlatformSetting("autopay_enabled", "true");
-    return raw === "true" || raw === "1" || raw === "on";
-  } catch {
-    return true;
-  }
+  // Instant Auto-Pay is permanently enabled on the platform
+  return true;
 }
 
 export async function isNegativeBalanceAllowed(): Promise<boolean> {
-  try {
-    const raw = await getPlatformSetting("allow_negative_balance", "true");
-    return raw === "true" || raw === "1" || raw === "on";
-  } catch {
-    return true;
-  }
+  // Minus Money Rule (negative balance on auto-pay) is permanently enabled on the platform
+  return true;
 }
 
 export async function getPlatformSettings(): Promise<PlatformSettingItem[]> {

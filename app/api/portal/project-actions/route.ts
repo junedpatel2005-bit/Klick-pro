@@ -1617,16 +1617,11 @@ export async function POST(request: NextRequest) {
       const attachmentsJson = input.evidence?.length ? JSON.stringify(input.evidence) : "[]";
 
       let dispute: { id: number; disputeRound: number };
-      const disputeLimitStr = await getPlatformSetting("dispute_limit", "5");
-      const configuredDisputeLimit = Math.max(1, parseInt(disputeLimitStr, 10) || 5);
       try {
         dispute = await db.$transaction(async (tx) => {
           const disputeCount = await tx.projectDispute.count({
             where: { trackingId: project.id },
           });
-          if (disputeCount >= configuredDisputeLimit) {
-            throw new Error("MAX_DISPUTE_LIMIT");
-          }
           const existingActiveDispute = await tx.projectDispute.findFirst({
             where: { trackingId: project.id, status: { not: "RESOLVED" } },
           });
@@ -1653,14 +1648,6 @@ export async function POST(request: NextRequest) {
           return { id: created.id, disputeRound };
         });
       } catch (err) {
-        if (err instanceof Error && err.message === "MAX_DISPUTE_LIMIT") {
-          return NextResponse.json(
-            {
-              error: `Maximum limit of ${configuredDisputeLimit} disputes reached for this contract.`,
-            },
-            { status: 409 },
-          );
-        }
         if (err instanceof Error && err.message === "ACTIVE_DISPUTE_EXISTS") {
           return NextResponse.json(
             { error: "This project already has an active dispute awaiting resolution." },

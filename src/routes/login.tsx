@@ -130,7 +130,9 @@ export default function Login() {
       }
       try {
         window.sessionStorage.removeItem("klickpro_negative_wallet_alerted");
-      } catch {}
+      } catch {
+        // Ignore storage access errors
+      }
       window.location.assign(getPostLoginRedirect(result.redirect));
     } catch (caught) {
       setError(
@@ -206,7 +208,9 @@ export default function Login() {
       }
       try {
         window.sessionStorage.removeItem("klickpro_negative_wallet_alerted");
-      } catch {}
+      } catch {
+        // Ignore storage access errors
+      }
       window.location.assign(getPostLoginRedirect(result.redirect));
     } catch {
       setError("Unable to sign in. Please check your connection and try again.");

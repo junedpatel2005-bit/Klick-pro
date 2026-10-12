@@ -42,7 +42,7 @@ export async function respondToProjectRequest(
       timingType: true,
       milestones: {
         orderBy: { sortOrder: "asc" },
-        select: { title: true, description: true, amount: true, percentage: true, sortOrder: true },
+        select: { title: true, description: true, amount: true, percentage: true, sortOrder: true, validityDays: true },
       },
     },
   });

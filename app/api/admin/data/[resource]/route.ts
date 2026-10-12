@@ -256,19 +256,84 @@ export async function GET(
   }
   if (resource === "jobs") {
     const now = new Date();
-    const [jobs, disputes, totalJobs, scheduledJobs, openJobs] = await Promise.all([
-      db.clientJob.findMany({
-        include: { user: { select: { firstName: true, lastName: true, email: true } } },
-        orderBy: { createdAt: "desc" },
-        take: 200,
-      }),
-      db.projectDispute.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
-      db.clientJob.count(),
-      db.clientJob.count({ where: { status: "OPEN", jobDate: { gt: now } } }),
-      db.clientJob.count({
-        where: { status: "OPEN", OR: [{ jobDate: null }, { jobDate: { lte: now } }] },
-      }),
-    ]);
+    const [jobs, disputes, totalJobs, scheduledJobs, openJobs, runningProjectTrackings] =
+      await Promise.all([
+        db.clientJob.findMany({
+          include: { user: { select: { firstName: true, lastName: true, email: true } } },
+          orderBy: { createdAt: "desc" },
+          take: 200,
+        }),
+        db.projectDispute.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
+        db.clientJob.count(),
+        db.clientJob.count({ where: { status: "OPEN", jobDate: { gt: now } } }),
+        db.clientJob.count({
+          where: { status: "OPEN", OR: [{ jobDate: null }, { jobDate: { lte: now } }] },
+        }),
+        db.projectTracking.findMany({
+          where: {
+            AND: [
+              { status: { notIn: ["COMPLETED", "CLOSED", "CANCELLED"] } },
+              { completedAt: null },
+            ],
+          },
+          include: {
+            job: {
+              select: {
+                id: true,
+                title: true,
+                category: true,
+                description: true,
+                budgetMin: true,
+                budgetMax: true,
+                hourlyRate: true,
+                timingType: true,
+                urgency: true,
+                workMode: true,
+                locationLabel: true,
+                status: true,
+                createdAt: true,
+              },
+            },
+            client: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
+            professional: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
+            milestones: {
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                amount: true,
+                dueDate: true,
+                status: true,
+                validityDays: true,
+                releaseAt: true,
+                autoReleaseStatus: true,
+                submittedAt: true,
+                approvedAt: true,
+                createdAt: true,
+              },
+              orderBy: { createdAt: "asc" },
+            },
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 100,
+        }),
+      ]);
     const projects = await db.projectTracking.findMany({
       where: { jobId: { in: jobs.map((job) => job.id) } },
       select: { jobId: true, status: true, completedAt: true },
@@ -280,10 +345,177 @@ export async function GET(
         project?.completedAt || project?.status.toUpperCase().includes("COMPLETED");
       return { ...job, status: isCompleted ? "COMPLETED" : project ? "RUNNING" : job.status };
     });
+
+    const runningJobIds = jobsWithProjectStatus
+      .filter((job) => job.status === "RUNNING")
+      .map((job) => job.id);
+    const existingTrackedJobIds = new Set(runningProjectTrackings.map((p) => p.jobId));
+    const missingJobIds = runningJobIds.filter((id) => !existingTrackedJobIds.has(id));
+
+    let allRunningTrackings = [...runningProjectTrackings];
+    if (missingJobIds.length > 0) {
+      const extraTrackings = await db.projectTracking
+        .findMany({
+          where: { jobId: { in: missingJobIds } },
+          include: {
+            job: {
+              select: {
+                id: true,
+                title: true,
+                category: true,
+                description: true,
+                budgetMin: true,
+                budgetMax: true,
+                hourlyRate: true,
+                timingType: true,
+                urgency: true,
+                workMode: true,
+                locationLabel: true,
+                status: true,
+                createdAt: true,
+              },
+            },
+            client: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
+            professional: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
+            milestones: {
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                amount: true,
+                dueDate: true,
+                status: true,
+                validityDays: true,
+                releaseAt: true,
+                autoReleaseStatus: true,
+                submittedAt: true,
+                approvedAt: true,
+                createdAt: true,
+              },
+              orderBy: { createdAt: "asc" },
+            },
+          },
+        })
+        .catch(() => []);
+      allRunningTrackings = [...allRunningTrackings, ...extraTrackings];
+    }
+
+    const runningJobs = allRunningTrackings.map((project) => {
+      const milestones = project.milestones ?? [];
+      const totalMilestones = milestones.length;
+      const completedMilestones = milestones.filter(
+        (m) => m.status === "APPROVED" || m.status === "COMPLETED",
+      ).length;
+
+      const milestonePercentage =
+        totalMilestones > 0
+          ? Math.round((completedMilestones / totalMilestones) * 100)
+          : project.progress || 0;
+
+      const progress = project.progress > 0 ? project.progress : milestonePercentage;
+
+      const runningMilestone =
+        milestones.find((m) => m.status === "SUBMITTED") ||
+        milestones.find((m) => m.status === "REVISION_REQUESTED") ||
+        milestones.find((m) => m.status === "IN_PROGRESS") ||
+        milestones.find((m) => m.status === "APPROVED" && m.autoReleaseStatus === "PENDING") ||
+        milestones.find((m) => m.status === "UPCOMING") ||
+        milestones[milestones.length - 1] ||
+        null;
+
+      const totalMilestoneBudget = milestones.reduce((sum, m) => sum + (m.amount || 0), 0);
+      const totalBudget =
+        totalMilestoneBudget > 0
+          ? totalMilestoneBudget
+          : project.job?.budgetMax ?? project.job?.budgetMin ?? 0;
+
+      const paidAmount = milestones
+        .filter((m) => m.status === "APPROVED" || m.status === "COMPLETED")
+        .reduce((sum, m) => sum + (m.amount || 0), 0);
+
+      return {
+        id: project.id,
+        trackingId: project.id,
+        jobId: project.jobId,
+        requestId: project.requestId,
+        status: project.status,
+        progress,
+        currentStage: project.currentStage,
+        startedAt: project.startedAt ? project.startedAt.toISOString() : null,
+        acceptedAt: project.acceptedAt ? project.acceptedAt.toISOString() : null,
+        updatedAt: project.updatedAt.toISOString(),
+        job: project.job
+          ? {
+              ...project.job,
+              createdAt: project.job.createdAt.toISOString(),
+            }
+          : null,
+        client: project.client,
+        professional: project.professional,
+        milestonesSummary: {
+          total: totalMilestones,
+          completed: completedMilestones,
+          percentage: milestonePercentage,
+        },
+        financialSummary: {
+          totalBudget,
+          paidAmount,
+          remainingAmount: Math.max(0, totalBudget - paidAmount),
+        },
+        runningMilestone: runningMilestone
+          ? {
+              id: runningMilestone.id,
+              title: runningMilestone.title,
+              amount: runningMilestone.amount,
+              status: runningMilestone.status,
+              dueDate: runningMilestone.dueDate ? runningMilestone.dueDate.toISOString() : null,
+              submittedAt: runningMilestone.submittedAt
+                ? runningMilestone.submittedAt.toISOString()
+                : null,
+              approvedAt: runningMilestone.approvedAt
+                ? runningMilestone.approvedAt.toISOString()
+                : null,
+              validityDays: runningMilestone.validityDays ?? 0,
+              releaseAt: runningMilestone.releaseAt
+                ? runningMilestone.releaseAt.toISOString()
+                : null,
+              autoReleaseStatus: runningMilestone.autoReleaseStatus ?? null,
+            }
+          : null,
+        milestones: milestones.map((m) => ({
+          id: m.id,
+          title: m.title,
+          amount: m.amount,
+          status: m.status,
+          dueDate: m.dueDate ? m.dueDate.toISOString() : null,
+          validityDays: m.validityDays ?? 0,
+          releaseAt: m.releaseAt ? m.releaseAt.toISOString() : null,
+          autoReleaseStatus: m.autoReleaseStatus ?? null,
+        })),
+      };
+    });
+
     return NextResponse.json({
       jobs: jobsWithProjectStatus,
       disputes,
-      stats: { totalJobs, openJobs, scheduledJobs },
+      runningJobs,
+      stats: { totalJobs, openJobs, scheduledJobs, runningJobs: runningJobs.length },
     });
   }
   if (resource === "finance") {

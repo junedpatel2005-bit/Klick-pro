@@ -63,7 +63,6 @@ import {
   DisputeData,
   DisputeMessage,
 } from "@/components/ProjectDisputeCenter";
-import { toast } from "sonner";
 import { formatReadableLabel } from "@/lib/utils";
 
 type Person = { firstName: string | null; lastName: string | null } | null;
@@ -188,6 +187,7 @@ type Data = {
   disputes?: DisputeData[];
   disputeMessages?: DisputeMessage[];
   disputeCount?: number;
+  openDisputeCount?: number;
   disputeLimit?: number;
   canRaiseDispute?: boolean;
 };
@@ -3025,42 +3025,45 @@ export default function SharedProjectTrackingPage() {
                                 </span>
                               </p>
                             )}
-                            {m.autoReleaseStatus === "PENDING" && m.releaseAt && (
-                              <div
-                                className={`mt-2 rounded-xl p-3 border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 ${
-                                  data.openDisputeCount > 0
-                                    ? "bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300"
-                                    : "bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-300"
-                                }`}
-                              >
-                                <div className="flex items-center gap-2">
-                                  {data.openDisputeCount > 0 ? (
-                                    <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
-                                  ) : (
-                                    <Clock3 className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 animate-pulse" />
-                                  )}
-                                  <div>
-                                    <p className="font-semibold">
-                                      {data.openDisputeCount > 0
-                                        ? "Auto-release paused due to open dispute"
-                                        : `Inspection Period: Auto-releases on ${new Date(
-                                            m.releaseAt,
-                                          ).toLocaleDateString("en-IN", {
-                                            month: "short",
-                                            day: "numeric",
-                                            hour: "2-digit",
-                                            minute: "2-digit",
-                                          })}`}
-                                    </p>
-                                    <p className="text-[11px] opacity-90">
-                                      {data.openDisputeCount > 0
-                                        ? "Payment release is securely held until the active dispute is resolved."
-                                        : "Funds are secured in platform escrow and will automatically release to the professional once inspection ends."}
-                                    </p>
+                            {m.autoReleaseStatus === "PENDING" && m.releaseAt && (() => {
+                              const hasOpenDispute = (data.openDisputeCount ?? 0) > 0 || Boolean(data.dispute && data.dispute.status !== "RESOLVED");
+                              return (
+                                <div
+                                  className={`mt-2 rounded-xl p-3 border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 ${
+                                    hasOpenDispute
+                                      ? "bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300"
+                                      : "bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-300"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {hasOpenDispute ? (
+                                      <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                                    ) : (
+                                      <Clock3 className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 animate-pulse" />
+                                    )}
+                                    <div>
+                                      <p className="font-semibold">
+                                        {hasOpenDispute
+                                          ? "Auto-release paused due to open dispute"
+                                          : `Inspection Period: Auto-releases on ${new Date(
+                                              m.releaseAt,
+                                            ).toLocaleDateString("en-IN", {
+                                              month: "short",
+                                              day: "numeric",
+                                              hour: "2-digit",
+                                              minute: "2-digit",
+                                            })}`}
+                                      </p>
+                                      <p className="text-[11px] opacity-90">
+                                        {hasOpenDispute
+                                          ? "Payment release is securely held until the active dispute is resolved."
+                                          : "Funds are secured in platform escrow and will automatically release to the professional once inspection ends."}
+                                      </p>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            )}
+                              );
+                            })()}
                             {m.autoReleaseStatus === "RELEASED" && Number(m.validityDays) > 0 && (
                               <p className="mt-1 flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
                                 <CheckCircle2 className="h-3.5 w-3.5" />

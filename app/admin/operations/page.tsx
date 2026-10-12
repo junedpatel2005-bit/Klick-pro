@@ -8,7 +8,9 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   CircleAlert,
   Clock3,
   CreditCard,
@@ -16,9 +18,11 @@ import {
   FileCheck,
   Gavel,
   Layers,
+  Mail,
   MapPin,
   MessageSquare,
   Paperclip,
+  Phone,
   PlayCircle,
   Power,
   Scale,
@@ -76,7 +80,7 @@ type Job = {
   locationLabel: string | null;
   status: string;
   createdAt: string;
-  user: { firstName: string; lastName: string; email: string };
+  user: { id?: number; firstName: string; lastName: string; email: string };
 };
 type Dispute = {
   id: number;
@@ -95,10 +99,84 @@ type Dispute = {
   createdAt: string;
   updatedAt: string;
 };
+export type RunningJobItem = {
+  id: number;
+  trackingId: number;
+  jobId: number;
+  requestId: number;
+  status: string;
+  progress: number;
+  currentStage: string | null;
+  startedAt: string | null;
+  acceptedAt: string | null;
+  updatedAt: string;
+  job: {
+    id: number;
+    title: string | null;
+    category: string | null;
+    description: string | null;
+    budgetMin: number | null;
+    budgetMax: number | null;
+    hourlyRate: number | null;
+    timingType: string;
+    urgency: string;
+    workMode: string;
+    locationLabel: string | null;
+    status: string;
+    createdAt: string;
+  } | null;
+  client: {
+    id: number;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string | null;
+  } | null;
+  professional: {
+    id: number;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string | null;
+  } | null;
+  milestonesSummary: {
+    total: number;
+    completed: number;
+    percentage: number;
+  };
+  financialSummary: {
+    totalBudget: number;
+    paidAmount: number;
+    remainingAmount: number;
+  };
+  runningMilestone: {
+    id: number;
+    title: string;
+    amount: number;
+    status: string;
+    dueDate: string | null;
+    submittedAt?: string | null;
+    approvedAt?: string | null;
+    validityDays: number;
+    releaseAt: string | null;
+    autoReleaseStatus: string | null;
+  } | null;
+  milestones: Array<{
+    id: number;
+    title: string;
+    amount: number;
+    status: string;
+    dueDate: string | null;
+    validityDays: number;
+    releaseAt: string | null;
+    autoReleaseStatus: string | null;
+  }>;
+};
 type OperationsData = {
   jobs: Job[];
   disputes: Dispute[];
-  stats: { totalJobs: number; openJobs: number; scheduledJobs: number };
+  runningJobs?: RunningJobItem[];
+  stats: { totalJobs: number; openJobs: number; scheduledJobs: number; runningJobs?: number };
 };
 type DisputeDetails = {
   dispute: Dispute & {
@@ -285,6 +363,22 @@ const formatMessageTime = (value: string) => {
     return "";
   }
 };
+const getValidityCountdown = (releaseAt: string) => {
+  try {
+    const target = new Date(releaseAt).getTime();
+    const now = Date.now();
+    const diff = target - now;
+    if (diff <= 0) return "Due now";
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    if (days >= 1) return `in ${days}d ${hours % 24}h`;
+    if (hours >= 1) return `in ${hours}h`;
+    const mins = Math.floor(diff / (1000 * 60));
+    return `in ${mins}m`;
+  } catch {
+    return "";
+  }
+};
 function getTimelineNodeConfig(type: AdminTimelineItem["type"]) {
   switch (type) {
     case "PAYMENT":
@@ -372,6 +466,16 @@ function getTimelineNodeConfig(type: AdminTimelineItem["type"]) {
 const tone = (value: string) =>
   ({
     OPEN: "bg-emerald-50 text-emerald-700 ring-emerald-200 border border-emerald-200",
+    RUNNING: "bg-indigo-50 text-indigo-700 ring-indigo-200 border border-indigo-200",
+    IN_PROGRESS: "bg-blue-50 text-blue-700 ring-blue-200 border border-blue-200",
+    READY_TO_START: "bg-sky-50 text-sky-700 ring-sky-200 border border-sky-200",
+    AWAITING_CLIENT_REVIEW: "bg-amber-50 text-amber-700 ring-amber-200 border border-amber-200",
+    SUBMITTED: "bg-amber-50 text-amber-700 ring-amber-200 border border-amber-200",
+    REVISION_REQUESTED: "bg-rose-50 text-rose-700 ring-rose-200 border border-rose-200",
+    FINAL_WORK_SUBMITTED: "bg-purple-50 text-purple-700 ring-purple-200 border border-purple-200",
+    COMPLETED: "bg-emerald-50 text-emerald-700 ring-emerald-200 border border-emerald-200",
+    APPROVED: "bg-emerald-50 text-emerald-700 ring-emerald-200 border border-emerald-200",
+    UPCOMING: "bg-slate-100 text-slate-600 ring-slate-200 border border-slate-200",
     CLOSED: "bg-slate-100 text-slate-700 ring-slate-200 border border-slate-200",
     DRAFT: "bg-slate-100 text-slate-700 ring-slate-200 border border-slate-200",
     PENDING: "bg-amber-50 text-amber-700 ring-amber-200 border border-amber-200",
@@ -385,6 +489,15 @@ const label = (value: string) =>
     .replaceAll("_", " ")
     .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+const capitalize = (value: string | null | undefined) => {
+  if (!value) return "";
+  return value
+    .replaceAll("_", " ")
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+};
 const projectStage = (project: DisputeDetails["project"]) => {
   if (!project) return "No active project is linked to this dispute yet.";
   switch (project.status) {
@@ -426,7 +539,7 @@ function OperationsContent() {
   // Dispute System Active
   const SHOW_DISPUTE_OPERATIONS = true;
   const [data, setData] = useState<OperationsData | null>(null);
-  const [view, setView] = useState<"jobs" | "disputes">("jobs");
+  const [view, setView] = useState<"jobs" | "running_jobs" | "disputes">("jobs");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("ALL");
   const [selectedJob, setSelectedJob] = useState<JobDetails | null>(null);
@@ -449,11 +562,17 @@ function OperationsContent() {
         setData({
           jobs: result.jobs ?? [],
           disputes: result.disputes ?? [],
+          runningJobs: result.runningJobs ?? [],
           stats: result.stats ?? { totalJobs: 0, openJobs: 0, scheduledJobs: 0 },
         }),
       )
       .catch(() =>
-        setData({ jobs: [], disputes: [], stats: { totalJobs: 0, openJobs: 0, scheduledJobs: 0 } }),
+        setData({
+          jobs: [],
+          disputes: [],
+          runningJobs: [],
+          stats: { totalJobs: 0, openJobs: 0, scheduledJobs: 0 },
+        }),
       );
   };
 
@@ -519,6 +638,86 @@ function OperationsContent() {
       }),
     [data, query, filter],
   );
+  const runningProjects = data?.jobs.filter((item) => item.status === "RUNNING").length ?? 0;
+  const runningCount = Math.max(data?.runningJobs?.length ?? 0, runningProjects);
+  const completedProjects = data?.jobs.filter((item) => item.status === "COMPLETED").length ?? 0;
+
+  const runningJobsList = useMemo(() => {
+    let list = data?.runningJobs ?? [];
+    if (list.length === 0 && data?.jobs) {
+      const runningJobsFromMarketplace = data.jobs.filter((j) => j.status === "RUNNING");
+      if (runningJobsFromMarketplace.length > 0) {
+        list = runningJobsFromMarketplace.map((job) => ({
+          id: job.id,
+          trackingId: job.id,
+          jobId: job.id,
+          requestId: job.id,
+          status: "IN_PROGRESS",
+          progress: 0,
+          currentStage: "In Progress",
+          startedAt: job.createdAt,
+          acceptedAt: job.createdAt,
+          updatedAt: job.createdAt,
+          job: {
+            id: job.id,
+            title: job.title,
+            category: job.category,
+            description: null,
+            budgetMin: job.budgetMin ?? null,
+            budgetMax: job.budgetMax ?? null,
+            hourlyRate: job.hourlyRate ?? null,
+            timingType: job.timingType,
+            urgency: job.urgency,
+            workMode: job.workMode,
+            locationLabel: job.locationLabel,
+            status: job.status,
+            createdAt: job.createdAt,
+          },
+          client: {
+            id: job.user.id ?? job.id,
+            firstName: job.user.firstName,
+            lastName: job.user.lastName,
+            email: job.user.email,
+            phone: null,
+          },
+          professional: null,
+          milestonesSummary: { total: 0, completed: 0, percentage: 0 },
+          financialSummary: {
+            totalBudget: job.budgetMax ?? job.budgetMin ?? 0,
+            paidAmount: 0,
+            remainingAmount: job.budgetMax ?? job.budgetMin ?? 0,
+          },
+          runningMilestone: null,
+          milestones: [],
+        }));
+      }
+    }
+    return list.filter((item) => {
+      const text = `
+        ${item.job?.title ?? `Project #${item.jobId}`}
+        ${item.job?.category ?? ""}
+        ${item.client?.firstName ?? ""} ${item.client?.lastName ?? ""} ${item.client?.email ?? ""} ${item.client?.phone ?? ""}
+        ${item.professional?.firstName ?? ""} ${item.professional?.lastName ?? ""} ${item.professional?.email ?? ""} ${item.professional?.phone ?? ""}
+        ${item.runningMilestone?.title ?? ""}
+        ${item.currentStage ?? ""}
+        ${item.status ?? ""}
+      `.toLowerCase();
+      const matchesQuery = text.includes(query.toLowerCase());
+      if (!matchesQuery) return false;
+
+      if (filter === "ALL" || filter === "RUNNING") return true;
+      if (filter === "HOLD_ACTIVE") {
+        return (
+          item.runningMilestone?.autoReleaseStatus === "PENDING" ||
+          (item.runningMilestone?.validityDays ?? 0) > 0
+        );
+      }
+      if (filter === "IN_PROGRESS") {
+        return item.status === "IN_PROGRESS" || item.status === "RUNNING";
+      }
+      return item.status === filter;
+    });
+  }, [data?.runningJobs, data?.jobs, query, filter]);
   const disputes = useMemo(
     () =>
       (data?.disputes ?? []).filter((dispute) => {
@@ -536,12 +735,12 @@ function OperationsContent() {
   );
   const openDisputes =
     data?.disputes.filter((item) => item.status !== "RESOLVED" && item.status !== "CLOSED").length ?? 0;
-  const runningProjects = data?.jobs.filter((item) => item.status === "RUNNING").length ?? 0;
-  const completedProjects = data?.jobs.filter((item) => item.status === "COMPLETED").length ?? 0;
   const options =
     view === "jobs"
       ? ["ALL", "OPEN", "RUNNING", "COMPLETED", "DRAFT", "CLOSED"]
-      : ["ALL", "OPEN", "RESOLVED", "HIGH", "MEDIUM", "LOW"];
+      : view === "running_jobs"
+        ? ["ALL", "IN_PROGRESS", "AWAITING_CLIENT_REVIEW", "REVISION_REQUESTED", "HOLD_ACTIVE"]
+        : ["ALL", "OPEN", "RESOLVED", "HIGH", "MEDIUM", "LOW"];
 
   async function openJob(id: number) {
     setDetailsStatus("loading");
@@ -778,15 +977,6 @@ function OperationsContent() {
               Monitor marketplace demand and keep operations running smoothly.
             </p>
           </div>
-          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-xs">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-100 text-emerald-700">
-              <CheckCircle2 className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-xs font-medium text-slate-500">Operations health</p>
-              <p className="text-sm font-semibold text-slate-900">All systems active</p>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -841,14 +1031,14 @@ function OperationsContent() {
               />
             ) : null}
             <Metric
-              icon={BriefcaseBusiness}
+              icon={PlayCircle}
               label="Running projects"
-              value={runningProjects}
+              value={runningCount}
               detail="Currently in progress"
               color="indigo"
               onClick={() => {
-                setView("jobs");
-                setFilter("RUNNING");
+                setView("running_jobs");
+                setFilter("ALL");
               }}
             />
             <Metric
@@ -876,10 +1066,15 @@ function OperationsContent() {
                   </p>
                 </div>
                 <span className="rounded-full bg-slate-200/70 px-3 py-1.5 text-xs font-semibold text-slate-700">
-                  {view === "jobs" ? jobs.length : disputes.length} records
+                  {view === "jobs"
+                    ? jobs.length
+                    : view === "running_jobs"
+                      ? runningJobsList.length
+                      : disputes.length}{" "}
+                  records
                 </span>
               </div>
-              <div className="mt-5 flex gap-1">
+              <div className="mt-5 flex flex-wrap gap-1">
                 <Tab
                   active={view === "jobs"}
                   onClick={() => {
@@ -890,6 +1085,16 @@ function OperationsContent() {
                   label="Jobs"
                   count={data.jobs.length}
                 />
+                <Tab
+                  active={view === "running_jobs"}
+                  onClick={() => {
+                    setView("running_jobs");
+                    setFilter("ALL");
+                  }}
+                  icon={PlayCircle}
+                  label="Running Jobs"
+                  count={runningCount}
+                />
                 {SHOW_DISPUTE_OPERATIONS ? (
                   <Tab
                     active={view === "disputes"}
@@ -899,7 +1104,7 @@ function OperationsContent() {
                     }}
                     icon={CircleAlert}
                     label="Disputes"
-                    count={data.disputes.length}
+                    count={openDisputes}
                   />
                 ) : null}
               </div>
@@ -913,7 +1118,9 @@ function OperationsContent() {
                   placeholder={
                     view === "jobs"
                       ? "Search jobs, clients, locations..."
-                      : "Search issue type or reporter..."
+                      : view === "running_jobs"
+                        ? "Search running jobs, clients, professionals, active milestone..."
+                        : "Search issue type or reporter..."
                   }
                   className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 shadow-2xs"
                 />
@@ -935,20 +1142,28 @@ function OperationsContent() {
                 ))}
               </div>
             </div>
-            <div className="divide-y divide-slate-100">
-              {view === "jobs"
-                ? jobs.map((job) => <JobRow key={`job-${job.id}`} job={job} onOpen={openJob} />)
-                : disputes.map((dispute) => (
-                    <DisputeRow
-                      key={`dispute-${dispute.id}`}
-                      dispute={dispute}
-                      onOpen={openDispute}
-                    />
-                  ))}
-              {(view === "jobs" ? jobs : disputes).length === 0 && (
-                <Empty key={`empty-${view}`} view={view} />
-              )}
-            </div>
+            {view === "running_jobs" ? (
+              runningJobsList.length > 0 ? (
+                <RunningJobsTable runningJobs={runningJobsList} onOpenJob={openJob} />
+              ) : (
+                <Empty key="empty-running_jobs" view="running_jobs" />
+              )
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {view === "jobs"
+                  ? jobs.map((job) => <JobRow key={`job-${job.id}`} job={job} onOpen={openJob} />)
+                  : disputes.map((dispute) => (
+                      <DisputeRow
+                        key={`dispute-${dispute.id}`}
+                        dispute={dispute}
+                        onOpen={openDispute}
+                      />
+                    ))}
+                {(view === "jobs" ? jobs : disputes).length === 0 && (
+                  <Empty key={`empty-${view}`} view={view} />
+                )}
+              </div>
+            )}
           </section>
         </>
       )}
@@ -1118,13 +1333,13 @@ function JobRow({ job, onOpen }: { job: Job; onOpen: (id: number) => void }) {
       </span>
       <div className="min-w-56 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="font-semibold text-slate-900">{job.title ?? `Untitled job #${job.id}`}</h3>
+          <h3 className="font-semibold text-slate-900">{capitalize(job.title) || `Untitled Job #${job.id}`}</h3>
           <Badge value={job.status} />
         </div>
         <p className="mt-1 text-sm text-slate-500">
-          {job.category ?? "General"} <span className="mx-1.5 text-slate-300">•</span>{" "}
+          {capitalize(job.category) || "General"} <span className="mx-1.5 text-slate-300">•</span>{" "}
           <span className="font-medium text-slate-700">
-            {job.user.firstName} {job.user.lastName}
+            {capitalize(job.user.firstName)} {capitalize(job.user.lastName)}
           </span>
         </p>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 font-medium">
@@ -1194,16 +1409,413 @@ function Badge({ value }: { value: string }) {
     </span>
   );
 }
-function Empty({ view }: { view: "jobs" | "disputes" }) {
-  const Icon = view === "jobs" ? BriefcaseBusiness : CheckCircle2;
+function Empty({ view }: { view: "jobs" | "running_jobs" | "disputes" }) {
+  const Icon =
+    view === "jobs" ? BriefcaseBusiness : view === "running_jobs" ? PlayCircle : CircleAlert;
+  const labelText = view === "running_jobs" ? "running jobs" : view;
   return (
     <div className="px-6 py-16 text-center">
       <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-500">
         <Icon className="h-6 w-6" />
       </span>
-      <p className="mt-4 font-semibold text-slate-900">No matching {view} found</p>
+      <p className="mt-4 font-semibold text-slate-900">No matching {labelText} found</p>
       <p className="mt-1 text-sm text-slate-500">Try changing the search or status filter.</p>
     </div>
+  );
+}
+
+function RunningJobsTable({
+  runningJobs,
+  onOpenJob,
+}: {
+  runningJobs: RunningJobItem[];
+  onOpenJob: (id: number) => void;
+}) {
+  return (
+    <div>
+      {/* Main Responsive Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm border-collapse">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50/50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <th scope="col" className="px-5 py-3 sm:px-6">
+                Project & Job
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Client & Pro
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Progress
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Milestones Done
+              </th>
+              <th scope="col" className="px-4 py-3">
+                Running Milestone & Validity
+              </th>
+              <th scope="col" className="px-4 py-3 text-right">
+                Budget & Escrow
+              </th>
+              <th scope="col" className="px-5 py-3 text-right sm:px-6">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {runningJobs.map((item) => (
+              <RunningJobRow key={`running-job-${item.id}`} item={item} onOpenJob={onOpenJob} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function RunningJobRow({
+  item,
+  onOpenJob,
+}: {
+  item: RunningJobItem;
+  onOpenJob: (id: number) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const milestone = item.runningMilestone;
+  const isOverdue =
+    milestone?.dueDate &&
+    new Date(milestone.dueDate) < new Date() &&
+    milestone.status !== "APPROVED" &&
+    milestone.status !== "COMPLETED";
+
+  return (
+    <>
+      <tr className="group transition hover:bg-slate-50/80">
+        {/* 1. Project & Job Info */}
+        <td className="px-5 py-4 sm:px-6 align-top">
+          <div className="min-w-48 max-w-72">
+            <button
+              type="button"
+              onClick={() => onOpenJob(item.jobId)}
+              className="text-left font-semibold text-slate-900 hover:text-indigo-600 transition line-clamp-2"
+            >
+              {capitalize(item.job?.title) || `Project #${item.jobId}`}
+            </button>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <Badge value={item.status} />
+              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                {capitalize(item.job?.category) || "General"}
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Job #{item.jobId} · Track #{item.id}
+            </p>
+          </div>
+        </td>
+
+        {/* 2. Client & Professional with Direct Contacts */}
+        <td className="px-4 py-4 align-top">
+          <div className="min-w-48 space-y-2.5">
+            {item.client ? (
+              <div>
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-900">
+                  <span className="grid h-4 w-4 place-items-center rounded-full bg-slate-100 text-[9px] font-bold text-slate-600">
+                    C
+                  </span>
+                  <span className="truncate max-w-40">
+                    {capitalize(item.client.firstName)} {capitalize(item.client.lastName)}
+                  </span>
+                </div>
+                <div className="mt-0.5 space-y-0.5 pl-5.5 text-[11px] text-slate-500">
+                  <a
+                    href={`mailto:${item.client.email}`}
+                    className="flex items-center gap-1 truncate max-w-44 hover:text-indigo-600 transition"
+                  >
+                    <Mail className="h-3 w-3 shrink-0 text-slate-400" />
+                    <span className="truncate">{item.client.email}</span>
+                  </a>
+                  {item.client.phone ? (
+                    <a
+                      href={`tel:${item.client.phone}`}
+                      className="flex items-center gap-1 hover:text-indigo-600 transition font-medium text-slate-600"
+                    >
+                      <Phone className="h-3 w-3 shrink-0 text-slate-400" />
+                      <span>{item.client.phone}</span>
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <span className="text-xs text-slate-400">Client not set</span>
+            )}
+
+            {item.professional ? (
+              <div className="border-t border-slate-100 pt-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-900">
+                  <span className="grid h-4 w-4 place-items-center rounded-full bg-teal-100 text-[9px] font-bold text-teal-700">
+                    P
+                  </span>
+                  <span className="truncate max-w-40">
+                    {capitalize(item.professional.firstName)} {capitalize(item.professional.lastName)}
+                  </span>
+                </div>
+                <div className="mt-0.5 space-y-0.5 pl-5.5 text-[11px] text-slate-500">
+                  <a
+                    href={`mailto:${item.professional.email}`}
+                    className="flex items-center gap-1 truncate max-w-44 hover:text-indigo-600 transition"
+                  >
+                    <Mail className="h-3 w-3 shrink-0 text-slate-400" />
+                    <span className="truncate">{item.professional.email}</span>
+                  </a>
+                  {item.professional.phone ? (
+                    <a
+                      href={`tel:${item.professional.phone}`}
+                      className="flex items-center gap-1 hover:text-indigo-600 transition font-medium text-slate-600"
+                    >
+                      <Phone className="h-3 w-3 shrink-0 text-slate-400" />
+                      <span>{item.professional.phone}</span>
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <span className="text-xs text-slate-400 italic">No pro assigned</span>
+            )}
+          </div>
+        </td>
+
+        {/* 3. Completion Progress */}
+        <td className="px-4 py-4 align-top">
+          <div className="min-w-36">
+            <div className="flex items-center justify-between text-xs font-bold">
+              <span className="text-indigo-600">{item.progress}%</span>
+              <span className="text-[11px] text-slate-400 font-normal">Complete</span>
+            </div>
+            <div className="mt-1.5 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.max(0, item.progress))}%` }}
+              />
+            </div>
+            <p
+              className="mt-1.5 text-[11px] text-slate-500 font-medium truncate max-w-40"
+              title={item.currentStage || "Active stage"}
+            >
+              {item.currentStage ? `Stage: ${capitalize(item.currentStage)}` : "In Progress"}
+            </p>
+          </div>
+        </td>
+
+        {/* 4. Milestones Completed */}
+        <td className="px-4 py-4 align-top">
+          <div className="min-w-36 space-y-2">
+            <div className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+              <span>
+                {item.milestonesSummary.completed} / {item.milestonesSummary.total} Done
+              </span>
+            </div>
+
+            {/* Segmented Milestone Progress Dots */}
+            {item.milestones.length > 0 && (
+              <div className="flex items-center gap-1">
+                {item.milestones.map((m, idx) => {
+                  const isApproved = m.status === "APPROVED" || m.status === "COMPLETED";
+                  const isInProgress = m.status === "IN_PROGRESS";
+                  const isSubmitted = m.status === "SUBMITTED";
+                  const isRevision = m.status === "REVISION_REQUESTED";
+
+                  const dotColor = isApproved
+                    ? "bg-emerald-500"
+                    : isSubmitted
+                      ? "bg-amber-500"
+                      : isRevision
+                        ? "bg-rose-500"
+                        : isInProgress
+                          ? "bg-indigo-500 animate-pulse"
+                          : "bg-slate-200";
+
+                  return (
+                    <span
+                      key={m.id || idx}
+                      title={`${m.title}: ${label(m.status)} (₹${m.amount.toLocaleString()})`}
+                      className={`h-2 w-2 rounded-full transition ${dotColor}`}
+                    />
+                  );
+                })}
+                <span className="text-[10px] text-slate-400 font-medium pl-1">
+                  {item.milestonesSummary.percentage}%
+                </span>
+              </div>
+            )}
+          </div>
+        </td>
+
+        {/* 5. Running Milestone & Validity */}
+        <td className="px-4 py-4 align-top">
+          <div className="min-w-56 max-w-72 space-y-1.5">
+            {milestone ? (
+              <>
+                <div className="flex items-start justify-between gap-1.5">
+                  <p className="text-xs font-bold text-slate-900 truncate max-w-48" title={milestone.title}>
+                    {milestone.title}
+                  </p>
+                  <span className="text-xs font-bold text-slate-900 shrink-0">
+                    ₹{milestone.amount.toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge value={milestone.status} />
+
+                  {/* Validity Hold Indicator */}
+                  {milestone.autoReleaseStatus === "PAUSED_DISPUTE" ? (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
+                      <AlertTriangle className="h-3 w-3" />
+                      <span>Dispute Paused</span>
+                    </span>
+                  ) : milestone.autoReleaseStatus === "PENDING" && milestone.releaseAt ? (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800"
+                      title={`Auto-releases on ${formatDateTime(milestone.releaseAt)}`}
+                    >
+                      <span>⏳</span>
+                      <span>
+                        {milestone.validityDays}d Hold ({getValidityCountdown(milestone.releaseAt)})
+                      </span>
+                    </span>
+                  ) : milestone.validityDays > 0 ? (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700"
+                      title={`${milestone.validityDays}-day inspection hold applies upon client approval`}
+                    >
+                      <span>⏳</span>
+                      <span>{milestone.validityDays}d Validity Hold</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                      <span>⚡</span>
+                      <span>Instant</span>
+                    </span>
+                  )}
+                </div>
+
+                {milestone.dueDate && (
+                  <p
+                    className={`text-[11px] font-medium ${
+                      isOverdue ? "text-rose-600 font-semibold" : "text-slate-400"
+                    }`}
+                  >
+                    {isOverdue ? "⚠️ Overdue: " : "Due: "}
+                    {date(milestone.dueDate)}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-slate-400 italic">All milestones completed or none set</p>
+            )}
+          </div>
+        </td>
+
+        {/* 6. Budget & Escrow */}
+        <td className="px-4 py-4 align-top text-right">
+          <div className="min-w-28 space-y-0.5">
+            <p className="text-sm font-bold text-slate-900">
+              ₹{item.financialSummary.totalBudget.toLocaleString()}
+            </p>
+            <p className="text-xs font-semibold text-emerald-600">
+              ₹{item.financialSummary.paidAmount.toLocaleString()} paid
+            </p>
+            <p className="text-[11px] text-slate-400 font-medium">
+              ₹{item.financialSummary.remainingAmount.toLocaleString()} in escrow
+            </p>
+          </div>
+        </td>
+
+        {/* 7. Actions */}
+        <td className="px-5 py-4 sm:px-6 align-top text-right">
+          <div className="flex flex-col items-end gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onOpenJob(item.jobId)}
+              className="h-8 rounded-lg border-indigo-200 bg-indigo-50/50 px-3 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900 shadow-2xs"
+            >
+              View Details
+            </Button>
+            {item.milestones.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setExpanded(!expanded)}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 transition"
+              >
+                <span>{expanded ? "Hide Milestones" : `Milestones (${item.milestones.length})`}</span>
+                {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </button>
+            )}
+          </div>
+        </td>
+      </tr>
+
+      {/* Expandable All-Milestones Detail Drawer */}
+      {expanded && item.milestones.length > 0 && (
+        <tr className="border-b border-slate-200 bg-slate-50/80">
+          <td colSpan={7} className="px-6 py-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-indigo-600" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Project #{item.id} Milestones Breakdown
+                  </h4>
+                </div>
+                <span className="text-xs font-semibold text-slate-500">
+                  {item.milestonesSummary.completed} of {item.milestonesSummary.total} Completed ({item.milestonesSummary.percentage}%)
+                </span>
+              </div>
+              <div className="mt-3 divide-y divide-slate-100">
+                {item.milestones.map((m, idx) => {
+                  const isApproved = m.status === "APPROVED" || m.status === "COMPLETED";
+                  return (
+                    <div key={m.id || idx} className="flex flex-wrap items-center justify-between gap-3 py-2.5 text-xs">
+                      <div className="flex items-center gap-3">
+                        <span className="grid h-6 w-6 place-items-center rounded-lg bg-slate-100 text-[11px] font-bold text-slate-600">
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <p className="font-semibold text-slate-900">{m.title}</p>
+                          {m.dueDate && (
+                            <p className="text-[11px] text-slate-400">Due: {date(m.dueDate)}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Badge value={m.status} />
+                        {m.validityDays > 0 ? (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800"
+                            title={m.releaseAt ? `Release date: ${formatDateTime(m.releaseAt)}` : undefined}
+                          >
+                            <span>⏳</span>
+                            <span>{m.validityDays}d Hold {m.releaseAt ? `(${getValidityCountdown(m.releaseAt)})` : ""}</span>
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                            ⚡ Instant
+                          </span>
+                        )}
+                        <span className="font-bold text-slate-900 min-w-16 text-right">
+                          ₹{m.amount.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -1462,10 +2074,10 @@ function JobDetailsPanel({
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white/95 px-5 py-5 sm:px-6 backdrop-blur-xs">
           <div>
             <p className="text-xs font-bold uppercase tracking-[.2em] text-indigo-600">
-              Job details
+              Job Details
             </p>
             <h2 id="job-details-title" className="mt-1 text-xl font-bold text-slate-900">
-              {job?.title ?? (status === "loading" ? "Loading job…" : "Job details")}
+              {capitalize(job?.title) || (status === "loading" ? "Loading Job…" : "Job Details")}
             </h2>
           </div>
           <div className="flex items-center gap-2">
@@ -1482,7 +2094,7 @@ function JobDetailsPanel({
                   }
                 >
                   <Power className="mr-2 h-3.5 w-3.5" />
-                  {job.status === "CLOSED" ? "Enable job" : "Disable job"}
+                  {job.status === "CLOSED" ? "Enable Job" : "Disable Job"}
                 </Button>
                 <Button
                   size="sm"
@@ -1491,7 +2103,7 @@ function JobDetailsPanel({
                   className="border-slate-200 bg-white text-slate-600 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
                 >
                   <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  Delete job
+                  Delete Job
                 </Button>
               </>
             )}
@@ -1523,21 +2135,21 @@ function JobDetailsPanel({
               </div>
               <DetailGrid
                 items={[
-                  ["Category", job.category ?? "General"],
-                  ["Work mode", label(job.workMode)],
+                  ["Category", capitalize(job.category) || "General"],
+                  ["Work Mode", label(job.workMode)],
                   [
                     "Budget",
                     job.timingType === "HOURLY"
                       ? job.hourlyRate == null
-                        ? "Not set"
+                        ? "Not Set"
                         : `₹${job.hourlyRate.toLocaleString()}/hr`
                       : `₹${job.budgetMin?.toLocaleString() ?? "—"} – ₹${job.budgetMax?.toLocaleString() ?? "—"}`,
                   ],
-                  ["Location", job.locationAddress ?? job.locationLabel ?? "Not set"],
-                  ["Job date", job.jobDate ? date(job.jobDate) : "Not set"],
-                  ["Deadline", job.deadline ? date(job.deadline) : "Not set"],
+                  ["Location", capitalize(job.locationAddress ?? job.locationLabel) || "Not Set"],
+                  ["Job Date", job.jobDate ? date(job.jobDate) : "Not Set"],
+                  ["Deadline", job.deadline ? date(job.deadline) : "Not Set"],
                   ["Posted", date(job.createdAt)],
-                  ["Saved", `${job._count.favoriteJobs} times`],
+                  ["Saved", `${job._count.favoriteJobs} Times`],
                 ]}
               />
               <div>
@@ -1616,30 +2228,30 @@ function JobDetailsPanel({
               </div>
             </div>
             <aside className="h-fit rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
-              <h3 className="text-sm font-semibold text-slate-900">Client information</h3>
+              <h3 className="text-sm font-semibold text-slate-900">Client Information</h3>
               <p className="mt-3 font-semibold text-slate-900">
-                {job.user.firstName} {job.user.lastName}
+                {capitalize(job.user.firstName)} {capitalize(job.user.lastName)}
               </p>
               <div className="mt-3 space-y-2 text-sm text-slate-600">
                 <p>{job.user.email}</p>
-                <p>{job.user.phone ?? "Phone not provided"}</p>
-                <p>{job.user.companyName ?? "No company listed"}</p>
-                <p>{job.user.address ?? "Address not provided"}</p>
+                <p>{job.user.phone ?? "Phone Not Provided"}</p>
+                <p>{capitalize(job.user.companyName) || "No Company Listed"}</p>
+                <p>{capitalize(job.user.address) || "Address Not Provided"}</p>
                 <p className="pt-2 text-xs text-slate-500 border-t border-slate-200">
                   Account created {date(job.user.createdAt)} ·{" "}
                   <span className="font-semibold text-slate-700">
-                    {job.user.isVerified ? "Verified" : "Not verified"}
+                    {job.user.isVerified ? "Verified" : "Not Verified"}
                   </span>
                 </p>
               </div>
               {job.project ? (
                 <div className="mt-5 border-t border-slate-200 pt-5">
-                  <h3 className="text-sm font-semibold text-slate-900">Project status</h3>
+                  <h3 className="text-sm font-semibold text-slate-900">Project Status</h3>
                   <p className="mt-2 text-sm font-medium text-slate-700">
-                    {label(job.project.status)} · {job.project.progress}% complete
+                    {label(job.project.status)} · {job.project.progress}% Complete
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {job.project.currentStage ?? "No current stage"}
+                    {capitalize(job.project.currentStage) || "No Current Stage"}
                   </p>
                   <dl className="mt-4 grid grid-cols-3 gap-2 text-center">
                     <div className="rounded-lg bg-white border border-slate-200 p-2 shadow-2xs">

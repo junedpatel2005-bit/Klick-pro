@@ -523,13 +523,6 @@ export function ProjectDisputeCenter({
   const isUnderAdminReview = dispute?.status === "UNDER_ADMIN_REVIEW";
   const isResolved = dispute?.status === "RESOLVED";
 
-  const totalUsed = disputeCount || (dispute ? dispute.disputeRound : 0);
-  // Cap the displayed limit: if a project already used more disputes than the current disputeLimit
-  // (e.g. 4 disputes were raised when limit was 5, now admin lowered to 3),
-  // show totalUsed (4) as the denominator so it cleanly displays "4 of 4 Used" instead of "4 of 3 Used".
-  const effectiveLimit = Math.max(disputeLimit, totalUsed);
-  const remainingAllowance = Math.max(0, disputeLimit - totalUsed);
-
   return (
     <section
       id="project-dispute-center"
@@ -545,16 +538,12 @@ export function ProjectDisputeCenter({
             <div>
               <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
                 Contract Dispute Resolution
-                {dispute && (
+                {isDisputeActive && dispute && (
                   <Badge
                     variant="outline"
-                    className={`text-xs font-semibold uppercase tracking-wider ${
-                      isResolved
-                        ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
-                        : ""
-                    }`}
+                    className="text-xs font-semibold uppercase tracking-wider"
                   >
-                    {isResolved ? "Resolved" : `Round ${dispute.disputeRound} of ${effectiveLimit}`}
+                    Round {dispute.disputeRound}
                   </Badge>
                 )}
               </h2>
@@ -565,20 +554,8 @@ export function ProjectDisputeCenter({
           </div>
         </div>
 
-        {/* Dispute counter badge */}
+        {/* Dispute Actions */}
         <div className="flex items-center gap-3">
-          <div className="rounded-xl border bg-muted/50 px-3 py-1.5 text-right">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              Dispute Allowance
-            </p>
-            <p className="text-xs font-bold text-foreground">
-              {totalUsed} of {effectiveLimit} Used{" "}
-              <span className="text-muted-foreground font-normal">
-                ({remainingAllowance} remaining)
-              </span>
-            </p>
-          </div>
-
           {!isDisputeActive && canRaiseDispute && (
             <Button
               onClick={handleOpenCreateModal}
@@ -594,44 +571,33 @@ export function ProjectDisputeCenter({
 
       {/* BODY CONTENT */}
 
-      {/* Case 1: No active dispute and dispute limit reached */}
-      {!dispute && totalUsed >= disputeLimit && (
-        <div className="mt-5 rounded-2xl border border-border/80 bg-muted/40 p-5 text-center">
-          <ShieldAlert className="mx-auto h-8 w-8 text-muted-foreground" />
-          <h3 className="mt-2 text-sm font-semibold text-foreground">Dispute Limit Reached</h3>
-          <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
-            The maximum allowance of {effectiveLimit} disputes has been reached for this project
-            contract. Please reach out directly to customer support if you need further help.
-          </p>
-        </div>
-      )}
-
-      {/* Case 2: No active dispute and can raise */}
-      {!dispute && totalUsed < disputeLimit && (
+      {/* Case 1: No active dispute */}
+      {!isDisputeActive && (
         <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 rounded-2xl border border-dashed border-border bg-muted/20 p-5">
           <div className="space-y-1">
             <p className="text-sm font-semibold text-foreground">Contract in good standing</p>
             <p className="text-xs text-muted-foreground">
               {isClient
-                ? "If an issue regarding quality, missed deadlines, scope disagreement, or refund arises, you can initiate a structured dispute. You have "
-                : "If an issue regarding withheld payments, unapproved milestones, scope creep, or unresponsive client arises, you can initiate a structured dispute. You have "}
-              {remainingAllowance} dispute claim(s) remaining.
+                ? "If an issue regarding quality, missed deadlines, scope disagreement, or refund arises, you can initiate a structured dispute for administrative arbitration."
+                : "If an issue regarding withheld payments, unapproved milestones, scope creep, or unresponsive client arises, you can initiate a structured dispute for administrative arbitration."}
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleOpenCreateModal}
-            className="shrink-0 font-medium"
-          >
-            <ShieldAlert className="mr-1.5 h-4 w-4 text-amber-600" />
-            File a Dispute Claim
-          </Button>
+          {canRaiseDispute && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenCreateModal}
+              className="shrink-0 font-medium"
+            >
+              <ShieldAlert className="mr-1.5 h-4 w-4 text-amber-600" />
+              File a Dispute Claim
+            </Button>
+          )}
         </div>
       )}
 
       {/* Case 3: Active Dispute - WAITING FOR OTHER PARTY RESPONSE */}
-      {isWaitingResponse && dispute && (
+      {isDisputeActive && isWaitingResponse && dispute && (
         <div className="mt-5 space-y-4">
           {/* Status banner */}
           <div
@@ -655,7 +621,7 @@ export function ProjectDisputeCenter({
                     {isRespondent ? "Action Required" : "Awaiting Other Party"}
                   </Badge>
                   <span className="text-xs text-muted-foreground">
-                    Dispute #{dispute.id} (Round {dispute.disputeRound} of {effectiveLimit})
+                    Dispute #{dispute.id} (Round {dispute.disputeRound})
                   </span>
                 </div>
                 <h3 className="mt-1.5 text-base font-bold text-foreground">
@@ -931,7 +897,7 @@ export function ProjectDisputeCenter({
       )}
 
       {/* Case 4: Active Dispute - UNDER ADMIN REVIEW */}
-      {isUnderAdminReview && dispute && (
+      {isDisputeActive && isUnderAdminReview && dispute && (
         <div className="mt-5 space-y-4">
           <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 dark:bg-indigo-950/30 p-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -941,7 +907,7 @@ export function ProjectDisputeCenter({
                     Under Administrative Review
                   </Badge>
                   <span className="text-xs text-muted-foreground">
-                    Case #{dispute.id} (Round {dispute.disputeRound} of {effectiveLimit})
+                    Case #{dispute.id} (Round {dispute.disputeRound})
                   </span>
                 </div>
                 <h3 className="mt-2 text-base font-bold text-foreground">
@@ -1114,150 +1080,8 @@ export function ProjectDisputeCenter({
         </div>
       )}
 
-      {/* Case 5: Dispute RESOLVED */}
-      {isResolved && dispute && (
-        <div className="mt-5 space-y-4">
-          <div
-            className={`rounded-2xl border p-5 ${
-              dispute.decision === "CLIENT_WINS"
-                ? "border-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/30"
-                : dispute.decision === "PROFESSIONAL_WINS"
-                  ? "border-blue-300 bg-blue-50/60 dark:bg-blue-950/30"
-                  : "border-purple-300 bg-purple-50/60 dark:bg-purple-950/30"
-            }`}
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant="outline"
-                    className="font-bold uppercase tracking-wider text-[10px] bg-background"
-                  >
-                    Dispute Resolved
-                  </Badge>
-                  <Badge
-                    className={`font-bold text-[10px] ${
-                      dispute.decision === "CLIENT_WINS"
-                        ? "bg-emerald-600 text-white"
-                        : dispute.decision === "PROFESSIONAL_WINS"
-                          ? "bg-blue-600 text-white"
-                          : "bg-purple-600 text-white"
-                    }`}
-                  >
-                    {dispute.decision === "CLIENT_WINS"
-                      ? "Client Wins (Refund)"
-                      : dispute.decision === "PROFESSIONAL_WINS"
-                        ? "Professional Wins (Released)"
-                        : dispute.decision === "MUTUAL_SETTLEMENT"
-                          ? "Mutually Settled"
-                          : "Partial Settlement"}
-                  </Badge>
-                </div>
-                <h3 className="mt-2 text-base font-bold text-foreground">
-                  Case #{dispute.id} Settled
-                </h3>
-                {dispute.decisionReason && (
-                  <p className="mt-1 text-xs text-foreground/80 leading-relaxed font-medium">
-                    &ldquo;{dispute.decisionReason}&rdquo;
-                  </p>
-                )}
-              </div>
-
-              {/* Settlement financial box */}
-              <div className="flex items-center gap-2 self-start sm:self-center">
-                {dispute.refundAmount != null && dispute.refundAmount > 0 && (
-                  <div className="rounded-xl border bg-background/80 px-3 py-1.5 text-center">
-                    <p className="text-[10px] uppercase font-bold text-emerald-600">
-                      Client Refund
-                    </p>
-                    <p className="text-sm font-black text-foreground">
-                      ₹{dispute.refundAmount.toLocaleString("en-IN")}
-                    </p>
-                  </div>
-                )}
-                {dispute.payoutAmount != null && dispute.payoutAmount > 0 && (
-                  <div className="rounded-xl border bg-background/80 px-3 py-1.5 text-center">
-                    <p className="text-[10px] uppercase font-bold text-blue-600">
-                      Professional Payout
-                    </p>
-                    <p className="text-sm font-black text-foreground">
-                      ₹{dispute.payoutAmount.toLocaleString("en-IN")}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* If Professional Won and Client owes milestone payment */}
-          {isClient &&
-            dispute.decision === "PROFESSIONAL_WINS" &&
-            payableMilestone &&
-            payableMilestone.status !== "APPROVED" &&
-            payableMilestone.status !== "COMPLETED" && (
-              <div className="rounded-2xl border-2 border-blue-400 bg-blue-50/90 dark:bg-blue-950/40 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white font-bold shadow-xs">
-                    <Gavel className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-bold text-foreground">
-                        Professional Won Dispute — Milestone Payment Required
-                      </h4>
-                      <Badge
-                        variant="outline"
-                        className="border-blue-400 bg-blue-100/70 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-[10px] font-bold"
-                      >
-                        Payment Action Required
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                      The dispute was resolved by Admin in favor of the professional. Please approve
-                      and pay{" "}
-                      <strong>
-                        Milestone #{payableMilestone.id}: {payableMilestone.title}
-                      </strong>{" "}
-                      (₹{payableMilestone.amount.toLocaleString("en-IN")}) to complete the payment
-                      and advance the project.
-                    </p>
-                  </div>
-                </div>
-                {onPayMilestone && (
-                  <Button
-                    size="default"
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold shrink-0 shadow-sm gap-1.5"
-                    onClick={() => onPayMilestone(payableMilestone)}
-                  >
-                    <CreditCard className="h-4 w-4" />
-                    Pay Milestone (₹{payableMilestone.amount.toLocaleString("en-IN")})
-                  </Button>
-                )}
-              </div>
-            )}
-
-          {/* If can raise another dispute later in the project */}
-          {canRaiseDispute && (
-            <div className="flex items-center justify-between rounded-xl border bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
-              <span>
-                {remainingAllowance} dispute(s) remaining for this contract if a separate issue
-                occurs.
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleOpenCreateModal}
-                className="text-xs h-7"
-              >
-                Raise New Dispute
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* DISPUTE DISCUSSION & ARBITRATION CHAT */}
-      {dispute && (
+      {/* DISPUTE DISCUSSION & ARBITRATION CHAT (active dispute only) */}
+      {isDisputeActive && dispute && (
         <div className="mt-5 rounded-2xl border bg-card p-5 space-y-4">
           <div className="flex items-center justify-between border-b pb-3">
             <div className="flex items-center gap-2">

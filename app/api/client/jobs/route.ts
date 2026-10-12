@@ -274,6 +274,7 @@ export async function POST(request: NextRequest) {
           title: "Project Completion",
           description: "Full project delivery and completion",
           percentage: 100,
+          validityDays: 0,
         },
       ];
     }

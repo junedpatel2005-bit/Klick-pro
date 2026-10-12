@@ -1,0 +1,195 @@
+================================================================================
+KLICK-PRO MULTI-PAYMENT GATEWAY INTEGRATION PLAN
+Secondary Gateway Integration & Conditional Routing Specification
+================================================================================
+
+1. OVERVIEW & OBJECTIVE
+--------------------------------------------------------------------------------
+This document specifies the complete architectural, database, backend API,
+and frontend UI implementation plan for adding a second payment gateway
+(e.g., Cashfree / PhonePe / PayU) alongside Razorpay, with admin toggle controls
+and dynamic conditional routing when clients deposit funds ("Add Money").
+
+Core Business Logic:
+  - Admin Settings has two independent ON / OFF toggle switches:
+      1) Gateway 1 (Razorpay)
+      2) Gateway 2 (Cashfree / PhonePe)
+  - When Client clicks "Add Money":
+      Condition A (Both ON):
+        Display a payment gateway selection modal ("Select Payment Method").
+        Client selects preferred gateway, and deposit transaction is initiated
+        via the selected gateway.
+      Condition B (Only One ON):
+        Bypass selection modal completely. Automatically invoke the single active
+        gateway SDK/checkout immediately.
+      Condition C (Both OFF fallback):
+        Display selection modal with available fallback gateways so deposits
+        are never blocked, with a notification to the administrator.
+
+
+2. DATABASE & PLATFORM SETTINGS SCHEMA
+--------------------------------------------------------------------------------
+We store gateway enablement and configuration inside the existing
+`PlatformSetting` key-value store to avoid unnecessary table overhead:
+
+  Key: "gateway_razorpay_enabled"
+  Value: "true" | "false" (Default: "true")
+
+  Key: "gateway_secondary_enabled"
+  Value: "true" | "false" (Default: "false")
+
+  Key: "gateway_secondary_provider"
+  Value: "CASHFREE" | "PHONEPE" | "PAYU" (Default: "CASHFREE")
+
+  Key: "gateway_secondary_app_id"
+  Value: (API App ID / Client ID)
+
+  Key: "gateway_secondary_secret_key"
+  Value: (API Secret Key)
+
+  Key: "gateway_secondary_env"
+  Value: "TEST" | "PRODUCTION"
+
+
+3. ADMIN SETTINGS UI (/admin/settings)
+--------------------------------------------------------------------------------
+File to Update: app/admin/settings/page.tsx
+
+Add a dedicated "Payment Gateway Integrations" section containing:
+  - Gateway 1: Razorpay
+      • Title: "Razorpay Gateway (Primary)"
+      • Subtitle: "Cards, UPI, Net Banking, Wallets"
+      • Toggle Switch: [ON / OFF]
+      • Status Indicator Badge: Active (Emerald) / Disabled (Slate)
+  - Gateway 2: Secondary Gateway (e.g., Cashfree / PhonePe)
+      • Title: "Cashfree / PhonePe Gateway (Secondary)"
+      • Subtitle: "Alternative UPI, Instant QR, Net Banking"
+      • Toggle Switch: [ON / OFF]
+      • Status Indicator Badge: Active (Emerald) / Disabled (Slate)
+  - Provider Selector Dropdown (When Gateway 2 is ON):
+      • Options: Cashfree Payments, PhonePe PG, PayU
+  - Save Changes button that persists settings via `POST /api/admin/settings`.
+
+
+4. BACKEND API ENDPOINTS
+--------------------------------------------------------------------------------
+A. Gateway Configuration Status Endpoint:
+   Endpoint: GET /api/v1/payments/gateways
+   Access: Public / Authenticated Clients
+   Response:
+     {
+       "razorpay": {
+         "enabled": true,
+         "name": "Razorpay",
+         "keyId": "rzp_test_..."
+       },
+       "secondary": {
+         "enabled": true,
+         "provider": "CASHFREE",
+         "name": "Cashfree Payments"
+       },
+       "activeCount": 2,
+       "requiresSelection": true
+     }
+
+B. Wallet Deposit Order Creation:
+   Endpoint: POST /api/v1/wallet/deposit
+   Payload:
+     {
+       "amount": 2000,
+       "gateway": "RAZORPAY" | "SECONDARY"
+     }
+   Logic:
+     1. Validate requested gateway against current platform settings.
+     2. If gateway is "RAZORPAY":
+        - Generate Razorpay Order via `razorpay.orders.create({ amount: 200000, currency: "INR" })`
+        - Return `{ orderId, amount, currency, keyId, gateway: "RAZORPAY" }`
+     3. If gateway is "SECONDARY" (e.g. Cashfree):
+        - Create Cashfree Order via Cashfree SDK / REST API:
+          `POST https://sandbox.cashfree.com/pg/orders`
+        - Return `{ paymentSessionId, orderId, gateway: "CASHFREE" }`
+
+C. Secondary Gateway Webhook & Verification:
+   Endpoint: POST /api/webhooks/secondary-gateway
+   Logic:
+     1. Verify webhook signature (HMAC SHA256 using secret key).
+     2. On payment success ("PAYMENT_SUCCESS" / "ORDER_PAID"):
+        - Locate pending `WalletTransaction` by order reference ID.
+        - Atomically credit client `Wallet.balance += amount` inside a transaction.
+        - Update `WalletTransaction.status = "COMPLETED"`.
+        - Create `UserNotification` informing client of successful deposit.
+
+
+5. CLIENT "ADD MONEY" UI CONDITIONAL FLOW (/client/wallet)
+--------------------------------------------------------------------------------
+File to Update: app/client/wallet/page.tsx
+
+State:
+  const [gatewayConfig, setGatewayConfig] = useState<{
+    razorpay: boolean;
+    secondary: boolean;
+    secondaryName: string;
+  }>({ razorpay: true, secondary: false, secondaryName: "Cashfree" });
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
+  const [pendingDepositAmount, setPendingDepositAmount] = useState<number | null>(null);
+
+Deposit Action Logic:
+  function handleAddMoneyClick(amount: number) {
+    const isBothOn = gatewayConfig.razorpay && gatewayConfig.secondary;
+    const isBothOff = !gatewayConfig.razorpay && !gatewayConfig.secondary;
+
+    if (isBothOn || isBothOff) {
+      // Both gateways active (or fallback): Prompt user to choose
+      setPendingDepositAmount(amount);
+      setShowGatewayModal(true);
+    } else if (gatewayConfig.razorpay) {
+      // Only Razorpay is active: Bypass prompt and invoke directly
+      executeDeposit(amount, "RAZORPAY");
+    } else {
+      // Only Secondary gateway is active: Bypass prompt and invoke directly
+      executeDeposit(amount, "SECONDARY");
+    }
+  }
+
+Gateway Selection Modal Component:
+  When `showGatewayModal` is true, render a modal:
+    - Title: "Select Payment Gateway"
+    - Subtitle: `Depositing ₹${pendingDepositAmount?.toLocaleString()}`
+    - Option 1 (Card):
+        • Icon: CreditCard
+        • Title: "Razorpay"
+        • Description: "Pay with UPI, Credit/Debit Card, or Net Banking"
+        • Action: executeDeposit(amount, "RAZORPAY")
+    - Option 2 (Card):
+        • Icon: Wallet
+        • Title: gatewayConfig.secondaryName (e.g., "Cashfree Payments")
+        • Description: "Fast UPI & Instant Net Banking"
+        • Action: executeDeposit(amount, "SECONDARY")
+
+
+6. STEP-BY-STEP IMPLEMENTATION ROADMAP
+--------------------------------------------------------------------------------
+Phase 1: Admin Settings & Storage
+  1. Add settings keys (`gateway_razorpay_enabled`, `gateway_secondary_enabled`)
+     in `src/lib/platform-settings.ts`.
+  2. Add UI toggles in `app/admin/settings/page.tsx` with instant save.
+
+Phase 2: Gateway Configuration API
+  1. Create `app/api/v1/payments/gateways/route.ts` returning active status.
+
+Phase 3: Secondary Gateway Provider Adapter
+  1. Install provider SDK (e.g., `npm install cashfree-pg` or PhonePe SDK).
+  2. Implement client wrapper in `src/lib/secondary-gateway.ts` with order creation
+     and signature verification methods.
+
+Phase 4: Client Wallet UI Integration
+  1. Update `app/client/wallet/page.tsx` with conditional gateway selector modal.
+  2. Handle SDK callback and instant wallet balance update.
+
+Phase 5: Webhooks & Verification
+  1. Create `app/api/webhooks/secondary-gateway/route.ts` for asynchronous ledger credits.
+  2. Test with mock test webhooks.
+
+================================================================================
+END OF SPECIFICATION
+================================================================================

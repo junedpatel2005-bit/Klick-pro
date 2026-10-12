@@ -114,6 +114,7 @@ export async function processMilestoneValidityReleases(trackingId?: number) {
           await tx.projectTimelineEvent.create({
             data: {
               trackingId: milestone.trackingId,
+              actorId: milestone.professionalId,
               actorRole: "SYSTEM",
               type: "MILESTONE_PAID",
               title: "Milestone payment released",
@@ -131,9 +132,11 @@ export async function processMilestoneValidityReleases(trackingId?: number) {
           try {
             await notifyMilestonePayoutApproved({
               professionalId: milestone.professionalId,
+              clientId: milestone.clientId,
               projectId: milestone.trackingId,
               milestoneTitle: milestone.title,
               payoutAmount: milestone.payment?.professionalPayoutAmount ?? milestone.amount,
+              platformEarnings: milestone.payment?.commissionAmount ?? 0,
               jobTitle: milestone.tracking.job.title ?? undefined,
             });
           } catch (notifErr) {
