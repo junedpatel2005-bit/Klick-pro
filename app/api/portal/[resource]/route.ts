@@ -12,6 +12,7 @@ import {
 import { attachLastActorRole } from "@/lib/project-request-actions";
 import { inferLocationFromAddress } from "@/lib/india-locations";
 import { getPlatformSetting } from "@/lib/platform-settings";
+import { processMilestoneValidityReleases } from "@/lib/milestone-validity";
 
 async function sessionFromRequest(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -1236,6 +1237,7 @@ export async function GET(
           : isClientRole
             ? "CLIENT"
             : "PROFESSIONAL";
+      await processMilestoneValidityReleases(project.id);
       const milestones = await db.projectMilestone.findMany({
         where: { trackingId: project.id },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],

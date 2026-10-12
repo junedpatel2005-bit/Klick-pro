@@ -722,6 +722,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             description: true,
             submittedAt: true,
             approvedAt: true,
+            validityDays: true,
+            releaseAt: true,
+            autoReleaseStatus: true,
           },
         })
       : Promise.resolve([]),

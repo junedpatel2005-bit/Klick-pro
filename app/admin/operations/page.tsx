@@ -150,6 +150,9 @@ type DisputeDetails = {
     description?: string | null;
     submittedAt?: string | null;
     approvedAt?: string | null;
+    validityDays?: number | null;
+    releaseAt?: string | null;
+    autoReleaseStatus?: string | null;
   }[];
   payments?: {
     id: number;
@@ -243,6 +246,9 @@ type JobDetails = Job & {
       dueDate: string | null;
       status: string;
       approvedAt: string | null;
+      validityDays?: number | null;
+      releaseAt?: string | null;
+      autoReleaseStatus?: string | null;
     }[];
     financial: { milestoneTotal: number; paidAmount: number; remainingAmount: number };
   } | null;
@@ -1670,15 +1676,46 @@ function JobDetailsPanel({
                           className="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs"
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm font-semibold text-slate-900">
-                              {milestone.title}
-                            </p>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">
+                                {milestone.title}
+                              </p>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                {milestone.validityDays && milestone.validityDays > 0 ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 border border-blue-200">
+                                    <span>⏳</span>
+                                    <span>{milestone.validityDays}d validity</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                                    <span>⚡</span>
+                                    <span>Instant</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                             <Badge value={milestone.status} />
                           </div>
-                          <p className="mt-1 text-xs text-slate-500">
+                          <p className="mt-1.5 text-xs text-slate-500">
                             ₹{milestone.amount.toLocaleString()}
                             {milestone.dueDate ? ` · Due ${date(milestone.dueDate)}` : ""}
                           </p>
+                          {milestone.autoReleaseStatus === "PAUSED_DISPUTE" ? (
+                            <div className="mt-2 rounded-md bg-rose-50 border border-rose-200 p-2 text-[11px] text-rose-700 font-semibold flex items-center gap-1.5">
+                              <span>⚠️</span>
+                              <span>Auto-release paused due to open dispute</span>
+                            </div>
+                          ) : milestone.autoReleaseStatus === "PENDING" && milestone.releaseAt ? (
+                            <div className="mt-2 rounded-md bg-amber-50 border border-amber-200 p-2 text-[11px] text-amber-800 font-medium flex items-center gap-1.5">
+                              <span>⏳</span>
+                              <span>Auto-releases on {formatDateTime(milestone.releaseAt)}</span>
+                            </div>
+                          ) : milestone.autoReleaseStatus === "RELEASED" ? (
+                            <div className="mt-2 rounded-md bg-emerald-50 border border-emerald-200 p-2 text-[11px] text-emerald-800 font-medium flex items-center gap-1.5">
+                              <span>✓</span>
+                              <span>Released to Professional</span>
+                            </div>
+                          ) : null}
                         </div>
                       ))
                     ) : (
@@ -2376,19 +2413,41 @@ function DisputeDetailsPanel({
                             }`}
                           >
                             <div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <p className="font-semibold text-slate-900">{milestone.title}</p>
                                 {milestone.id === details.dispute.milestoneId && (
                                   <span className="rounded-md bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">
                                     In Dispute
                                   </span>
                                 )}
+                                {milestone.validityDays && milestone.validityDays > 0 ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 border border-blue-200">
+                                    ⏳ {milestone.validityDays}d hold
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                                    ⚡ Instant
+                                  </span>
+                                )}
                               </div>
-                              <p className="text-xs text-slate-500">
+                              <p className="mt-1 text-xs text-slate-500">
                                 {milestone.dueDate
                                   ? `Due ${date(milestone.dueDate)}`
                                   : "No due date"}
                               </p>
+                              {milestone.autoReleaseStatus === "PAUSED_DISPUTE" ? (
+                                <p className="mt-1 text-[11px] font-semibold text-rose-600">
+                                  ⚠️ Payout paused due to active dispute
+                                </p>
+                              ) : milestone.autoReleaseStatus === "PENDING" && milestone.releaseAt ? (
+                                <p className="mt-1 text-[11px] font-medium text-amber-700">
+                                  ⏳ Scheduled release: {formatDateTime(milestone.releaseAt)}
+                                </p>
+                              ) : milestone.autoReleaseStatus === "RELEASED" ? (
+                                <p className="mt-1 text-[11px] font-medium text-emerald-700">
+                                  ✓ Released to Professional
+                                </p>
+                              ) : null}
                             </div>
                             <div className="text-right">
                               <Badge value={milestone.status} />

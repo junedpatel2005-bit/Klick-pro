@@ -51,6 +51,7 @@ const bodySchema = z.discriminatedUnion("action", [
     amount: z.number().int().min(0),
     description: z.string().trim().max(2000).nullish(),
     deadline: z.string().datetime().nullish(),
+    validityDays: z.number().int().min(0).max(30).optional().default(0),
   }),
   z.object({
     action: z.literal("create-milestones"),
@@ -62,6 +63,7 @@ const bodySchema = z.discriminatedUnion("action", [
           amount: z.number().int().min(0),
           description: z.string().trim().max(2000).nullish(),
           deadline: z.string().datetime().nullish(),
+          validityDays: z.number().int().min(0).max(30).optional().default(0),
         }),
       )
       .min(1)
@@ -74,6 +76,7 @@ const bodySchema = z.discriminatedUnion("action", [
     title: z.string().trim().min(1).max(160),
     amount: z.number().int().min(0),
     description: z.string().trim().max(2000).nullish(),
+    validityDays: z.number().int().min(0).max(30).optional(),
   }),
   z.object({
     action: z.literal("delete-milestone"),
@@ -462,6 +465,7 @@ export async function POST(request: NextRequest) {
           amount: input.amount,
           description: input.description ?? null,
           dueDate: input.deadline ? new Date(input.deadline) : null,
+          validityDays: input.validityDays ?? 0,
           status: activeCount === 0 ? "IN_PROGRESS" : "UPCOMING",
         },
       });
@@ -544,6 +548,7 @@ export async function POST(request: NextRequest) {
             amount: m.amount,
             description: m.description ?? null,
             dueDate: m.deadline ? new Date(m.deadline) : null,
+            validityDays: m.validityDays ?? 0,
             status,
           },
         });
@@ -633,6 +638,7 @@ export async function POST(request: NextRequest) {
           title: input.title,
           amount: input.amount,
           description: input.description ?? null,
+          ...(input.validityDays !== undefined ? { validityDays: input.validityDays } : {}),
         },
       });
       await event(

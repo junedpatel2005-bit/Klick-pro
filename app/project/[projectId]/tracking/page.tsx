@@ -71,6 +71,7 @@ export type DraftMilestone = {
   amount: number | "";
   description: string;
   percentage?: number | "";
+  validityDays?: number;
 };
 type Milestone = {
   id: number;
@@ -81,6 +82,9 @@ type Milestone = {
   status: string;
   submittedAt: string | null;
   approvedAt: string | null;
+  validityDays?: number;
+  releaseAt?: string | null;
+  autoReleaseStatus?: string | null;
   payment?: {
     status: string;
     professionalPayoutAmount?: number | null;
@@ -1135,6 +1139,8 @@ export default function SharedProjectTrackingPage() {
           item.percentage =
             totalAgreed > 0 ? Math.min(100, Math.round((amt / totalAgreed) * 100)) : "";
         }
+      } else if (field === "validityDays") {
+        item.validityDays = Number(val) || 0;
       }
       next[index] = item;
       return next;
@@ -1177,6 +1183,7 @@ export default function SharedProjectTrackingPage() {
         amount: suggestedAmount > 0 ? suggestedAmount : "",
         percentage: suggestedPct > 0 ? suggestedPct : "",
         description: "",
+        validityDays: 0,
       },
     ]);
     setMilestoneModalError(null);
@@ -1210,6 +1217,7 @@ export default function SharedProjectTrackingPage() {
           amount: remainingToAllocate,
           percentage: totalAgreed > 0 ? Math.round((remainingToAllocate / totalAgreed) * 100) : 100,
           description: "",
+          validityDays: 0,
         },
       ];
     });
@@ -1258,6 +1266,7 @@ export default function SharedProjectTrackingPage() {
           title: first.title.trim(),
           amount: Number(first.amount),
           description: first.description.trim() || null,
+          validityDays: Number(first.validityDays) || 0,
         });
       } else {
         await action("create-milestones", {
@@ -1265,6 +1274,7 @@ export default function SharedProjectTrackingPage() {
             title: m.title.trim(),
             amount: Number(m.amount),
             description: m.description.trim() || null,
+            validityDays: Number(m.validityDays) || 0,
           })),
         });
       }
@@ -2974,6 +2984,16 @@ export default function SharedProjectTrackingPage() {
                               <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary border border-primary/20">
                                 ₹{m.amount.toLocaleString("en-IN")}
                               </span>
+                              {Number(m.validityDays) > 0 ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                                  <Clock3 className="h-3 w-3" />
+                                  {m.validityDays}d validity
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                                  ⚡ Instant
+                                </span>
+                              )}
                               {pct > 0 && (
                                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                                   {pct}% of project
@@ -3000,6 +3020,50 @@ export default function SharedProjectTrackingPage() {
                                             ? "Approved"
                                             : (m.payment?.status ?? "Pending")}
                                   </strong>
+                                </span>
+                              </p>
+                            )}
+                            {m.autoReleaseStatus === "PENDING" && m.releaseAt && (
+                              <div
+                                className={`mt-2 rounded-xl p-3 border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 ${
+                                  data.openDisputeCount > 0
+                                    ? "bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300"
+                                    : "bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-300"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {data.openDisputeCount > 0 ? (
+                                    <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                                  ) : (
+                                    <Clock3 className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 animate-pulse" />
+                                  )}
+                                  <div>
+                                    <p className="font-semibold">
+                                      {data.openDisputeCount > 0
+                                        ? "Auto-release paused due to open dispute"
+                                        : `Inspection Period: Auto-releases on ${new Date(
+                                            m.releaseAt,
+                                          ).toLocaleDateString("en-IN", {
+                                            month: "short",
+                                            day: "numeric",
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                          })}`}
+                                    </p>
+                                    <p className="text-[11px] opacity-90">
+                                      {data.openDisputeCount > 0
+                                        ? "Payment release is securely held until the active dispute is resolved."
+                                        : "Funds are secured in platform escrow and will automatically release to the professional once inspection ends."}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            {m.autoReleaseStatus === "RELEASED" && Number(m.validityDays) > 0 && (
+                              <p className="mt-1 flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                <span>
+                                  Funds released to professional following {m.validityDays}-day inspection period.
                                 </span>
                               </p>
                             )}
@@ -4645,7 +4709,7 @@ export default function SharedProjectTrackingPage() {
                       </div>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-4">
                       <div>
                         <label className="text-xs font-semibold text-foreground block mb-1">
                           Amount (₹) <span className="text-destructive">*</span>
@@ -4677,6 +4741,23 @@ export default function SharedProjectTrackingPage() {
                           placeholder="Brief summary of deliverables for this milestone"
                           maxLength={500}
                         />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-foreground block mb-1">
+                          Validity
+                        </label>
+                        <select
+                          value={m.validityDays ?? 0}
+                          onChange={(e) =>
+                            updateDraftMilestone(index, "validityDays", Number(e.target.value))
+                          }
+                          className="h-10 w-full rounded-md border border-input bg-background px-2 text-xs"
+                        >
+                          <option value={0}>None (Instant)</option>
+                          <option value={3}>3 Days</option>
+                          <option value={5}>5 Days</option>
+                          <option value={7}>7 Days</option>
+                        </select>
                       </div>
                     </div>
                   </div>

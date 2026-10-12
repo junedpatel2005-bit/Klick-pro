@@ -176,6 +176,7 @@ export async function respondToProjectRequest(
         title: milestone.title,
         description: milestone.description,
         amount,
+        validityDays: milestone.validityDays ?? 0,
         status: "UPCOMING" as const,
       };
     });
@@ -192,6 +193,7 @@ export async function respondToProjectRequest(
         title: "Project Completion",
         description: "Full project delivery and completion",
         amount: hireRequest.bidAmount,
+        validityDays: 0,
         status: "UPCOMING",
       },
     });

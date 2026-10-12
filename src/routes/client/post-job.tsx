@@ -15,6 +15,7 @@ export type JobFormMilestone = {
   title: string;
   percentage: number | "";
   description?: string;
+  validityDays?: number;
 };
 
 type Form = {
@@ -674,6 +675,7 @@ export default function PostJob() {
         title: m.title.trim(),
         percentage: Number(m.percentage) || 100,
         description: m.description?.trim() || null,
+        validityDays: Number(m.validityDays) || 0,
       })),
     mode,
   });
@@ -1468,14 +1470,34 @@ export default function PostJob() {
                         </div>
                       </div>
 
-                      <Field label="Deliverables / Description (Optional)">
-                        <Input
-                          value={milestone.description || ""}
-                          onChange={(e) => updateMilestone(index, "description", e.target.value)}
-                          placeholder="Brief summary of deliverables for this milestone"
-                          maxLength={500}
-                        />
-                      </Field>
+                      <div className="grid gap-4 sm:grid-cols-3">
+                        <div className="sm:col-span-2">
+                          <Field label="Deliverables / Description (Optional)">
+                            <Input
+                              value={milestone.description || ""}
+                              onChange={(e) => updateMilestone(index, "description", e.target.value)}
+                              placeholder="Brief summary of deliverables for this milestone"
+                              maxLength={500}
+                            />
+                          </Field>
+                        </div>
+                        <div>
+                          <Field label="Validity">
+                            <select
+                              value={milestone.validityDays ?? 0}
+                              onChange={(e) =>
+                                updateMilestone(index, "validityDays", Number(e.target.value))
+                              }
+                              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                            >
+                              <option value={0}>None (Instant)</option>
+                              <option value={3}>3 Days</option>
+                              <option value={5}>5 Days</option>
+                              <option value={7}>7 Days</option>
+                            </select>
+                          </Field>
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -1766,6 +1788,7 @@ export default function PostJob() {
                   ? form.milestones
                       .map((m, idx) => {
                         const milestonePercent = Number(m.percentage) || 0;
+                        const validityLabel = m.validityDays ? ` • ${m.validityDays}d validity` : " • Instant";
                         return `${idx + 1}. ${m.title} (${m.percentage}%${
                           (
                             form.timingType === "HOURLY"
@@ -1774,7 +1797,7 @@ export default function PostJob() {
                           )
                             ? ` • ₹${Math.round(((form.timingType === "HOURLY" ? hourlyProjectTotal : Number(form.budgetMax))! * milestonePercent) / 100).toLocaleString("en-IN")}`
                             : ""
-                        })${m.description ? `\n   ${m.description}` : ""}`;
+                        }${validityLabel})${m.description ? `\n   ${m.description}` : ""}`;
                       })
                       .join("\n")
                   : "Default: 100% on Project Completion"

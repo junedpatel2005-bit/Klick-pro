@@ -324,6 +324,7 @@ model ClientJobMilestone {
   description String?
   percentage  Int
   amount      Int?
+  validityDays Int      @default(0) @map("validity_days")
   sortOrder   Int       @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -486,6 +487,9 @@ model ProjectMilestone {
   amount         Int
   dueDate        DateTime?
   status         String              @default("UPCOMING")
+  validityDays   Int                 @default(0) @map("validity_days")
+  releaseAt      DateTime?           @map("release_at")
+  autoReleaseStatus String?          @map("auto_release_status")
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   submittedAt    DateTime?

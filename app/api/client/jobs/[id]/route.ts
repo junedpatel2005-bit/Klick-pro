@@ -12,6 +12,7 @@ const milestoneInput = z.object({
     .int()
     .min(1, "Percentage must be at least 1%.")
     .max(100, "Percentage cannot exceed 100%."),
+  validityDays: z.coerce.number().int().min(0).max(30).optional().default(0),
 });
 const milestonesInput = z.array(milestoneInput).superRefine((milestones, context) => {
   const total = milestones.reduce((sum, milestone) => sum + milestone.percentage, 0);
@@ -366,6 +367,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         title: m.title.trim(),
         description: m.description?.trim() || null,
         percentage: m.percentage,
+        validityDays: m.validityDays ?? 0,
         amount: budgetRef ? Math.round((budgetRef * m.percentage) / 100) : null,
         sortOrder: index,
       }));

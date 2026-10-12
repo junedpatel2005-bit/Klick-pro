@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
+import { processMilestoneValidityReleases } from "@/lib/milestone-validity";
 
 async function requireAdmin(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -80,6 +81,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     where: { id: jobId },
     include: {
       attachments: { orderBy: { createdAt: "desc" } },
+      milestones: { orderBy: { sortOrder: "asc" } },
       user: {
         select: {
           id: true,
@@ -142,6 +144,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const professionalsById = new Map(
     professionals.map((professional) => [professional.id, professional]),
   );
+  if (project) {
+    await processMilestoneValidityReleases(project.id);
+  }
   const [milestones, paymentsSum, timelineEvents, workUploads, transactions, paymentsList] = project
     ? await Promise.all([
         db.projectMilestone.findMany({
@@ -154,6 +159,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             amount: true,
             dueDate: true,
             status: true,
+            validityDays: true,
+            releaseAt: true,
+            autoReleaseStatus: true,
             approvedAt: true,
             submittedAt: true,
             createdAt: true,
