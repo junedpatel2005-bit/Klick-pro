@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { CLIENT_FEE_RATE, calculateMilestoneMoney } from "@/lib/payment-fees";
-import { getPlatformCommissionRate } from "@/lib/platform-settings";
+import { getPlatformCommissionRate, isNegativeBalanceAllowed } from "@/lib/platform-settings";
 import { Prisma } from "@generated/prisma/client";
 
 export {
@@ -42,6 +42,7 @@ async function recordTransaction(
     idempotencyKey: string;
     paymentId?: number;
     metadata?: Record<string, number | string>;
+    allowNegativeBalance?: boolean;
   },
 ) {
   const wallet = await walletForUser(tx, input.userId);
@@ -54,11 +55,18 @@ async function recordTransaction(
         data: { balance: { increment: topUp } },
       });
     }
-    const result = await tx.wallet.updateMany({
-      where: { id: wallet.id, balance: { gte: Math.abs(input.amount) } },
-      data: { balance: { decrement: Math.abs(input.amount) } },
-    });
-    if (result.count !== 1) throw new Error("Insufficient wallet balance.");
+    if (input.allowNegativeBalance) {
+      await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { balance: { decrement: Math.abs(input.amount) } },
+      });
+    } else {
+      const result = await tx.wallet.updateMany({
+        where: { id: wallet.id, balance: { gte: Math.abs(input.amount) } },
+        data: { balance: { decrement: Math.abs(input.amount) } },
+      });
+      if (result.count !== 1) throw new Error("Insufficient wallet balance.");
+    }
   } else if (input.amount > 0) {
     await tx.wallet.update({
       where: { id: wallet.id },
@@ -123,6 +131,7 @@ export async function fundMilestoneFromWallet(
     baseAmount: number;
     milestoneId: number;
     customCommissionRate?: number;
+    allowNegativeBalance?: boolean;
   },
 ) {
   const admin = await tx.user.findFirst({
@@ -135,9 +144,13 @@ export async function fundMilestoneFromWallet(
     input.customCommissionRate !== undefined
       ? input.customCommissionRate
       : await getPlatformCommissionRate();
+  const allowNegative =
+    input.allowNegativeBalance !== undefined
+      ? input.allowNegativeBalance
+      : await isNegativeBalanceAllowed();
   const money = calculateMilestoneMoney(input.baseAmount, rate);
 
-  // 1. Client Entry 1: Milestone money debit
+  // 1. Client Entry 1: Milestone money debit (supports negative balance / overdraft)
   await recordTransaction(tx, {
     userId: input.clientId,
     amount: -money.baseAmount,
@@ -146,6 +159,7 @@ export async function fundMilestoneFromWallet(
     idempotencyKey: `payment-${input.paymentId}-client-milestone-debit`,
     paymentId: input.paymentId,
     metadata: { milestoneId: input.milestoneId, baseAmount: money.baseAmount },
+    allowNegativeBalance: allowNegative,
   });
 
   // 2. Client Entry 2: Platform commission fee debit
@@ -158,6 +172,7 @@ export async function fundMilestoneFromWallet(
       idempotencyKey: `payment-${input.paymentId}-client-commission-debit`,
       paymentId: input.paymentId,
       metadata: { milestoneId: input.milestoneId, feeAmount: money.clientFeeAmount },
+      allowNegativeBalance: allowNegative,
     });
   }
 

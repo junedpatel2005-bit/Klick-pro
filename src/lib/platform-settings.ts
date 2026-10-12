@@ -51,6 +51,12 @@ export const DEFAULT_PLATFORM_SETTINGS: Record<
       "When ON, client milestone approvals automatically release net earnings to professional wallet after deducting admin commission. When OFF, payments remain held in admin review.",
     category: "FINANCE",
   },
+  allow_negative_balance: {
+    value: "true",
+    description:
+      "When ON, milestone auto-payments are allowed even if the client wallet has insufficient funds, deducting the full milestone amount and setting the client wallet balance into negative (e.g. -₹200) until repaid. When OFF, payments require full wallet balance.",
+    category: "FINANCE",
+  },
 };
 
 export async function getPlatformSetting(key: string, fallback?: string): Promise<string> {
@@ -98,6 +104,15 @@ export async function getMinWithdrawalAmount(): Promise<number> {
 export async function isAutopayEnabled(): Promise<boolean> {
   try {
     const raw = await getPlatformSetting("autopay_enabled", "true");
+    return raw === "true" || raw === "1" || raw === "on";
+  } catch {
+    return true;
+  }
+}
+
+export async function isNegativeBalanceAllowed(): Promise<boolean> {
+  try {
+    const raw = await getPlatformSetting("allow_negative_balance", "true");
     return raw === "true" || raw === "1" || raw === "on";
   } catch {
     return true;

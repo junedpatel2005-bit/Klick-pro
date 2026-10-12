@@ -117,6 +117,10 @@ export default function AdminSettingsPage() {
     (formValues["autopay_enabled"] ?? "true") === "true" ||
     formValues["autopay_enabled"] === "1" ||
     formValues["autopay_enabled"] === "on";
+  const isAllowNegativeBalance =
+    (formValues["allow_negative_balance"] ?? "true") === "true" ||
+    formValues["allow_negative_balance"] === "1" ||
+    formValues["allow_negative_balance"] === "on";
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
@@ -450,6 +454,61 @@ export default function AdminSettingsPage() {
                       }`}
                     >
                       Auto-Pay OFF
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Minus Money Rule / Negative Balance Toggle */}
+              <div className="space-y-3 md:col-span-2 border-t border-slate-100 pt-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Label
+                        htmlFor="allow_negative_balance"
+                        className="text-xs font-semibold text-slate-800"
+                      >
+                        Minus Money Rule (Negative Balance on Auto-Pay)
+                      </Label>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          isAllowNegativeBalance
+                            ? "bg-purple-100 text-purple-800"
+                            : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {isAllowNegativeBalance ? "MINUS RULE ON" : "MINUS RULE OFF"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                      {isAllowNegativeBalance
+                        ? "When client wallet has less money than milestone amount (e.g. Milestone ₹1,200, Wallet ₹1,000), auto-pay still pays the full ₹1,200 to professional and client wallet balance goes negative (-₹200) until repaid."
+                        : "When client wallet has insufficient funds, milestone payments fail until client deposits the full amount."}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleValueChange("allow_negative_balance", "true")}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-1.5 text-xs font-bold transition ${
+                        isAllowNegativeBalance
+                          ? "border-purple-600 bg-purple-600 text-white shadow-xs"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Minus Rule ON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleValueChange("allow_negative_balance", "false")}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-1.5 text-xs font-bold transition ${
+                        !isAllowNegativeBalance
+                          ? "border-slate-700 bg-slate-700 text-white shadow-xs"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      Minus Rule OFF
                     </button>
                   </div>
                 </div>

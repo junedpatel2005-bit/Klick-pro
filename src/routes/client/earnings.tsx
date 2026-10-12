@@ -553,9 +553,22 @@ export default function ClientEarnings() {
                 </span>
               </div>
               {wallet && !walletLoading ? (
-                <p className="mt-3 font-display text-4xl font-bold tracking-tight">
-                  ₹{wallet.available.toLocaleString("en-IN")}
-                </p>
+                <div>
+                  <p
+                    className={`mt-3 font-display text-4xl font-bold tracking-tight ${
+                      wallet.available < 0 ? "text-rose-300" : ""
+                    }`}
+                  >
+                    {wallet.available < 0
+                      ? `-₹${Math.abs(wallet.available).toLocaleString("en-IN")}`
+                      : `₹${wallet.available.toLocaleString("en-IN")}`}
+                  </p>
+                  {wallet.available < 0 && (
+                    <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-rose-500/20 px-2.5 py-1 text-xs font-semibold text-rose-200 border border-rose-400/30">
+                      <span>⚠️ Negative Balance (Outstanding Dues)</span>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div
                   className="mt-3 h-10 w-44 animate-pulse rounded-lg bg-white/20"
@@ -570,6 +583,36 @@ export default function ClientEarnings() {
           </div>
         </div>
       </section>
+
+      {/* Outstanding Dues Banner */}
+      {wallet && wallet.available < 0 && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50/90 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-in fade-in-50">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 rounded-xl bg-rose-100 p-2 text-rose-600 shrink-0">
+              <AlertCircle className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-rose-900">
+                Outstanding Balance: -₹{Math.abs(wallet.available).toLocaleString("en-IN")}
+              </h3>
+              <p className="mt-0.5 text-xs text-rose-700 leading-relaxed">
+                Your wallet has a negative balance from an approved milestone auto-payment. Please add funds to clear your dues and keep your projects running smoothly.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setTopUpAmount(String(Math.abs(wallet.available)));
+              window.scrollTo({ top: 380, behavior: "smooth" });
+            }}
+            className="shrink-0 rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-bold text-white shadow-xs transition cursor-pointer"
+          >
+            Clear Dues (Add ₹{Math.abs(wallet.available).toLocaleString("en-IN")})
+          </button>
+        </div>
+      )}
+
       {paymentsLoading && !payments ? (
         <CardListSkeleton count={3} />
       ) : (
@@ -577,7 +620,11 @@ export default function ClientEarnings() {
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Stat
               icon={CircleDollarSign}
-              value={`₹${(wallet?.available ?? 0).toLocaleString()}`}
+              value={
+                (wallet?.available ?? 0) < 0
+                  ? `-₹${Math.abs(wallet?.available ?? 0).toLocaleString("en-IN")}`
+                  : `₹${(wallet?.available ?? 0).toLocaleString("en-IN")}`
+              }
               label="Wallet balance"
               loading={walletLoading}
             />
