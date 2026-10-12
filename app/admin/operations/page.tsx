@@ -1676,8 +1676,8 @@ function JobDetailsPanel({
                           className="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs"
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-slate-900 break-words line-clamp-2">
                                 {milestone.title}
                               </p>
                               <div className="mt-1 flex flex-wrap items-center gap-1.5">

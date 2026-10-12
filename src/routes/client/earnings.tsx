@@ -621,7 +621,11 @@ export default function ClientEarnings() {
             type="button"
             onClick={() => {
               setTopUpAmount(String(Math.abs(wallet.available)));
-              window.scrollTo({ top: 380, behavior: "smooth" });
+              const el = document.getElementById("client-top-up-input");
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+                (el as HTMLInputElement).focus();
+              }
             }}
             className="shrink-0 rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-bold text-white shadow-xs transition cursor-pointer"
           >
@@ -698,6 +702,7 @@ export default function ClientEarnings() {
                   <div className="flex h-12 min-w-0 flex-1 items-center rounded-xl border border-input bg-background px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10">
                     <span className="mr-2 text-sm font-semibold text-muted-foreground">₹</span>
                     <input
+                      id="client-top-up-input"
                       className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
                       type="number"
                       min="1"

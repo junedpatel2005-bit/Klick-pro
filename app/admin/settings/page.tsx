@@ -180,7 +180,7 @@ export default function AdminSettingsPage() {
       ) : (
         <div className="grid gap-6">
           {/* Quick Stat Pill Preview */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div
               className={`rounded-xl border p-3.5 ${
                 isCommissionEnabled
@@ -237,6 +237,35 @@ export default function AdminSettingsPage() {
                 }`}
               >
                 {isAutopay ? "Instant pro payout" : "Manual admin review"}
+              </p>
+            </div>
+            <div
+              className={`rounded-xl border p-3.5 ${
+                isAllowNegativeBalance
+                  ? "border-purple-200/80 bg-purple-50/50"
+                  : "border-slate-200/80 bg-slate-50/50"
+              }`}
+            >
+              <p
+                className={`text-[11px] font-bold uppercase tracking-wider ${
+                  isAllowNegativeBalance ? "text-purple-700" : "text-slate-600"
+                }`}
+              >
+                Minus Rule
+              </p>
+              <p
+                className={`mt-1 text-2xl font-black ${
+                  isAllowNegativeBalance ? "text-purple-900" : "text-slate-700"
+                }`}
+              >
+                {isAllowNegativeBalance ? "ON" : "OFF"}
+              </p>
+              <p
+                className={`text-[10px] mt-0.5 ${
+                  isAllowNegativeBalance ? "text-purple-600" : "text-slate-500"
+                }`}
+              >
+                {isAllowNegativeBalance ? "Negative balance allowed" : "Strict funds required"}
               </p>
             </div>
             <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-3.5">
