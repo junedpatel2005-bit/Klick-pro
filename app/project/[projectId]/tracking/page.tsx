@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { CelebrationConfetti } from "@/components/CelebrationConfetti";
+import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageActionLoading } from "@/components/PageActionLoading";
 import { Button } from "@/components/ui/button";
@@ -658,12 +659,13 @@ export default function SharedProjectTrackingPage() {
         remainingBalance?: number;
       } | null;
       if (!response.ok) {
-        setApprovalError(
+        const errorMsg =
           result?.error ??
-            (offlinePayment
-              ? "Unable to record offline payment."
-              : "Unable to complete wallet payment."),
-        );
+          (offlinePayment
+            ? "Unable to record offline payment."
+            : "Money was not in wallet. This milestone payment is remaining, please add money.");
+        setApprovalError(errorMsg);
+        toast.error(errorMsg);
         return false;
       }
       // Close the approval popup immediately upon successful payment

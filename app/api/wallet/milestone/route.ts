@@ -365,7 +365,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message === "Insufficient wallet balance.")
       return NextResponse.json(
         {
-          error: `Add at least ₹${money.clientChargeAmount.toLocaleString()} to your wallet before paying this milestone.`,
+          error: `Money was not in wallet. This milestone payment is remaining, please add money to your wallet.`,
         },
         { status: 402 },
       );
