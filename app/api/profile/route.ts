@@ -7,7 +7,11 @@ const profileSchema = z.object({
   firstName: z.string().trim().min(1, "First name is required.").max(80),
   lastName: z.string().trim().min(1, "Last name is required.").max(80),
   companyName: z.string().trim().max(160).optional().or(z.literal("")),
-  address: z.string().trim().min(1, "Address is required.").max(300),
+  address: z
+    .string({ required_error: "Address is required." })
+    .trim()
+    .min(1, "Address is required.")
+    .max(1000, "Address must be under 1000 characters."),
   profilePhotoUrl: z
     .string()
     .max(2048)
@@ -19,7 +23,7 @@ const profileSchema = z.object({
     .optional()
     .nullable()
     .or(z.literal("")),
-  phone: z.string().trim().min(7).max(25).optional().or(z.literal("")),
+  phone: z.string().trim().max(30).optional().nullable().or(z.literal("")),
 });
 
 async function getSession(request: NextRequest) {
@@ -139,7 +143,7 @@ export async function POST(request: NextRequest) {
       });
     }
     const existingPrimary = await tx.clientSavedLocation.findFirst({
-      where: { clientProfileId: profile.id, label: "Primary Address" },
+      where: { clientProfileId: profile.id, isPrimary: true },
     });
     await tx.clientSavedLocation.updateMany({
       where: { clientProfileId: profile.id },

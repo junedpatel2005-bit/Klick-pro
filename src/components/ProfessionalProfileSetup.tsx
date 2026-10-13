@@ -77,7 +77,23 @@ export function ProfessionalProfileSetup() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [skippingSetup, setSkippingSetup] = useState(false);
   const isEdit = Boolean(profile?.professionalCategory);
+
+  async function handleDontShowAgain() {
+    setSkippingSetup(true);
+    try {
+      localStorage.setItem("klick_skip_setup", "1");
+      document.cookie = "klick_skip_setup=1; path=/; max-age=31536000; SameSite=Lax";
+      await fetch("/api/auth/skip-setup", { method: "POST" }).catch(() => null);
+      toast.success("Setup skipped. You won't be redirected here on login.");
+      router.push(isEdit ? "/professional-profile" : "/professional-home");
+    } catch {
+      router.push(isEdit ? "/professional-profile" : "/professional-home");
+    } finally {
+      setSkippingSetup(false);
+    }
+  }
   const segmentRootCategory = categories.find(
     (item) => item.parentId === null && item.segment === segment,
   );
@@ -292,13 +308,25 @@ export function ProfessionalProfileSetup() {
       <header className="border-b border-border/70 bg-card/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Logo />
-          <Link
-            href={isEdit ? "/professional-profile" : "/professional/dashboard"}
-            className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Link>
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDontShowAgain}
+              disabled={skippingSetup}
+              className="text-xs sm:text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              {skippingSetup ? "Skipping..." : "Don't show again"}
+            </Button>
+            <Link
+              href={isEdit ? "/professional-profile" : "/professional/dashboard"}
+              className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Link>
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">

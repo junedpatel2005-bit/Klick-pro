@@ -241,9 +241,11 @@ export function ClientMyInfoPage({ data }: { data: ClientAccountSummaryResponse 
   // Save primary address & location
   async function handleSaveAddress(e: React.FormEvent) {
     e.preventDefault();
-    const finalAddress = (draftManualAddress.trim() || draftAddress.trim()).trim();
+    const enteredAddr = (draftManualAddress.trim() || draftAddress.trim()).trim();
+    const finalAddress =
+      enteredAddr || [draftCity, draftState].filter(Boolean).join(", ").trim();
     if (!finalAddress) {
-      toast.error("Please provide a valid address.");
+      toast.error("Please provide a valid address or select one on the map.");
       return;
     }
     setSavingAddress(true);
@@ -299,9 +301,15 @@ export function ClientMyInfoPage({ data }: { data: ClientAccountSummaryResponse 
   // Save or Update saved location
   async function handleSaveSavedLocation(e: React.FormEvent) {
     e.preventDefault();
-    const finalAddress = (locManualAddress.trim() || locAddress.trim()).trim();
-    if (!locLabel.trim() || !finalAddress) {
-      toast.error("Please provide both label and address.");
+    const enteredAddr = (locManualAddress.trim() || locAddress.trim()).trim();
+    const finalAddress =
+      enteredAddr || [locCity, locState].filter(Boolean).join(", ").trim();
+    if (!locLabel.trim()) {
+      toast.error("Please enter a location label (e.g. Home, Office).");
+      return;
+    }
+    if (!finalAddress) {
+      toast.error("Please enter or select an address on the map.");
       return;
     }
     setSavingLocation(true);
@@ -722,6 +730,9 @@ export function ClientMyInfoPage({ data }: { data: ClientAccountSummaryResponse 
                           setDraftAddress(addr);
                           setDraftManualAddress(addr);
                         }}
+                        onManualAddressChange={(addr) => {
+                          setDraftManualAddress(addr);
+                        }}
                         onLocationChange={(newState, newCity) => {
                           if (newState) setDraftState(newState);
                           if (newCity) setDraftCity(newCity);
@@ -771,10 +782,9 @@ export function ClientMyInfoPage({ data }: { data: ClientAccountSummaryResponse 
                       </Label>
                       <Input
                         id="primaryManualAddress"
-                        value={draftManualAddress}
+                        value={draftManualAddress || draftAddress}
                         onChange={(e) => setDraftManualAddress(e.target.value)}
                         placeholder="Flat / House no., building name, street, area, PIN code"
-                        required
                       />
                       <p className="text-[11px] text-muted-foreground">
                         Type your precise door, flat, or building number to accompany the map
@@ -967,6 +977,9 @@ export function ClientMyInfoPage({ data }: { data: ClientAccountSummaryResponse 
                           setLocAddress(addr);
                           setLocManualAddress(addr);
                         }}
+                        onManualAddressChange={(addr) => {
+                          setLocManualAddress(addr);
+                        }}
                         onLocationChange={(newState, newCity) => {
                           if (newState) setLocState(newState);
                           if (newCity) setLocCity(newCity);
@@ -1016,10 +1029,9 @@ export function ClientMyInfoPage({ data }: { data: ClientAccountSummaryResponse 
                       </Label>
                       <Input
                         id="locManualAddress"
-                        value={locManualAddress}
+                        value={locManualAddress || locAddress}
                         onChange={(e) => setLocManualAddress(e.target.value)}
                         placeholder="Flat / House no., street, area, PIN code"
-                        required
                       />
                     </div>
 

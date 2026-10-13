@@ -46,7 +46,23 @@ export function ClientProfileSetup() {
   const [error, setError] = useState<string | null>(null);
   const [showSetupReminder, setShowSetupReminder] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
+  const [skippingSetup, setSkippingSetup] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleDontShowAgain() {
+    setSkippingSetup(true);
+    try {
+      localStorage.setItem("klick_skip_setup", "1");
+      document.cookie = "klick_skip_setup=1; path=/; max-age=31536000; SameSite=Lax";
+      await fetch("/api/auth/skip-setup", { method: "POST" }).catch(() => null);
+      toast.success("Setup skipped. You won't be redirected here on login.");
+      router.push("/dashboard");
+    } catch {
+      router.push("/dashboard");
+    } finally {
+      setSkippingSetup(false);
+    }
+  }
 
   useEffect(() => {
     if (searchParams.get("profileSetup") !== "1") return;
@@ -195,13 +211,25 @@ export function ClientProfileSetup() {
       <header className="border-b border-border/70 bg-card/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Logo />
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Link>
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDontShowAgain}
+              disabled={skippingSetup}
+              className="text-xs sm:text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              {skippingSetup ? "Skipping..." : "Don't show again"}
+            </Button>
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Link>
+          </div>
         </div>
       </header>
 

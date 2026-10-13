@@ -68,6 +68,42 @@ function publicAppOrigin(request: NextRequest) {
 
   return request.nextUrl.origin.replace("0.0.0.0", "localhost");
 }
+
+function getAuthRedirect(
+  user: {
+    role: string;
+    emailVerifiedAt: Date | null;
+    lastLoginAt: Date | null;
+    professionalCategory?: string | null;
+    professionalLatitude?: number | null;
+    professionalLongitude?: number | null;
+  },
+  hasClientProfile: boolean,
+  skipSetupCookie: boolean,
+): string {
+  if (user.role === "ADMIN") return "/admin";
+  if (!user.emailVerifiedAt) return "/verify";
+
+  const isReturningOrSkipped = Boolean(user.lastLoginAt) || skipSetupCookie;
+
+  if (user.role === "PROFESSIONAL") {
+    const hasProProfile =
+      Boolean(user.professionalCategory) &&
+      user.professionalLatitude !== null &&
+      user.professionalLongitude !== null;
+    if (isReturningOrSkipped || hasProProfile) {
+      return "/professional-home";
+    }
+    return "/professional/setup?profileSetup=1";
+  }
+
+  // Client role
+  if (isReturningOrSkipped || hasClientProfile) {
+    return "/dashboard";
+  }
+  return "/client/setup?profileSetup=1";
+}
+
 async function createEmailVerificationToken(userId: number) {
   const raw = randomBytes(32).toString("hex");
   await db.apiToken.create({
@@ -494,25 +530,13 @@ export async function POST(
       return safe("Invalid email or password.", 401);
 
     const isFirstLogin = !user.lastLoginAt;
+    const skipSetupCookie = request.cookies.get("klick_skip_setup")?.value === "1";
     const hasClientProfile =
       user.role !== "CLIENT" ||
       Boolean(
         await db.clientProfile.findFirst({ where: { userId: user.id }, select: { id: true } }),
       );
-    const nextRedirect =
-      user.role === "ADMIN"
-        ? "/admin"
-        : !user.emailVerifiedAt
-          ? "/verify"
-          : user.role === "PROFESSIONAL"
-            ? user.professionalCategory &&
-              user.professionalLatitude !== null &&
-              user.professionalLongitude !== null
-              ? "/professional-home"
-              : "/professional/setup?profileSetup=1"
-            : hasClientProfile
-              ? "/dashboard"
-              : "/client/setup?profileSetup=1";
+    const nextRedirect = getAuthRedirect(user, hasClientProfile, skipSetupCookie);
 
     if (!user.emailVerifiedAt) {
       const response = NextResponse.json(
@@ -604,22 +628,13 @@ export async function POST(
       return safe("Invalid phone number or verification code.", 401);
     const result = await verifyPhoneOtp(parsed.data.phone, parsed.data.code, user.role);
     if (!result.ok) return safe(result.error, result.status);
+    const skipSetupCookie = request.cookies.get("klick_skip_setup")?.value === "1";
     const hasClientProfile =
       user.role !== "CLIENT" ||
       Boolean(
         await db.clientProfile.findFirst({ where: { userId: user.id }, select: { id: true } }),
       );
-    const nextRedirect = !user.emailVerifiedAt
-      ? "/verify"
-      : user.role === "PROFESSIONAL"
-        ? user.professionalCategory &&
-          user.professionalLatitude !== null &&
-          user.professionalLongitude !== null
-          ? "/professional-home"
-          : "/professional/setup?profileSetup=1"
-        : hasClientProfile
-          ? "/dashboard"
-          : "/client/setup?profileSetup=1";
+    const nextRedirect = getAuthRedirect(user, hasClientProfile, skipSetupCookie);
     if (!user.emailVerifiedAt)
       return NextResponse.json(
         {
@@ -656,22 +671,13 @@ export async function POST(
       !(await bcrypt.compare(parsed.data.password, user.passwordHash))
     )
       return safe("Invalid phone number or password.", 401);
+    const skipSetupCookie = request.cookies.get("klick_skip_setup")?.value === "1";
     const hasClientProfile =
       user.role !== "CLIENT" ||
       Boolean(
         await db.clientProfile.findFirst({ where: { userId: user.id }, select: { id: true } }),
       );
-    const nextRedirect = !user.emailVerifiedAt
-      ? "/verify"
-      : user.role === "PROFESSIONAL"
-        ? user.professionalCategory &&
-          user.professionalLatitude !== null &&
-          user.professionalLongitude !== null
-          ? "/professional-home"
-          : "/professional/setup?profileSetup=1"
-        : hasClientProfile
-          ? "/dashboard"
-          : "/client/setup?profileSetup=1";
+    const nextRedirect = getAuthRedirect(user, hasClientProfile, skipSetupCookie);
     const response = NextResponse.json(
       !user.emailVerifiedAt
         ? {
@@ -913,16 +919,20 @@ export async function POST(
           data: { emailVerifiedAt: new Date() },
         }),
       ]);
+      const skipSetupCookie = request.cookies.get("klick_skip_setup")?.value === "1";
+      const hasClientProfile =
+        user.role !== "CLIENT" ||
+        Boolean(
+          await db.clientProfile.findFirst({ where: { userId: user.id }, select: { id: true } }),
+        );
+      const nextRedirect = getAuthRedirect(
+        { ...user, emailVerifiedAt: new Date() },
+        hasClientProfile,
+        skipSetupCookie,
+      );
       const response = NextResponse.json({
         success: true,
-        redirect:
-          user.role === "CLIENT"
-            ? "/client/setup?profileSetup=1"
-            : user.professionalCategory &&
-                user.professionalLatitude !== null &&
-                user.professionalLongitude !== null
-              ? "/professional-home"
-              : "/professional/setup?profileSetup=1",
+        redirect: nextRedirect,
       });
       response.cookies.set(
         sessionCookie,
