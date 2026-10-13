@@ -13,6 +13,7 @@ import {
 } from "@/lib/wallet-ledger";
 import { getPlatformCommissionRate } from "@/lib/platform-settings";
 import { emitRealtimeProjectUpdate } from "@/lib/realtime";
+import { processMilestoneValidityReleases } from "@/lib/milestone-validity";
 
 async function getAdminSession(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -635,6 +636,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       emitRealtimeProjectUpdate([dispute.clientId, dispute.professionalId], {
         projectId: dispute.trackingId,
       });
+      await processMilestoneValidityReleases(dispute.trackingId).catch(() => {});
       return NextResponse.json({ dispute: updatedDispute });
     }
 
@@ -656,6 +658,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     emitRealtimeProjectUpdate([dispute.clientId, dispute.professionalId], {
       projectId: dispute.trackingId,
     });
+    if (nextStatus === "RESOLVED") {
+      await processMilestoneValidityReleases(dispute.trackingId).catch(() => {});
+    }
     return NextResponse.json({ dispute: updated });
   } catch (error) {
     console.error("admin.dispute.adjudicate.failed", error);

@@ -100,10 +100,80 @@ export async function POST(request: NextRequest) {
           throw new Error("This milestone is already being processed or has already been funded.");
 
         const autopay = await isAutopayEnabled();
-        const hasValidityHold = autopay && (milestone.validityDays ?? 0) > 0;
+        const hasValidityHold = (milestone.validityDays ?? 0) > 0;
         let releaseAtDate: Date | null = null;
 
-        if (autopay) {
+        if (hasValidityHold) {
+          // Validity Hold (e.g. 3, 5, or 7 days):
+          // DO NOT CUT MONEY FROM CLIENT WALLET TODAY!
+          // Client wallet balance remains untouched today.
+          // Money will be automatically debited and released after validityDays elapse,
+          // provided no dispute is open.
+          releaseAtDate = new Date(Date.now() + (milestone.validityDays ?? 0) * 86400000);
+          await tx.payment.update({
+            where: { id: payment.id },
+            data: {
+              status: "PENDING",
+              capturedAt: null,
+              professionalPayoutAmount: money.professionalPayoutAmount,
+              commissionAmount: money.professionalFeeAmount,
+              adminNetAmount: money.adminNetAmount,
+            },
+          });
+          await tx.projectMilestone.update({
+            where: { id: milestone.id },
+            data: {
+              status: "APPROVED",
+              approvedAt: new Date(),
+              releaseAt: releaseAtDate,
+              autoReleaseStatus: "PENDING",
+            },
+          });
+          await tx.projectTimelineEvent.create({
+            data: {
+              trackingId: project.id,
+              actorRole: "CLIENT",
+              actorId: project.clientId,
+              type: "MILESTONE_APPROVED",
+              title: `Milestone approved (${milestone.validityDays}-day inspection period)`,
+              description: `Client approved "${milestone.title}". ${milestone.validityDays}-day inspection active. No funds were debited today; payment will be deducted and released after ${milestone.validityDays} days if no dispute is opened.`,
+            },
+          });
+
+          // Automatically start the next upcoming milestone so work can continue seamlessly
+          const nextMilestone = await tx.projectMilestone.findFirst({
+            where: {
+              trackingId: project.id,
+              id: { not: milestone.id },
+              status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+            },
+            orderBy: [{ id: "asc" }],
+          });
+          if (nextMilestone) {
+            await tx.projectMilestone.update({
+              where: { id: nextMilestone.id },
+              data: { status: "IN_PROGRESS" },
+            });
+            await tx.projectTracking.update({
+              where: { id: project.id },
+              data: { status: "IN_PROGRESS", currentStage: nextMilestone.title },
+            });
+          } else {
+            const remainingUnapproved = await tx.projectMilestone.count({
+              where: {
+                trackingId: project.id,
+                status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
+              },
+            });
+            if (remainingUnapproved === 0) {
+              await tx.projectTracking.update({
+                where: { id: project.id },
+                data: { status: "IN_PROGRESS", currentStage: null },
+              });
+            }
+          }
+        } else if (autopay) {
+          // Instant Auto-Pay (Validity: None / 0 days):
           // Debit from client wallet into platform escrow
           await fundMilestoneFromWallet(tx, {
             paymentId: payment.id,
@@ -112,71 +182,36 @@ export async function POST(request: NextRequest) {
             baseAmount: milestone.amount,
             milestoneId: milestone.id,
             customCommissionRate: commissionRate,
+            allowNegativeBalance: true,
           });
 
-          if (!hasValidityHold) {
-            // Instant Auto-Pay (Validity: None):
-            // Immediately add to professional wallet directly
-            await releaseMilestoneToProfessional(tx, {
-              paymentId: payment.id,
-              clientId: project.clientId,
-              professionalId: project.professionalId,
-              baseAmount: milestone.amount,
-              milestoneId: milestone.id,
-              customCommissionRate: commissionRate,
-            });
-            await tx.payment.update({
-              where: { id: payment.id },
-              data: {
-                status: "COMPLETED",
-                capturedAt: new Date(),
-                professionalPayoutAmount: money.professionalPayoutAmount,
-                commissionAmount: money.professionalFeeAmount,
-                adminNetAmount: money.adminNetAmount,
-              },
-            });
-            await tx.projectMilestone.update({
-              where: { id: milestone.id },
-              data: {
-                status: "APPROVED",
-                approvedAt: new Date(),
-                autoReleaseStatus: "RELEASED",
-              },
-            });
-          } else {
-            // Validity Hold (Validity: 3, 5, or 7 days):
-            // Keep funds secured in platform escrow until validity expires
-            releaseAtDate = new Date(Date.now() + (milestone.validityDays ?? 0) * 86400000);
-            await tx.payment.update({
-              where: { id: payment.id },
-              data: {
-                status: "FUNDED",
-                capturedAt: new Date(),
-                professionalPayoutAmount: money.professionalPayoutAmount,
-                commissionAmount: money.professionalFeeAmount,
-                adminNetAmount: money.adminNetAmount,
-              },
-            });
-            await tx.projectMilestone.update({
-              where: { id: milestone.id },
-              data: {
-                status: "APPROVED",
-                approvedAt: new Date(),
-                releaseAt: releaseAtDate,
-                autoReleaseStatus: "PENDING",
-              },
-            });
-            await tx.projectTimelineEvent.create({
-              data: {
-                trackingId: project.id,
-                actorRole: "CLIENT",
-                actorId: project.clientId,
-                type: "MILESTONE_APPROVED",
-                title: `Milestone approved (${milestone.validityDays}-day inspection)`,
-                description: `Client approved "${milestone.title}". Funds are secured in platform escrow and will auto-release in ${milestone.validityDays} days if no dispute is opened.`,
-              },
-            });
-          }
+          // Immediately credit to professional wallet directly
+          await releaseMilestoneToProfessional(tx, {
+            paymentId: payment.id,
+            clientId: project.clientId,
+            professionalId: project.professionalId,
+            baseAmount: milestone.amount,
+            milestoneId: milestone.id,
+            customCommissionRate: commissionRate,
+          });
+          await tx.payment.update({
+            where: { id: payment.id },
+            data: {
+              status: "COMPLETED",
+              capturedAt: new Date(),
+              professionalPayoutAmount: money.professionalPayoutAmount,
+              commissionAmount: money.professionalFeeAmount,
+              adminNetAmount: money.adminNetAmount,
+            },
+          });
+          await tx.projectMilestone.update({
+            where: { id: milestone.id },
+            data: {
+              status: "APPROVED",
+              approvedAt: new Date(),
+              autoReleaseStatus: "RELEASED",
+            },
+          });
 
           // Automatically start the next upcoming milestone so work can continue seamlessly
           const nextMilestone = await tx.projectMilestone.findFirst({
@@ -252,39 +287,56 @@ export async function POST(request: NextRequest) {
           update: {},
         });
 
-        // 1. Entry 1: Milestone money transaction
-        await tx.projectTransaction.create({
-          data: {
-            trackingId: project.id,
-            milestoneId: milestone.id,
-            clientId: project.clientId,
-            professionalId: project.professionalId,
-            amount: milestone.amount,
-            currency: "INR",
-            type: autopay ? "WALLET_MILESTONE_COMPLETED" : "WALLET_MILESTONE_PENDING_APPROVAL",
-            status: autopay ? "COMPLETED" : "PENDING",
-            description: autopay
-              ? `Milestone payment: ${milestone.title}`
-              : `Milestone payment (pending approval): ${milestone.title}`,
-          },
-        });
-
-        // 2. Entry 2: Platform commission transaction
-        const feeAmount = money.professionalFeeAmount || money.clientFeeAmount;
-        if (feeAmount > 0) {
+        if (hasValidityHold) {
+          // Validity Hold: payment will be deducted and recorded upon validity completion
           await tx.projectTransaction.create({
             data: {
               trackingId: project.id,
               milestoneId: milestone.id,
               clientId: project.clientId,
               professionalId: project.professionalId,
-              amount: feeAmount,
+              amount: milestone.amount,
               currency: "INR",
-              type: "PLATFORM_COMMISSION",
-              status: autopay ? "COMPLETED" : "PENDING",
-              description: `Platform commission (10%): ${milestone.title}`,
+              type: "WALLET_MILESTONE_PENDING_APPROVAL",
+              status: "PENDING",
+              description: `Milestone approved (${milestone.validityDays}-day inspection period): ${milestone.title}`,
             },
           });
+        } else {
+          // 1. Entry 1: Milestone money transaction
+          await tx.projectTransaction.create({
+            data: {
+              trackingId: project.id,
+              milestoneId: milestone.id,
+              clientId: project.clientId,
+              professionalId: project.professionalId,
+              amount: milestone.amount,
+              currency: "INR",
+              type: autopay ? "WALLET_MILESTONE_COMPLETED" : "WALLET_MILESTONE_PENDING_APPROVAL",
+              status: autopay ? "COMPLETED" : "PENDING",
+              description: autopay
+                ? `Milestone payment: ${milestone.title}`
+                : `Milestone payment (pending approval): ${milestone.title}`,
+            },
+          });
+
+          // 2. Entry 2: Platform commission transaction
+          const feeAmount = money.professionalFeeAmount || money.clientFeeAmount;
+          if (feeAmount > 0) {
+            await tx.projectTransaction.create({
+              data: {
+                trackingId: project.id,
+                milestoneId: milestone.id,
+                clientId: project.clientId,
+                professionalId: project.professionalId,
+                amount: feeAmount,
+                currency: "INR",
+                type: "PLATFORM_COMMISSION",
+                status: autopay ? "COMPLETED" : "PENDING",
+                description: `Platform commission (10%): ${milestone.title}`,
+              },
+            });
+          }
         }
 
         // Disputes are never settled by paying a milestone. Paying one milestone
@@ -343,7 +395,7 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({
       ok: true,
-      charged: money.clientChargeAmount,
+      charged: result.hasValidityHold ? 0 : money.clientChargeAmount,
       milestoneAmount: money.baseAmount,
       professionalReceives: money.professionalPayoutAmount,
       remainingBalance: result.remainingBalance,
@@ -354,9 +406,9 @@ export async function POST(request: NextRequest) {
       disputeOpen: result.openDisputes > 0,
       message:
         result.openDisputes > 0
-          ? `Milestone paid with ₹${money.baseAmount.toLocaleString("en-IN")}. ${result.openDisputes} dispute${result.openDisputes === 1 ? " is" : "s are"} still open and must be settled by an admin.`
+          ? `Milestone approved with ₹${money.baseAmount.toLocaleString("en-IN")}. ${result.openDisputes} dispute${result.openDisputes === 1 ? " is" : "s are"} still open and must be settled by an admin.`
           : result.hasValidityHold
-            ? `Milestone approved and funded with ₹${money.baseAmount.toLocaleString("en-IN")}. Funds are secured in platform escrow and will automatically release to the professional in ${result.validityDays} days if no dispute is opened.`
+            ? `Milestone approved with ${result.validityDays}-day inspection period. No money has been deducted from your wallet today. ₹${money.baseAmount.toLocaleString("en-IN")} will be automatically deducted and paid to the professional after ${result.validityDays} days if no dispute is opened.`
             : result.autopay
               ? `Milestone paid with ₹${money.baseAmount.toLocaleString("en-IN")}. ₹${money.professionalPayoutAmount.toLocaleString("en-IN")} was instantly credited to the professional.`
               : `Milestone paid with ₹${money.baseAmount.toLocaleString("en-IN")}. Funds held in escrow awaiting admin release.`,

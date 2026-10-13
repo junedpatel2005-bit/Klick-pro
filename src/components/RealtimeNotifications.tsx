@@ -1,15 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchCurrentUser } from "@/lib/current-user";
 import { io } from "socket.io-client";
-import { toast } from "sonner";
 import {
   AlertTriangle,
   ArrowRight,
   BellRing,
-  CheckCheck,
   CircleCheck,
   FileText,
   Flag,
@@ -17,10 +15,6 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import {
-  dismissAllNotificationsWithAnimation,
-  dismissSingleNotificationWithAnimation,
-} from "@/lib/notification-dismiss";
 import { fetchPortalNotifications, invalidateNotificationsCache } from "@/lib/notifications-client";
 import { capitalizeFirst } from "@/lib/utils";
 
@@ -34,6 +28,12 @@ type RealtimeNotification = {
   readAt?: string | null;
 };
 
+type ActiveToast = {
+  key: string;
+  notification: RealtimeNotification;
+  timerId: ReturnType<typeof setTimeout>;
+};
+
 function getNotificationVisual(type = "", title = "") {
   const upper = `${type} ${title}`.toUpperCase();
   if (upper.includes("DISPUTE")) {
@@ -41,8 +41,6 @@ function getNotificationVisual(type = "", title = "") {
       Icon: AlertTriangle,
       iconClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20",
       accentGradient: "bg-gradient-to-r from-amber-500/50 via-amber-500 to-amber-500/50",
-      pulseColor: "bg-amber-500",
-      dotColor: "bg-amber-500",
       categoryLabel: "Dispute Update",
     };
   }
@@ -51,8 +49,6 @@ function getNotificationVisual(type = "", title = "") {
       Icon: ShieldCheck,
       iconClass: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20",
       accentGradient: "bg-gradient-to-r from-blue-500/50 via-blue-500 to-blue-500/50",
-      pulseColor: "bg-blue-500",
-      dotColor: "bg-blue-500",
       categoryLabel: "Verification Status",
     };
   }
@@ -66,8 +62,6 @@ function getNotificationVisual(type = "", title = "") {
       Icon: Wallet,
       iconClass: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
       accentGradient: "bg-gradient-to-r from-emerald-500/50 via-emerald-500 to-emerald-500/50",
-      pulseColor: "bg-emerald-500",
-      dotColor: "bg-emerald-500",
       categoryLabel: "Wallet & Payment",
     };
   }
@@ -76,8 +70,6 @@ function getNotificationVisual(type = "", title = "") {
       Icon: Flag,
       iconClass: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/20",
       accentGradient: "bg-gradient-to-r from-purple-500/50 via-purple-500 to-purple-500/50",
-      pulseColor: "bg-purple-500",
-      dotColor: "bg-purple-500",
       categoryLabel: "Milestone Alert",
     };
   }
@@ -86,8 +78,6 @@ function getNotificationVisual(type = "", title = "") {
       Icon: FileText,
       iconClass: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20",
       accentGradient: "bg-gradient-to-r from-indigo-500/50 via-indigo-500 to-indigo-500/50",
-      pulseColor: "bg-indigo-500",
-      dotColor: "bg-indigo-500",
       categoryLabel: "Project Opportunity",
     };
   }
@@ -95,8 +85,6 @@ function getNotificationVisual(type = "", title = "") {
     Icon: CircleCheck,
     iconClass: "bg-primary/15 text-primary border border-primary/20",
     accentGradient: "bg-gradient-to-r from-primary/50 via-primary to-primary/50",
-    pulseColor: "bg-primary",
-    dotColor: "bg-primary",
     categoryLabel: "Platform Notification",
   };
 }
@@ -107,207 +95,70 @@ export function RealtimeNotifications() {
   const seenNotifications = useRef(new Set<string>());
   const notificationsInitialized = useRef(false);
 
-  const showNotification = useCallback(
+  const [activeQueue, setActiveQueue] = useState<ActiveToast[]>([]);
+
+  const notificationKey = useCallback((notification: RealtimeNotification) => {
+    return [notification.type, notification.title, notification.description, notification.href].join("|");
+  }, []);
+
+  const dismissFromScreen = useCallback((key: string) => {
+    setActiveQueue((prev) => {
+      const match = prev.find((item) => item.key === key);
+      if (match?.timerId) clearTimeout(match.timerId);
+      return prev.filter((item) => item.key !== key);
+    });
+  }, []);
+
+  const handleCancelAllFromScreen = useCallback(() => {
+    // Clear all notifications from the screen state immediately.
+    // STRICT CONSTRAINT: "not read only remove" -> No PATCH API call is made,
+    // notifications remain unread in the database and user inbox.
+    setActiveQueue((prev) => {
+      prev.forEach((item) => {
+        if (item.timerId) clearTimeout(item.timerId);
+      });
+      return [];
+    });
+  }, []);
+
+  const enqueueNotification = useCallback(
     (notification: RealtimeNotification) => {
-      let actionLabel = "View";
-      if (notification.href?.includes("/project/")) actionLabel = "View Project";
-      else if (notification.href?.includes("/job/")) actionLabel = "Review Job";
-      else if (notification.type.includes("PROPOSAL")) actionLabel = "Review Proposal";
-      else if (notification.type.includes("DISPUTE")) actionLabel = "Check Dispute";
-      else if (notification.type.includes("VERIFICATION")) actionLabel = "Inspect Status";
+      const key =
+        notification.id != null ? `id:${notification.id}` : notificationKey(notification);
 
-      const visual = getNotificationVisual(notification.type, notification.title);
-      const VisualIcon = visual.Icon;
+      setActiveQueue((prev) => {
+        if (prev.some((item) => item.key === key)) return prev;
 
-      let titleContent: React.ReactNode = capitalizeFirst(notification.title);
-      if (notification.title.includes(" · ")) {
-        const [projectName, ...actionParts] = notification.title.split(" · ");
-        titleContent = (
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="font-bold text-foreground text-sm leading-snug break-words line-clamp-2">
-              {capitalizeFirst(projectName)}
-            </span>
-            <span className="text-xs font-semibold text-primary break-words line-clamp-1">
-              {capitalizeFirst(actionParts.join(" · "))}
-            </span>
-          </div>
-        );
-      } else {
-        titleContent = (
-          <span className="font-bold text-foreground text-sm leading-snug break-words line-clamp-2">
-            {capitalizeFirst(notification.title)}
-          </span>
-        );
-      }
+        const timerId = setTimeout(() => {
+          dismissFromScreen(key);
+        }, 8500);
 
-      toast.custom(
-        (t) => (
-          <div
-            data-notification-toast="true"
-            data-notification-id={String(t)}
-            className="group relative flex w-full max-w-sm items-start gap-3 rounded-xl border border-border/80 bg-background/95 p-3.5 shadow-lg shadow-black/5 dark:shadow-black/30 backdrop-blur-xl transition-all duration-200 hover:border-foreground/20 hover:shadow-xl"
-          >
-            {/* Minimal Icon Badge */}
-            <div
-              className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg shadow-xs ${visual.iconClass}`}
-            >
-              <VisualIcon className="h-4 w-4" />
-            </div>
-
-            {/* Clickable Content Body */}
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                if (notification.href) {
-                  void dismissSingleNotificationWithAnimation(
-                    t,
-                    notification.id,
-                    notification.href,
-                    (target) => router.push(target),
-                  );
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && notification.href) {
-                  void dismissSingleNotificationWithAnimation(
-                    t,
-                    notification.id,
-                    notification.href,
-                    (target) => router.push(target),
-                  );
-                }
-              }}
-              className={`min-w-0 flex-1 text-left ${notification.href ? "cursor-pointer" : ""}`}
-            >
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-                  {visual.categoryLabel}
-                </span>
-                <span className="text-[10px] text-muted-foreground/60">· Just now</span>
-              </div>
-              <div className="mt-0.5">{titleContent}</div>
-              {notification.description && (
-                <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground leading-snug">
-                  {capitalizeFirst(notification.description)}
-                </p>
-              )}
-              {notification.href && (
-                <div className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-primary group-hover:underline">
-                  <span>{actionLabel}</span>
-                  <ArrowRight className="h-3 w-3" />
-                </div>
-              )}
-            </div>
-
-            {/* Subtle Close Button */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                void dismissSingleNotificationWithAnimation(t, notification.id);
-              }}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-              aria-label="Dismiss notification"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ),
-        { duration: 5500, unstyled: true },
-      );
+        return [{ key, notification, timerId }, ...prev];
+      });
     },
-    [router],
+    [dismissFromScreen, notificationKey],
   );
 
-  const showGroupedNotification = useCallback(
+  const enqueueBatch = useCallback(
     (notifications: RealtimeNotification[]) => {
       if (!notifications.length) return;
-      const first = notifications[0];
-      if (!first) return;
-      if (notifications.length === 1) {
-        showNotification(first);
-        return;
-      }
-
-      const latest = first;
-      const totalCount = notifications.length;
-
-      toast.custom(
-        (t) => (
-          <div
-            data-notification-toast="true"
-            data-notification-id={String(t)}
-            className="group relative flex w-full max-w-sm items-start gap-3 rounded-xl border border-border/80 bg-background/95 p-3.5 shadow-lg shadow-black/5 dark:shadow-black/30 backdrop-blur-xl transition-all duration-200 hover:border-foreground/20 hover:shadow-xl"
-          >
-            <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary border border-primary/20 shadow-xs">
-              <BellRing className="h-4 w-4" />
-            </div>
-
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                void dismissSingleNotificationWithAnimation(
-                  t,
-                  undefined,
-                  "/notifications",
-                  (target) => router.push(target),
-                );
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  void dismissSingleNotificationWithAnimation(
-                    t,
-                    undefined,
-                    "/notifications",
-                    (target) => router.push(target),
-                  );
-                }
-              }}
-              className="min-w-0 flex-1 text-left cursor-pointer"
-            >
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-semibold tracking-wide text-primary uppercase">
-                  Notifications ({totalCount})
-                </span>
-                <span className="text-[10px] text-muted-foreground/60">· Just now</span>
-              </div>
-              <p className="mt-0.5 text-sm font-semibold text-foreground truncate">
-                {capitalizeFirst(latest.title)}
-              </p>
-              {latest.description && (
-                <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-                  {capitalizeFirst(latest.description)}
-                </p>
-              )}
-              <div className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-primary group-hover:underline">
-                <span>View all ({totalCount})</span>
-                <ArrowRight className="h-3 w-3" />
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                void dismissSingleNotificationWithAnimation(t);
-              }}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-              aria-label="Dismiss notification"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ),
-        { duration: 6500, unstyled: true },
-      );
+      setActiveQueue((prev) => {
+        const next = [...prev];
+        for (const notification of notifications) {
+          const key =
+            notification.id != null ? `id:${notification.id}` : notificationKey(notification);
+          if (!next.some((item) => item.key === key)) {
+            const timerId = setTimeout(() => {
+              dismissFromScreen(key);
+            }, 8500);
+            next.unshift({ key, notification, timerId });
+          }
+        }
+        return next;
+      });
     },
-    [showNotification, router],
+    [dismissFromScreen, notificationKey],
   );
-
-  const notificationKey = (notification: RealtimeNotification) =>
-    [notification.type, notification.title, notification.description, notification.href].join("|");
 
   useEffect(() => {
     void fetchCurrentUser()
@@ -334,10 +185,8 @@ export function RealtimeNotifications() {
           }
         }
         notificationsInitialized.current = true;
-        if (newUnread.length > 1) {
-          showGroupedNotification(newUnread);
-        } else if (newUnread.length === 1 && newUnread[0]) {
-          showNotification(newUnread[0]);
+        if (newUnread.length > 0) {
+          enqueueBatch(newUnread);
         }
       } catch {
         // The inbox remains available if the background refresh is unavailable.
@@ -369,7 +218,6 @@ export function RealtimeNotifications() {
     let lastActiveCheck = 0;
     const onActiveChange = () => {
       const now = Date.now();
-      // Only check missed if at least 30s elapsed and socket is not currently connected
       if (document.visibilityState === "visible" && !socket.connected) {
         if (now - lastActiveCheck > 30000) {
           lastActiveCheck = now;
@@ -381,10 +229,11 @@ export function RealtimeNotifications() {
     document.addEventListener("visibilitychange", onActiveChange);
 
     const onNotification = (notification: RealtimeNotification) => {
-      const key = notification.id != null ? `id:${notification.id}` : notificationKey(notification);
+      const key =
+        notification.id != null ? `id:${notification.id}` : notificationKey(notification);
       if (seenNotifications.current.has(key)) return;
       seenNotifications.current.add(key);
-      showNotification(notification);
+      enqueueNotification(notification);
       invalidateNotificationsCache();
       window.dispatchEvent(new CustomEvent("servio:notification"));
     };
@@ -429,7 +278,159 @@ export function RealtimeNotifications() {
       window.removeEventListener("focus", onActiveChange);
       document.removeEventListener("visibilitychange", onActiveChange);
     };
-  }, [showNotification, showGroupedNotification]);
+  }, [enqueueNotification, enqueueBatch, notificationKey]);
 
-  return null;
+  if (activeQueue.length === 0) return null;
+
+  // Max 3 visible cards on screen to prevent screen flooding (e.g. when 11 arrive)
+  const MAX_VISIBLE = 3;
+  const visibleItems = activeQueue.slice(0, MAX_VISIBLE);
+  const overflowCount = Math.max(0, activeQueue.length - MAX_VISIBLE);
+
+  return (
+    <aside
+      aria-label="Real-time notifications"
+      className="fixed top-20 right-4 z-[9999] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none select-none transition-all duration-300"
+    >
+      {visibleItems.map(({ key, notification }) => {
+        let actionLabel = "View";
+        if (notification.href?.includes("/project/")) actionLabel = "View Project";
+        else if (notification.href?.includes("/job/")) actionLabel = "Review Job";
+        else if (notification.type.includes("PROPOSAL")) actionLabel = "Review Proposal";
+        else if (notification.type.includes("DISPUTE")) actionLabel = "Check Dispute";
+        else if (notification.type.includes("VERIFICATION")) actionLabel = "Inspect Status";
+
+        const visual = getNotificationVisual(notification.type, notification.title);
+        const VisualIcon = visual.Icon;
+
+        let titleContent: React.ReactNode = capitalizeFirst(notification.title);
+        if (notification.title.includes(" · ")) {
+          const [projectName, ...actionParts] = notification.title.split(" · ");
+          titleContent = (
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="font-bold text-foreground text-sm leading-snug break-words line-clamp-2">
+                {capitalizeFirst(projectName)}
+              </span>
+              <span className="text-xs font-semibold text-primary break-words line-clamp-1">
+                {capitalizeFirst(actionParts.join(" · "))}
+              </span>
+            </div>
+          );
+        } else {
+          titleContent = (
+            <span className="font-bold text-foreground text-sm leading-snug break-words line-clamp-2">
+              {capitalizeFirst(notification.title)}
+            </span>
+          );
+        }
+
+        return (
+          <div
+            key={key}
+            data-notification-toast="true"
+            className="pointer-events-auto group relative flex w-full items-start gap-3 rounded-xl border border-border/80 bg-background/95 p-3.5 shadow-lg shadow-black/5 dark:shadow-black/30 backdrop-blur-xl transition-all duration-200 hover:border-foreground/20 hover:shadow-xl animate-in fade-in slide-in-from-top-2"
+          >
+            {/* Category Icon Badge */}
+            <div
+              className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg shadow-xs ${visual.iconClass}`}
+            >
+              <VisualIcon className="h-4 w-4" />
+            </div>
+
+            {/* Clickable Content Body */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                dismissFromScreen(key);
+                if (notification.href) {
+                  router.push(notification.href);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  dismissFromScreen(key);
+                  if (notification.href) {
+                    router.push(notification.href);
+                  }
+                }
+              }}
+              className={`min-w-0 flex-1 text-left ${notification.href ? "cursor-pointer" : ""}`}
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  {visual.categoryLabel}
+                </span>
+                <span className="text-[10px] text-muted-foreground/60">· Just now</span>
+              </div>
+              <div className="mt-0.5">{titleContent}</div>
+              {notification.description && (
+                <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground leading-snug">
+                  {capitalizeFirst(notification.description)}
+                </p>
+              )}
+              {notification.href && (
+                <div className="mt-1.5 flex items-center gap-1 text-[11px] font-semibold text-primary group-hover:underline">
+                  <span>{actionLabel}</span>
+                  <ArrowRight className="h-3 w-3" />
+                </div>
+              )}
+            </div>
+
+            {/* Remove from screen only (does not mark read) */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                dismissFromScreen(key);
+              }}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+              aria-label="Remove notification from screen"
+              title="Remove from screen"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        );
+      })}
+
+      {/* Overflow Summary when more than 3 notifications are queued (e.g. 11 notifications) */}
+      {overflowCount > 0 && (
+        <div className="pointer-events-auto rounded-xl border border-primary/25 bg-background/95 p-2.5 shadow-md backdrop-blur-xl transition hover:border-primary/50 animate-in fade-in slide-in-from-top-2">
+          <button
+            type="button"
+            onClick={() => {
+              handleCancelAllFromScreen();
+              router.push("/notifications");
+            }}
+            className="flex w-full items-center justify-between gap-2 text-xs font-semibold text-primary cursor-pointer"
+          >
+            <div className="flex items-center gap-1.5">
+              <BellRing className="h-3.5 w-3.5" />
+              <span>+{overflowCount} more notifications in your inbox</span>
+            </div>
+            <div className="flex items-center gap-1 text-[11px] hover:underline">
+              <span>View all</span>
+              <ArrowRight className="h-3 w-3" />
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* When 2 or more notifications are active, show Cancel button at the bottom (in last) */}
+      {activeQueue.length >= 2 && (
+        <div className="pointer-events-auto flex items-center justify-end pt-0.5 animate-in fade-in">
+          <button
+            type="button"
+            onClick={handleCancelAllFromScreen}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-background/95 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/80 shadow-md backdrop-blur-xl transition-all cursor-pointer"
+            title="Remove all notifications from screen without marking read"
+          >
+            <X className="h-3.5 w-3.5" />
+            <span>Cancel</span>
+          </button>
+        </div>
+      )}
+    </aside>
+  );
 }

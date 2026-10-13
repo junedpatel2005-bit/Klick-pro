@@ -1,6 +1,11 @@
 import "server-only";
 import { db } from "@/lib/db";
-import { releaseMilestoneToProfessional } from "@/lib/wallet-ledger";
+import {
+  calculateMilestoneMoney,
+  fundMilestoneFromWallet,
+  releaseMilestoneToProfessional,
+} from "@/lib/wallet-ledger";
+import { getPlatformCommissionRate } from "@/lib/platform-settings";
 import { notifyMilestonePayoutApproved } from "@/lib/marketplace-notifications";
 import { emitRealtimeProjectUpdate } from "@/lib/realtime";
 
@@ -16,7 +21,7 @@ export async function processMilestoneValidityReleases(trackingId?: number) {
         ...(trackingId ? { trackingId } : {}),
         validityDays: { gt: 0 },
         releaseAt: { lte: now },
-        autoReleaseStatus: "PENDING",
+        autoReleaseStatus: { in: ["PENDING", "PAUSED_DISPUTE"] },
       },
       include: {
         tracking: {
@@ -51,7 +56,13 @@ export async function processMilestoneValidityReleases(trackingId?: number) {
       });
 
       if (openDispute) {
-        // A dispute is open! Stop payment release until dispute is resolved.
+        // A dispute is open! Stop payment release and do NOT debit client wallet until dispute is resolved.
+        if (milestone.autoReleaseStatus !== "PAUSED_DISPUTE") {
+          await db.projectMilestone.update({
+            where: { id: milestone.id },
+            data: { autoReleaseStatus: "PAUSED_DISPUTE" },
+          }).catch(() => {});
+        }
         continue;
       }
 
@@ -61,7 +72,7 @@ export async function processMilestoneValidityReleases(trackingId?: number) {
           const claim = await tx.projectMilestone.updateMany({
             where: {
               id: milestone.id,
-              autoReleaseStatus: "PENDING",
+              autoReleaseStatus: { in: ["PENDING", "PAUSED_DISPUTE"] },
             },
             data: {
               autoReleaseStatus: "PROCESSING",
@@ -72,12 +83,28 @@ export async function processMilestoneValidityReleases(trackingId?: number) {
 
           const payment = milestone.payment;
           if (payment && payment.provider === "wallet" && payment.status !== "COMPLETED") {
+            const commissionRate = await getPlatformCommissionRate();
+            const money = calculateMilestoneMoney(milestone.amount, commissionRate);
+
+            // Step 1: Debit from client wallet (with negative balance enabled)
+            await fundMilestoneFromWallet(tx, {
+              paymentId: payment.id,
+              clientId: milestone.clientId,
+              professionalId: milestone.professionalId,
+              baseAmount: milestone.amount,
+              milestoneId: milestone.id,
+              customCommissionRate: commissionRate,
+              allowNegativeBalance: true,
+            });
+
+            // Step 2: Release to professional wallet
             await releaseMilestoneToProfessional(tx, {
               paymentId: payment.id,
               clientId: milestone.clientId,
               professionalId: milestone.professionalId,
               baseAmount: milestone.amount,
               milestoneId: milestone.id,
+              customCommissionRate: commissionRate,
             });
 
             await tx.payment.update({
@@ -85,6 +112,9 @@ export async function processMilestoneValidityReleases(trackingId?: number) {
               data: {
                 status: "COMPLETED",
                 capturedAt: new Date(),
+                professionalPayoutAmount: money.professionalPayoutAmount,
+                commissionAmount: money.professionalFeeAmount,
+                adminNetAmount: money.adminNetAmount,
               },
             });
           }

@@ -4097,8 +4097,10 @@ export default function SharedProjectTrackingPage() {
                 const clientCharge = offlinePayment
                   ? approvalMilestone.amount
                   : milestoneMoney.clientChargeAmount;
+                const hasValidity = (approvalMilestone.validityDays ?? 0) > 0;
                 const isInsufficient =
                   !offlinePayment &&
+                  !hasValidity &&
                   approvalWalletBalance !== null &&
                   approvalWalletBalance < clientCharge;
                 const shortAmount = isInsufficient
@@ -4110,10 +4112,12 @@ export default function SharedProjectTrackingPage() {
                     <div className="flex flex-col h-full">
                       <div className="border-b border-border/80 px-6 py-4 bg-muted/30">
                         <DialogTitle className="text-base font-semibold text-foreground">
-                          Payment Successful
+                          {hasValidity ? "Deliverable Approved" : "Payment Successful"}
                         </DialogTitle>
                         <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                          Milestone settled and released to {professional}.
+                          {hasValidity
+                            ? `${approvalMilestone.validityDays}-day inspection period active.`
+                            : `Milestone settled and released to ${professional}.`}
                         </DialogDescription>
                       </div>
                       <div className="p-6 overflow-y-auto space-y-4 text-center flex-1">
@@ -4127,17 +4131,21 @@ export default function SharedProjectTrackingPage() {
                         <div>
                           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                             <Sparkles className="h-3.5 w-3.5" />
-                            {offlinePayment
-                              ? "Milestone Approved & Paid! 🎉"
-                              : "Milestone Paid & Completed! 🎉"}
+                            {hasValidity
+                              ? `Deliverable Approved (${approvalMilestone.validityDays}-Day Inspection)! 🎉`
+                              : offlinePayment
+                                ? "Milestone Approved & Paid! 🎉"
+                                : "Milestone Paid & Completed! 🎉"}
                           </span>
                           <h3 className="mt-2 font-display text-2xl font-bold tracking-tight text-foreground">
-                            ₹{approvalSuccess.charged.toLocaleString("en-IN")}
+                            ₹{approvalMilestone.amount.toLocaleString("en-IN")}
                           </h3>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {offlinePayment
-                              ? `Marked as paid directly to ${professional}.`
-                              : "Payment confirmed. Milestone completed and funds credited to professional."}
+                            {hasValidity
+                              ? `No money deducted today. Funds will be automatically debited and paid after ${approvalMilestone.validityDays} days.`
+                              : offlinePayment
+                                ? `Marked as paid directly to ${professional}.`
+                                : "Payment confirmed. Milestone completed and funds credited to professional."}
                           </p>
                         </div>
 
@@ -4188,11 +4196,15 @@ export default function SharedProjectTrackingPage() {
                           className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
                             isDisputeSettlement
                               ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                              : "bg-primary/10 text-primary"
+                              : hasValidity
+                                ? "bg-sky-500/15 text-sky-600 dark:text-sky-400"
+                                : "bg-primary/10 text-primary"
                           }`}
                         >
                           {isDisputeSettlement ? (
                             <Gavel className="h-4 w-4" />
+                          ) : hasValidity ? (
+                            <Clock3 className="h-4 w-4" />
                           ) : (
                             <CreditCard className="h-4 w-4" />
                           )}
@@ -4203,14 +4215,18 @@ export default function SharedProjectTrackingPage() {
                               ? "Pay Milestone & Settle Dispute"
                               : offlinePayment
                                 ? "Confirm Offline Payment"
-                                : "Approve Milestone Payment"}
+                                : hasValidity
+                                  ? `Approve Milestone (${approvalMilestone.validityDays}-Day Inspection)`
+                                  : "Approve Milestone Payment"}
                           </DialogTitle>
                           <DialogDescription className="text-xs text-muted-foreground mt-0.5 leading-snug">
                             {isDisputeSettlement
                               ? `Fulfill dispute settlement and release funds to ${professional}.`
                               : offlinePayment
                                 ? `Confirm direct payment made to ${professional}.`
-                                : "Review wallet payment breakdown before approving."}
+                                : hasValidity
+                                  ? `Approve work deliverable. Your wallet will not be charged today.`
+                                  : "Review wallet payment breakdown before approving."}
                           </DialogDescription>
                         </div>
                       </div>
@@ -4256,7 +4272,11 @@ export default function SharedProjectTrackingPage() {
                           </div>
                           <div className="flex justify-between border-t border-border/60 pt-2.5 text-sm font-semibold">
                             <span className="text-foreground">
-                              {offlinePayment ? "Amount paid offline" : "Total charged to wallet"}
+                              {offlinePayment
+                                ? "Amount paid offline"
+                                : hasValidity
+                                  ? "Payment scheduled after inspection"
+                                  : "Total charged to wallet"}
                             </span>
                             <span className="text-base font-bold text-primary">
                               ₹{clientCharge.toLocaleString("en-IN")}
@@ -4265,8 +4285,18 @@ export default function SharedProjectTrackingPage() {
                         </div>
                       </div>
 
-                      {/* Wallet Balance & Funding Status */}
-                      {!offlinePayment && (
+                      {/* Validity Period Inspection Banner */}
+                      {hasValidity ? (
+                        <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-3.5 space-y-2 text-xs">
+                          <div className="flex items-center gap-1.5 font-bold text-sky-700 dark:text-sky-300">
+                            <Clock3 className="h-4 w-4" />
+                            <span>{approvalMilestone.validityDays}-Day Inspection Period Active</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            No money will be deducted from your wallet today. You have {approvalMilestone.validityDays} days to inspect the delivered work. ₹{clientCharge.toLocaleString("en-IN")} will be automatically debited and paid to the professional after {approvalMilestone.validityDays} days. If you find any issue, raise a dispute before the period ends to stop the payment.
+                          </p>
+                        </div>
+                      ) : !offlinePayment ? (
                         <div
                           className={`rounded-xl border p-3.5 space-y-2.5 transition-colors ${
                             isInsufficient
@@ -4357,7 +4387,7 @@ export default function SharedProjectTrackingPage() {
                             </div>
                           )}
                         </div>
-                      )}
+                      ) : null}
 
                       {approvalError && (
                         <p className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-xs font-medium text-destructive">
@@ -4382,6 +4412,7 @@ export default function SharedProjectTrackingPage() {
                         disabled={
                           busy === "approve-milestone" ||
                           (!offlinePayment &&
+                            !hasValidity &&
                             approvalWalletBalance !== null &&
                             approvalWalletBalance < clientCharge)
                         }
@@ -4403,6 +4434,8 @@ export default function SharedProjectTrackingPage() {
                           "Top Up to Settle"
                         ) : isDisputeSettlement ? (
                           "Pay & Settle Dispute"
+                        ) : hasValidity ? (
+                          `Approve Deliverable (${approvalMilestone.validityDays}-Day Inspection)`
                         ) : offlinePayment ? (
                           "Approve & Pay"
                         ) : (
