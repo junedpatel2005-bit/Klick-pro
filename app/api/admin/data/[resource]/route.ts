@@ -511,11 +511,68 @@ export async function GET(
       };
     });
 
+    // Ensure any marketplace job marked RUNNING or IN_PROGRESS that does not yet have a ProjectTracking record
+    // is synthesized so the running jobs section and metric boxes match the Jobs table perfectly
+    const trackedJobIds = new Set(allRunningTrackings.map((p) => p.jobId));
+    const untrackedRunningJobs = jobsWithProjectStatus.filter(
+      (job) => (job.status === "RUNNING" || job.status === "IN_PROGRESS") && !trackedJobIds.has(job.id),
+    );
+
+    const syntheticRunningJobs = untrackedRunningJobs.map((job) => ({
+      id: job.id,
+      trackingId: job.id,
+      jobId: job.id,
+      requestId: job.id,
+      status: "IN_PROGRESS",
+      progress: 0,
+      currentStage: "In Progress",
+      startedAt: job.createdAt ? new Date(job.createdAt).toISOString() : null,
+      acceptedAt: job.createdAt ? new Date(job.createdAt).toISOString() : null,
+      updatedAt: job.createdAt ? new Date(job.createdAt).toISOString() : new Date().toISOString(),
+      job: {
+        id: job.id,
+        title: job.title,
+        category: job.category,
+        description: job.description ?? null,
+        budgetMin: job.budgetMin ?? null,
+        budgetMax: job.budgetMax ?? null,
+        hourlyRate: job.hourlyRate ?? null,
+        timingType: job.timingType,
+        urgency: job.urgency,
+        workMode: job.workMode,
+        locationLabel: job.locationLabel,
+        status: "RUNNING",
+        createdAt: job.createdAt ? new Date(job.createdAt).toISOString() : new Date().toISOString(),
+      },
+      client: {
+        id: job.user?.id ?? job.id,
+        firstName: job.user?.firstName ?? "Client",
+        lastName: job.user?.lastName ?? "",
+        email: job.user?.email ?? "",
+        phone: null,
+      },
+      professional: null,
+      milestonesSummary: {
+        total: 0,
+        completed: 0,
+        percentage: 0,
+      },
+      financialSummary: {
+        totalBudget: job.budgetMax ?? job.budgetMin ?? 0,
+        paidAmount: 0,
+        remainingAmount: job.budgetMax ?? job.budgetMin ?? 0,
+      },
+      runningMilestone: null,
+      milestones: [],
+    }));
+
+    const finalRunningJobs = [...runningJobs, ...syntheticRunningJobs];
+
     return NextResponse.json({
       jobs: jobsWithProjectStatus,
       disputes,
-      runningJobs,
-      stats: { totalJobs, openJobs, scheduledJobs, runningJobs: runningJobs.length },
+      runningJobs: finalRunningJobs,
+      stats: { totalJobs, openJobs, scheduledJobs, runningJobs: finalRunningJobs.length },
     });
   }
   if (resource === "finance") {

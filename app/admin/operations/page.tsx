@@ -639,7 +639,7 @@ function OperationsContent() {
     [data, query, filter],
   );
   const runningProjects = data?.jobs.filter((item) => item.status === "RUNNING").length ?? 0;
-  const runningCount = Math.max(data?.runningJobs?.length ?? 0, runningProjects);
+  const runningCount = Math.max(data?.runningJobs?.length ?? 0, data?.stats?.runningJobs ?? 0, runningProjects);
   const completedProjects = data?.jobs.filter((item) => item.status === "COMPLETED").length ?? 0;
 
   const runningJobsList = useMemo(() => {
@@ -997,9 +997,9 @@ function OperationsContent() {
           >
             <Metric
               icon={BriefcaseBusiness}
-              label="Total jobs"
+              label="Total Jobs"
               value={data.stats.totalJobs}
-              detail={`${data.stats.openJobs} currently open`}
+              detail={`${data.stats.openJobs} Currently Open`}
               color="indigo"
               onClick={() => {
                 setView("jobs");
@@ -1008,9 +1008,9 @@ function OperationsContent() {
             />
             <Metric
               icon={CalendarDays}
-              label="Scheduled jobs"
+              label="Scheduled Jobs"
               value={data.stats.scheduledJobs}
-              detail="Future-dated open jobs"
+              detail="Future-Dated Open Jobs"
               color="amber"
               onClick={() => {
                 setView("jobs");
@@ -1020,9 +1020,9 @@ function OperationsContent() {
             {SHOW_DISPUTE_OPERATIONS ? (
               <Metric
                 icon={Clock3}
-                label="Open disputes"
+                label="Open Disputes"
                 value={openDisputes}
-                detail="Need team attention"
+                detail="Needs Team Attention"
                 color="amber"
                 onClick={() => {
                   setView("disputes");
@@ -1032,9 +1032,9 @@ function OperationsContent() {
             ) : null}
             <Metric
               icon={PlayCircle}
-              label="Running projects"
+              label="Running Projects"
               value={runningCount}
-              detail="Currently in progress"
+              detail="Currently In Progress"
               color="indigo"
               onClick={() => {
                 setView("running_jobs");
@@ -1043,9 +1043,9 @@ function OperationsContent() {
             />
             <Metric
               icon={CheckCircle2}
-              label="Completed projects"
+              label="Completed Projects"
               value={completedProjects}
-              detail="Finished work"
+              detail="Finished Work"
               color="emerald"
               onClick={() => {
                 setView("jobs");
@@ -1059,10 +1059,10 @@ function OperationsContent() {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <h2 className="font-display text-xl font-semibold text-slate-900">
-                    Operations queue
+                    Operations Queue
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Review the latest marketplace activity in one place.
+                    Review The Latest Marketplace Activity In One Place.
                   </p>
                 </div>
                 <span className="rounded-full bg-slate-200/70 px-3 py-1.5 text-xs font-semibold text-slate-700">
