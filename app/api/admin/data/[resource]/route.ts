@@ -259,7 +259,7 @@ export async function GET(
     const [jobs, disputes, totalJobs, scheduledJobs, openJobs, runningProjectTrackings] =
       await Promise.all([
         db.clientJob.findMany({
-          include: { user: { select: { firstName: true, lastName: true, email: true } } },
+          include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
           orderBy: { createdAt: "desc" },
           take: 200,
         }),
