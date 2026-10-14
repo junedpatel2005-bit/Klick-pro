@@ -14,17 +14,33 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  AlertCircle,
   Building2,
   CheckCircle2,
+  Clock,
   CreditCard,
   Landmark,
+  Loader2,
+  Pencil,
   Plus,
   RefreshCw,
+  Search,
+  ShieldCheck,
   Smartphone,
   Star,
   Trash2,
   Wallet,
 } from "lucide-react";
+import {
+  POPULAR_INDIAN_BANKS,
+  lookupIfscCode,
+  normalizeIfsc,
+  getBankNameFromIfsc,
+  validateBankSpecificAccountNumber,
+  getExpectedAccountLengthHint,
+} from "@/lib/indian-banks";
+import { BankCombobox } from "@/components/BankCombobox";
+import { IfscFinderDialog } from "@/components/IfscFinderDialog";
 
 export type LinkedAccount = {
   id: number;
@@ -38,6 +54,7 @@ export type LinkedAccount = {
   upiId: string | null;
   cardBank: string | null;
   razorpayAccountId: string | null;
+  razorpayFundAccountId?: string | null;
   isDefault: boolean;
   createdAt: string;
 };
@@ -56,6 +73,7 @@ export function LinkedAccountsCard({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actionBusyId, setActionBusyId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   // Form State
   const [accountType, setAccountType] = useState<"BANK" | "UPI" | "RAZORPAY">("BANK");
@@ -69,11 +87,29 @@ export function LinkedAccountsCard({
   const [razorpayAccountId, setRazorpayAccountId] = useState("");
   const [isDefault, setIsDefault] = useState(false);
 
+  // NPCI VPA Verification State
+  const [vpaVerifying, setVpaVerifying] = useState(false);
+  const [vpaVerified, setVpaVerified] = useState<boolean | null>(null);
+  const [vpaCustomerName, setVpaCustomerName] = useState<string | null>(null);
+  const [vpaError, setVpaError] = useState<string | null>(null);
+
+  // Bank Verification & IFSC State
+  const [ifscBranch, setIfscBranch] = useState<string | null>(null);
+  const [ifscVerifying, setIfscVerifying] = useState(false);
+  const [ifscError, setIfscError] = useState<string | null>(null);
+  const [bankAccountVerifying, setBankAccountVerifying] = useState(false);
+  const [bankAccountVerified, setBankAccountVerified] = useState<boolean | null>(null);
+  const [bankAccountError, setBankAccountError] = useState<string | null>(null);
+  const [officialBankName, setOfficialBankName] = useState<string | null>(null);
+  const [customBankInput, setCustomBankInput] = useState(false);
+  const [bankSearchTerm, setBankSearchTerm] = useState("");
+  const [ifscFinderOpen, setIfscFinderOpen] = useState(false);
+
   const fetchAccounts = async () => {
     try {
       const res = await fetch("/api/v1/linked-accounts");
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) {
         setAccounts(data.accounts || []);
       }
     } catch {
@@ -88,6 +124,7 @@ export function LinkedAccountsCard({
   }, []);
 
   const resetForm = () => {
+    setEditingId(null);
     setAccountHolder("");
     setAccountNumber("");
     setConfirmAccountNumber("");
@@ -97,10 +134,114 @@ export function LinkedAccountsCard({
     setCardBank("");
     setRazorpayAccountId("");
     setIsDefault(false);
+    setVpaVerified(null);
+    setVpaCustomerName(null);
+    setVpaError(null);
+    setIfscBranch(null);
+    setIfscError(null);
+    setBankAccountVerified(null);
+    setBankAccountError(null);
+    setOfficialBankName(null);
+    setCustomBankInput(false);
+    setBankSearchTerm("");
+  };
+
+  const handleEdit = (acc: LinkedAccount) => {
+    setEditingId(acc.id);
+    const targetType = acc.accountType === "CARD" ? "BANK" : acc.accountType;
+    setAccountType(targetType);
+    setAccountHolder(acc.accountHolder || "");
+    setAccountNumber(acc.accountNumber || "");
+    setConfirmAccountNumber(acc.accountNumber || "");
+    setIfscCode(acc.ifscCode || "");
+    setBankName(acc.bankName || "");
+    setUpiId(acc.upiId || "");
+    setCardBank(acc.cardBank || "");
+    setRazorpayAccountId(acc.razorpayAccountId || "");
+    setIsDefault(acc.isDefault);
+    setVpaVerified(acc.accountType === "UPI" ? true : null);
+    setVpaCustomerName(acc.accountHolder || null);
+    setVpaError(null);
+    setIfscBranch(null);
+    setIfscError(null);
+    setBankAccountVerified(acc.accountType === "BANK" ? true : null);
+    setCustomBankInput(
+      acc.bankName
+        ? !POPULAR_INDIAN_BANKS.some((b) => b.name.toLowerCase() === acc.bankName?.toLowerCase())
+        : false,
+    );
+    setBankSearchTerm("");
+    if (acc.ifscCode && acc.ifscCode.length === 11) {
+      void handleLookupIfsc(acc.ifscCode);
+    }
+    setDialogOpen(true);
+  };
+
+  const handleLookupIfsc = async (code: string) => {
+    const clean = normalizeIfsc(code);
+    setIfscCode(clean);
+    setIfscError(null);
+    setIfscBranch(null);
+    if (clean.length === 11) {
+      setIfscVerifying(true);
+      try {
+        const res = await lookupIfscCode(clean);
+        if (res.valid && res.bank) {
+          setIfscBranch(`${res.bank} · ${res.branch} (${res.city})`);
+          setBankName(res.bank);
+          toast.success(`IFSC Verified: ${res.bank} (${res.branch})`);
+        } else {
+          setIfscError(res.error || "Invalid IFSC code.");
+          toast.error(res.error || "Invalid IFSC code.");
+        }
+      } catch {
+        setIfscError("Unable to verify IFSC code.");
+      } finally {
+        setIfscVerifying(false);
+      }
+    }
+  };
+
+  const handleNameChange = (newName: string) => {
+    setAccountHolder(newName);
+  };
+
+  const handleVerifyVpa = async () => {
+    const toCheck = upiId.trim().toLowerCase();
+    if (!toCheck || !toCheck.includes("@")) {
+      toast.error("Please enter a valid UPI ID (e.g. rahul@upi)");
+      return;
+    }
+    setVpaVerifying(true);
+    setVpaError(null);
+    try {
+      const res = await fetch("/api/v1/wallet/verify-vpa", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ vpa: toCheck }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.valid) {
+        setVpaVerified(true);
+        toast.success("UPI ID format verified successfully!");
+      } else {
+        setVpaVerified(false);
+        setVpaCustomerName(null);
+        setVpaError(data?.error || "UPI ID could not be verified on NPCI.");
+        toast.error(data?.error || "UPI ID could not be verified on NPCI.");
+      }
+    } catch {
+      setVpaVerified(false);
+      setVpaError("Failed to reach NPCI verification service.");
+      toast.error("Failed to reach NPCI verification service.");
+    } finally {
+      setVpaVerifying(false);
+    }
   };
 
   const handleOpenDialog = () => {
     resetForm();
+    setEditingId(null);
     setDialogOpen(true);
   };
 
@@ -108,8 +249,9 @@ export function LinkedAccountsCard({
     e.preventDefault();
 
     if (accountType === "BANK") {
-      if (!accountNumber || accountNumber.length < 6) {
-        toast.error("Please enter a valid bank account number.");
+      const accValidation = validateBankSpecificAccountNumber(accountNumber, bankName, ifscCode);
+      if (!accValidation.valid) {
+        toast.error(accValidation.message || "Please enter a valid bank account number.");
         return;
       }
       if (accountNumber !== confirmAccountNumber) {
@@ -120,9 +262,17 @@ export function LinkedAccountsCard({
         toast.error("IFSC Code must be exactly 11 characters.");
         return;
       }
+      if (!accountHolder.trim() || accountHolder.trim().length < 2) {
+        toast.error("Please enter the account holder name as per bank records.");
+        return;
+      }
     } else if (accountType === "UPI") {
       if (!upiId || !upiId.includes("@")) {
         toast.error("Please enter a valid UPI ID (e.g. yourname@oksbi).");
+        return;
+      }
+      if (!accountHolder.trim() || accountHolder.trim().length < 2) {
+        toast.error("Please enter the name registered with your UPI account.");
         return;
       }
     } else if (accountType === "RAZORPAY") {
@@ -134,8 +284,13 @@ export function LinkedAccountsCard({
 
     setSaving(true);
     try {
-      const res = await fetch("/api/v1/linked-accounts", {
-        method: "POST",
+      const url = editingId
+        ? `/api/v1/linked-accounts/${editingId}`
+        : "/api/v1/linked-accounts";
+      const method = editingId ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           accountType,
@@ -149,12 +304,12 @@ export function LinkedAccountsCard({
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(data.error || "Failed to link account.");
+        throw new Error(data?.error || `Failed to ${editingId ? "update" : "link"} account.`);
       }
 
-      toast.success("Account linked successfully!");
+      toast.success(editingId ? "Account updated successfully!" : "Account linked successfully!");
       setDialogOpen(false);
       resetForm();
       await fetchAccounts();
@@ -273,7 +428,8 @@ export function LinkedAccountsCard({
                 IconComponent = Building2;
                 iconColor =
                   "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400";
-                titleText = `${acc.bankName || "Bank Account"} · •••• ${acc.last4 || "••••"}`;
+                const resolvedBank = acc.bankName || getBankNameFromIfsc(acc.ifscCode) || "Bank Account";
+                titleText = `${resolvedBank} · •••• ${acc.last4 || "••••"}`;
                 subText = [
                   acc.accountHolder ? `Holder: ${acc.accountHolder}` : null,
                   acc.ifscCode ? `IFSC: ${acc.ifscCode}` : null,
@@ -339,7 +495,7 @@ export function LinkedAccountsCard({
                         size="sm"
                         onClick={() => handleSetDefault(acc.id)}
                         disabled={actionBusyId === acc.id}
-                        className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                        className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
                         title="Make default payout method"
                       >
                         <Star className="h-3 w-3 mr-1" />
@@ -350,9 +506,20 @@ export function LinkedAccountsCard({
                       type="button"
                       variant="ghost"
                       size="sm"
+                      onClick={() => handleEdit(acc)}
+                      disabled={actionBusyId === acc.id}
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                      title="Edit account details"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={() => handleDelete(acc.id)}
                       disabled={actionBusyId === acc.id}
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive cursor-pointer"
                       title="Remove linked account"
                     >
                       {actionBusyId === acc.id ? (
@@ -369,17 +536,30 @@ export function LinkedAccountsCard({
         )}
       </CardContent>
 
-      {/* Add / Link Account Modal */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Add / Edit Linked Account Modal */}
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) resetForm();
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Plus className="h-5 w-5 text-primary" />
-              Link Payout &amp; Settlement Account
+              {editingId ? (
+                <Pencil className="h-5 w-5 text-primary" />
+              ) : (
+                <Plus className="h-5 w-5 text-primary" />
+              )}
+              {editingId
+                ? `Edit ${accountType === "BANK" ? "Bank Account" : accountType === "UPI" ? "UPI ID" : "Razorpay Account"}`
+                : "Link Payout & Settlement Account"}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Save your account details once. You can use it across the platform with 1-click on the
-              Earnings page.
+              {editingId
+                ? "Modify your account details below. Payouts will immediately use the updated details."
+                : "Save your account details once. You can use it across the platform with 1-click on the Earnings page."}
             </DialogDescription>
           </DialogHeader>
 
@@ -427,30 +607,84 @@ export function LinkedAccountsCard({
             {/* BANK FORM */}
             {accountType === "BANK" && (
               <>
+                {/* 2-in-1 Bank Name Combobox */}
                 <div className="space-y-1">
                   <Label htmlFor="bankName" className="text-xs font-semibold">
                     Bank Name
                   </Label>
-                  <Input
+                  <BankCombobox
                     id="bankName"
                     value={bankName}
-                    onChange={(e) => setBankName(e.target.value)}
-                    placeholder="e.g. HDFC Bank, SBI, ICICI Bank"
+                    onChange={(val) => setBankName(val)}
+                    onSelectBank={(bank) => {
+                      if (!ifscCode) {
+                        setIfscCode(`${bank.code}0`);
+                      }
+                    }}
+                    placeholder="Search or type bank name (e.g. HDFC, SBI, ICICI)…"
                     required
                   />
                 </div>
+
+                {/* IFSC Code with Live Verification & Find IFSC Tool */}
                 <div className="space-y-1">
-                  <Label htmlFor="accountHolder" className="text-xs font-semibold">
-                    Account Holder Name
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="ifscCode" className="text-xs font-semibold">
+                      IFSC Code
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      {ifscVerifying && (
+                        <span className="flex items-center gap-1 text-[11px] text-primary">
+                          <Loader2 className="h-3 w-3 animate-spin" /> Verifying…
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setIfscFinderOpen(true)}
+                        className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                        title="Find IFSC Code by Bank & Location"
+                      >
+                        <Search className="h-3 w-3" />
+                        Find IFSC Code
+                      </button>
+                    </div>
+                  </div>
                   <Input
-                    id="accountHolder"
-                    value={accountHolder}
-                    onChange={(e) => setAccountHolder(e.target.value)}
-                    placeholder="Name as registered with your bank"
+                    id="ifscCode"
+                    maxLength={11}
+                    value={ifscCode}
+                    onChange={(e) => void handleLookupIfsc(normalizeIfsc(e.target.value))}
+                    placeholder="e.g. HDFC0001234 or BARB0IKHARX"
+                    className="font-mono uppercase text-xs"
                     required
                   />
+                  {ifscBranch && (
+                    <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                      <span className="truncate">
+                        Branch: <strong>{ifscBranch}</strong>
+                      </span>
+                    </div>
+                  )}
+                  {ifscError && (
+                    <p className="text-[11px] text-rose-600 dark:text-rose-400">
+                      {ifscError}
+                    </p>
+                  )}
                 </div>
+
+                <IfscFinderDialog
+                  open={ifscFinderOpen}
+                  onOpenChange={setIfscFinderOpen}
+                  defaultBank={bankName}
+                  onSelectIfsc={(code, bName, bBranch) => {
+                    setIfscCode(code);
+                    if (bName) setBankName(bName);
+                    if (bBranch) setIfscBranch(bBranch);
+                    void handleLookupIfsc(code);
+                  }}
+                />
+
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <Label htmlFor="accountNumber" className="text-xs font-semibold">
@@ -460,10 +694,13 @@ export function LinkedAccountsCard({
                       id="accountNumber"
                       type="password"
                       value={accountNumber}
-                      onChange={(e) => setAccountNumber(e.target.value)}
+                      onChange={(e) => setAccountNumber(e.target.value.replace(/\s+/g, ""))}
                       placeholder="e.g. 102938475612"
                       required
                     />
+                    <p className="text-[11px] text-muted-foreground">
+                      {getExpectedAccountLengthHint(bankName, ifscCode)}
+                    </p>
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="confirmAccountNumber" className="text-xs font-semibold">
@@ -472,24 +709,32 @@ export function LinkedAccountsCard({
                     <Input
                       id="confirmAccountNumber"
                       value={confirmAccountNumber}
-                      onChange={(e) => setConfirmAccountNumber(e.target.value)}
+                      onChange={(e) => setConfirmAccountNumber(e.target.value.replace(/\s+/g, ""))}
                       placeholder="Re-enter number"
                       required
                     />
                   </div>
                 </div>
+
                 <div className="space-y-1">
-                  <Label htmlFor="ifscCode" className="text-xs font-semibold">
-                    IFSC Code
+                  <Label htmlFor="accountHolder" className="text-xs font-semibold">
+                    Account Holder Name
                   </Label>
                   <Input
-                    id="ifscCode"
-                    maxLength={11}
-                    value={ifscCode}
-                    onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
-                    placeholder="e.g. HDFC0001234 (11 characters)"
+                    id="accountHolder"
+                    value={accountHolder}
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    placeholder="Enter full name as per bank records"
+                    className="text-xs"
                     required
                   />
+                  <p className="text-[10px] text-muted-foreground">
+                    Please ensure this matches the beneficiary name on your bank passbook or statement.
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-cyan-500/10 p-2.5 border border-cyan-500/20 text-[11px] text-cyan-800 dark:text-cyan-300">
+                  ⚡ <strong>Secure Payout Account:</strong> Verified bank details are saved securely for withdrawal requests. Admin reviews and approves payouts upon request.
                 </div>
               </>
             )}
@@ -497,6 +742,74 @@ export function LinkedAccountsCard({
             {/* UPI FORM */}
             {accountType === "UPI" && (
               <>
+                <div className="space-y-1">
+                  <Label htmlFor="upiId" className="text-xs font-semibold">
+                    UPI ID / VPA
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="upiId"
+                      value={upiId}
+                      onChange={(e) => {
+                        setUpiId(e.target.value.toLowerCase());
+                        setVpaVerified(null);
+                        setVpaCustomerName(null);
+                        setVpaError(null);
+                      }}
+                      onBlur={() => {
+                        if (upiId.includes("@") && upiId.length >= 4 && vpaVerified === null) {
+                          void handleVerifyVpa();
+                        }
+                      }}
+                      placeholder="e.g. rahul@upi, yourname@oksbi"
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!upiId.includes("@") || vpaVerifying}
+                      onClick={() => void handleVerifyVpa()}
+                      className="h-9 text-xs px-3 font-semibold shrink-0"
+                    >
+                      {vpaVerifying ? (
+                        <>
+                          <Clock className="h-3.5 w-3.5 mr-1 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="h-3.5 w-3.5 mr-1 text-primary" />
+                          Verify VPA
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {vpaVerified === true && (
+                  <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 p-2 border border-emerald-500/20 text-xs text-emerald-800 dark:text-emerald-300">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <div>
+                      <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                        NPCI Verified Active VPA
+                      </p>
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                        {vpaCustomerName
+                          ? `Registered Beneficiary: ${vpaCustomerName}`
+                          : "UPI VPA is verified and active on NPCI banking rails."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {vpaVerified === false && vpaError && (
+                  <div className="flex items-center gap-2 rounded-xl bg-rose-500/10 p-2 border border-rose-500/20 text-xs text-rose-800 dark:text-rose-300">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                    <p className="text-[11px] text-rose-700 dark:text-rose-300">{vpaError}</p>
+                  </div>
+                )}
+
                 <div className="space-y-1">
                   <Label htmlFor="upiHolder" className="text-xs font-semibold">
                     Registered Name
@@ -508,18 +821,15 @@ export function LinkedAccountsCard({
                     placeholder="Name linked with UPI"
                     required
                   />
+                  {vpaCustomerName && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Auto-detected from bank record via NPCI.
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="upiId" className="text-xs font-semibold">
-                    UPI ID / VPA
-                  </Label>
-                  <Input
-                    id="upiId"
-                    value={upiId}
-                    onChange={(e) => setUpiId(e.target.value.toLowerCase())}
-                    placeholder="e.g. yourname@oksbi, 9876543210@paytm"
-                    required
-                  />
+
+                <div className="rounded-xl bg-emerald-500/10 p-2.5 border border-emerald-500/20 text-[11px] text-emerald-800 dark:text-emerald-300">
+                  ⚡ <strong>Automated UPI Payout:</strong> RazorpayX verifies VPA validity via NPCI and initiates a UPI payout directly to the bank account linked to that UPI ID. Money arrives in seconds.
                 </div>
               </>
             )}
@@ -573,7 +883,13 @@ export function LinkedAccountsCard({
               </Button>
               <Button type="submit" size="sm" disabled={saving} className="gap-1.5 font-semibold">
                 {saving && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
-                {saving ? "Saving…" : "Save & Link Account"}
+                {saving
+                  ? editingId
+                    ? "Updating…"
+                    : "Saving…"
+                  : editingId
+                  ? "Update Account"
+                  : "Save & Link Account"}
               </Button>
             </div>
           </form>

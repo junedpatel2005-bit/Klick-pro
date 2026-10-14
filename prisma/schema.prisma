@@ -158,6 +158,7 @@ model User {
   phoneVerifiedAt                     DateTime?
   username                            String?                   @unique
   razorpayAccountId                   String?                   @unique @map("razorpay_account_id")
+  razorpayContactId                   String?                   @map("razorpay_contact_id")
   professionalState                   String?
   professionalDistrict                String?
   professionalCategoryId              Int?                      @map("professional_category_id")
@@ -182,6 +183,7 @@ model User {
 
   @@index([professionalState, professionalDistrict])
   @@index([professionalCategoryId])
+  @@index([razorpayContactId])
 }
 
 model Session {
@@ -318,17 +320,17 @@ model ClientJobAttachment {
 }
 
 model ClientJobMilestone {
-  id          Int       @id @default(autoincrement())
-  jobId       Int
-  title       String
-  description String?
-  percentage  Int
-  amount      Int?
-  validityDays Int      @default(0) @map("validity_days")
-  sortOrder   Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  job         ClientJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  id           Int       @id @default(autoincrement())
+  jobId        Int
+  title        String
+  description  String?
+  percentage   Int
+  amount       Int?
+  validityDays Int       @default(0) @map("validity_days")
+  sortOrder    Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  job          ClientJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@index([jobId])
   @@map("ClientJobMilestone")
@@ -478,25 +480,25 @@ model ProjectTimelineEvent {
 }
 
 model ProjectMilestone {
-  id             Int                 @id @default(autoincrement())
-  trackingId     Int
-  clientId       Int
-  professionalId Int
-  title          String
-  description    String?
-  amount         Int
-  dueDate        DateTime?
-  status         String              @default("UPCOMING")
-  validityDays   Int                 @default(0) @map("validity_days")
-  releaseAt      DateTime?           @map("release_at")
-  autoReleaseStatus String?          @map("auto_release_status")
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  submittedAt    DateTime?
-  approvedAt     DateTime?
-  tracking       ProjectTracking     @relation(fields: [trackingId], references: [id])
-  payment        Payment?
-  workUploads    ProjectWorkUpload[]
+  id                Int                 @id @default(autoincrement())
+  trackingId        Int
+  clientId          Int
+  professionalId    Int
+  title             String
+  description       String?
+  amount            Int
+  dueDate           DateTime?
+  status            String              @default("UPCOMING")
+  validityDays      Int                 @default(0) @map("validity_days")
+  releaseAt         DateTime?           @map("release_at")
+  autoReleaseStatus String?             @map("auto_release_status")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  submittedAt       DateTime?
+  approvedAt        DateTime?
+  tracking          ProjectTracking     @relation(fields: [trackingId], references: [id])
+  payment           Payment?
+  workUploads       ProjectWorkUpload[]
 
   @@index([trackingId])
   @@map("ProjectMilestone")
@@ -721,9 +723,15 @@ model ProjectWithdrawal {
   providerTransferId String?   @map("provider_transfer_id")
   failureReason      String?   @map("failure_reason")
   processedAt        DateTime? @map("processed_at")
+  payoutMode         String?   @map("payout_mode")
+  utr                String?   @map("utr")
 
   @@index([professionalId])
   @@index([paymentId])
+  @@index([providerTransferId])
+  @@index([utr])
+  @@index([status])
+  @@index([professionalId, status])
 }
 
 model Invoice {
@@ -1198,22 +1206,26 @@ model SmsTemplate {
 }
 
 model UserLinkedAccount {
-  id                Int      @id @default(autoincrement())
-  userId            Int      @map("user_id")
-  accountType       String   @map("account_type")
-  accountHolder     String?  @map("account_holder")
-  accountNumber     String?  @map("account_number")
-  last4             String?  @map("last_4")
-  ifscCode          String?  @map("ifsc_code")
-  bankName          String?  @map("bank_name")
-  upiId             String?  @map("upi_id")
-  cardBank          String?  @map("card_bank")
-  razorpayAccountId String?  @map("razorpay_account_id")
-  isDefault         Boolean  @default(false) @map("is_default")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    Int      @id @default(autoincrement())
+  userId                Int      @map("user_id")
+  accountType           String   @map("account_type")
+  accountHolder         String?  @map("account_holder")
+  accountNumber         String?  @map("account_number")
+  last4                 String?  @map("last_4")
+  ifscCode              String?  @map("ifsc_code")
+  bankName              String?  @map("bank_name")
+  upiId                 String?  @map("upi_id")
+  cardBank              String?  @map("card_bank")
+  razorpayAccountId     String?  @map("razorpay_account_id")
+  razorpayFundAccountId String?  @map("razorpay_fund_account_id")
+  isDefault             Boolean  @default(false) @map("is_default")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([userId, isDefault])
+  @@index([razorpayFundAccountId])
+  @@index([upiId])
   @@map("user_linked_accounts")
 }

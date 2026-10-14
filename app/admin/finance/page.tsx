@@ -450,15 +450,34 @@ export default function AdminFinancePage() {
       const proName =
         user?.name || data.names[w.professionalId] || `Professional #${w.professionalId}`;
 
+      let destSummary = formatReadableLabel(w.destinationType) || "Bank Transfer";
+      if (w.destinationLabel) {
+        try {
+          const parsed = JSON.parse(w.destinationLabel);
+          if (parsed && typeof parsed === "object") {
+            if (parsed.type === "BANK") {
+              const last4 = parsed.accountNumber ? `•••• ${String(parsed.accountNumber).slice(-4)}` : "";
+              destSummary = [parsed.bankName || "Bank Transfer", last4].filter(Boolean).join(" · ");
+            } else if (parsed.type === "UPI") {
+              destSummary = `UPI · ${parsed.upiId || ""}`;
+            } else {
+              destSummary = `${formatReadableLabel(w.destinationType)} (${w.destinationLabel})`;
+            }
+          } else {
+            destSummary = `${formatReadableLabel(w.destinationType)} (${w.destinationLabel})`;
+          }
+        } catch {
+          destSummary = `${formatReadableLabel(w.destinationType)} (${w.destinationLabel})`;
+        }
+      }
+
       items.push({
         id: `withdrawal-${w.id}`,
         kind: "WITHDRAWAL",
         refId: w.id,
         date: w.createdAt,
         title: "Professional Withdrawal",
-        categoryOrRef: w.destinationLabel
-          ? `${formatReadableLabel(w.destinationType)} (${w.destinationLabel})`
-          : formatReadableLabel(w.destinationType) || "Bank Transfer",
+        categoryOrRef: destSummary,
         milestoneInfo: null,
         remainingAmount: null,
         clientName: null,

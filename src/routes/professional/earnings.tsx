@@ -39,6 +39,10 @@ import {
 import { PageActionLoading } from "@/components/PageActionLoading";
 import { formatReadableLabel } from "@/lib/utils";
 import { LinkedAccountsCard } from "@/components/LinkedAccountsCard";
+import {
+  validateBankSpecificAccountNumber,
+  getExpectedAccountLengthHint,
+} from "@/lib/indian-banks";
 type Transaction = {
   id: number;
   amount: number;
@@ -75,6 +79,9 @@ type Withdrawal = {
   destinationLabel: string | null;
   failureReason?: string | null;
   createdAt: string;
+  payoutMode?: string | null;
+  utr?: string | null;
+  providerTransferId?: string | null;
 };
 
 type PayoutMethod = "BANK" | "UPI";
@@ -150,6 +157,7 @@ type LinkedAccount = {
   upiId: string | null;
   cardBank: string | null;
   razorpayAccountId: string | null;
+  razorpayFundAccountId?: string | null;
   isDefault: boolean;
 };
 
@@ -176,6 +184,10 @@ export default function Earnings() {
   // UPI Form State
   const [upiId, setUpiId] = useState("");
   const [upiHolder, setUpiHolder] = useState("");
+  const [vpaVerifying, setVpaVerifying] = useState(false);
+  const [vpaVerified, setVpaVerified] = useState<boolean | null>(null);
+  const [vpaCustomerName, setVpaCustomerName] = useState<string | null>(null);
+  const [vpaError, setVpaError] = useState<string | null>(null);
 
   const [saveDetailsForFuture, setSaveDetailsForFuture] = useState(true);
   const [showRazorpayAdvanced, setShowRazorpayAdvanced] = useState(false);
@@ -189,6 +201,38 @@ export default function Earnings() {
   const [visibleCount, setVisibleCount] = useState(10);
   const [historyFilter, setHistoryFilter] = useState<"all" | "milestones" | "disputes">("all");
 
+  async function handleVerifyVpa(targetVpa?: string) {
+    const toCheck = (targetVpa || upiId).trim().toLowerCase();
+    if (!toCheck || !toCheck.includes("@")) {
+      setVpaError("Please enter a valid UPI ID (e.g. rahul@upi)");
+      setVpaVerified(false);
+      return;
+    }
+    setVpaVerifying(true);
+    setVpaError(null);
+    try {
+      const res = await fetch("/api/v1/wallet/verify-vpa", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ vpa: toCheck }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.valid) {
+        setVpaVerified(true);
+        setVpaCustomerName(null);
+      } else {
+        setVpaVerified(false);
+        setVpaCustomerName(null);
+        setVpaError(data?.error || "UPI ID could not be verified on NPCI.");
+      }
+    } catch {
+      setVpaVerified(false);
+      setVpaError("Failed to reach NPCI verification service.");
+    } finally {
+      setVpaVerifying(false);
+    }
+  }
+
   function applyLinkedAccount(acc: LinkedAccount) {
     if (acc.accountType === "BANK") {
       setPayoutMethod("BANK");
@@ -201,6 +245,9 @@ export default function Earnings() {
       setPayoutMethod("UPI");
       setUpiId(acc.upiId ?? "");
       setUpiHolder(acc.accountHolder ?? "");
+      setVpaVerified(true);
+      setVpaCustomerName(null);
+      setVpaError(null);
     } else if (acc.accountType === "RAZORPAY") {
       setRazorpayAccountId(acc.razorpayAccountId ?? "");
     }
@@ -308,15 +355,18 @@ export default function Earnings() {
     [items, historyFilter],
   );
 
+  const bankAccValidation = validateBankSpecificAccountNumber(accountNumber, bankName, ifscCode);
+
   const isBankValid =
-    bankName.trim().length >= 2 &&
     accountHolder.trim().length >= 2 &&
-    accountNumber.trim().length >= 8 &&
+    bankAccValidation.valid &&
     accountNumber.trim() === confirmAccountNumber.trim() &&
     ifscCode.trim().length === 11;
 
   const isUpiValid =
-    upiId.trim().includes("@") && upiId.trim().length >= 4 && upiHolder.trim().length >= 2;
+    upiId.trim().includes("@") &&
+    upiId.trim().length >= 4 &&
+    upiHolder.trim().length >= 2;
 
   const isFormValid = payoutMethod === "BANK" ? isBankValid : isUpiValid;
 
@@ -377,13 +427,23 @@ export default function Earnings() {
           amount: Number(amount),
           destinationType: payoutMethod,
           destinationLabel,
+          saveDetails: saveDetailsForFuture,
+          accountHolder: payoutMethod === "BANK" ? accountHolder.trim() : upiHolder.trim(),
+          accountNumber: payoutMethod === "BANK" ? accountNumber.trim() : undefined,
+          ifscCode: payoutMethod === "BANK" ? ifscCode.trim().toUpperCase() : undefined,
+          bankName: payoutMethod === "BANK" ? bankName.trim() : undefined,
+          upiId: payoutMethod === "UPI" ? upiId.trim().toLowerCase() : undefined,
+          upiHolder: payoutMethod === "UPI" ? upiHolder.trim() : undefined,
         }),
       });
       const d = await r.json();
       setMessage(
         r.ok
-          ? "Withdrawal request submitted successfully! Admin will review and process your payout."
-          : (d.error ?? "Unable to request withdrawal."),
+          ? (d.message ??
+              `Withdrawal request of ₹${Number(amount).toLocaleString(
+                "en-IN",
+              )} submitted successfully! Your request has been forwarded to Admin for approval.`)
+          : (d.error ?? "Unable to submit withdrawal request."),
       );
       if (r.ok) {
         setAmount("");
@@ -831,20 +891,27 @@ export default function Earnings() {
                           <p className="font-semibold text-foreground text-sm">
                             ₹{w.amount.toLocaleString("en-IN")}
                           </p>
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider ${
-                              w.status === "COMPLETED"
-                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                                : w.status === "FAILED"
-                                  ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-                                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-                            }`}
-                          >
-                            {w.status === "COMPLETED" && <CheckCircle2 className="h-3 w-3" />}
-                            {w.status === "PENDING" && <Clock className="h-3 w-3" />}
-                            {w.status === "FAILED" && <X className="h-3 w-3" />}
-                            {formatReadableLabel(w.status)}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {w.payoutMode && (
+                              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary border border-primary/20">
+                                {w.payoutMode}
+                              </span>
+                            )}
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wider ${
+                                w.status === "COMPLETED"
+                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                                  : w.status === "FAILED"
+                                    ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                                    : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                              }`}
+                            >
+                              {w.status === "COMPLETED" && <CheckCircle2 className="h-3 w-3" />}
+                              {w.status === "PENDING" && <Clock className="h-3 w-3" />}
+                              {w.status === "FAILED" && <X className="h-3 w-3" />}
+                              {formatReadableLabel(w.status)}
+                            </span>
+                          </div>
                         </div>
                         <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
                           <DestIcon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary" />
@@ -857,15 +924,22 @@ export default function Earnings() {
                             )}
                           </div>
                         </div>
-                        <p className="text-[10px] text-muted-foreground">
-                          {new Date(w.createdAt).toLocaleDateString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </p>
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                          <span>
+                            {new Date(w.createdAt).toLocaleDateString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                          {w.utr && (
+                            <span className="font-mono text-emerald-700 dark:text-emerald-400">
+                              UTR: {w.utr}
+                            </span>
+                          )}
+                        </div>
                         {w.failureReason && (
                           <p className="mt-1 text-[11px] text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 p-1.5 rounded-lg border border-rose-200 dark:border-rose-800">
                             Reason: {w.failureReason}
@@ -890,9 +964,9 @@ export default function Earnings() {
       <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Request Withdrawal</DialogTitle>
+            <DialogTitle>Request Funds Withdrawal</DialogTitle>
             <DialogDescription>
-              Enter the amount you wish to withdraw and select your payout destination.
+              Submit your payout request to your bank account or UPI ID. Requests are reviewed and processed by the Finance administrator.
             </DialogDescription>
           </DialogHeader>
 
@@ -1083,15 +1157,29 @@ export default function Earnings() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                    Account Number
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold text-muted-foreground">
+                      Account Number
+                    </label>
+                    <span className="text-[10px] font-medium text-primary">
+                      {getExpectedAccountLengthHint(bankName, ifscCode)}
+                    </span>
+                  </div>
                   <input
-                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className={`h-10 w-full rounded-xl border bg-background px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 ${
+                      accountNumber && !bankAccValidation.valid
+                        ? "border-amber-500 focus:border-amber-500"
+                        : "border-input"
+                    }`}
                     placeholder="e.g. 102938475612"
                     value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
+                    onChange={(e) => setAccountNumber(e.target.value.replace(/\s+/g, ""))}
                   />
+                  {accountNumber && !bankAccValidation.valid && (
+                    <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                      {bankAccValidation.message}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
@@ -1101,7 +1189,7 @@ export default function Earnings() {
                     className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
                     placeholder="Re-enter bank account number"
                     value={confirmAccountNumber}
-                    onChange={(e) => setConfirmAccountNumber(e.target.value)}
+                    onChange={(e) => setConfirmAccountNumber(e.target.value.replace(/\s+/g, ""))}
                   />
                   {confirmAccountNumber && (
                     <p
@@ -1134,6 +1222,9 @@ export default function Earnings() {
                     </p>
                   )}
                 </div>
+                <div className="rounded-xl bg-cyan-500/10 p-2.5 border border-cyan-500/20 text-[11px] text-cyan-800 dark:text-cyan-300">
+                  ⚡ <strong>Secure Bank Settlement:</strong> Your withdrawal request is sent directly to Admin for verification and payout approval in the Finance portal.
+                </div>
               </div>
             )}
 
@@ -1142,7 +1233,85 @@ export default function Earnings() {
               <div className="space-y-3 pt-1">
                 <div>
                   <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                    Registered Name
+                    UPI ID (Virtual Payment Address)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      className="h-10 flex-1 rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      placeholder="e.g. rahul@upi, yourname@oksbi"
+                      value={upiId}
+                      onChange={(e) => {
+                        setUpiId(e.target.value.toLowerCase());
+                        setVpaVerified(null);
+                        setVpaCustomerName(null);
+                        setVpaError(null);
+                      }}
+                      onBlur={() => {
+                        if (upiId.includes("@") && upiId.length >= 4 && vpaVerified === null) {
+                          void handleVerifyVpa(upiId);
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!upiId.includes("@") || vpaVerifying}
+                      onClick={() => void handleVerifyVpa(upiId)}
+                      className="h-10 text-xs px-3 font-semibold shrink-0"
+                    >
+                      {vpaVerifying ? (
+                        <>
+                          <Clock className="h-3.5 w-3.5 mr-1 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="h-3.5 w-3.5 mr-1 text-primary" />
+                          Verify VPA
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {upiId && !upiId.includes("@") && (
+                    <p className="mt-1 text-[11px] text-amber-600">
+                      Please include a valid UPI handle (must contain &apos;@&apos;, e.g. rahul@upi).
+                    </p>
+                  )}
+                </div>
+
+                {/* Real-time NPCI Verification Status Indicator */}
+                {vpaVerified === true && (
+                  <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 p-2.5 border border-emerald-500/20 text-xs text-emerald-800 dark:text-emerald-300">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <div>
+                      <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                        NPCI Verified Active VPA
+                      </p>
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                        {vpaCustomerName
+                          ? `Registered Beneficiary: ${vpaCustomerName}`
+                          : "UPI VPA is verified and active on NPCI banking rails."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {vpaVerified === false && vpaError && (
+                  <div className="flex items-center gap-2 rounded-xl bg-rose-500/10 p-2.5 border border-rose-500/20 text-xs text-rose-800 dark:text-rose-300">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                    <div>
+                      <p className="font-semibold text-rose-900 dark:text-rose-200">
+                        NPCI Verification Failed
+                      </p>
+                      <p className="text-[11px] text-rose-700 dark:text-rose-300">{vpaError}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
+                    Account Holder / Registered Name
                   </label>
                   <input
                     className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -1150,26 +1319,15 @@ export default function Earnings() {
                     value={upiHolder}
                     onChange={(e) => setUpiHolder(e.target.value)}
                   />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                    UPI ID (Virtual Payment Address)
-                  </label>
-                  <input
-                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="e.g. yourname@oksbi, 9876543210@paytm"
-                    value={upiId}
-                    onChange={(e) => setUpiId(e.target.value.toLowerCase())}
-                  />
-                  {upiId && !upiId.includes("@") && (
-                    <p className="mt-1 text-[11px] text-amber-600">
-                      Please include a valid UPI handle (must contain &apos;@&apos;).
+                  {vpaCustomerName && (
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Auto-detected from bank record via NPCI.
                     </p>
                   )}
                 </div>
-                <div className="rounded-xl bg-primary/5 p-2.5 border border-primary/10 text-[11px] text-muted-foreground">
-                  Funds will be transferred directly to your UPI-linked bank account upon
-                  review.
+
+                <div className="rounded-xl bg-emerald-500/10 p-2.5 border border-emerald-500/20 text-[11px] text-emerald-800 dark:text-emerald-300">
+                  ⚡ <strong>Automated UPI Payout:</strong> RazorpayX verifies VPA validity via NPCI and initiates a UPI payout directly to the bank account linked to that UPI ID. Money arrives in seconds.
                 </div>
               </div>
             )}

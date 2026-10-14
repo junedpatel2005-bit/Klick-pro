@@ -51,10 +51,57 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         });
         if (settled.count !== 1)
           throw new Error("Professional wallet reservation is no longer available.");
+
+        // Record transaction ledger row
+        await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            amount: -withdrawal.amount,
+            type: "WITHDRAWAL",
+            status: "COMPLETED",
+            description: `Withdrawal of ₹${withdrawal.amount.toLocaleString(
+              "en-IN",
+            )} approved & paid by Admin (${withdrawal.destinationType || "BANK"})`,
+            idempotencyKey: `payout-${withdrawal.id}`,
+            metadataJson: JSON.stringify({
+              withdrawalId: withdrawal.id,
+              destinationType: withdrawal.destinationType,
+              destinationLabel: withdrawal.destinationLabel,
+            }),
+          },
+        });
+
+        // Notify user
+        await tx.userNotification.create({
+          data: {
+            userId: withdrawal.professionalId,
+            type: "PAYOUT_COMPLETED",
+            title: "Withdrawal Approved & Paid",
+            description: `Your withdrawal request of ₹${withdrawal.amount.toLocaleString(
+              "en-IN",
+            )} has been approved and paid by Admin.`,
+            href: "/professional/earnings",
+          },
+        });
       } else {
         await tx.wallet.updateMany({
           where: { id: wallet.id, pendingBalance: { gte: withdrawal.amount } },
           data: { pendingBalance: { decrement: withdrawal.amount } },
+        });
+
+        // Notify user about rejection
+        await tx.userNotification.create({
+          data: {
+            userId: withdrawal.professionalId,
+            type: "PAYOUT_FAILED",
+            title: "Withdrawal Request Rejected",
+            description: `Your withdrawal request of ₹${withdrawal.amount.toLocaleString(
+              "en-IN",
+            )} was rejected: ${
+              parsed.data.failureReason ?? "Rejected by admin."
+            }. Reserved funds have been restored to your wallet balance.`,
+            href: "/professional/earnings",
+          },
         });
       }
       return tx.projectWithdrawal.update({

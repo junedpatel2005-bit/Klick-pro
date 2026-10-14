@@ -14,10 +14,28 @@ const paymentEntitySchema = z.object({
   currency: z.string().length(3).optional(),
 });
 
+const payoutEntitySchema = z.object({
+  id: z.string().min(1).optional(),
+  fund_account_id: z.string().optional(),
+  status: z.string().optional(),
+  amount: z.number().int().nonnegative().optional(),
+  currency: z.string().length(3).optional(),
+  mode: z.string().optional(),
+  reference_id: z.string().optional(),
+  utr: z.string().optional(),
+  failure_reason: z.string().optional(),
+  error_description: z.string().optional(),
+});
+
 const payloadSchema = z.object({
   id: z.string().min(1),
   event: z.string().min(1),
-  payload: z.object({ payment: z.object({ entity: paymentEntitySchema }).optional() }).optional(),
+  payload: z
+    .object({
+      payment: z.object({ entity: paymentEntitySchema }).optional(),
+      payout: z.object({ entity: payoutEntitySchema }).optional(),
+    })
+    .optional(),
 });
 
 const retryableStatuses = ["RECEIVED", "FAILED"];
@@ -156,6 +174,120 @@ export async function POST(request: Request) {
                 metadataJson: JSON.stringify({
                   reason: entity.error_description ?? "Payment failed.",
                 }),
+              },
+            });
+          }
+        }
+      }
+
+      const payoutEntity = payload.payload?.payout?.entity;
+      if (payoutEntity?.id) {
+        const withdrawal = await tx.projectWithdrawal.findFirst({
+          where: {
+            OR: [
+              { providerTransferId: payoutEntity.id },
+              ...(payoutEntity.reference_id
+                ? [{ providerTransferId: payoutEntity.reference_id }]
+                : []),
+            ],
+          },
+        });
+
+        if (withdrawal) {
+          if (payload.event === "payout.processed") {
+            await tx.projectWithdrawal.update({
+              where: { id: withdrawal.id },
+              data: {
+                status: "COMPLETED",
+                utr: payoutEntity.utr ?? withdrawal.utr,
+                payoutMode: payoutEntity.mode ?? withdrawal.payoutMode,
+                processedAt: new Date(),
+                failureReason: null,
+              },
+            });
+            await tx.walletTransaction.updateMany({
+              where: { idempotencyKey: `payout-${withdrawal.id}`, status: { in: ["PENDING", "PROCESSING"] } },
+              data: { status: "COMPLETED", providerReference: payoutEntity.id },
+            });
+          } else if (payload.event === "payout.failed") {
+            const failReason =
+              payoutEntity.failure_reason ??
+              payoutEntity.error_description ??
+              "Payout failed on banking rails.";
+            // If funds were deducted while processing, restore balance
+            if (withdrawal.status === "PROCESSING") {
+              await tx.wallet.update({
+                where: { userId: withdrawal.professionalId },
+                data: { balance: { increment: withdrawal.amount } },
+              });
+            }
+            await tx.projectWithdrawal.update({
+              where: { id: withdrawal.id },
+              data: {
+                status: "FAILED",
+                failureReason: failReason,
+              },
+            });
+            await tx.walletTransaction.updateMany({
+              where: { idempotencyKey: `payout-${withdrawal.id}` },
+              data: { status: "FAILED" },
+            });
+            await tx.userNotification.create({
+              data: {
+                userId: withdrawal.professionalId,
+                type: "PAYOUT_FAILED",
+                title: "Withdrawal Failed - Balance Restored",
+                description: `Your withdrawal of ₹${withdrawal.amount.toLocaleString("en-IN")} failed (${failReason}). Your wallet balance has been restored.`,
+                href: "/professional/earnings",
+              },
+            });
+          } else if (payload.event === "payout.reversed") {
+            const failReason =
+              payoutEntity.failure_reason ??
+              payoutEntity.error_description ??
+              "Payout reversed by beneficiary bank / NPCI.";
+            // If the withdrawal was completed earlier, refund balance to user
+            if (withdrawal.status === "COMPLETED") {
+              await tx.wallet.update({
+                where: { userId: withdrawal.professionalId },
+                data: { balance: { increment: withdrawal.amount } },
+              });
+              const userWallet = await tx.wallet.findUnique({
+                where: { userId: withdrawal.professionalId },
+              });
+              if (userWallet) {
+                await tx.walletTransaction.create({
+                  data: {
+                    walletId: userWallet.id,
+                    amount: withdrawal.amount,
+                    type: "REFUND",
+                    status: "COMPLETED",
+                    description: `Refund: Payout reversed by bank rails (Withdrawal #${withdrawal.id})`,
+                    idempotencyKey: `reversal-${withdrawal.id}-${payload.id}`,
+                    providerReference: payoutEntity.id,
+                    metadataJson: JSON.stringify({
+                      payoutId: payoutEntity.id,
+                      reason: failReason,
+                      reversedAt: new Date().toISOString(),
+                    }),
+                  },
+                });
+              }
+            }
+            await tx.projectWithdrawal.update({
+              where: { id: withdrawal.id },
+              data: {
+                status: "REVERSED",
+                failureReason: failReason,
+              },
+            });
+            await tx.userNotification.create({
+              data: {
+                userId: withdrawal.professionalId,
+                type: "PAYOUT_REVERSED",
+                title: "Withdrawal Reversed - Balance Refunded",
+                description: `Your payout of ₹${withdrawal.amount.toLocaleString("en-IN")} was reversed by the banking network (${failReason}). The amount has been credited back to your wallet.`,
+                href: "/professional/earnings",
               },
             });
           }
