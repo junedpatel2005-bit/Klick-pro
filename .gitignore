@@ -58,5 +58,8 @@ clients-credentials.json
 *credentials*.json
 
 # Local-only scratch output (credential dumps, exports).
+backups/
+*.sql.gz
+*.sql.bak
 .local/
 .eslintcache

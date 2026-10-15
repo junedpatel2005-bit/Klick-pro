@@ -1,0 +1,13 @@
+.git
+.github
+.next/
+node_modules/
+backups/
+tmp/
+*.log
+npm-debug.log*
+.env
+.env*.local
+.vscode
+.idea
+.DS_Store
