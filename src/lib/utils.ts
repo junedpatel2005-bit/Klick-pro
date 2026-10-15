@@ -26,3 +26,65 @@ export function formatReadableLabel(value: string | null | undefined): string {
     .toLowerCase()
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
+
+const COMMON_PRESERVED_ACRONYMS = new Set([
+  "SBI",
+  "HDFC",
+  "ICICI",
+  "PNB",
+  "BOB",
+  "AXIS",
+  "KOTAK",
+  "IDFC",
+  "NPCI",
+  "UPI",
+  "IMPS",
+  "NEFT",
+  "RTGS",
+  "IFSC",
+  "PAN",
+  "GST",
+  "IT",
+  "ID",
+  "OTP",
+]);
+
+/**
+ * Capitalizes the first letter of each word in a string (Title Case).
+ * Formats user names, bank names, account holders, cities, job titles, etc.
+ * e.g., "juned ansari" -> "Juned Ansari"
+ * e.g., "state bank of india" -> "State Bank Of India"
+ */
+export function capitalizeWords(value: string | null | undefined): string {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  return trimmed
+    .split(/(\s+|-|\/)/)
+    .map((part) => {
+      if (!part || /^\s+$/.test(part) || part === "-" || part === "/") return part;
+      const upper = part.toUpperCase();
+      if (COMMON_PRESERVED_ACRONYMS.has(upper)) return upper;
+      // Preserve existing mixed-case tokens like McDonald, iPhone, etc. if intentional
+      if (/[A-Z]/.test(part) && /[a-z]/.test(part) && !part.includes(" ")) {
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      }
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+    })
+    .join("");
+}
+
+/**
+ * Unified formatter for user details across the website.
+ * @param value String to format
+ * @param mode "words" for proper nouns/names/titles/cities (default); "sentence" for descriptions/messages
+ */
+export function formatUserDetail(
+  value: string | null | undefined,
+  mode: "words" | "sentence" = "words",
+): string {
+  if (!value) return "";
+  return mode === "sentence" ? capitalizeFirst(value) : capitalizeWords(value);
+}
+

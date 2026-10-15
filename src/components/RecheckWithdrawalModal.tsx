@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getBankValidationRule } from "@/lib/indian-banks";
+import { capitalizeWords } from "@/lib/utils";
 
 export type RecheckWithdrawalModalProps = {
   open: boolean;
@@ -151,8 +152,9 @@ export function RecheckWithdrawalModal({
       onUpdateDetails?.({ ifscCode: cleanVal });
       toast.success("IFSC code updated!");
     } else if (field === "accountHolder") {
-      setCurrentHolder(val);
-      onUpdateDetails?.({ accountHolder: val });
+      const formatted = capitalizeWords(val);
+      setCurrentHolder(formatted);
+      onUpdateDetails?.({ accountHolder: formatted });
       toast.success("Account holder name updated!");
     } else if (field === "upiId") {
       const cleanVal = val.toLowerCase().replace(/\s+/g, "");
@@ -164,8 +166,9 @@ export function RecheckWithdrawalModal({
       onUpdateDetails?.({ upiId: cleanVal });
       toast.success("UPI ID updated!");
     } else if (field === "upiHolder") {
-      setCurrentUpiHolder(val);
-      onUpdateDetails?.({ upiHolder: val });
+      const formatted = capitalizeWords(val);
+      setCurrentUpiHolder(formatted);
+      onUpdateDetails?.({ upiHolder: formatted });
       toast.success("Registered UPI name updated!");
     }
 
@@ -230,8 +233,8 @@ export function RecheckWithdrawalModal({
                   <p className="text-xs font-bold text-foreground">
                     {isBank ? "Bank Account Transfer" : "UPI Instant Transfer"}
                   </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {isBank ? (rule?.bankName || bankName || "Verified Bank") : "UPI Network 24x7"}
+                  <p className="text-[11px] text-muted-foreground capitalize">
+                    {isBank ? capitalizeWords(rule?.bankName || bankName || "Verified Bank") : "UPI Network 24x7"}
                   </p>
                 </div>
               </div>
@@ -253,7 +256,9 @@ export function RecheckWithdrawalModal({
                 {/* Bank Name */}
                 <div className="flex justify-between items-center py-1">
                   <span className="text-muted-foreground">Bank Name</span>
-                  <span className="font-semibold text-foreground">{bankName || rule?.bankName || "Bank Transfer"}</span>
+                  <span className="font-semibold text-foreground capitalize">
+                    {capitalizeWords(bankName || rule?.bankName || "Bank Transfer")}
+                  </span>
                 </div>
 
                 {/* Account Holder Name with Edit */}
@@ -266,7 +271,7 @@ export function RecheckWithdrawalModal({
                         value={tempValue}
                         onChange={(e) => setTempValue(e.target.value)}
                         placeholder="Account holder name"
-                        className="h-7 w-full max-w-[170px] rounded-md border border-primary/40 bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="h-7 w-full max-w-[170px] capitalize rounded-md border border-primary/40 bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                         autoFocus
                         onKeyDown={(e) => {
                           if (e.key === "Enter") saveEdit("accountHolder");
@@ -292,7 +297,9 @@ export function RecheckWithdrawalModal({
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-foreground">{currentHolder || "—"}</span>
+                      <span className="font-semibold text-foreground capitalize">
+                        {capitalizeWords(currentHolder) || "—"}
+                      </span>
                       <button
                         type="button"
                         onClick={() => startEdit("accountHolder", currentHolder)}
@@ -477,7 +484,9 @@ export function RecheckWithdrawalModal({
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-foreground">{currentUpiHolder || "—"}</span>
+                      <span className="font-semibold text-foreground capitalize">
+                        {capitalizeWords(currentUpiHolder) || "—"}
+                      </span>
                       <button
                         type="button"
                         onClick={() => startEdit("upiHolder", currentUpiHolder)}

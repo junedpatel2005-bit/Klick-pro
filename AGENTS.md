@@ -46,3 +46,13 @@ Whenever any schema change is requested:
 
 - **TRANSPARENCY FIRST**: Before executing multi-file edits, batch updates, or structural changes, always explain to the user what you are about to do, why, and how it will be implemented.
 - **NEVER WORK IN SILENCE**: Keep the user fully in the loop with a clear breakdown of the planned steps and affected files so the user has complete visibility and control over all modifications.
+
+# UI & Text Presentation Rules (STRICT & MANDATORY)
+
+## Rule 5: First-Letter Capitalization for User-Entered & Displayed Details
+
+- **ALWAYS CAPITALIZE USER-ENTERED DETAILS**: Across the entire website, whenever a user enters details in lowercase (small case) — including full names, first/last names, bank account holder names, bank names, UPI registered names, cities, states, addresses, company names, job titles, profession categories, proposals, and descriptions — the UI display MUST ALWAYS format and show them with the first letter capitalized.
+- **NO RAW ALL-LOWERCASE RENDERING**: Never display raw unformatted lowercase strings for user details in cards, headers, navigation bars, tables, modal dialogs, receipts, or profile pages. Always apply capitalization utility functions (`capitalizeWords`, `capitalizeFirst`, or `formatUserDetail` from `@/lib/utils`) or CSS `capitalize` (`text-transform: capitalize;`).
+- **TITLE CASING FOR NAMES & ENTITIES**: Proper nouns such as names (`john doe` → `John Doe`), bank names (`bank of baroda` → `Bank Of Baroda`), cities (`mumbai` → `Mumbai`), and designations (`software developer` → `Software Developer`) must have the first letter of each word capitalized.
+- **SENTENCE CASING FOR DESCRIPTIONS & MESSAGES**: Descriptions, project overviews, bios, and message text must always begin with a capitalized first letter (`capitalizeFirst`).
+

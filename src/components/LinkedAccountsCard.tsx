@@ -41,6 +41,8 @@ import {
 } from "@/lib/indian-banks";
 import { BankCombobox } from "@/components/BankCombobox";
 import { IfscFinderDialog } from "@/components/IfscFinderDialog";
+import { capitalizeWords } from "@/lib/utils";
+
 
 export type LinkedAccount = {
   id: number;
@@ -298,10 +300,10 @@ export function LinkedAccountsCard({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           accountType,
-          accountHolder: accountHolder.trim() || undefined,
+          accountHolder: accountHolder.trim() ? capitalizeWords(accountHolder.trim()) : undefined,
           accountNumber: accountNumber.trim() || undefined,
           ifscCode: ifscCode.trim().toUpperCase() || undefined,
-          bankName: bankName.trim() || undefined,
+          bankName: bankName.trim() ? capitalizeWords(bankName.trim()) : undefined,
           upiId: upiId.trim().toLowerCase() || undefined,
           razorpayAccountId: razorpayAccountId.trim() || undefined,
           isDefault,
@@ -432,10 +434,11 @@ export function LinkedAccountsCard({
                 IconComponent = Building2;
                 iconColor =
                   "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400";
-                const resolvedBank = acc.bankName || getBankNameFromIfsc(acc.ifscCode) || "Bank Account";
+                const rawBank = acc.bankName || getBankNameFromIfsc(acc.ifscCode) || "Bank Account";
+                const resolvedBank = capitalizeWords(rawBank);
                 titleText = `${resolvedBank} · •••• ${acc.last4 || "••••"}`;
                 subText = [
-                  acc.accountHolder ? `Holder: ${acc.accountHolder}` : null,
+                  acc.accountHolder ? `Holder: ${capitalizeWords(acc.accountHolder)}` : null,
                   acc.ifscCode ? `IFSC: ${acc.ifscCode}` : null,
                 ]
                   .filter(Boolean)
@@ -446,14 +449,14 @@ export function LinkedAccountsCard({
                   "bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-950/40 dark:text-purple-400";
                 titleText = `UPI · ${acc.upiId}`;
                 subText = acc.accountHolder
-                  ? `Name: ${acc.accountHolder}`
+                  ? `Name: ${capitalizeWords(acc.accountHolder)}`
                   : "Virtual Payment Address";
               } else if (isCard) {
                 IconComponent = CreditCard;
                 iconColor =
                   "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400";
-                titleText = `${acc.cardBank || "Debit Card"} · •••• ${acc.last4 || "••••"}`;
-                subText = acc.accountHolder ? `Holder: ${acc.accountHolder}` : "Debit Card";
+                titleText = `${capitalizeWords(acc.cardBank || "Debit Card")} · •••• ${acc.last4 || "••••"}`;
+                subText = acc.accountHolder ? `Holder: ${capitalizeWords(acc.accountHolder)}` : "Debit Card";
               } else {
                 IconComponent = Landmark;
                 iconColor =

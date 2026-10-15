@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import { ensureWallet } from "@/lib/wallet-ledger";
+import { ensureWallet, creditWalletFromVerifiedProvider } from "@/lib/wallet-ledger";
+import { fetchRazorpayOrderPayments, isRazorpayConfigured } from "@/lib/razorpay";
 import { getMinWithdrawalAmount } from "@/lib/platform-settings";
 import { Prisma } from "@generated/prisma/client";
 
@@ -19,6 +20,43 @@ export async function GET(request: NextRequest) {
   const session = await sessionFrom(request);
   if (!session) return NextResponse.json({ error: "Sign-in required." }, { status: 401 });
   const wallet = await ensureWallet(session.userId);
+
+  // Resilient Auto-Reconciliation: If user closed their browser or lost network,
+  // reconcile any uncompleted recent top-up directly with Razorpay on page load
+  if (isRazorpayConfigured()) {
+    try {
+      const pendingTopUp = await db.walletTransaction.findFirst({
+        where: {
+          walletId: wallet.id,
+          type: "WALLET_TOP_UP",
+          status: "PENDING",
+          createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      if (pendingTopUp?.providerReference) {
+        const payments = await fetchRazorpayOrderPayments(pendingTopUp.providerReference);
+        const captured = payments.find(
+          (p) =>
+            p.status === "captured" &&
+            p.amount === pendingTopUp.amount * 100 &&
+            p.currency === "INR",
+        );
+        if (captured) {
+          await db.$transaction((tx) =>
+            creditWalletFromVerifiedProvider(tx, {
+              userId: session.userId,
+              amount: pendingTopUp.amount,
+              providerReference: pendingTopUp.providerReference!,
+              providerPaymentId: captured.id,
+            }),
+          );
+        }
+      }
+    } catch (reconcileErr) {
+      console.warn("Wallet auto-reconciliation warning:", reconcileErr);
+    }
+  }
   const transactions = await db.walletTransaction.findMany({
     where: { walletId: wallet.id },
     orderBy: { createdAt: "desc" },

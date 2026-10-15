@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardSkeleton } from "@/components/LoadingSkeleton";
-import { capitalizeFirst } from "@/lib/utils";
+import { capitalizeFirst, capitalizeWords } from "@/lib/utils";
 
 type DashboardData = {
   user: {
@@ -209,9 +209,9 @@ export default function Dashboard() {
     return <DashboardSkeleton />;
   }
 
-  const fullName = `${data.user.firstName} ${data.user.lastName ?? ""}`.trim();
-  const firstInitial = (data.user.firstName || "C").charAt(0);
-  const lastInitial = (data.user.lastName || "").charAt(0);
+  const fullName = capitalizeWords(`${data.user.firstName} ${data.user.lastName ?? ""}`.trim());
+  const firstInitial = (data.user.firstName || "C").charAt(0).toUpperCase();
+  const lastInitial = (data.user.lastName || "").charAt(0).toUpperCase();
   const initials = (firstInitial + lastInitial).toUpperCase();
   const walletBal = data.walletBalance ?? 0;
 
@@ -299,8 +299,8 @@ export default function Dashboard() {
                   Client Workspace
                 </span>
                 {data.user.companyName && (
-                  <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-xs text-white/80">
-                    {data.user.companyName}
+                  <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-xs text-white/80 capitalize">
+                    {capitalizeWords(data.user.companyName)}
                   </span>
                 )}
                 {data.user.averageRating > 0 && (
@@ -312,7 +312,7 @@ export default function Dashboard() {
               </div>
 
               <h1 className="mt-2 font-display text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">
-                Good to see you, {data.user.firstName}.
+                Good to see you, <span className="capitalize">{capitalizeWords(data.user.firstName)}</span>.
               </h1>
               <p className="mt-1 max-w-xl text-sm leading-relaxed text-white/75">
                 Manage your job postings, review incoming proposals, and collaborate with top professionals.

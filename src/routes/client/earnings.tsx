@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { CardListSkeleton } from "@/components/LoadingSkeleton";
 import { PageActionLoading } from "@/components/PageActionLoading";
-import { formatReadableLabel } from "@/lib/utils";
+import { formatReadableLabel, capitalizeWords, capitalizeFirst } from "@/lib/utils";
 import { LinkedAccountsCard } from "@/components/LinkedAccountsCard";
 import { RecheckWithdrawalModal } from "@/components/RecheckWithdrawalModal";
 import { WithdrawalDetailModal } from "@/components/WithdrawalDetailModal";
@@ -125,15 +125,15 @@ function parseDestinationSummary(destinationLabel: string | null, destinationTyp
   try {
     const data = JSON.parse(destinationLabel);
     if (data.type === "BANK" || destinationType === "BANK") {
-      const resolvedBank = data.bankName || getBankNameFromIfsc(data.ifsc);
-      const bank = resolvedBank ? `${resolvedBank} · ` : "";
+      const rawBank = data.bankName || getBankNameFromIfsc(data.ifsc);
+      const bank = rawBank ? `${capitalizeWords(rawBank)} · ` : "";
       const last4 = data.accountNumber
         ? `A/C •••• ${data.accountNumber.slice(-4)}`
         : "Bank Account";
       return {
         label: `${bank}${last4}`,
         sub: data.accountHolder
-          ? `Holder: ${data.accountHolder} | IFSC: ${data.ifsc ?? "—"}`
+          ? `Holder: ${capitalizeWords(data.accountHolder)} | IFSC: ${data.ifsc ?? "—"}`
           : undefined,
         icon: Building2,
       };
@@ -141,16 +141,16 @@ function parseDestinationSummary(destinationLabel: string | null, destinationTyp
     if (data.type === "UPI" || destinationType === "UPI") {
       return {
         label: `UPI · ${data.upiId}`,
-        sub: data.upiHolder ? `Name: ${data.upiHolder}` : undefined,
+        sub: data.upiHolder ? `Name: ${capitalizeWords(data.upiHolder)}` : undefined,
         icon: Smartphone,
       };
     }
     if (data.type === "CARD" || destinationType === "CARD") {
-      const bank = data.cardBank ? `${data.cardBank} · ` : "";
+      const bank = data.cardBank ? `${capitalizeWords(data.cardBank)} · ` : "";
       const last4 = data.cardNumber ? `Card •••• ${data.cardNumber.slice(-4)}` : "Debit Card";
       return {
         label: `${bank}${last4}`,
-        sub: data.cardHolder ? `Name: ${data.cardHolder}` : undefined,
+        sub: data.cardHolder ? `Name: ${capitalizeWords(data.cardHolder)}` : undefined,
         icon: CreditCard,
       };
     }
@@ -417,8 +417,17 @@ export default function ClientEarnings() {
     const handleLinkedUpdated = () => {
       loadLinkedAccounts();
     };
+    const handleOnline = () => {
+      toast.success("Internet connection restored. Refreshing wallet balance…");
+      loadWallet();
+      loadLinkedAccounts();
+    };
+    window.addEventListener("online", handleOnline);
     window.addEventListener("servio:linked-accounts-updated", handleLinkedUpdated);
-    return () => window.removeEventListener("servio:linked-accounts-updated", handleLinkedUpdated);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("servio:linked-accounts-updated", handleLinkedUpdated);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useRealtimeRefresh(["servio:project-update", "servio:notification", "servio:proposal"], () => {
@@ -490,6 +499,13 @@ export default function ClientEarnings() {
     if (updatedDetails?.upiId) setWithdrawDestination(updatedDetails.upiId);
     if (updatedDetails?.upiHolder) setUpiHolder(updatedDetails.upiHolder);
 
+    if (typeof window !== "undefined" && !window.navigator.onLine) {
+      setActionBusy(null);
+      return setWithdrawMessage(
+        "You appear to be offline. Please reconnect to the internet to submit your withdrawal.",
+      );
+    }
+
     setActionBusy("withdraw");
     try {
       const destinationLabel =
@@ -548,6 +564,10 @@ export default function ClientEarnings() {
         setRecheckModalOpen(false);
         loadWallet();
       }
+    } catch {
+      setWithdrawMessage(
+        "Network connection lost. Please check your internet connection and try again.",
+      );
     } finally {
       setActionBusy(null);
     }
@@ -555,6 +575,13 @@ export default function ClientEarnings() {
   async function startTopUp(amountOverride?: number) {
     const topUp = Number(amountOverride ?? topUpAmount);
     if (!topUp || topUp <= 0) return;
+
+    if (typeof window !== "undefined" && !window.navigator.onLine) {
+      return setWalletMessage(
+        "You appear to be offline. Please reconnect to the internet to fund your wallet.",
+      );
+    }
+
     setActionBusy("topup");
     try {
       const response = await fetch("/api/v1/wallet/deposit/order", {
@@ -1254,9 +1281,6 @@ export default function ClientEarnings() {
                   <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 border border-primary/20 px-3 py-1.5 text-xs font-bold text-primary">
                     <Landmark className="h-3.5 w-3.5" /> Withdraw funds
                   </div>
-                  <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
-                    ⚡ {withdrawMethod === "UPI" ? "Real-time UPI Payout" : "24x7 IMPS Rails (5s)"}
-                  </span>
                 </div>
 
                 <h2 className="mt-3 font-display text-2xl font-semibold text-foreground">
@@ -1276,23 +1300,13 @@ export default function ClientEarnings() {
                       ₹{(wallet?.available ?? 0).toLocaleString("en-IN")}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <span className="inline-flex items-center gap-1 rounded-lg bg-background border border-border/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                      Min amount: <strong className="text-foreground">₹{(wallet?.minWithdrawalAmount ?? 500).toLocaleString("en-IN")}</strong>
-                    </span>
-                  </div>
                 </div>
 
                 {/* Withdrawal Method Tabs */}
                 <div className="mt-4 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-foreground">
-                      Withdrawal Destination
-                    </label>
-                    <span className="text-[11px] text-muted-foreground">
-                      {withdrawMethod === "UPI" ? "⚡ Real-time UPI Payout" : "⚡ 24x7 IMPS Rails (5s)"}
-                    </span>
-                  </div>
+                  <label className="text-xs font-semibold text-foreground block">
+                    Withdrawal Destination
+                  </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
@@ -1349,10 +1363,12 @@ export default function ClientEarnings() {
                               </div>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <h3 className="font-semibold text-foreground text-sm sm:text-base truncate">
-                                    {selectedBankAccount.bankName ||
-                                      getBankNameFromIfsc(selectedBankAccount.ifscCode) ||
-                                      "Bank Account"}
+                                  <h3 className="font-semibold text-foreground text-sm sm:text-base truncate capitalize">
+                                    {capitalizeWords(
+                                      selectedBankAccount.bankName ||
+                                        getBankNameFromIfsc(selectedBankAccount.ifscCode) ||
+                                        "Bank Account",
+                                    )}
                                   </h3>
                                   {selectedBankAccount.isDefault && (
                                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/25 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400">
@@ -1391,8 +1407,8 @@ export default function ClientEarnings() {
                               <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block">
                                 Account Holder
                               </span>
-                              <span className="font-semibold text-foreground truncate block">
-                                {selectedBankAccount.accountHolder || "Account Holder"}
+                              <span className="font-semibold text-foreground truncate block capitalize">
+                                {capitalizeWords(selectedBankAccount.accountHolder) || "Account Holder"}
                               </span>
                             </div>
                           </div>
@@ -1494,8 +1510,8 @@ export default function ClientEarnings() {
                               <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
                                 Registered Beneficiary
                               </span>
-                              <span className="font-semibold text-foreground truncate">
-                                {selectedUpiAccount.accountHolder}
+                              <span className="font-semibold text-foreground truncate capitalize">
+                                {capitalizeWords(selectedUpiAccount.accountHolder)}
                               </span>
                             </div>
                           )}
@@ -1554,14 +1570,9 @@ export default function ClientEarnings() {
 
                 {/* Quick Amounts & Amount Input */}
                 <div className="mt-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-foreground">
-                      Withdrawal Amount
-                    </label>
-                    <span className="text-[11px] text-muted-foreground">
-                      Min: ₹{(wallet?.minWithdrawalAmount ?? 500).toLocaleString("en-IN")}
-                    </span>
-                  </div>
+                  <label className="text-xs font-semibold text-foreground block">
+                    Withdrawal Amount
+                  </label>
 
                   <div className="flex flex-wrap gap-1.5">
                     {[500, 1000, 2500, 5000].map((amt) => (
@@ -1602,7 +1613,7 @@ export default function ClientEarnings() {
                       max={wallet?.available ?? 0}
                       value={withdrawAmount}
                       onChange={(event) => setWithdrawAmount(event.target.value)}
-                      placeholder={`Enter amount (min ₹${(wallet?.minWithdrawalAmount ?? 500).toLocaleString("en-IN")})`}
+                      placeholder="Enter amount"
                     />
                   </div>
 

@@ -622,3 +622,14 @@ body:has(.cms-live-editable) button {
   box-shadow: none !important;
   outline: none !important;
 }
+
+/* User details presentation: ensure first letter capitalization across all pages */
+.capitalize-words,
+[data-capitalize-words="true"] {
+  text-transform: capitalize;
+}
+
+.capitalize-first::first-letter {
+  text-transform: uppercase;
+}
+

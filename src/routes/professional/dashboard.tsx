@@ -15,7 +15,7 @@ import {
   Star,
   UserRound,
 } from "lucide-react";
-import { capitalizeFirst, formatReadableLabel } from "@/lib/utils";
+import { capitalizeFirst, formatReadableLabel, capitalizeWords } from "@/lib/utils";
 
 type DashboardData = {
   professional: {
@@ -135,7 +135,7 @@ export default function ProfessionalDashboard() {
     );
 
   const professional = data.professional;
-  const name = `${professional.firstName} ${professional.lastName}`.trim();
+  const name = capitalizeWords(`${professional.firstName} ${professional.lastName}`.trim());
   const availability = formatReadableLabel(professional.availabilityStatus);
 
   return (
@@ -200,7 +200,7 @@ export default function ProfessionalDashboard() {
           <div className="mt-4 space-y-3">
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-foreground capitalize">
                   {name}
                 </h1>
                 {professional.isVerified && (
@@ -210,15 +210,15 @@ export default function ProfessionalDashboard() {
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-sm sm:text-base font-medium text-muted-foreground">
-                {professional.professionalCategory ?? "Professional"}
+              <p className="mt-1 text-sm sm:text-base font-medium text-muted-foreground capitalize">
+                {capitalizeWords(professional.professionalCategory) ?? "Professional"}
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5 pt-1">
-              <span className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-muted/50 px-3 py-1.5 text-xs font-medium text-foreground">
+              <span className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-muted/50 px-3 py-1.5 text-xs font-medium text-foreground capitalize">
                 <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                {professional.professionalCity ?? "Location not added"}
+                {capitalizeWords(professional.professionalCity) ?? "Location not added"}
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
                 <BadgeCheck className="h-3.5 w-3.5 text-primary" />

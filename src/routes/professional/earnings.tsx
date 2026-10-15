@@ -38,7 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PageActionLoading } from "@/components/PageActionLoading";
-import { formatReadableLabel } from "@/lib/utils";
+import { formatReadableLabel, capitalizeWords, capitalizeFirst } from "@/lib/utils";
 import { LinkedAccountsCard } from "@/components/LinkedAccountsCard";
 import { BankCombobox } from "@/components/BankCombobox";
 import { IfscFinderDialog } from "@/components/IfscFinderDialog";
@@ -100,14 +100,14 @@ function parseDestinationSummary(destinationLabel: string | null, destinationTyp
   try {
     const data = JSON.parse(destinationLabel);
     if (data.type === "BANK" || destinationType === "BANK") {
-      const bank = data.bankName ? `${data.bankName} · ` : "";
+      const bank = data.bankName ? `${capitalizeWords(data.bankName)} · ` : "";
       const last4 = data.accountNumber
         ? `A/C •••• ${data.accountNumber.slice(-4)}`
         : "Bank Account";
       return {
         label: `${bank}${last4}`,
         sub: data.accountHolder
-          ? `Holder: ${data.accountHolder} | IFSC: ${data.ifsc ?? "—"}`
+          ? `Holder: ${capitalizeWords(data.accountHolder)} | IFSC: ${data.ifsc ?? "—"}`
           : undefined,
         icon: Building2,
       };
@@ -115,16 +115,16 @@ function parseDestinationSummary(destinationLabel: string | null, destinationTyp
     if (data.type === "UPI" || destinationType === "UPI") {
       return {
         label: `UPI · ${data.upiId}`,
-        sub: data.upiHolder ? `Name: ${data.upiHolder}` : undefined,
+        sub: data.upiHolder ? `Name: ${capitalizeWords(data.upiHolder)}` : undefined,
         icon: Smartphone,
       };
     }
     if (data.type === "CARD" || destinationType === "CARD") {
-      const bank = data.cardBank ? `${data.cardBank} · ` : "";
+      const bank = data.cardBank ? `${capitalizeWords(data.cardBank)} · ` : "";
       const last4 = data.cardNumber ? `Card •••• ${data.cardNumber.slice(-4)}` : "Debit Card";
       return {
         label: `${bank}${last4}`,
-        sub: data.cardHolder ? `Name: ${data.cardHolder}` : undefined,
+        sub: data.cardHolder ? `Name: ${capitalizeWords(data.cardHolder)}` : undefined,
         icon: CreditCard,
       };
     }
@@ -432,15 +432,15 @@ export default function Earnings() {
     if (!canSubmit) return;
     const finalAccountNumber = (updatedDetails?.accountNumber ?? accountNumber).trim();
     const finalIfscCode = (updatedDetails?.ifscCode ?? ifscCode).trim().toUpperCase();
-    const finalAccountHolder = (updatedDetails?.accountHolder ?? accountHolder).trim();
+    const finalAccountHolder = capitalizeWords((updatedDetails?.accountHolder ?? accountHolder).trim());
     const finalUpiId = (updatedDetails?.upiId ?? upiId).trim().toLowerCase();
-    const finalUpiHolder = (updatedDetails?.upiHolder ?? upiHolder).trim();
+    const finalUpiHolder = capitalizeWords((updatedDetails?.upiHolder ?? upiHolder).trim());
 
     if (updatedDetails?.accountNumber) setAccountNumber(updatedDetails.accountNumber);
     if (updatedDetails?.ifscCode) setIfscCode(updatedDetails.ifscCode);
-    if (updatedDetails?.accountHolder) setAccountHolder(updatedDetails.accountHolder);
+    if (updatedDetails?.accountHolder) setAccountHolder(finalAccountHolder);
     if (updatedDetails?.upiId) setUpiId(updatedDetails.upiId);
-    if (updatedDetails?.upiHolder) setUpiHolder(updatedDetails.upiHolder);
+    if (updatedDetails?.upiHolder) setUpiHolder(finalUpiHolder);
 
     setActionBusy("withdraw");
     setMessage("");
@@ -449,7 +449,7 @@ export default function Earnings() {
       if (payoutMethod === "BANK") {
         destinationLabel = JSON.stringify({
           type: "BANK",
-          bankName: bankName.trim(),
+          bankName: capitalizeWords(bankName.trim()),
           accountHolder: finalAccountHolder,
           accountNumber: finalAccountNumber,
           ifsc: finalIfscCode,
@@ -497,14 +497,14 @@ export default function Earnings() {
           upiHolder: payoutMethod === "UPI" ? finalUpiHolder : undefined,
         }),
       });
-      const d = await r.json();
+      const d = await r.json().catch(() => null);
       setMessage(
         r.ok
-          ? (d.message ??
+          ? (d?.message ??
               `Withdrawal request of ₹${Number(amount).toLocaleString(
                 "en-IN",
               )} submitted successfully! Your request has been forwarded to Admin for approval.`)
-          : (d.error ?? "Unable to submit withdrawal request."),
+          : (d?.error ?? "Unable to submit withdrawal request."),
       );
       if (r.ok) {
         setAmount("");
@@ -512,6 +512,8 @@ export default function Earnings() {
         setRecheckModalOpen(false);
         load();
       }
+    } catch {
+      setMessage("Network connection lost. Please check your internet connection and try again.");
     } finally {
       setActionBusy(null);
     }

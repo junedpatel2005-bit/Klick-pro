@@ -6,6 +6,7 @@ import { Menu } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { capitalizeWords } from "@/lib/utils";
 
 export type NavigationItem = { to: string; icon: ElementType; label: string };
 export type NavigationUser = {
@@ -271,8 +272,8 @@ export function AppSidebar({
               collapsed ? "opacity-0 pointer-events-none hidden" : "opacity-100"
             }`}
           >
-            <p className="truncate text-sm font-semibold text-foreground">
-              {user.firstName} {user.lastName}
+            <p className="truncate text-sm font-semibold text-foreground capitalize">
+              {capitalizeWords(`${user.firstName} ${user.lastName}`)}
             </p>
             <p className="text-xs capitalize text-muted-foreground">{user.role.toLowerCase()}</p>
           </div>
