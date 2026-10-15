@@ -1,7 +1,11 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { CLIENT_FEE_RATE, calculateMilestoneMoney } from "@/lib/payment-fees";
-import { getPlatformCommissionRate, isNegativeBalanceAllowed } from "@/lib/platform-settings";
+import {
+  getPlatformCommissionRate,
+  isNegativeBalanceAllowed,
+  getSettlementAdminId,
+} from "@/lib/platform-settings";
 import { Prisma } from "@generated/prisma/client";
 
 export {
@@ -136,12 +140,7 @@ export async function fundMilestoneFromWallet(
     allowNegativeBalance?: boolean;
   },
 ) {
-  const admin = await tx.user.findFirst({
-    where: { role: "ADMIN" },
-    orderBy: { id: "asc" },
-    select: { id: true },
-  });
-  if (!admin) throw new Error("No admin account is configured for settlement.");
+  const adminId = await getSettlementAdminId(tx);
   const rate =
     input.customCommissionRate !== undefined
       ? input.customCommissionRate
@@ -180,7 +179,7 @@ export async function fundMilestoneFromWallet(
 
   // 3. Admin receipt entries: 2 entries (milestone receipt + commission receipt)
   await recordTransaction(tx, {
-    userId: admin.id,
+    userId: adminId,
     amount: money.baseAmount,
     type: "ADMIN_MILESTONE_RECEIPT",
     description: `Milestone receipt: ₹${money.baseAmount.toLocaleString("en-IN")}`,
@@ -191,7 +190,7 @@ export async function fundMilestoneFromWallet(
 
   if (money.clientFeeAmount > 0) {
     await recordTransaction(tx, {
-      userId: admin.id,
+      userId: adminId,
       amount: money.clientFeeAmount,
       type: "PLATFORM_COMMISSION",
       description: `Platform commission: ₹${money.clientFeeAmount.toLocaleString("en-IN")}`,
@@ -214,12 +213,7 @@ export async function releaseMilestoneToProfessional(
     customCommissionRate?: number;
   },
 ) {
-  const admin = await tx.user.findFirst({
-    where: { role: "ADMIN" },
-    orderBy: { id: "asc" },
-    select: { id: true },
-  });
-  if (!admin) throw new Error("No admin account is configured for settlement.");
+  const adminId = await getSettlementAdminId(tx);
 
   const rate =
     input.customCommissionRate !== undefined
@@ -230,7 +224,7 @@ export async function releaseMilestoneToProfessional(
   const money = calculateMilestoneMoney(input.baseAmount, rate);
 
   await recordTransaction(tx, {
-    userId: admin.id,
+    userId: adminId,
     amount: -money.professionalPayoutAmount,
     type: "PROFESSIONAL_PAYOUT",
     description: `Professional payout: ₹${money.professionalPayoutAmount.toLocaleString("en-IN")}`,
@@ -293,14 +287,9 @@ export async function refundDisputeToClient(
   },
 ) {
   if (input.amount <= 0) return { refundAmount: 0 };
-  const admin = await tx.user.findFirst({
-    where: { role: "ADMIN" },
-    orderBy: { id: "asc" },
-    select: { id: true },
-  });
-  if (!admin) throw new Error("No admin account is configured for settlement.");
+  const adminId = await getSettlementAdminId(tx);
   await recordTransaction(tx, {
-    userId: admin.id,
+    userId: adminId,
     amount: -input.amount,
     type: "DISPUTE_REFUND_DEBIT",
     description: `Dispute refund debit: ₹${input.amount} (${input.reason})`,
@@ -331,14 +320,9 @@ export async function releaseDisputeToProfessional(
   },
 ) {
   if (input.amount <= 0) return { payoutAmount: 0 };
-  const admin = await tx.user.findFirst({
-    where: { role: "ADMIN" },
-    orderBy: { id: "asc" },
-    select: { id: true },
-  });
-  if (!admin) throw new Error("No admin account is configured for settlement.");
+  const adminId = await getSettlementAdminId(tx);
   await recordTransaction(tx, {
-    userId: admin.id,
+    userId: adminId,
     amount: -input.amount,
     type: "DISPUTE_PAYOUT_DEBIT",
     description: `Dispute payout debit: ₹${input.amount} (${input.reason})`,

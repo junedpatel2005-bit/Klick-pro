@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
 import { GoogleMapsProvider } from "@/components/GoogleMapsProvider";
 import { NavigationProgressBar } from "@/components/NavigationProgressBar";
@@ -59,16 +61,30 @@ if (typeof window !== "undefined" && typeof Node === "function" && Node.prototyp
 // signed-in surfaces only (PortalShell, AdminPortal). Mounting it globally kept
 // a socket open on marketing pages for anonymous visitors.
 export function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 60 * 1000,
+            refetchOnWindowFocus: false,
+          },
+        },
+      }),
+  );
+
   return (
-    <GoogleMapsProvider>
-      <NavigationProgressBar />
-      {children}
-      <Toaster
-        position="top-right"
-        offset="76px"
-        duration={4500}
-        closeButton
-      />
-    </GoogleMapsProvider>
+    <QueryClientProvider client={queryClient}>
+      <GoogleMapsProvider>
+        <NavigationProgressBar />
+        {children}
+        <Toaster
+          position="top-right"
+          offset="76px"
+          duration={4500}
+          closeButton
+        />
+      </GoogleMapsProvider>
+    </QueryClientProvider>
   );
 }

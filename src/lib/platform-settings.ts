@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import type { Prisma } from "@generated/prisma/client";
 
 export type PlatformSettingItem = {
   key: string;
@@ -55,6 +56,12 @@ export const DEFAULT_PLATFORM_SETTINGS: Record<
     value: "true",
     description:
       "When ON, milestone auto-payments are allowed even if the client wallet has insufficient funds, deducting the full milestone amount and setting the client wallet balance into negative (e.g. -₹200) until repaid. When OFF, payments require full wallet balance.",
+    category: "FINANCE",
+  },
+  treasury_admin_user_id: {
+    value: "",
+    description:
+      "Dedicated Admin User ID for holding platform commission and escrow treasury. If empty, falls back to the lowest-ID administrator.",
     category: "FINANCE",
   },
 };
@@ -171,4 +178,32 @@ export async function setPlatformSetting(
       updatedAt: new Date(),
     },
   });
+}
+
+/**
+ * Resolves the administrator ID designated to hold platform commission and escrow balances.
+ * Looks up the configurable treasury_admin_user_id setting first, falling back to the lowest-ID active admin.
+ */
+export async function getSettlementAdminId(tx: Prisma.TransactionClient): Promise<number> {
+  try {
+    const configured = await getPlatformSetting("treasury_admin_user_id");
+    if (configured && /^\d+$/.test(configured.trim())) {
+      const specificId = parseInt(configured.trim(), 10);
+      const user = await tx.user.findFirst({
+        where: { id: specificId, role: "ADMIN", isActive: true },
+        select: { id: true },
+      });
+      if (user) return user.id;
+    }
+  } catch (err) {
+    console.warn("treasury_admin_lookup_fallback", err);
+  }
+
+  const admin = await tx.user.findFirst({
+    where: { role: "ADMIN", isActive: true },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  });
+  if (!admin) throw new Error("No active admin account is configured for settlement.");
+  return admin.id;
 }
