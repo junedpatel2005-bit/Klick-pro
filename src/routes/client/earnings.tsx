@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import {
   AlertCircle,
@@ -165,10 +166,50 @@ function parseDestinationSummary(destinationLabel: string | null, destinationTyp
 }
 
 export default function ClientEarnings() {
+  const queryClient = useQueryClient();
   const [payments, setPayments] = useState<Payment[] | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [walletLoading, setWalletLoading] = useState(true);
   const [paymentsLoading, setPaymentsLoading] = useState(true);
+
+  const { data: walletQueryData, refetch: refetchWallet } = useQuery({
+    queryKey: ["client-wallet"],
+    queryFn: async () => {
+      const r = await fetch("/api/v1/wallet", { cache: "no-store" });
+      if (!r.ok) return null;
+      return r.json();
+    },
+    staleTime: 30 * 1000,
+  });
+
+  useEffect(() => {
+    if (walletQueryData) {
+      const bal = walletQueryData?.wallet?.balance ?? walletQueryData?.available ?? 0;
+      if (bal < 0) {
+        try {
+          const alreadyAlerted = window.sessionStorage.getItem("klickpro_negative_wallet_alerted");
+          if (!alreadyAlerted) {
+            window.sessionStorage.setItem("klickpro_negative_wallet_alerted", "true");
+            toast.error(
+              `Your wallet balance is -₹${Math.abs(bal).toLocaleString("en-IN")}. Please add funds to clear your dues.`,
+              { duration: 7000 },
+            );
+          }
+        } catch {
+          // ignore
+        }
+      }
+      setWallet({
+        balance: walletQueryData.wallet?.balance ?? 0,
+        available: walletQueryData.available ?? walletQueryData.wallet?.balance ?? 0,
+        reserved: walletQueryData.reserved ?? 0,
+        transactions: walletQueryData.transactions ?? [],
+        withdrawals: walletQueryData.withdrawals ?? [],
+        minWithdrawalAmount: walletQueryData.minWithdrawalAmount,
+      });
+      setWalletLoading(false);
+    }
+  }, [walletQueryData]);
   const [topUpAmount, setTopUpAmount] = useState("");
   const [walletMessage, setWalletMessage] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState<
@@ -340,6 +381,8 @@ export default function ClientEarnings() {
 
   function loadWallet() {
     setWalletLoading(true);
+    void refetchWallet();
+    void queryClient.invalidateQueries({ queryKey: ["client-wallet"] });
     void fetch("/api/v1/wallet", { cache: "no-store" })
       .then((r) => (r.ok ? r.json().catch(() => null) : null))
       .then(

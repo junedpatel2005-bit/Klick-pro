@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import {
   AlertCircle,
@@ -172,9 +173,26 @@ type LinkedAccount = {
 
 type StatKey = "available" | "total" | "month" | "reserved";
 export default function Earnings() {
+  const queryClient = useQueryClient();
   const [items, setItems] = useState<Transaction[] | null>(null);
   const [completedJobs, setCompletedJobs] = useState<CompletedJob[] | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
+
+  const { data: proWalletData, refetch: refetchProWallet } = useQuery({
+    queryKey: ["pro-wallet"],
+    queryFn: async () => {
+      const r = await fetch("/api/v1/wallet", { cache: "no-store" });
+      if (!r.ok) return null;
+      return r.json();
+    },
+    staleTime: 30 * 1000,
+  });
+
+  useEffect(() => {
+    if (proWalletData) {
+      setWallet(proWalletData);
+    }
+  }, [proWalletData]);
   const [amount, setAmount] = useState("");
   const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>("BANK");
   const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
@@ -313,6 +331,8 @@ export default function Earnings() {
   }, []);
 
   const load = () => {
+    void refetchProWallet();
+    void queryClient.invalidateQueries({ queryKey: ["pro-wallet"] });
     void fetch("/api/v1/portal/earnings", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : []))
       .then(setItems)

@@ -10,6 +10,7 @@
     "start": "cross-env NODE_ENV=production node server.mjs",
     "lint": "eslint . --cache",
     "typecheck": "tsc --noEmit",
+    "test:resilience": "node --conditions=react-server --import tsx scripts/test-razorpay-resilience.ts",
     "check:razorpay": "tsx scripts/check-razorpay-sandbox.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:add-subcategory-jobs": "tsx scripts/add-faker-subcategory-jobs.ts",
