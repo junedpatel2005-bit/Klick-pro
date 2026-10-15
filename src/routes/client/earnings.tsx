@@ -42,6 +42,8 @@ import { formatReadableLabel } from "@/lib/utils";
 import { LinkedAccountsCard } from "@/components/LinkedAccountsCard";
 import { BankCombobox } from "@/components/BankCombobox";
 import { IfscFinderDialog } from "@/components/IfscFinderDialog";
+import { RecheckWithdrawalModal } from "@/components/RecheckWithdrawalModal";
+import { WithdrawalDetailModal } from "@/components/WithdrawalDetailModal";
 import {
   POPULAR_INDIAN_BANKS,
   lookupIfscCode,
@@ -76,6 +78,8 @@ type Withdrawal = {
   destinationType: string;
   destinationLabel: string | null;
   createdAt: string;
+  updatedAt?: string;
+  processedAt?: string | null;
   payoutMode?: string | null;
   utr?: string | null;
   failureReason?: string | null;
@@ -206,6 +210,8 @@ export default function ClientEarnings() {
 
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawMessage, setWithdrawMessage] = useState("");
+  const [recheckModalOpen, setRecheckModalOpen] = useState(false);
+  const [selectedWithdrawalDetail, setSelectedWithdrawalDetail] = useState<Withdrawal | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(10);
 
@@ -399,7 +405,17 @@ export default function ClientEarnings() {
     void loadWallet();
     loadLinkedAccounts();
   });
-  async function requestWithdrawal() {
+  function requestWithdrawal() {
+    const minAmt = wallet?.minWithdrawalAmount ?? 500;
+    const numAmt = Number(withdrawAmount);
+    if (!numAmt || numAmt < minAmt) {
+      return setWithdrawMessage(`Minimum withdrawal amount is ₹${minAmt.toLocaleString("en-IN")}.`);
+    }
+    if (wallet && numAmt > (wallet.available ?? 0)) {
+      return setWithdrawMessage(
+        `Amount exceeds your available balance of ₹${(wallet.available ?? 0).toLocaleString("en-IN")}.`,
+      );
+    }
     const upiTarget = withdrawDestination.trim().toLowerCase();
     if (withdrawMethod === "BANK") {
       const accValidation = validateBankSpecificAccountNumber(bankAccount, bankName, bankIfsc);
@@ -417,6 +433,12 @@ export default function ClientEarnings() {
       return setWithdrawMessage("Please enter a valid UPI ID (e.g. name@okhdfcbank).");
     }
 
+    setWithdrawMessage("");
+    setRecheckModalOpen(true);
+  }
+
+  async function executeClientWithdrawal() {
+    const upiTarget = withdrawDestination.trim().toLowerCase();
     setActionBusy("withdraw");
     try {
       const destinationLabel =
@@ -472,6 +494,7 @@ export default function ClientEarnings() {
         setIfscBranch(null);
         setIfscError(null);
         setBankAccountVerified(null);
+        setRecheckModalOpen(false);
         loadWallet();
       }
     } finally {
@@ -1013,7 +1036,16 @@ export default function ClientEarnings() {
                         return (
                           <div
                             key={withdrawal.id}
-                            className="rounded-xl border border-border/80 bg-background/60 hover:bg-muted/30 p-3.5 text-sm space-y-2 transition-colors"
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setSelectedWithdrawalDetail(withdrawal)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setSelectedWithdrawalDetail(withdrawal);
+                              }
+                            }}
+                            className="rounded-xl border border-border/80 bg-background/60 hover:bg-muted/40 p-3.5 text-sm space-y-2 transition-all cursor-pointer group"
                           >
                             <div className="flex items-center justify-between gap-3">
                               <p className="font-bold text-foreground text-base tracking-tight">
@@ -1031,14 +1063,23 @@ export default function ClientEarnings() {
                                       ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
                                       : withdrawal.status === "FAILED"
                                         ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-                                        : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                                        : withdrawal.status === "PROCESSING"
+                                          ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
+                                          : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
                                   }`}
                                 >
                                   {withdrawal.status === "COMPLETED" && <CheckCircle2 className="h-3 w-3" />}
+                                  {withdrawal.status === "PROCESSING" && (
+                                    <span className="relative flex h-2 w-2">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                                    </span>
+                                  )}
                                   {withdrawal.status === "PENDING" && <Clock className="h-3 w-3" />}
                                   {withdrawal.status === "FAILED" && <X className="h-3 w-3" />}
-                                  {formatReadableLabel(withdrawal.status)}
+                                  {withdrawal.status === "PROCESSING" ? "In Progress" : formatReadableLabel(withdrawal.status)}
                                 </span>
+                                <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-foreground group-hover:translate-x-0.5 transition-transform shrink-0" />
                               </div>
                             </div>
 
@@ -2023,6 +2064,30 @@ export default function ClientEarnings() {
           </section>
         </div>
       ) : null}
+
+      {/* Confirmation Modal to Recheck Details Before Withdrawal */}
+      <RecheckWithdrawalModal
+        open={recheckModalOpen}
+        onOpenChange={setRecheckModalOpen}
+        amount={Number(withdrawAmount)}
+        payoutMethod={withdrawMethod}
+        bankName={bankName}
+        accountHolder={accountHolder}
+        accountNumber={bankAccount}
+        ifscCode={bankIfsc}
+        upiId={withdrawDestination}
+        upiHolder={upiHolder}
+        onConfirm={executeClientWithdrawal}
+        onEdit={() => setRecheckModalOpen(false)}
+        isSubmitting={actionBusy === "withdraw"}
+      />
+
+      {/* Withdrawal Transaction 3-Step Timeline Detail Modal */}
+      <WithdrawalDetailModal
+        open={Boolean(selectedWithdrawalDetail)}
+        onOpenChange={(open) => !open && setSelectedWithdrawalDetail(null)}
+        withdrawal={selectedWithdrawalDetail}
+      />
 
       <PageActionLoading
         active={actionBusy !== null}

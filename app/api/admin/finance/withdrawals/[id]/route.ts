@@ -14,8 +14,9 @@ async function isAdmin(request: NextRequest) {
 }
 
 const bodySchema = z.object({
-  status: z.enum(["COMPLETED", "FAILED"]),
+  status: z.enum(["PROCESSING", "COMPLETED", "FAILED"]),
   failureReason: z.string().trim().max(300).optional(),
+  utr: z.string().trim().max(100).optional(),
 });
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -28,15 +29,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!parsed.success)
     return NextResponse.json({ error: "A valid status is required." }, { status: 400 });
   const withdrawal = await db.projectWithdrawal.findUnique({ where: { id } });
-  if (!withdrawal || withdrawal.status !== "PENDING")
+  if (!withdrawal || (withdrawal.status !== "PENDING" && withdrawal.status !== "PROCESSING"))
     return NextResponse.json(
-      { error: "Only pending withdrawal requests can be updated." },
+      { error: "Only pending or processing withdrawal requests can be updated." },
       { status: 409 },
     );
   try {
     const updated = await db.$transaction(async (tx) => {
       const wallet = await tx.wallet.findUnique({ where: { userId: withdrawal.professionalId } });
       if (!wallet) throw new Error("Professional wallet not found.");
+
       if (parsed.data.status === "COMPLETED") {
         const settled = await tx.wallet.updateMany({
           where: {
@@ -67,6 +69,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
               withdrawalId: withdrawal.id,
               destinationType: withdrawal.destinationType,
               destinationLabel: withdrawal.destinationLabel,
+              utr: parsed.data.utr ?? withdrawal.utr,
             }),
           },
         });
@@ -79,11 +82,25 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             title: "Withdrawal Approved & Paid",
             description: `Your withdrawal request of ₹${withdrawal.amount.toLocaleString(
               "en-IN",
-            )} has been approved and paid by Admin.`,
+            )} has been approved and paid by Admin. Money is in your bank account!`,
+            href: "/professional/earnings",
+          },
+        });
+      } else if (parsed.data.status === "PROCESSING") {
+        // Payout approved and dispatched to bank
+        await tx.userNotification.create({
+          data: {
+            userId: withdrawal.professionalId,
+            type: "PAYOUT_PROCESSING",
+            title: "Withdrawal Approved by Admin",
+            description: `Your withdrawal request of ₹${withdrawal.amount.toLocaleString(
+              "en-IN",
+            )} was approved by Admin. Payout transfer is in progress — please wait for money in your bank.`,
             href: "/professional/earnings",
           },
         });
       } else {
+        // FAILED: unreserve pending balance
         await tx.wallet.updateMany({
           where: { id: wallet.id, pendingBalance: { gte: withdrawal.amount } },
           data: { pendingBalance: { decrement: withdrawal.amount } },
@@ -104,6 +121,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           },
         });
       }
+
       return tx.projectWithdrawal.update({
         where: { id },
         data: {
@@ -113,6 +131,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             parsed.data.status === "FAILED"
               ? (parsed.data.failureReason ?? "Rejected by admin.")
               : null,
+          utr: parsed.data.utr ?? undefined,
         },
       });
     });

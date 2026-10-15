@@ -23,6 +23,7 @@ import {
   LockKeyhole,
   Percent,
   ReceiptText,
+  Search,
   ShieldCheck,
   Smartphone,
   WalletCards,
@@ -39,9 +40,15 @@ import {
 import { PageActionLoading } from "@/components/PageActionLoading";
 import { formatReadableLabel } from "@/lib/utils";
 import { LinkedAccountsCard } from "@/components/LinkedAccountsCard";
+import { BankCombobox } from "@/components/BankCombobox";
+import { IfscFinderDialog } from "@/components/IfscFinderDialog";
+import { RecheckWithdrawalModal } from "@/components/RecheckWithdrawalModal";
+import { WithdrawalDetailModal } from "@/components/WithdrawalDetailModal";
 import {
   validateBankSpecificAccountNumber,
   getExpectedAccountLengthHint,
+  lookupIfscCode,
+  normalizeIfsc,
 } from "@/lib/indian-banks";
 type Transaction = {
   id: number;
@@ -79,6 +86,8 @@ type Withdrawal = {
   destinationLabel: string | null;
   failureReason?: string | null;
   createdAt: string;
+  updatedAt?: string;
+  processedAt?: string | null;
   payoutMode?: string | null;
   utr?: string | null;
   providerTransferId?: string | null;
@@ -169,6 +178,12 @@ export default function Earnings() {
   const [amount, setAmount] = useState("");
   const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>("BANK");
   const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
+  const [recheckModalOpen, setRecheckModalOpen] = useState(false);
+  const [selectedWithdrawalDetail, setSelectedWithdrawalDetail] = useState<Withdrawal | null>(null);
+  const [ifscFinderOpen, setIfscFinderOpen] = useState(false);
+  const [ifscBranch, setIfscBranch] = useState<string | null>(null);
+  const [ifscVerifying, setIfscVerifying] = useState(false);
+  const [ifscError, setIfscError] = useState<string | null>(null);
 
   // Profile Linked Accounts
   const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
@@ -200,6 +215,29 @@ export default function Earnings() {
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(10);
   const [historyFilter, setHistoryFilter] = useState<"all" | "milestones" | "disputes">("all");
+
+  async function handleLookupIfsc(code: string) {
+    const clean = normalizeIfsc(code);
+    setIfscCode(clean);
+    setIfscError(null);
+    setIfscBranch(null);
+    if (clean.length === 11) {
+      setIfscVerifying(true);
+      try {
+        const res = await lookupIfscCode(clean);
+        if (res.valid && res.bank) {
+          setIfscBranch(`${res.bank} · ${res.branch} (${res.city})`);
+          if (!bankName) setBankName(res.bank);
+        } else {
+          setIfscError(res.error || "Invalid IFSC code.");
+        }
+      } catch {
+        setIfscError("Unable to verify IFSC code.");
+      } finally {
+        setIfscVerifying(false);
+      }
+    }
+  }
 
   async function handleVerifyVpa(targetVpa?: string) {
     const toCheck = (targetVpa || upiId).trim().toLowerCase();
@@ -379,7 +417,12 @@ export default function Earnings() {
 
   const canSubmit = isAmountValid && isFormValid && !actionBusy;
 
-  async function withdraw() {
+  function handleInitiateWithdraw() {
+    if (!canSubmit) return;
+    setRecheckModalOpen(true);
+  }
+
+  async function executeWithdrawal() {
     if (!canSubmit) return;
     setActionBusy("withdraw");
     setMessage("");
@@ -448,6 +491,7 @@ export default function Earnings() {
       if (r.ok) {
         setAmount("");
         setWithdrawDialogOpen(false);
+        setRecheckModalOpen(false);
         load();
       }
     } finally {
@@ -880,13 +924,28 @@ export default function Earnings() {
 
               {/* Withdrawal History Card */}
               <section className="rounded-2xl border border-border bg-card p-5 shadow-soft">
-                <h2 className="font-display text-lg font-semibold">Withdrawal history</h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="font-display text-lg font-semibold">Withdrawal history</h2>
+                  <span className="text-[11px] text-muted-foreground">Click item to view 3-step timeline</span>
+                </div>
                 <div className="mt-3 divide-y divide-border">
                   {wallet.withdrawals.map((w) => {
                     const dest = parseDestinationSummary(w.destinationLabel, w.destinationType);
                     const DestIcon = dest.icon;
                     return (
-                      <div key={w.id} className="py-3 space-y-1">
+                      <div
+                        key={w.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedWithdrawalDetail(w)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedWithdrawalDetail(w);
+                          }
+                        }}
+                        className="py-3 px-2.5 -mx-2.5 rounded-xl space-y-1.5 cursor-pointer hover:bg-muted/40 transition-colors group"
+                      >
                         <div className="flex items-center justify-between gap-3">
                           <p className="font-semibold text-foreground text-sm">
                             ₹{w.amount.toLocaleString("en-IN")}
@@ -903,14 +962,23 @@ export default function Earnings() {
                                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
                                   : w.status === "FAILED"
                                     ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-                                    : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                                    : w.status === "PROCESSING"
+                                      ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20"
+                                      : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
                               }`}
                             >
                               {w.status === "COMPLETED" && <CheckCircle2 className="h-3 w-3" />}
+                              {w.status === "PROCESSING" && (
+                                <span className="relative flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                                </span>
+                              )}
                               {w.status === "PENDING" && <Clock className="h-3 w-3" />}
                               {w.status === "FAILED" && <X className="h-3 w-3" />}
-                              {formatReadableLabel(w.status)}
+                              {w.status === "PROCESSING" ? "In Progress" : formatReadableLabel(w.status)}
                             </span>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-foreground group-hover:translate-x-0.5 transition-transform shrink-0" />
                           </div>
                         </div>
                         <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
@@ -1135,14 +1203,29 @@ export default function Earnings() {
             {payoutMethod === "BANK" && (
               <div className="space-y-3 pt-1">
                 <div>
-                  <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                    Bank Name
-                  </label>
-                  <input
-                    className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    placeholder="e.g. State Bank of India, HDFC Bank, ICICI"
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold text-muted-foreground">
+                      Bank Name
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIfscFinderOpen(true)}
+                      className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Search className="h-3 w-3" /> Find IFSC
+                    </button>
+                  </div>
+                  <BankCombobox
+                    id="pro-withdraw-bank-name"
                     value={bankName}
-                    onChange={(e) => setBankName(e.target.value)}
+                    onChange={(val) => setBankName(val)}
+                    onSelectBank={(bank) => {
+                      setBankName(bank.name);
+                      if (!ifscCode && bank.code) {
+                        setIfscCode(`${bank.code.toUpperCase()}0`);
+                      }
+                    }}
+                    placeholder="Search popular Indian banks (e.g. HDFC, SBI, BOB, Kotak)…"
                   />
                 </div>
                 <div>
@@ -1206,17 +1289,34 @@ export default function Earnings() {
                   )}
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                    IFSC Code
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold text-muted-foreground">
+                      IFSC Code
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIfscFinderOpen(true)}
+                      className="text-[10px] text-primary hover:underline"
+                    >
+                      Search IFSC
+                    </button>
+                  </div>
                   <input
                     className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs font-mono uppercase focus:outline-none focus:ring-2 focus:ring-primary/20"
                     placeholder="e.g. SBIN0001234 (11 characters)"
                     maxLength={11}
                     value={ifscCode}
-                    onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
+                    onChange={(e) => void handleLookupIfsc(e.target.value.toUpperCase())}
                   />
-                  {ifscCode && ifscCode.length < 11 && (
+                  {ifscBranch && (
+                    <p className="mt-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                      ✓ {ifscBranch}
+                    </p>
+                  )}
+                  {ifscError && (
+                    <p className="mt-1 text-[11px] text-rose-500">{ifscError}</p>
+                  )}
+                  {ifscCode && !ifscBranch && !ifscError && ifscCode.length < 11 && (
                     <p className="mt-1 text-[11px] text-amber-600">
                       IFSC must be exactly 11 characters ({ifscCode.length}/11).
                     </p>
@@ -1369,13 +1469,13 @@ export default function Earnings() {
               </Button>
               <Button
                 disabled={!canSubmit}
-                onClick={() => void withdraw()}
+                onClick={handleInitiateWithdraw}
               >
                 {actionBusy === "withdraw" ? (
                   "Submitting..."
                 ) : (
                   <>
-                    Confirm & Request <ArrowUpRight className="h-4 w-4 ml-1" />
+                    Continue to Verification <ArrowUpRight className="h-4 w-4 ml-1" />
                   </>
                 )}
               </Button>
@@ -1437,6 +1537,42 @@ export default function Earnings() {
           onClose={() => setSelectedStat(null)}
         />
       ) : null}
+
+      {/* Confirmation Modal to Recheck Details Before Withdrawal */}
+      <RecheckWithdrawalModal
+        open={recheckModalOpen}
+        onOpenChange={setRecheckModalOpen}
+        amount={Number(amount)}
+        payoutMethod={payoutMethod}
+        bankName={bankName}
+        accountHolder={accountHolder}
+        accountNumber={accountNumber}
+        ifscCode={ifscCode}
+        upiId={upiId}
+        upiHolder={upiHolder}
+        onConfirm={executeWithdrawal}
+        onEdit={() => setRecheckModalOpen(false)}
+        isSubmitting={actionBusy === "withdraw"}
+      />
+
+      {/* Withdrawal Transaction 3-Step Timeline Detail Modal */}
+      <WithdrawalDetailModal
+        open={Boolean(selectedWithdrawalDetail)}
+        onOpenChange={(open) => !open && setSelectedWithdrawalDetail(null)}
+        withdrawal={selectedWithdrawalDetail}
+      />
+
+      {/* IFSC Code Search Tool Dialog */}
+      <IfscFinderDialog
+        open={ifscFinderOpen}
+        onOpenChange={setIfscFinderOpen}
+        defaultBank={bankName}
+        onSelectIfsc={(code, bName) => {
+          setIfscCode(code);
+          if (bName) setBankName(bName);
+          void handleLookupIfsc(code);
+        }}
+      />
 
       <PageActionLoading
         active={actionBusy !== null}

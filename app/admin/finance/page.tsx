@@ -655,16 +655,28 @@ export default function AdminFinancePage() {
 
   function handleWithdrawalStatus(
     withdrawalId: number,
-    status: "COMPLETED" | "FAILED",
+    status: "PROCESSING" | "COMPLETED" | "FAILED",
     failureReason?: string,
+    utr?: string,
   ) {
     const isCompleted = status === "COMPLETED";
+    const isProcessing = status === "PROCESSING";
     setConfirmAction({
-      title: isCompleted ? "Approve Payout as Paid?" : "Reject Withdrawal Request?",
+      title: isCompleted
+        ? "Approve Payout as Paid?"
+        : isProcessing
+          ? "Approve Payout (Transfer in Progress)?"
+          : "Reject Withdrawal Request?",
       description: isCompleted
         ? `Are you sure you want to mark withdrawal #${withdrawalId} as paid? This records that the funds have been sent to the professional's destination.`
-        : `Are you sure you want to reject withdrawal #${withdrawalId}? Reserved funds will be returned to the professional's wallet.`,
-      confirmLabel: isCompleted ? "Approve Payout" : "Reject Withdrawal",
+        : isProcessing
+          ? `Mark withdrawal #${withdrawalId} as approved and transferring to the user's account.`
+          : `Are you sure you want to reject withdrawal #${withdrawalId}? Reserved funds will be returned to the professional's wallet.`,
+      confirmLabel: isCompleted
+        ? "Approve & Mark as Paid"
+        : isProcessing
+          ? "Approve (In Progress)"
+          : "Reject Withdrawal",
       variant: status === "FAILED" ? "destructive" : "default",
       action: async () => {
         setBusyId(withdrawalId);
@@ -675,12 +687,13 @@ export default function AdminFinancePage() {
             body: JSON.stringify({
               status,
               ...(failureReason ? { failureReason } : {}),
+              ...(utr ? { utr } : {}),
             }),
           });
           const d = await res.json().catch(() => null);
           if (!res.ok) throw new Error(d?.error ?? "Failed to update withdrawal.");
           toast.success(
-            `Withdrawal #${withdrawalId} ${isCompleted ? "approved as paid" : "rejected"}.`,
+            `Withdrawal #${withdrawalId} ${isCompleted ? "approved as paid" : isProcessing ? "approved (in progress)" : "rejected"}.`,
           );
           if (selectedWithdrawal?.id === withdrawalId) {
             setSelectedWithdrawal(null);
@@ -693,6 +706,16 @@ export default function AdminFinancePage() {
         }
       },
     });
+  }
+
+  function promptApproveWithUtr(withdrawalId: number) {
+    const utrInput = window.prompt(
+      `Enter Bank Reference / UTR Number for withdrawal #${withdrawalId} (optional, press OK to continue):`,
+      "",
+    );
+    if (utrInput !== null) {
+      handleWithdrawalStatus(withdrawalId, "COMPLETED", undefined, utrInput.trim() || undefined);
+    }
   }
 
   function promptRejectWithdrawal(w: Withdrawal) {
@@ -1220,7 +1243,7 @@ export default function AdminFinancePage() {
           withdrawal={selectedWithdrawal}
           user={data?.usersById?.[selectedWithdrawal.professionalId] ?? null}
           onClose={() => setSelectedWithdrawal(null)}
-          onApprove={(id) => handleWithdrawalStatus(id, "COMPLETED")}
+          onApprove={(id) => promptApproveWithUtr(id)}
           onReject={promptRejectWithdrawal}
           onPayRazorpay={handlePayViaRazorpay}
           isBusy={busyId === selectedWithdrawal.id}
@@ -1836,7 +1859,7 @@ function WithdrawalDrawer({
 
         {/* Drawer Footer Actions */}
         <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
-          {isPending ? (
+          {isPending || withdrawal.status === "PROCESSING" ? (
             <div className="flex flex-col sm:flex-row items-center gap-2.5">
               <button
                 type="button"
