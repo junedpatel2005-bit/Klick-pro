@@ -4,7 +4,7 @@ import { GoogleMap, Marker } from "@react-google-maps/api";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useGoogleMaps } from "@/components/GoogleMapsProvider";
 
-const worldFallbackCenter = { lat: 20, lng: 0 };
+const worldFallbackCenter = { lat: 20.5937, lng: 78.9629 };
 
 export default function JobsPreviewMap({
   points,

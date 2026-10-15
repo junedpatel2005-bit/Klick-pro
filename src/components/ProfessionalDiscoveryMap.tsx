@@ -72,13 +72,32 @@ export default function ProfessionalDiscoveryMap({
         map.setZoom(14);
         return;
       }
+
+      if (userLocation && userRadiusKm && userRadiusKm > 0) {
+        // Calculate bounding box for any radius from 1 to 100+ km
+        const latDelta = userRadiusKm / 111.32;
+        const latRad = (userLocation.lat * Math.PI) / 180;
+        const cosLat = Math.cos(latRad);
+        const lngDelta = cosLat !== 0 ? userRadiusKm / (111.32 * Math.abs(cosLat)) : latDelta;
+
+        const bounds = new google.maps.LatLngBounds(
+          new google.maps.LatLng(userLocation.lat - latDelta, userLocation.lng - lngDelta),
+          new google.maps.LatLng(userLocation.lat + latDelta, userLocation.lng + lngDelta),
+        );
+
+        // Include any discovered professionals within or around the circle
+        points.forEach((p) => bounds.extend(p));
+        map.fitBounds(bounds);
+        return;
+      }
+
       if (points.length > 0) {
         const bounds = new google.maps.LatLngBounds();
         points.forEach((p) => bounds.extend(p));
         map.fitBounds(bounds);
       }
     },
-    [selectedPro, activeProfessional, selectedPoint, points],
+    [selectedPro, activeProfessional, selectedPoint, points, userLocation, userRadiusKm],
   );
 
   useEffect(() => {
@@ -121,6 +140,12 @@ export default function ProfessionalDiscoveryMap({
               Show all on map
             </button>
           )}
+        </div>
+      )}
+      {userRadiusKm && userRadiusKm > 0 && userLocation && (
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-xl bg-card/90 px-3 py-1.5 text-xs font-semibold shadow-md backdrop-blur-md border border-primary/20 text-foreground ring-1 ring-primary/10">
+          <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+          <span>Radius: {userRadiusKm} km</span>
         </div>
       )}
       <GoogleMap

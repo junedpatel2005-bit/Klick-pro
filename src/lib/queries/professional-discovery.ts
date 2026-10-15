@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { getDistanceBoundingBox, getDistanceKm, createDisplayPoint } from "@/lib/geo";
+import { getCityCoordinates, INDIAN_CITY_COORDINATES } from "@/lib/city-coordinates";
 import type { Prisma } from "@generated/prisma/client";
 import type { ProfessionalDiscoveryResult } from "@/lib/types/professional-discovery";
 
@@ -307,9 +308,7 @@ function toPublicProfessional(
   },
   distanceKm: number | null,
 ): ProfessionalDiscoveryResult {
-  const cityPoint = professional.professionalCity
-    ? CITY_COORDINATES[professional.professionalCity.trim()]
-    : undefined;
+  const cityPoint = getCityCoordinates(professional.professionalCity) ?? undefined;
   const basePoint =
     professional.professionalLatitude !== null && professional.professionalLongitude !== null
       ? { lat: professional.professionalLatitude, lng: professional.professionalLongitude }
@@ -367,20 +366,18 @@ function applyDistanceFilter(
 ) {
   return professionals
     .map((professional) => {
-      if (
-        professional.professionalLatitude === null ||
-        professional.professionalLongitude === null ||
-        Number.isNaN(professional.professionalLatitude) ||
-        Number.isNaN(professional.professionalLongitude)
-      ) {
-        return null;
+      let lat = professional.professionalLatitude;
+      let lng = professional.professionalLongitude;
+      if (lat === null || lng === null || Number.isNaN(lat) || Number.isNaN(lng)) {
+        const cityCoord = getCityCoordinates(professional.professionalCity);
+        if (cityCoord) {
+          lat = cityCoord.lat;
+          lng = cityCoord.lng;
+        } else {
+          return null;
+        }
       }
-      const distance = getDistanceKm(
-        originLat,
-        originLng,
-        professional.professionalLatitude,
-        professional.professionalLongitude,
-      );
+      const distance = getDistanceKm(originLat, originLng, lat, lng);
       return { professional, distance };
     })
     .filter(
@@ -412,17 +409,40 @@ export async function searchProfessionals(filter: ProfessionalDiscoveryFilter) {
     const originLng = filter.originLng!;
     const distanceKm = filter.distanceKm!;
     const bbox = getDistanceBoundingBox(originLat, distanceKm);
-    baseWhere.professionalLatitude = {
-      gte: originLat - bbox.latDelta,
-      lte: originLat + bbox.latDelta,
-    };
-    baseWhere.professionalLongitude = {
-      gte: originLng - bbox.lngDelta,
-      lte: originLng + bbox.lngDelta,
-    };
-    baseWhere.AND = [
-      { professionalLatitude: { not: null } },
-      { professionalLongitude: { not: null } },
+
+    // Collect all known Indian cities falling within this bounding box
+    const nearbyCityKeys = Object.entries(INDIAN_CITY_COORDINATES)
+      .filter(([_, coord]) => {
+        return (
+          coord.lat >= originLat - bbox.latDelta &&
+          coord.lat <= originLat + bbox.latDelta &&
+          coord.lng >= originLng - bbox.lngDelta &&
+          coord.lng <= originLng + bbox.lngDelta
+        );
+      })
+      .map(([name]) => name);
+
+    baseWhere.OR = [
+      {
+        AND: [
+          { professionalLatitude: { gte: originLat - bbox.latDelta, lte: originLat + bbox.latDelta } },
+          { professionalLongitude: { gte: originLng - bbox.lngDelta, lte: originLng + bbox.lngDelta } },
+        ],
+      },
+      ...(nearbyCityKeys.length > 0
+        ? [
+            {
+              AND: [
+                { professionalLatitude: null },
+                {
+                  OR: nearbyCityKeys.map((cityName) => ({
+                    professionalCity: { contains: cityName, mode: "insensitive" as const },
+                  })),
+                },
+              ],
+            },
+          ]
+        : []),
     ];
   }
 

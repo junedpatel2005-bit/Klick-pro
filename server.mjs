@@ -105,4 +105,24 @@ const browseHost = LOOPBACK_ALIASES.has(hostname) ? "localhost" : hostname;
 
 httpServer.listen(port, hostname, () => {
   console.log(`> Klick-pro ready on http://${browseHost}:${port} (bound to ${hostname})`);
+
+  // Autonomous 15-Minute Milestone Validity Cron Worker
+  const MILESTONE_CRON_INTERVAL_MS = 15 * 60 * 1000;
+  setInterval(async () => {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/cron/milestone-releases`, {
+        method: "GET",
+        headers: { "x-internal-loopback": "true" },
+      });
+      if (response.ok) {
+        const data = await response.json().catch(() => null);
+        if (data?.processed > 0) {
+          console.log(`[ESCROW CRON] Auto-released ${data.processed} expired milestone(s) at ${new Date().toISOString()}`);
+        }
+      }
+    } catch (cronErr) {
+      // Server may still be warming up or restarting; keep loop silent
+    }
+  }, MILESTONE_CRON_INTERVAL_MS);
 });
+

@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { getAllStates, getDistrictsByState } from "@/lib/india-locations";
+import { getCityCoordinates } from "@/lib/city-coordinates";
 
 const PAGE_SIZE = 50;
 const segmentOptions: [string, string][] = [
@@ -560,10 +561,20 @@ function DiscoverContent() {
               className="text-sm"
               value={city}
               onChange={(event) => {
-                setCity(event.target.value);
+                const val = event.target.value;
+                setCity(val);
+                const coords = getCityCoordinates(val);
+                if (coords) {
+                  setOriginLat(coords.lat);
+                  setOriginLng(coords.lng);
+                  userLocationRef.current = coords;
+                  if (distanceKm === "") {
+                    setDistanceKm(25);
+                  }
+                }
                 setPage(1);
               }}
-              placeholder="e.g., Toronto, Vancouver"
+              placeholder="e.g., Mumbai, Surat, Ahmedabad, Bengaluru"
             />
           </FilterSection>
 
@@ -604,50 +615,129 @@ function DiscoverContent() {
             </div>
           </FilterSection>
 
-          <FilterSection title="Distance">
-            <div className="space-y-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full justify-start gap-2"
-                onClick={requestMyLocation}
-              >
-                <LocateFixed className="size-4" />
-                Use my current location
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full justify-start gap-2"
-                onClick={() => void requestPrimaryAddress()}
-              >
-                <Home className="size-4" />
-                Use my primary address
-              </Button>
-              {distanceKm !== "" && originLat !== null && originLng !== null && (
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-sm">
-                    <span className="w-20">Within</span>
-                    <select
-                      className="flex-1 h-9 rounded-lg border border-input bg-background px-3 text-sm"
-                      value={distanceKm}
-                      onChange={(event) => {
-                        setDistanceKm(Number(event.target.value));
+          <FilterSection title="Search Radius & Distance">
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-center gap-1.5 text-xs"
+                  onClick={requestMyLocation}
+                >
+                  <LocateFixed className="size-3.5 text-primary" />
+                  My GPS
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-center gap-1.5 text-xs"
+                  onClick={() => void requestPrimaryAddress()}
+                >
+                  <Home className="size-3.5 text-primary" />
+                  Primary address
+                </Button>
+              </div>
+
+              {/* Active Center Indicator */}
+              <div className="rounded-lg border bg-muted/40 p-2.5 text-xs">
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span>Center:</span>
+                  <span className="font-semibold text-foreground truncate max-w-[140px]">
+                    {originLat !== null && originLng !== null
+                      ? city.trim()
+                        ? city.trim()
+                        : "Location Active"
+                      : "Pick City or GPS"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Radius Chips for all: 5km, 10km, 25km, 50km, 100km */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-medium text-foreground">
+                  <span>Radius: {distanceKm !== "" ? `${distanceKm} km` : "Select radius"}</span>
+                  {distanceKm !== "" && (
+                    <button
+                      type="button"
+                      className="text-[11px] text-primary hover:underline"
+                      onClick={() => {
+                        setDistanceKm("");
                         setPage(1);
                       }}
                     >
-                      <option value={5}>5 km</option>
-                      <option value={10}>10 km</option>
-                      <option value={25}>25 km</option>
-                      <option value={50}>50 km</option>
-                      <option value={100}>100 km</option>
-                    </select>
-                  </label>
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-5 gap-1">
+                  {[5, 10, 25, 50, 100].map((km) => (
+                    <button
+                      key={km}
+                      type="button"
+                      onClick={() => {
+                        if (originLat === null || originLng === null) {
+                          const fallback = getCityCoordinates(city) ?? getCityCoordinates("Mumbai");
+                          if (fallback) {
+                            setOriginLat(fallback.lat);
+                            setOriginLng(fallback.lng);
+                            userLocationRef.current = fallback;
+                          }
+                        }
+                        setDistanceKm(km);
+                        setPage(1);
+                      }}
+                      className={`rounded-lg py-1.5 text-center text-xs font-semibold transition ${
+                        distanceKm === km
+                          ? "bg-primary text-primary-foreground shadow-xs"
+                          : "border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                      }`}
+                    >
+                      {km}km
+                    </button>
+                  ))}
+                </div>
+
+                {/* Slider from 1 to 100 km */}
+                <div className="pt-1">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={1}
+                      max={100}
+                      value={distanceKm === "" ? 25 : distanceKm}
+                      onChange={(e) => {
+                        if (originLat === null || originLng === null) {
+                          const fallback = getCityCoordinates(city) ?? getCityCoordinates("Mumbai");
+                          if (fallback) {
+                            setOriginLat(fallback.lat);
+                            setOriginLng(fallback.lng);
+                            userLocationRef.current = fallback;
+                          }
+                        }
+                        setDistanceKm(Number(e.target.value));
+                        setPage(1);
+                      }}
+                      className="h-1.5 w-full cursor-pointer accent-primary"
+                    />
+                    <span className="w-12 text-right text-xs font-bold text-primary">
+                      {distanceKm === "" ? "Any" : `${distanceKm} km`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>1 km</span>
+                    <span>25 km</span>
+                    <span>50 km</span>
+                    <span>100 km</span>
+                  </div>
+                </div>
+
+                {distanceKm !== "" && (
                   <button
                     type="button"
-                    className="text-xs text-primary hover:underline"
+                    className="pt-1 text-xs text-muted-foreground hover:text-destructive hover:underline"
                     onClick={() => {
                       setDistanceKm("");
                       setOriginLat(null);
@@ -656,10 +746,10 @@ function DiscoverContent() {
                       setPage(1);
                     }}
                   >
-                    Clear location
+                    Clear location filter
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </FilterSection>
 
@@ -913,7 +1003,7 @@ function DiscoverContent() {
             ))}
           {status === "ready" && professionals.length > 0 && (
             <>
-              {showMap && (results?.professionals?.length ?? 0) > 0 && (
+              {showMap && ((results?.professionals?.length ?? 0) > 0 || (originLat !== null && originLng !== null)) && (
                 <div ref={mapSectionRef} className="mb-6">
                   <Suspense
                     fallback={

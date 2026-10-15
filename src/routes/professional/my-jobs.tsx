@@ -36,6 +36,7 @@ import { toast } from "sonner";
 import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import type { MarketplaceCategory } from "@/lib/types/marketplace";
 import { getAllStates, getDistrictsByState } from "@/lib/india-locations";
+import { getCityCoordinates } from "@/lib/city-coordinates";
 
 const ProfessionalJobsMap = dynamic(() => import("@/components/ProfessionalJobsMap"), {
   ssr: false,
@@ -624,9 +625,16 @@ function ProfessionalJobsContent() {
 
   const selectedJob =
     displayedMapJobs.find((job) => job.id === selectedJobId) ?? displayedMapJobs[0] ?? null;
+  const cityCoord = getCityCoordinates(city);
   const mapCenter: [number, number] = selectedJob
     ? [selectedJob.locationLat, selectedJob.locationLng]
-    : [20, 0];
+    : userLocation
+      ? userLocation
+      : cityCoord
+        ? [cityCoord.lat, cityCoord.lng]
+        : mapJobs[0]
+          ? [mapJobs[0].locationLat, mapJobs[0].locationLng]
+          : [21.1702, 72.8311];
   const previewPoints: [number, number][] = mapJobs.map((job) => [
     job.locationLat,
     job.locationLng,
@@ -1281,7 +1289,7 @@ function ProfessionalJobsContent() {
                       </p>
                     </div>
                     <div className="h-full w-1/2">
-                      <JobsPreviewMap points={previewPoints} />
+                      <JobsPreviewMap points={previewPoints} fallbackCenter={mapCenter} />
                     </div>
                   </div>
                 </div>
@@ -1344,6 +1352,8 @@ function ProfessionalJobsContent() {
                         <ProfessionalJobsMap
                           center={mapCenter}
                           jobs={displayedMapJobs}
+                          radiusKm={nearMe ? radiusKm : null}
+                          userLocation={nearMe && userLocation ? userLocation : null}
                           onSelectJob={setSelectedJobId}
                         />
                       ) : (

@@ -1,7 +1,7 @@
 "use client";
 
-import { GoogleMap, InfoWindow, Marker } from "@react-google-maps/api";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { GoogleMap, InfoWindow, Marker, Circle } from "@react-google-maps/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapPin, Star } from "lucide-react";
 import { useGoogleMaps } from "@/components/GoogleMapsProvider";
 
@@ -33,10 +33,14 @@ function budgetLabel(job: MapJob): string {
 export default function ProfessionalJobsMap({
   center,
   jobs,
+  radiusKm,
+  userLocation,
   onSelectJob,
 }: {
   center: [number, number];
   jobs: MapJob[];
+  radiusKm?: number | null;
+  userLocation?: [number, number] | null;
   onSelectJob: (id: number) => void;
 }) {
   const { isLoaded, isConfigured, hasError } = useGoogleMaps();
@@ -49,6 +53,43 @@ export default function ProfessionalJobsMap({
   const activeJob =
     jobs.find((job) => job.id === activeJobId) ?? (jobs.length === 1 ? jobs[0] : null);
 
+  const applyView = useCallback(
+    (map: google.maps.Map) => {
+      if (activeJob) {
+        map.panTo({ lat: activeJob.locationLat, lng: activeJob.locationLng });
+        map.setZoom(14);
+        return;
+      }
+
+      if (userLocation && radiusKm && radiusKm > 0) {
+        const [uLat, uLng] = userLocation;
+        const latDelta = radiusKm / 111.32;
+        const latRad = (uLat * Math.PI) / 180;
+        const cosLat = Math.cos(latRad);
+        const lngDelta = cosLat !== 0 ? radiusKm / (111.32 * Math.abs(cosLat)) : latDelta;
+
+        const bounds = new google.maps.LatLngBounds(
+          new google.maps.LatLng(uLat - latDelta, uLng - lngDelta),
+          new google.maps.LatLng(uLat + latDelta, uLng + lngDelta),
+        );
+        jobs.forEach((j) => bounds.extend({ lat: j.locationLat, lng: j.locationLng }));
+        map.fitBounds(bounds);
+        return;
+      }
+
+      if (jobs.length > 0) {
+        const bounds = new google.maps.LatLngBounds();
+        jobs.forEach((j) => bounds.extend({ lat: j.locationLat, lng: j.locationLng }));
+        map.fitBounds(bounds);
+        return;
+      }
+
+      map.setCenter(mapCenter);
+      map.setZoom(10);
+    },
+    [activeJob, userLocation, radiusKm, jobs, mapCenter],
+  );
+
   useEffect(() => {
     if (jobs.length === 1 && jobs[0]) {
       setActiveJobId(jobs[0].id);
@@ -57,10 +98,9 @@ export default function ProfessionalJobsMap({
 
   useEffect(() => {
     if (mapRef.current) {
-      mapRef.current.setCenter(mapCenter);
-      mapRef.current.setZoom(jobs.length === 1 ? 13 : 6);
+      applyView(mapRef.current);
     }
-  }, [mapCenter, jobs.length]);
+  }, [applyView]);
 
   if (!isConfigured || hasError) {
     return (
@@ -75,16 +115,58 @@ export default function ProfessionalJobsMap({
   }
 
   return (
-    <GoogleMap
-      onLoad={(map) => {
-        mapRef.current = map;
-        map.setZoom(jobs.length === 1 ? 13 : 6);
-      }}
-      mapContainerStyle={{ width: "100%", height: "100%" }}
-      center={mapCenter}
-      zoom={jobs.length === 1 ? 13 : 6}
-      options={{ mapTypeControl: false, streetViewControl: false }}
-    >
+    <div className="relative h-full w-full">
+      {radiusKm && radiusKm > 0 && userLocation && (
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 rounded-lg bg-card/90 px-2.5 py-1 text-xs font-semibold shadow-md backdrop-blur-md border border-primary/20 text-foreground">
+          <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+          <span>Radius: {radiusKm} km</span>
+        </div>
+      )}
+      <GoogleMap
+        onLoad={(map) => {
+          mapRef.current = map;
+          applyView(map);
+        }}
+        mapContainerStyle={{ width: "100%", height: "100%" }}
+        center={mapCenter}
+        zoom={jobs.length === 1 ? 14 : 10}
+        options={{ mapTypeControl: false, streetViewControl: false }}
+      >
+        {userLocation && (
+          <>
+            <Marker
+              position={{ lat: userLocation[0], lng: userLocation[1] }}
+              title="Your location / Search center"
+              icon={
+                typeof google !== "undefined"
+                  ? {
+                      path: google.maps.SymbolPath.CIRCLE,
+                      scale: 8,
+                      fillColor: "#2563eb",
+                      fillOpacity: 1,
+                      strokeColor: "#ffffff",
+                      strokeWeight: 2.5,
+                    }
+                  : undefined
+              }
+            />
+            {radiusKm && radiusKm > 0 && (
+              <Circle
+                center={{ lat: userLocation[0], lng: userLocation[1] }}
+                radius={radiusKm * 1000}
+                options={{
+                  fillColor: "#3b82f6",
+                  fillOpacity: 0.12,
+                  strokeColor: "#3b82f6",
+                  strokeOpacity: 0.75,
+                  strokeWeight: 2,
+                  clickable: false,
+                  zIndex: 0,
+                }}
+              />
+            )}
+          </>
+        )}
       {jobs.map((job) => (
         <Marker
           key={job.id}
@@ -132,6 +214,7 @@ export default function ProfessionalJobsMap({
           </div>
         </InfoWindow>
       ) : null}
-    </GoogleMap>
+      </GoogleMap>
+    </div>
   );
 }

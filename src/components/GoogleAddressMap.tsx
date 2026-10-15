@@ -28,19 +28,22 @@ export default function GoogleAddressMap({
   }, [onPointChange]);
 
   useEffect(() => {
-    if (!mapRef.current || !radiusKm || radiusKm <= 0) return;
-    let targetZoom = 11;
-    if (radiusKm <= 2) targetZoom = 14;
-    else if (radiusKm <= 5) targetZoom = 13;
-    else if (radiusKm <= 12) targetZoom = 12;
-    else if (radiusKm <= 25) targetZoom = 11;
-    else if (radiusKm <= 60) targetZoom = 10;
-    else if (radiusKm <= 120) targetZoom = 9;
-    else if (radiusKm <= 250) targetZoom = 8;
-    else targetZoom = 7;
-
-    mapRef.current.setZoom(targetZoom);
-    mapRef.current.panTo({ lat: point[0], lng: point[1] });
+    if (!mapRef.current) return;
+    if (radiusKm && radiusKm > 0 && point[0] && point[1]) {
+      const lat = point[0];
+      const lng = point[1];
+      const latDelta = (radiusKm * 1.1) / 111.32;
+      const cosLat = Math.cos((lat * Math.PI) / 180);
+      const lngDelta = (radiusKm * 1.1) / (111.32 * (Math.abs(cosLat) > 0.001 ? cosLat : 1));
+      const bounds = new google.maps.LatLngBounds(
+        { lat: lat - latDelta, lng: lng - lngDelta },
+        { lat: lat + latDelta, lng: lng + lngDelta },
+      );
+      mapRef.current.fitBounds(bounds);
+    } else if (point[0] && point[1]) {
+      mapRef.current.panTo({ lat: point[0], lng: point[1] });
+      mapRef.current.setZoom(13);
+    }
   }, [radiusKm, point]);
 
   if (!isConfigured || hasError) {
@@ -65,6 +68,18 @@ export default function GoogleAddressMap({
     <GoogleMap
       onLoad={(map) => {
         mapRef.current = map;
+        if (radiusKm && radiusKm > 0 && point[0] && point[1]) {
+          const lat = point[0];
+          const lng = point[1];
+          const latDelta = (radiusKm * 1.1) / 111.32;
+          const cosLat = Math.cos((lat * Math.PI) / 180);
+          const lngDelta = (radiusKm * 1.1) / (111.32 * (Math.abs(cosLat) > 0.001 ? cosLat : 1));
+          const bounds = new google.maps.LatLngBounds(
+            { lat: lat - latDelta, lng: lng - lngDelta },
+            { lat: lat + latDelta, lng: lng + lngDelta },
+          );
+          map.fitBounds(bounds);
+        }
       }}
       mapContainerStyle={containerStyle}
       center={{ lat: point[0], lng: point[1] }}

@@ -1645,6 +1645,19 @@ export async function POST(request: NextRequest) {
               milestoneId: input.milestoneId ?? null,
             },
           });
+
+          // Instantly pause milestone auto-release so background cron cannot release funds while dispute is active
+          await tx.projectMilestone.updateMany({
+            where: {
+              trackingId: project.id,
+              ...(input.milestoneId ? { id: input.milestoneId } : {}),
+              autoReleaseStatus: { in: ["PENDING", "PROCESSING"] },
+            },
+            data: {
+              autoReleaseStatus: "PAUSED_DISPUTE",
+            },
+          });
+
           return { id: created.id, disputeRound };
         });
       } catch (err) {
