@@ -11,8 +11,9 @@ import { sessionCookie, verifySession } from "@/lib/auth";
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = (await headers()).get("x-pathname") ?? "";
+  const isLoginPage = pathname === "/admin/login" || pathname.endsWith("/admin/login");
 
-  if (pathname !== "/admin/login") {
+  if (!isLoginPage) {
     const token = (await cookies()).get(sessionCookie)?.value;
     let session = null;
     try {

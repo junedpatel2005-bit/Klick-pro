@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { verifyUpiVpaViaNpci } from "@/lib/razorpayx";
+import { rateLimit } from "@/lib/rate-limit";
 
 async function sessionFrom(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -21,6 +22,13 @@ export async function POST(request: NextRequest) {
   const session = await sessionFrom(request);
   if (!session) {
     return NextResponse.json({ error: "Sign-in required." }, { status: 401 });
+  }
+
+  if (!rateLimit(`verify-vpa:${session.userId}`, 10, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many UPI lookup attempts. Please wait a minute before trying again." },
+      { status: 429 },
+    );
   }
 
   const rawBody = await request.json().catch(() => null);

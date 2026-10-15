@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { createRazorpayOrder, isRazorpayConfigured, razorpayConfig } from "@/lib/razorpay";
 import { ensureWallet } from "@/lib/wallet-ledger";
+import { rateLimit } from "@/lib/rate-limit";
 
 const schema = z.object({ amount: z.number().int().positive().max(1_000_000) });
 
@@ -23,6 +24,13 @@ export async function POST(request: NextRequest) {
   }
   if (session.role !== "CLIENT")
     return NextResponse.json({ error: "Only clients can fund a wallet." }, { status: 403 });
+
+  if (!rateLimit(`wallet-order:${session.userId}`, 10, 60_000)) {
+    return NextResponse.json(
+      { error: "Too many deposit attempts. Please wait a minute before creating a new order." },
+      { status: 429 },
+    );
+  }
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
     return NextResponse.json({ error: "Enter a valid amount." }, { status: 400 });
