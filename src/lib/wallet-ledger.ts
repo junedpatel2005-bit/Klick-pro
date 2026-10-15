@@ -97,6 +97,8 @@ export async function creditWalletFromVerifiedProvider(
   });
   if (!transaction || transaction.walletId !== wallet.id)
     throw new Error("Wallet top-up is invalid or already processed.");
+  if (transaction.amount !== input.amount)
+    throw new Error("Wallet top-up amount mismatch.");
 
   // The top-up must be claimed before the balance moves. A plain read-then-write
   // lets two concurrent verifications of the same payment both observe PENDING
@@ -117,7 +119,7 @@ export async function creditWalletFromVerifiedProvider(
 
   await tx.wallet.update({
     where: { id: wallet.id },
-    data: { balance: { increment: input.amount } },
+    data: { balance: { increment: transaction.amount } },
   });
   return tx.walletTransaction.findUniqueOrThrow({ where: { id: transaction.id } });
 }

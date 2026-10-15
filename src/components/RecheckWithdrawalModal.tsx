@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,7 @@ import {
   Pencil,
   ShieldCheck,
   Smartphone,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getBankValidationRule } from "@/lib/indian-banks";
@@ -37,8 +38,21 @@ export type RecheckWithdrawalModalProps = {
   upiId?: string;
   upiHolder?: string;
   // Actions
-  onConfirm: () => void | Promise<void>;
+  onConfirm: (details?: {
+    accountNumber?: string;
+    ifscCode?: string;
+    accountHolder?: string;
+    upiId?: string;
+    upiHolder?: string;
+  }) => void | Promise<void>;
   onEdit: () => void;
+  onUpdateDetails?: (details: {
+    accountNumber?: string;
+    ifscCode?: string;
+    accountHolder?: string;
+    upiId?: string;
+    upiHolder?: string;
+  }) => void;
   isSubmitting?: boolean;
 };
 
@@ -55,12 +69,36 @@ export function RecheckWithdrawalModal({
   upiHolder = "",
   onConfirm,
   onEdit,
+  onUpdateDetails,
   isSubmitting = false,
 }: RecheckWithdrawalModalProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  // Local editable values
+  const [currentAccNo, setCurrentAccNo] = useState(accountNumber);
+  const [currentIfsc, setCurrentIfsc] = useState(ifscCode);
+  const [currentHolder, setCurrentHolder] = useState(accountHolder);
+  const [currentUpiId, setCurrentUpiId] = useState(upiId);
+  const [currentUpiHolder, setCurrentUpiHolder] = useState(upiHolder);
+
+  // Inline editing state
+  const [editingField, setEditingField] = useState<
+    "accountNumber" | "ifsc" | "accountHolder" | "upiId" | "upiHolder" | null
+  >(null);
+  const [tempValue, setTempValue] = useState("");
+
+  useEffect(() => {
+    setCurrentAccNo(accountNumber);
+    setCurrentIfsc(ifscCode);
+    setCurrentHolder(accountHolder);
+    setCurrentUpiId(upiId);
+    setCurrentUpiHolder(upiHolder);
+    setEditingField(null);
+    setTempValue("");
+  }, [accountNumber, ifscCode, accountHolder, upiId, upiHolder, open]);
+
   const isBank = payoutMethod === "BANK";
-  const rule = isBank ? getBankValidationRule(bankName, ifscCode) : null;
+  const rule = isBank ? getBankValidationRule(bankName, currentIfsc) : null;
 
   const handleCopy = (text: string, label: string) => {
     if (!text) return;
@@ -70,6 +108,79 @@ export function RecheckWithdrawalModal({
     setTimeout(() => {
       setCopiedField((curr) => (curr === label ? null : curr));
     }, 2000);
+  };
+
+  const startEdit = (
+    field: "accountNumber" | "ifsc" | "accountHolder" | "upiId" | "upiHolder",
+    initialVal: string,
+  ) => {
+    setEditingField(field);
+    setTempValue(initialVal);
+  };
+
+  const cancelEdit = () => {
+    setEditingField(null);
+    setTempValue("");
+  };
+
+  const saveEdit = (
+    field: "accountNumber" | "ifsc" | "accountHolder" | "upiId" | "upiHolder",
+  ) => {
+    const val = tempValue.trim();
+    if (!val) {
+      toast.error("Value cannot be empty");
+      return;
+    }
+
+    if (field === "accountNumber") {
+      const cleanVal = val.replace(/\s+/g, "");
+      if (!/^\d+$/.test(cleanVal)) {
+        toast.error("Account number must contain only numeric digits.");
+        return;
+      }
+      setCurrentAccNo(cleanVal);
+      onUpdateDetails?.({ accountNumber: cleanVal });
+      toast.success("Account number updated!");
+    } else if (field === "ifsc") {
+      const cleanVal = val.toUpperCase().replace(/\s+/g, "");
+      if (cleanVal.length !== 11) {
+        toast.error("IFSC code must be exactly 11 characters.");
+        return;
+      }
+      setCurrentIfsc(cleanVal);
+      onUpdateDetails?.({ ifscCode: cleanVal });
+      toast.success("IFSC code updated!");
+    } else if (field === "accountHolder") {
+      setCurrentHolder(val);
+      onUpdateDetails?.({ accountHolder: val });
+      toast.success("Account holder name updated!");
+    } else if (field === "upiId") {
+      const cleanVal = val.toLowerCase().replace(/\s+/g, "");
+      if (!cleanVal.includes("@")) {
+        toast.error("Please enter a valid UPI ID (e.g. name@bank).");
+        return;
+      }
+      setCurrentUpiId(cleanVal);
+      onUpdateDetails?.({ upiId: cleanVal });
+      toast.success("UPI ID updated!");
+    } else if (field === "upiHolder") {
+      setCurrentUpiHolder(val);
+      onUpdateDetails?.({ upiHolder: val });
+      toast.success("Registered UPI name updated!");
+    }
+
+    setEditingField(null);
+    setTempValue("");
+  };
+
+  const handleFinalConfirm = () => {
+    void onConfirm({
+      accountNumber: currentAccNo,
+      ifscCode: currentIfsc,
+      accountHolder: currentHolder,
+      upiId: currentUpiId,
+      upiHolder: currentUpiHolder,
+    });
   };
 
   return (
@@ -133,58 +244,192 @@ export function RecheckWithdrawalModal({
                 disabled={isSubmitting}
                 className="h-8 gap-1 text-xs font-medium text-primary hover:text-primary hover:bg-primary/10"
               >
-                <Pencil className="h-3.5 w-3.5" /> Edit
+                <Pencil className="h-3.5 w-3.5" /> Edit on Form
               </Button>
             </div>
 
             {isBank ? (
-              <div className="space-y-2 pt-2 border-t border-border/60 text-xs">
+              <div className="space-y-2.5 pt-2 border-t border-border/60 text-xs">
+                {/* Bank Name */}
                 <div className="flex justify-between items-center py-1">
                   <span className="text-muted-foreground">Bank Name</span>
                   <span className="font-semibold text-foreground">{bankName || rule?.bankName || "Bank Transfer"}</span>
                 </div>
 
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-muted-foreground">Account Holder Name</span>
-                  <span className="font-semibold text-foreground">{accountHolder || "—"}</span>
+                {/* Account Holder Name with Edit */}
+                <div className="flex justify-between items-center py-1 gap-2">
+                  <span className="text-muted-foreground shrink-0">Account Holder Name</span>
+                  {editingField === "accountHolder" ? (
+                    <div className="flex items-center gap-1.5 flex-1 justify-end max-w-xs">
+                      <input
+                        type="text"
+                        value={tempValue}
+                        onChange={(e) => setTempValue(e.target.value)}
+                        placeholder="Account holder name"
+                        className="h-7 w-full max-w-[170px] rounded-md border border-primary/40 bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit("accountHolder");
+                          if (e.key === "Escape") cancelEdit();
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveEdit("accountHolder")}
+                        className="h-7 px-2 rounded-md bg-primary text-primary-foreground text-[11px] font-semibold hover:bg-primary/90 transition cursor-pointer flex items-center gap-1"
+                        title="Save"
+                      >
+                        <Check className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="h-7 px-1.5 rounded-md hover:bg-muted text-muted-foreground text-[11px] transition cursor-pointer"
+                        title="Cancel"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-foreground">{currentHolder || "—"}</span>
+                      <button
+                        type="button"
+                        onClick={() => startEdit("accountHolder", currentHolder)}
+                        className="p-1 rounded hover:bg-primary/10 text-primary transition cursor-pointer"
+                        title="Edit account holder name"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-muted-foreground">Account Number</span>
-                  <div className="flex items-center gap-1.5 font-mono font-bold text-foreground bg-muted/60 px-2 py-0.5 rounded border border-border/60">
-                    <span>{accountNumber}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(accountNumber, "Account Number")}
-                      className="text-muted-foreground hover:text-foreground p-0.5 transition cursor-pointer"
-                      title="Copy account number"
-                    >
-                      {copiedField === "Account Number" ? (
-                        <Check className="h-3.5 w-3.5 text-emerald-600" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
+                {/* Account Number with Copy AND Inline Edit */}
+                <div className="flex justify-between items-center py-1 gap-2">
+                  <span className="text-muted-foreground shrink-0">Account Number</span>
+                  {editingField === "accountNumber" ? (
+                    <div className="flex items-center gap-1.5 flex-1 justify-end max-w-xs">
+                      <input
+                        type="text"
+                        value={tempValue}
+                        onChange={(e) => setTempValue(e.target.value)}
+                        placeholder="Enter account number"
+                        className="h-7 w-full max-w-[170px] rounded-md border border-primary/40 bg-background px-2 text-xs font-mono font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit("accountNumber");
+                          if (e.key === "Escape") cancelEdit();
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveEdit("accountNumber")}
+                        className="h-7 px-2 rounded-md bg-primary text-primary-foreground text-[11px] font-semibold hover:bg-primary/90 transition cursor-pointer flex items-center gap-1"
+                        title="Save"
+                      >
+                        <Check className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="h-7 px-1.5 rounded-md hover:bg-muted text-muted-foreground text-[11px] transition cursor-pointer"
+                        title="Cancel"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 font-mono font-bold text-foreground bg-muted/60 px-2 py-0.5 rounded border border-border/60">
+                        <span>{currentAccNo || "—"}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(currentAccNo, "Account Number")}
+                          className="text-muted-foreground hover:text-foreground p-0.5 transition cursor-pointer"
+                          title="Copy account number"
+                        >
+                          {copiedField === "Account Number" ? (
+                            <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => startEdit("accountNumber", currentAccNo)}
+                        className="p-1 rounded hover:bg-primary/10 text-primary transition cursor-pointer"
+                        title="Edit account number"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-muted-foreground">IFSC Code</span>
-                  <div className="flex items-center gap-1.5 font-mono font-bold text-foreground bg-muted/60 px-2 py-0.5 rounded border border-border/60">
-                    <span>{ifscCode.toUpperCase()}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(ifscCode.toUpperCase(), "IFSC Code")}
-                      className="text-muted-foreground hover:text-foreground p-0.5 transition cursor-pointer"
-                      title="Copy IFSC code"
-                    >
-                      {copiedField === "IFSC Code" ? (
-                        <Check className="h-3.5 w-3.5 text-emerald-600" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
+                {/* IFSC Code with Copy AND Inline Edit */}
+                <div className="flex justify-between items-center py-1 gap-2">
+                  <span className="text-muted-foreground shrink-0">IFSC Code</span>
+                  {editingField === "ifsc" ? (
+                    <div className="flex items-center gap-1.5 flex-1 justify-end max-w-xs">
+                      <input
+                        type="text"
+                        value={tempValue}
+                        onChange={(e) => setTempValue(e.target.value.toUpperCase())}
+                        placeholder="11-char IFSC"
+                        maxLength={11}
+                        className="h-7 w-full max-w-[130px] uppercase rounded-md border border-primary/40 bg-background px-2 text-xs font-mono font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit("ifsc");
+                          if (e.key === "Escape") cancelEdit();
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveEdit("ifsc")}
+                        className="h-7 px-2 rounded-md bg-primary text-primary-foreground text-[11px] font-semibold hover:bg-primary/90 transition cursor-pointer flex items-center gap-1"
+                        title="Save"
+                      >
+                        <Check className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="h-7 px-1.5 rounded-md hover:bg-muted text-muted-foreground text-[11px] transition cursor-pointer"
+                        title="Cancel"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 font-mono font-bold text-foreground bg-muted/60 px-2 py-0.5 rounded border border-border/60">
+                        <span>{currentIfsc ? currentIfsc.toUpperCase() : "—"}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(currentIfsc.toUpperCase(), "IFSC Code")}
+                          className="text-muted-foreground hover:text-foreground p-0.5 transition cursor-pointer"
+                          title="Copy IFSC code"
+                        >
+                          {copiedField === "IFSC Code" ? (
+                            <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => startEdit("ifsc", currentIfsc)}
+                        className="p-1 rounded hover:bg-primary/10 text-primary transition cursor-pointer"
+                        title="Edit IFSC code"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {rule && (
@@ -195,29 +440,117 @@ export function RecheckWithdrawalModal({
                 )}
               </div>
             ) : (
-              <div className="space-y-2 pt-2 border-t border-border/60 text-xs">
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-muted-foreground">Registered Name</span>
-                  <span className="font-semibold text-foreground">{upiHolder || "—"}</span>
+              <div className="space-y-2.5 pt-2 border-t border-border/60 text-xs">
+                {/* UPI Registered Name */}
+                <div className="flex justify-between items-center py-1 gap-2">
+                  <span className="text-muted-foreground shrink-0">Registered Name</span>
+                  {editingField === "upiHolder" ? (
+                    <div className="flex items-center gap-1.5 flex-1 justify-end max-w-xs">
+                      <input
+                        type="text"
+                        value={tempValue}
+                        onChange={(e) => setTempValue(e.target.value)}
+                        placeholder="Registered name"
+                        className="h-7 w-full max-w-[170px] rounded-md border border-primary/40 bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit("upiHolder");
+                          if (e.key === "Escape") cancelEdit();
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveEdit("upiHolder")}
+                        className="h-7 px-2 rounded-md bg-primary text-primary-foreground text-[11px] font-semibold hover:bg-primary/90 transition cursor-pointer flex items-center gap-1"
+                        title="Save"
+                      >
+                        <Check className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="h-7 px-1.5 rounded-md hover:bg-muted text-muted-foreground text-[11px] transition cursor-pointer"
+                        title="Cancel"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-foreground">{currentUpiHolder || "—"}</span>
+                      <button
+                        type="button"
+                        onClick={() => startEdit("upiHolder", currentUpiHolder)}
+                        className="p-1 rounded hover:bg-primary/10 text-primary transition cursor-pointer"
+                        title="Edit registered name"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-muted-foreground">UPI ID / VPA</span>
-                  <div className="flex items-center gap-1.5 font-mono font-bold text-primary bg-primary/5 px-2.5 py-0.5 rounded border border-primary/20">
-                    <span>{upiId.toLowerCase()}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(upiId.toLowerCase(), "UPI ID")}
-                      className="text-primary/70 hover:text-primary p-0.5 transition cursor-pointer"
-                      title="Copy UPI ID"
-                    >
-                      {copiedField === "UPI ID" ? (
-                        <Check className="h-3.5 w-3.5 text-emerald-600" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
+                {/* UPI ID with Copy AND Inline Edit */}
+                <div className="flex justify-between items-center py-1 gap-2">
+                  <span className="text-muted-foreground shrink-0">UPI ID / VPA</span>
+                  {editingField === "upiId" ? (
+                    <div className="flex items-center gap-1.5 flex-1 justify-end max-w-xs">
+                      <input
+                        type="text"
+                        value={tempValue}
+                        onChange={(e) => setTempValue(e.target.value.toLowerCase())}
+                        placeholder="yourname@bank"
+                        className="h-7 w-full max-w-[170px] rounded-md border border-primary/40 bg-background px-2 text-xs font-mono font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit("upiId");
+                          if (e.key === "Escape") cancelEdit();
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveEdit("upiId")}
+                        className="h-7 px-2 rounded-md bg-primary text-primary-foreground text-[11px] font-semibold hover:bg-primary/90 transition cursor-pointer flex items-center gap-1"
+                        title="Save"
+                      >
+                        <Check className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="h-7 px-1.5 rounded-md hover:bg-muted text-muted-foreground text-[11px] transition cursor-pointer"
+                        title="Cancel"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 font-mono font-bold text-primary bg-primary/5 px-2.5 py-0.5 rounded border border-primary/20">
+                        <span>{currentUpiId ? currentUpiId.toLowerCase() : "—"}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(currentUpiId.toLowerCase(), "UPI ID")}
+                          className="text-primary/70 hover:text-primary p-0.5 transition cursor-pointer"
+                          title="Copy UPI ID"
+                        >
+                          {copiedField === "UPI ID" ? (
+                            <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => startEdit("upiId", currentUpiId)}
+                        className="p-1 rounded hover:bg-primary/10 text-primary transition cursor-pointer"
+                        title="Edit UPI ID"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-1 text-[11px] text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
@@ -248,11 +581,11 @@ export function RecheckWithdrawalModal({
               disabled={isSubmitting}
               className="sm:w-1/3 text-xs font-semibold"
             >
-              Edit Details
+              Edit on Form
             </Button>
             <Button
               type="button"
-              onClick={() => void onConfirm()}
+              onClick={handleFinalConfirm}
               disabled={isSubmitting}
               className="sm:flex-1 text-xs font-bold gap-2"
             >

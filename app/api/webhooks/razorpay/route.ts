@@ -232,13 +232,20 @@ export async function POST(request: Request) {
               where: { idempotencyKey: `payout-${withdrawal.id}` },
               data: { status: "FAILED" },
             });
+            const targetUser = await tx.user.findUnique({
+              where: { id: withdrawal.professionalId },
+              select: { role: true },
+            });
+            const earningsHref =
+              targetUser?.role === "CLIENT" ? "/client/earnings" : "/professional/earnings";
+
             await tx.userNotification.create({
               data: {
                 userId: withdrawal.professionalId,
                 type: "PAYOUT_FAILED",
                 title: "Withdrawal Failed - Balance Restored",
                 description: `Your withdrawal of ₹${withdrawal.amount.toLocaleString("en-IN")} failed (${failReason}). Your wallet balance has been restored.`,
-                href: "/professional/earnings",
+                href: earningsHref,
               },
             });
           } else if (payload.event === "payout.reversed") {
@@ -281,13 +288,21 @@ export async function POST(request: Request) {
                 failureReason: failReason,
               },
             });
+
+            const targetUser = await tx.user.findUnique({
+              where: { id: withdrawal.professionalId },
+              select: { role: true },
+            });
+            const earningsHref =
+              targetUser?.role === "CLIENT" ? "/client/earnings" : "/professional/earnings";
+
             await tx.userNotification.create({
               data: {
                 userId: withdrawal.professionalId,
                 type: "PAYOUT_REVERSED",
                 title: "Withdrawal Reversed - Balance Refunded",
                 description: `Your payout of ₹${withdrawal.amount.toLocaleString("en-IN")} was reversed by the banking network (${failReason}). The amount has been credited back to your wallet.`,
-                href: "/professional/earnings",
+                href: earningsHref,
               },
             });
           }

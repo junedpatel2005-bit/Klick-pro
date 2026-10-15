@@ -40,17 +40,13 @@ import { CardListSkeleton } from "@/components/LoadingSkeleton";
 import { PageActionLoading } from "@/components/PageActionLoading";
 import { formatReadableLabel } from "@/lib/utils";
 import { LinkedAccountsCard } from "@/components/LinkedAccountsCard";
-import { BankCombobox } from "@/components/BankCombobox";
-import { IfscFinderDialog } from "@/components/IfscFinderDialog";
 import { RecheckWithdrawalModal } from "@/components/RecheckWithdrawalModal";
 import { WithdrawalDetailModal } from "@/components/WithdrawalDetailModal";
 import {
-  POPULAR_INDIAN_BANKS,
   lookupIfscCode,
   normalizeIfsc,
   getBankNameFromIfsc,
   validateBankSpecificAccountNumber,
-  getExpectedAccountLengthHint,
 } from "@/lib/indian-banks";
 type Payment = {
   id: number;
@@ -206,7 +202,6 @@ export default function ClientEarnings() {
   const [bankAccountVerified, setBankAccountVerified] = useState<boolean | null>(null);
   const [bankAccountError, setBankAccountError] = useState<string | null>(null);
   const [officialBankName, setOfficialBankName] = useState<string | null>(null);
-  const [ifscFinderOpen, setIfscFinderOpen] = useState(false);
 
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawMessage, setWithdrawMessage] = useState("");
@@ -219,8 +214,31 @@ export default function ClientEarnings() {
   const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
   const [defaultAccount, setDefaultAccount] = useState<LinkedAccount | null>(null);
   const [selectedLinkedAccountId, setSelectedLinkedAccountId] = useState<string>("");
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState<string>("");
+  const [selectedUpiAccountId, setSelectedUpiAccountId] = useState<string>("");
   const [showAllWithdrawals, setShowAllWithdrawals] = useState(false);
   const [copiedUtr, setCopiedUtr] = useState<string | null>(null);
+
+  const savedBankAccounts = useMemo(
+    () => linkedAccounts.filter((a) => a.accountType === "BANK"),
+    [linkedAccounts],
+  );
+  const savedUpiAccounts = useMemo(
+    () => linkedAccounts.filter((a) => a.accountType === "UPI"),
+    [linkedAccounts],
+  );
+
+  const selectedBankAccount =
+    savedBankAccounts.find((a) => a.id === selectedBankAccountId) ??
+    savedBankAccounts.find((a) => a.isDefault) ??
+    savedBankAccounts[0] ??
+    null;
+
+  const selectedUpiAccount =
+    savedUpiAccounts.find((a) => a.id === selectedUpiAccountId) ??
+    savedUpiAccounts.find((a) => a.isDefault) ??
+    savedUpiAccounts[0] ??
+    null;
 
   function handleCopyUtr(utr: string) {
     if (!utr) return;
@@ -264,7 +282,7 @@ export default function ClientEarnings() {
     }
   }
 
-  async function handleLookupIfsc(code: string) {
+  async function handleLookupIfsc(code: string, silent = false) {
     const clean = normalizeIfsc(code);
     setBankIfsc(clean);
     setIfscError(null);
@@ -276,10 +294,14 @@ export default function ClientEarnings() {
         if (res.valid && res.bank) {
           setIfscBranch(`${res.bank} · ${res.branch} (${res.city})`);
           setBankName(res.bank);
-          toast.success(`IFSC Verified: ${res.bank} (${res.branch})`);
+          if (!silent) {
+            toast.success(`IFSC Verified: ${res.bank} (${res.branch})`);
+          }
         } else {
           setIfscError(res.error || "Invalid IFSC code.");
-          toast.error(res.error || "Invalid IFSC code.");
+          if (!silent) {
+            toast.error(res.error || "Invalid IFSC code.");
+          }
         }
       } catch {
         setIfscError("Unable to verify IFSC code.");
@@ -296,16 +318,18 @@ export default function ClientEarnings() {
   function applyLinkedAccount(acc: LinkedAccount) {
     if (acc.accountType === "BANK") {
       setWithdrawMethod("BANK");
+      setSelectedBankAccountId(acc.id);
       setBankAccount(acc.accountNumber ?? "");
       setBankIfsc(acc.ifscCode ?? "");
       setAccountHolder(acc.accountHolder ?? "");
       const bName = acc.bankName || getBankNameFromIfsc(acc.ifscCode) || "";
       setBankName(bName);
       if (acc.ifscCode) {
-        void handleLookupIfsc(acc.ifscCode);
+        void handleLookupIfsc(acc.ifscCode, true);
       }
     } else if (acc.accountType === "UPI") {
       setWithdrawMethod("UPI");
+      setSelectedUpiAccountId(acc.id);
       setWithdrawDestination(acc.upiId ?? "");
       setUpiHolder(acc.accountHolder ?? "");
       setVpaVerified(true);
@@ -371,6 +395,8 @@ export default function ClientEarnings() {
         if (def) {
           applyLinkedAccount(def);
           setSelectedLinkedAccountId(def.id);
+        } else if (accs.length > 0) {
+          applyLinkedAccount(accs[0]!);
         }
       })
       .catch(() => {
@@ -418,6 +444,9 @@ export default function ClientEarnings() {
     }
     const upiTarget = withdrawDestination.trim().toLowerCase();
     if (withdrawMethod === "BANK") {
+      if (!selectedBankAccount) {
+        return setWithdrawMessage("Please link or select a bank account to withdraw.");
+      }
       const accValidation = validateBankSpecificAccountNumber(bankAccount, bankName, bankIfsc);
       if (!accValidation.valid) {
         return setWithdrawMessage(accValidation.message || "Please enter a valid bank account number.");
@@ -429,16 +458,38 @@ export default function ClientEarnings() {
         return setWithdrawMessage("Please enter the account holder name as per bank records.");
       }
     }
-    if (withdrawMethod === "UPI" && !upiTarget) {
-      return setWithdrawMessage("Please enter a valid UPI ID (e.g. name@okhdfcbank).");
+    if (withdrawMethod === "UPI") {
+      if (!selectedUpiAccount) {
+        return setWithdrawMessage("Please link or select a UPI ID to withdraw.");
+      }
+      if (!upiTarget) {
+        return setWithdrawMessage("Please enter a valid UPI ID (e.g. name@okhdfcbank).");
+      }
     }
 
     setWithdrawMessage("");
     setRecheckModalOpen(true);
   }
 
-  async function executeClientWithdrawal() {
-    const upiTarget = withdrawDestination.trim().toLowerCase();
+  async function executeClientWithdrawal(updatedDetails?: {
+    accountNumber?: string;
+    ifscCode?: string;
+    accountHolder?: string;
+    upiId?: string;
+    upiHolder?: string;
+  }) {
+    const finalBankAccount = (updatedDetails?.accountNumber ?? bankAccount).trim();
+    const finalBankIfsc = (updatedDetails?.ifscCode ?? bankIfsc).trim().toUpperCase();
+    const finalAccountHolder = (updatedDetails?.accountHolder ?? accountHolder).trim();
+    const finalUpiId = (updatedDetails?.upiId ?? withdrawDestination).trim().toLowerCase();
+    const finalUpiHolder = (updatedDetails?.upiHolder ?? upiHolder).trim();
+
+    if (updatedDetails?.accountNumber) setBankAccount(updatedDetails.accountNumber);
+    if (updatedDetails?.ifscCode) setBankIfsc(updatedDetails.ifscCode);
+    if (updatedDetails?.accountHolder) setAccountHolder(updatedDetails.accountHolder);
+    if (updatedDetails?.upiId) setWithdrawDestination(updatedDetails.upiId);
+    if (updatedDetails?.upiHolder) setUpiHolder(updatedDetails.upiHolder);
+
     setActionBusy("withdraw");
     try {
       const destinationLabel =
@@ -446,14 +497,14 @@ export default function ClientEarnings() {
           ? JSON.stringify({
               type: "BANK",
               bankName: bankName.trim() || undefined,
-              accountHolder: accountHolder.trim() || undefined,
-              accountNumber: bankAccount.trim(),
-              ifsc: bankIfsc.trim().toUpperCase(),
+              accountHolder: finalAccountHolder || undefined,
+              accountNumber: finalBankAccount,
+              ifsc: finalBankIfsc,
             })
           : JSON.stringify({
               type: "UPI",
-              upiId: upiTarget,
-              upiHolder: upiHolder.trim() || undefined,
+              upiId: finalUpiId,
+              upiHolder: finalUpiHolder || undefined,
             });
 
       const response = await fetch("/api/v1/wallet", {
@@ -464,11 +515,11 @@ export default function ClientEarnings() {
           destinationType: withdrawMethod,
           destinationLabel,
           accountHolder:
-            withdrawMethod === "BANK" ? accountHolder.trim() : upiHolder.trim() || undefined,
-          accountNumber: withdrawMethod === "BANK" ? bankAccount.trim() : undefined,
-          ifscCode: withdrawMethod === "BANK" ? bankIfsc.trim().toUpperCase() : undefined,
-          upiId: withdrawMethod === "UPI" ? upiTarget : undefined,
-          upiHolder: withdrawMethod === "UPI" ? upiHolder.trim() || undefined : undefined,
+            withdrawMethod === "BANK" ? finalAccountHolder : finalUpiHolder || undefined,
+          accountNumber: withdrawMethod === "BANK" ? finalBankAccount : undefined,
+          ifscCode: withdrawMethod === "BANK" ? finalBankIfsc : undefined,
+          upiId: withdrawMethod === "UPI" ? finalUpiId : undefined,
+          upiHolder: withdrawMethod === "UPI" ? finalUpiHolder || undefined : undefined,
         }),
       });
       const result = await response.json().catch(() => null);
@@ -1232,74 +1283,6 @@ export default function ClientEarnings() {
                   </div>
                 </div>
 
-                {/* Default Payout Account Banner (Replaces Clumsy Select Dropdown) */}
-                {defaultAccount ? (
-                  <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3 flex items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
-                        <Star className="h-4 w-4 fill-emerald-500/20 text-emerald-600 dark:text-emerald-400" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-foreground">
-                            Default {defaultAccount.accountType === "UPI" ? "UPI ID" : "Bank Account"}
-                          </span>
-                          <span className="rounded-full bg-emerald-500/10 px-2 py-0.2 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
-                            Auto-selected
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                          {defaultAccount.accountType === "BANK"
-                            ? `${defaultAccount.bankName || getBankNameFromIfsc(defaultAccount.ifscCode) || "Bank"} · A/C •••• ${defaultAccount.last4 || (defaultAccount.accountNumber ? defaultAccount.accountNumber.slice(-4) : "••••")}${defaultAccount.accountHolder ? ` (${defaultAccount.accountHolder})` : ""}`
-                            : `${defaultAccount.upiId}${defaultAccount.accountHolder ? ` · ${defaultAccount.accountHolder}` : ""}`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (defaultAccount) applyLinkedAccount(defaultAccount);
-                        }}
-                        className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
-                        title="Re-apply default account details"
-                      >
-                        Reset default
-                      </button>
-                      <span className="text-muted-foreground/30">|</span>
-                      <a
-                        href="#saved-accounts"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          document.getElementById("saved-accounts")?.scrollIntoView({ behavior: "smooth" });
-                        }}
-                        className="text-[11px] font-semibold text-foreground hover:text-primary underline flex items-center gap-1 cursor-pointer"
-                        title="Edit or manage your saved accounts"
-                      >
-                        <Pencil className="h-3 w-3" />
-                        Edit / Manage
-                      </a>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-4 rounded-xl border border-border/80 bg-muted/20 p-3 flex items-center justify-between text-xs text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Landmark className="h-4 w-4 text-muted-foreground/60" />
-                      <span>No default payout account set.</span>
-                    </div>
-                    <a
-                      href="#saved-accounts"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        document.getElementById("saved-accounts")?.scrollIntoView({ behavior: "smooth" });
-                      }}
-                      className="font-semibold text-primary hover:underline text-[11px]"
-                    >
-                      + Link &amp; Set Default
-                    </a>
-                  </div>
-                )}
-
                 {/* Withdrawal Method Tabs */}
                 <div className="mt-4 space-y-1.5">
                   <div className="flex items-center justify-between">
@@ -1316,13 +1299,8 @@ export default function ClientEarnings() {
                       onClick={() => {
                         setWithdrawMethod("BANK");
                         setWithdrawMessage("");
-                        if (!bankAccount && !bankIfsc) {
-                          const savedBank = linkedAccounts.find((a) => a.accountType === "BANK");
-                          if (savedBank) {
-                            setBankAccount(savedBank.accountNumber ?? "");
-                            setBankIfsc(savedBank.ifscCode ?? "");
-                            setAccountHolder(savedBank.accountHolder ?? "");
-                          }
+                        if (selectedBankAccount) {
+                          applyLinkedAccount(selectedBankAccount);
                         }
                       }}
                       className={`flex items-center justify-center gap-2 rounded-xl border p-2.5 text-xs font-semibold transition-all duration-200 cursor-pointer active:scale-[0.99] ${
@@ -1339,14 +1317,8 @@ export default function ClientEarnings() {
                       onClick={() => {
                         setWithdrawMethod("UPI");
                         setWithdrawMessage("");
-                        if (!withdrawDestination) {
-                          const savedUpi = linkedAccounts.find((a) => a.accountType === "UPI");
-                          if (savedUpi) {
-                            setWithdrawDestination(savedUpi.upiId ?? "");
-                            setUpiHolder(savedUpi.accountHolder ?? "");
-                            setVpaVerified(true);
-                            setVpaCustomerName(savedUpi.accountHolder ?? null);
-                          }
+                        if (selectedUpiAccount) {
+                          applyLinkedAccount(selectedUpiAccount);
                         }
                       }}
                       className={`flex items-center justify-center gap-2 rounded-xl border p-2.5 text-xs font-semibold transition-all duration-200 cursor-pointer active:scale-[0.99] ${
@@ -1361,202 +1333,221 @@ export default function ClientEarnings() {
                   </div>
                 </div>
 
-                {/* Form Fields with Smooth Tab Switch Animation */}
+                {/* Selected Saved Account Card (Replacing Raw Input Form) */}
                 <div
                   key={withdrawMethod}
                   className="animate-in fade-in-50 slide-in-from-bottom-2 duration-300 fill-mode-both"
                 >
                   {withdrawMethod === "BANK" ? (
-                    <div className="mt-4 space-y-3">
-                      {/* 2-in-1 Bank Name Combobox */}
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-foreground">
-                          Bank Name <span className="text-rose-500">*</span>
-                        </label>
-                        <BankCombobox
-                          id="withdraw-bank-name"
-                          value={bankName}
-                          onChange={(val) => setBankName(val)}
-                          onSelectBank={(bank) => {
-                            if (!bankIfsc) {
-                              setBankIfsc(`${bank.code}0`);
-                            }
-                          }}
-                          placeholder="Search or type bank name (e.g. HDFC, SBI, ICICI)…"
-                        />
-                      </div>
-
-                      {/* IFSC Code with Live Verification & Find IFSC Tool */}
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-medium text-foreground">
-                            IFSC Code <span className="text-rose-500">*</span>
-                          </label>
-                          <div className="flex items-center gap-2">
-                            {ifscVerifying && (
-                              <span className="flex items-center gap-1 text-[11px] text-primary">
-                                <Loader2 className="h-3 w-3 animate-spin" /> Verifying…
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setIfscFinderOpen(true)}
-                              className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
-                              title="Find IFSC Code by Bank & Location"
+                    <div className="mt-4 space-y-2.5">
+                      {selectedBankAccount ? (
+                        <div className="rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/5 via-card to-background p-4 sm:p-5 shadow-xs relative overflow-hidden">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+                                <Landmark className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h3 className="font-semibold text-foreground text-sm sm:text-base truncate">
+                                    {selectedBankAccount.bankName ||
+                                      getBankNameFromIfsc(selectedBankAccount.ifscCode) ||
+                                      "Bank Account"}
+                                  </h3>
+                                  {selectedBankAccount.isDefault && (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/25 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400">
+                                      <Star className="h-3 w-3 fill-amber-500 text-amber-500" /> Default
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="font-mono text-xs sm:text-sm text-foreground/80 tracking-wider mt-1">
+                                  A/C •••• {selectedBankAccount.last4 || selectedBankAccount.accountNumber?.slice(-4) || "••••"}
+                                </p>
+                              </div>
+                            </div>
+                            <a
+                              href="#saved-accounts"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                document.getElementById("saved-accounts")?.scrollIntoView({ behavior: "smooth" });
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline shrink-0 cursor-pointer pt-0.5"
+                              title="Edit or manage saved bank accounts"
                             >
-                              <Search className="h-3 w-3" />
-                              Find IFSC Code
+                              <Pencil className="h-3 w-3" /> Edit / Manage
+                            </a>
+                          </div>
+
+                          <div className="mt-3.5 pt-3 border-t border-border/60 grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block">
+                                IFSC Code
+                              </span>
+                              <span className="font-mono font-semibold text-foreground tracking-wide">
+                                {selectedBankAccount.ifscCode || "—"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider block">
+                                Account Holder
+                              </span>
+                              <span className="font-semibold text-foreground truncate block">
+                                {selectedBankAccount.accountHolder || "Account Holder"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-border/80 bg-muted/15 p-5 text-center space-y-2">
+                          <div className="h-10 w-10 mx-auto rounded-xl bg-muted/60 border border-border flex items-center justify-center text-muted-foreground">
+                            <Landmark className="h-5 w-5" />
+                          </div>
+                          <p className="text-xs font-semibold text-foreground">No bank account saved yet</p>
+                          <p className="text-[11px] text-muted-foreground max-w-xs mx-auto">
+                            Add your bank account below in Saved Accounts to withdraw funds directly via 24x7 IMPS.
+                          </p>
+                          <a
+                            href="#saved-accounts"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              document.getElementById("saved-accounts")?.scrollIntoView({ behavior: "smooth" });
+                            }}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline pt-1 cursor-pointer"
+                          >
+                            + Link Bank Account
+                          </a>
+                        </div>
+                      )}
+
+                      {/* Multi-Account Quick Switcher */}
+                      {savedBankAccounts.length > 1 && (
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+                          <span className="text-[11px] text-muted-foreground shrink-0">Switch account:</span>
+                          {savedBankAccounts.map((acc) => (
+                            <button
+                              key={acc.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedBankAccountId(acc.id);
+                                applyLinkedAccount(acc);
+                              }}
+                              className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                                selectedBankAccount?.id === acc.id
+                                  ? "border-primary bg-primary/10 text-primary font-semibold shadow-2xs"
+                                  : "border-border bg-background hover:border-primary/40 text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              <span>
+                                {acc.bankName || "Bank"} (••{acc.last4 || acc.accountNumber?.slice(-2)})
+                              </span>
+                              {acc.isDefault && (
+                                <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
+                              )}
                             </button>
-                          </div>
+                          ))}
                         </div>
-                        <input
-                          className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs sm:text-sm uppercase font-mono tracking-wider text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition placeholder:normal-case placeholder:tracking-normal"
-                          value={bankIfsc}
-                          onChange={(event) =>
-                            void handleLookupIfsc(normalizeIfsc(event.target.value))
-                          }
-                          placeholder="e.g. HDFC0001234 or BARB0IKHARX"
-                          maxLength={11}
-                        />
-                        {ifscBranch && (
-                          <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
-                            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                            <span className="truncate">
-                              Branch: <strong>{ifscBranch}</strong>
-                            </span>
-                          </div>
-                        )}
-                        {ifscError && (
-                          <p className="text-[11px] text-rose-600 dark:text-rose-400">
-                            {ifscError}
-                          </p>
-                        )}
-                      </div>
-
-                      <IfscFinderDialog
-                        open={ifscFinderOpen}
-                        onOpenChange={setIfscFinderOpen}
-                        defaultBank={bankName}
-                        onSelectIfsc={(code, bName, bBranch) => {
-                          setBankIfsc(code);
-                          if (bName) setBankName(bName);
-                          if (bBranch) setIfscBranch(bBranch);
-                          void handleLookupIfsc(code);
-                        }}
-                      />
-
-                      {/* Bank Account Number */}
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-medium text-foreground">
-                            Bank Account Number <span className="text-rose-500">*</span>
-                          </label>
-                          <span className="text-[10px] font-medium text-primary">
-                            {getExpectedAccountLengthHint(bankName, bankIfsc)}
-                          </span>
-                        </div>
-                        <input
-                          className={`h-10 w-full rounded-xl border bg-background px-3 text-xs sm:text-sm font-mono text-foreground placeholder:text-muted-foreground/50 focus:ring-2 outline-none transition ${
-                            bankAccount && !validateBankSpecificAccountNumber(bankAccount, bankName, bankIfsc).valid
-                              ? "border-amber-500 focus:border-amber-500 focus:ring-amber-500/20"
-                              : "border-input focus:border-primary focus:ring-primary/20"
-                          }`}
-                          value={bankAccount}
-                          onChange={(event) => setBankAccount(event.target.value.replace(/\s+/g, ""))}
-                          placeholder="e.g. 123456789012"
-                        />
-                        {bankAccount && !validateBankSpecificAccountNumber(bankAccount, bankName, bankIfsc).valid && (
-                          <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                            {validateBankSpecificAccountNumber(bankAccount, bankName, bankIfsc).message}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Account Holder Name */}
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-foreground">
-                          Account Holder Name <span className="text-rose-500">*</span>
-                        </label>
-                        <input
-                          className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
-                          value={accountHolder}
-                          onChange={(event) => handleNameChange(event.target.value)}
-                          placeholder="Enter full name as per bank records"
-                        />
-                        <p className="text-[10px] text-muted-foreground">
-                          Please ensure this matches the beneficiary name on your bank passbook or statement.
-                        </p>
-                      </div>
+                      )}
                     </div>
                   ) : (
-                    /* Form Fields: UPI */
-                    <div className="mt-4 space-y-3">
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-foreground">
-                          UPI ID / Virtual Payment Address <span className="text-rose-500">*</span>
-                        </label>
-                        <div className="relative flex items-center">
-                          <input
-                            className="h-10 w-full rounded-xl border border-input bg-background px-3 pr-28 text-xs sm:text-sm font-mono text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
-                            value={withdrawDestination}
-                            onChange={(event) => {
-                              const val = event.target.value.trim().toLowerCase();
-                              setWithdrawDestination(val);
-                              setVpaVerified(null);
-                              setVpaCustomerName(null);
-                              setVpaError(null);
-                            }}
-                            placeholder="e.g. name@okhdfcbank or mobile@upi"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => void handleVerifyVpa()}
-                            disabled={vpaVerifying || !withdrawDestination.includes("@")}
-                            className="absolute right-1.5 h-7 rounded-lg bg-primary/10 px-2.5 text-xs font-semibold text-primary hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-40 transition flex items-center gap-1 cursor-pointer"
-                          >
-                            {vpaVerifying ? (
-                              <>
-                                <Loader2 className="h-3 w-3 animate-spin" /> Verifying
-                              </>
-                            ) : (
-                              "Verify NPCI"
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      {vpaVerified === true && (
-                        <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
-                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                          <div>
-                            <p className="font-semibold">UPI ID Verified via NPCI</p>
-                            {vpaCustomerName && (
-                              <p className="text-[11px] text-emerald-800 dark:text-emerald-200">
-                                Registered to: <span className="font-semibold">{vpaCustomerName}</span>
-                              </p>
-                            )}
+                    <div className="mt-4 space-y-2.5">
+                      {selectedUpiAccount ? (
+                        <div className="rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/5 via-card to-background p-4 sm:p-5 shadow-xs relative overflow-hidden">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+                                <Smartphone className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h3 className="font-semibold text-foreground text-sm sm:text-base truncate">
+                                    UPI Virtual Payment Address
+                                  </h3>
+                                  {selectedUpiAccount.isDefault && (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/25 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400">
+                                      <Star className="h-3 w-3 fill-amber-500 text-amber-500" /> Default
+                                    </span>
+                                  )}
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                                    <CheckCircle2 className="h-3 w-3 text-emerald-600" /> NPCI Verified
+                                  </span>
+                                </div>
+                                <p className="font-mono text-xs sm:text-sm font-semibold text-primary tracking-wide mt-1 truncate">
+                                  {selectedUpiAccount.upiId}
+                                </p>
+                              </div>
+                            </div>
+                            <a
+                              href="#saved-accounts"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                document.getElementById("saved-accounts")?.scrollIntoView({ behavior: "smooth" });
+                              }}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline shrink-0 cursor-pointer pt-0.5"
+                              title="Edit or manage saved UPI accounts"
+                            >
+                              <Pencil className="h-3 w-3" /> Edit / Manage
+                            </a>
                           </div>
+
+                          {selectedUpiAccount.accountHolder && (
+                            <div className="mt-3.5 pt-3 border-t border-border/60 text-xs flex items-center justify-between">
+                              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                                Registered Beneficiary
+                              </span>
+                              <span className="font-semibold text-foreground truncate">
+                                {selectedUpiAccount.accountHolder}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-border/80 bg-muted/15 p-5 text-center space-y-2">
+                          <div className="h-10 w-10 mx-auto rounded-xl bg-muted/60 border border-border flex items-center justify-center text-muted-foreground">
+                            <Smartphone className="h-5 w-5" />
+                          </div>
+                          <p className="text-xs font-semibold text-foreground">No UPI ID saved yet</p>
+                          <p className="text-[11px] text-muted-foreground max-w-xs mx-auto">
+                            Add your UPI ID below in Saved Accounts to withdraw funds instantly to your UPI app.
+                          </p>
+                          <a
+                            href="#saved-accounts"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              document.getElementById("saved-accounts")?.scrollIntoView({ behavior: "smooth" });
+                            }}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline pt-1 cursor-pointer"
+                          >
+                            + Link UPI ID
+                          </a>
                         </div>
                       )}
 
-                      {vpaError && (
-                        <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300 border border-rose-500/20">
-                          <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
-                          <span>{vpaError}</span>
+                      {/* Multi-UPI Quick Switcher */}
+                      {savedUpiAccounts.length > 1 && (
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+                          <span className="text-[11px] text-muted-foreground shrink-0">Switch UPI:</span>
+                          {savedUpiAccounts.map((acc) => (
+                            <button
+                              key={acc.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedUpiAccountId(acc.id);
+                                applyLinkedAccount(acc);
+                              }}
+                              className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                                selectedUpiAccount?.id === acc.id
+                                  ? "border-primary bg-primary/10 text-primary font-semibold shadow-2xs"
+                                  : "border-border bg-background hover:border-primary/40 text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              <span>{acc.upiId}</span>
+                              {acc.isDefault && (
+                                <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
+                              )}
+                            </button>
+                          ))}
                         </div>
                       )}
-
-                      <div className="space-y-1">
-                        <label className="text-xs font-medium text-foreground">
-                          Beneficiary Name (Optional)
-                        </label>
-                        <input
-                          className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
-                          value={upiHolder}
-                          onChange={(event) => setUpiHolder(event.target.value)}
-                          placeholder="e.g. Rahul Sharma"
-                        />
-                      </div>
                     </div>
                   )}
                 </div>
@@ -1642,8 +1633,8 @@ export default function ClientEarnings() {
                       Number(withdrawAmount) < (wallet?.minWithdrawalAmount ?? 500) ||
                       Number(withdrawAmount) > (wallet?.available ?? 0) ||
                       (withdrawMethod === "BANK"
-                        ? !bankAccount.trim() || !bankIfsc.trim() || !accountHolder.trim()
-                        : !withdrawDestination.trim()) ||
+                        ? !selectedBankAccount || !bankAccount.trim()
+                        : !selectedUpiAccount || !withdrawDestination.trim()) ||
                       actionBusy === "withdraw"
                     }
                   >
@@ -2079,6 +2070,13 @@ export default function ClientEarnings() {
         upiHolder={upiHolder}
         onConfirm={executeClientWithdrawal}
         onEdit={() => setRecheckModalOpen(false)}
+        onUpdateDetails={(updated) => {
+          if (updated.accountNumber !== undefined) setBankAccount(updated.accountNumber);
+          if (updated.ifscCode !== undefined) setBankIfsc(updated.ifscCode);
+          if (updated.accountHolder !== undefined) setAccountHolder(updated.accountHolder);
+          if (updated.upiId !== undefined) setWithdrawDestination(updated.upiId);
+          if (updated.upiHolder !== undefined) setUpiHolder(updated.upiHolder);
+        }}
         isSubmitting={actionBusy === "withdraw"}
       />
 

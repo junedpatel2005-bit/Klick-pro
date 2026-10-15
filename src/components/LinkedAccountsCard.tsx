@@ -172,12 +172,12 @@ export function LinkedAccountsCard({
     );
     setBankSearchTerm("");
     if (acc.ifscCode && acc.ifscCode.length === 11) {
-      void handleLookupIfsc(acc.ifscCode);
+      void handleLookupIfsc(acc.ifscCode, true);
     }
     setDialogOpen(true);
   };
 
-  const handleLookupIfsc = async (code: string) => {
+  const handleLookupIfsc = async (code: string, silent = false) => {
     const clean = normalizeIfsc(code);
     setIfscCode(clean);
     setIfscError(null);
@@ -189,10 +189,14 @@ export function LinkedAccountsCard({
         if (res.valid && res.bank) {
           setIfscBranch(`${res.bank} · ${res.branch} (${res.city})`);
           setBankName(res.bank);
-          toast.success(`IFSC Verified: ${res.bank} (${res.branch})`);
+          if (!silent) {
+            toast.success(`IFSC Verified: ${res.bank} (${res.branch})`);
+          }
         } else {
           setIfscError(res.error || "Invalid IFSC code.");
-          toast.error(res.error || "Invalid IFSC code.");
+          if (!silent) {
+            toast.error(res.error || "Invalid IFSC code.");
+          }
         }
       } catch {
         setIfscError("Unable to verify IFSC code.");
@@ -488,19 +492,27 @@ export function LinkedAccountsCard({
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
-                    {!acc.isDefault && (
+                    {!acc.isDefault ? (
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         onClick={() => handleSetDefault(acc.id)}
                         disabled={actionBusyId === acc.id}
-                        className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
-                        title="Make default payout method"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                        title="Set as default payout account"
+                        aria-label="Set as default payout account"
                       >
-                        <Star className="h-3 w-3 mr-1" />
-                        Set Default
+                        <Star className="h-3.5 w-3.5 text-muted-foreground hover:text-amber-500 transition-colors" />
                       </Button>
+                    ) : (
+                      <div
+                        className="flex h-7 w-7 items-center justify-center text-amber-500"
+                        title="Default payout account"
+                        aria-label="Default payout account"
+                      >
+                        <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" />
+                      </div>
                     )}
                     <Button
                       type="button"

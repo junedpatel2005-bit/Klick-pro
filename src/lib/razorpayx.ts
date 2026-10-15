@@ -176,7 +176,7 @@ export async function verifyUpiVpaViaNpci(vpa: string): Promise<{
       };
     }
 
-    // In test mode: Razorpay test credentials reject non-sandbox handles
+    // In test mode: Razorpay test credentials reject non-sandbox handles on real NPCI
     if (isTestKey(keyId)) {
       if (
         trimmed.includes("wrong") ||
@@ -187,12 +187,6 @@ export async function verifyUpiVpaViaNpci(vpa: string): Promise<{
         return {
           valid: false,
           message: "UPI ID not registered on NPCI. Account not found.",
-        };
-      }
-      if (body?.error?.code === "BAD_REQUEST_ERROR" && body?.error?.description?.toLowerCase().includes("not")) {
-        return {
-          valid: false,
-          message: body.error.description || "UPI ID not found on NPCI.",
         };
       }
       const username = trimmed.split("@")[0] || "User";

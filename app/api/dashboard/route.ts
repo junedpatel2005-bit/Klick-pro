@@ -19,7 +19,14 @@ export async function GET(request: NextRequest) {
       await Promise.all([
         db.user.findUniqueOrThrow({
           where: { id: userId },
-          select: { firstName: true, averageRating: true, phoneVerifiedAt: true },
+          select: {
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            companyName: true,
+            averageRating: true,
+            phoneVerifiedAt: true,
+          },
         }),
         db.clientJob.findMany({
           where: { userId },

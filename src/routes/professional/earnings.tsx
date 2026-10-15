@@ -422,8 +422,26 @@ export default function Earnings() {
     setRecheckModalOpen(true);
   }
 
-  async function executeWithdrawal() {
+  async function executeWithdrawal(updatedDetails?: {
+    accountNumber?: string;
+    ifscCode?: string;
+    accountHolder?: string;
+    upiId?: string;
+    upiHolder?: string;
+  }) {
     if (!canSubmit) return;
+    const finalAccountNumber = (updatedDetails?.accountNumber ?? accountNumber).trim();
+    const finalIfscCode = (updatedDetails?.ifscCode ?? ifscCode).trim().toUpperCase();
+    const finalAccountHolder = (updatedDetails?.accountHolder ?? accountHolder).trim();
+    const finalUpiId = (updatedDetails?.upiId ?? upiId).trim().toLowerCase();
+    const finalUpiHolder = (updatedDetails?.upiHolder ?? upiHolder).trim();
+
+    if (updatedDetails?.accountNumber) setAccountNumber(updatedDetails.accountNumber);
+    if (updatedDetails?.ifscCode) setIfscCode(updatedDetails.ifscCode);
+    if (updatedDetails?.accountHolder) setAccountHolder(updatedDetails.accountHolder);
+    if (updatedDetails?.upiId) setUpiId(updatedDetails.upiId);
+    if (updatedDetails?.upiHolder) setUpiHolder(updatedDetails.upiHolder);
+
     setActionBusy("withdraw");
     setMessage("");
     try {
@@ -432,15 +450,15 @@ export default function Earnings() {
         destinationLabel = JSON.stringify({
           type: "BANK",
           bankName: bankName.trim(),
-          accountHolder: accountHolder.trim(),
-          accountNumber: accountNumber.trim(),
-          ifsc: ifscCode.trim().toUpperCase(),
+          accountHolder: finalAccountHolder,
+          accountNumber: finalAccountNumber,
+          ifsc: finalIfscCode,
         });
       } else {
         destinationLabel = JSON.stringify({
           type: "UPI",
-          upiId: upiId.trim().toLowerCase(),
-          upiHolder: upiHolder.trim(),
+          upiId: finalUpiId,
+          upiHolder: finalUpiHolder,
         });
       }
 
@@ -451,11 +469,11 @@ export default function Earnings() {
             JSON.stringify({
               payoutMethod,
               bankName,
-              accountHolder,
-              accountNumber,
-              ifscCode,
-              upiId,
-              upiHolder,
+              accountHolder: finalAccountHolder,
+              accountNumber: finalAccountNumber,
+              ifscCode: finalIfscCode,
+              upiId: finalUpiId,
+              upiHolder: finalUpiHolder,
             }),
           );
         } catch {
@@ -471,12 +489,12 @@ export default function Earnings() {
           destinationType: payoutMethod,
           destinationLabel,
           saveDetails: saveDetailsForFuture,
-          accountHolder: payoutMethod === "BANK" ? accountHolder.trim() : upiHolder.trim(),
-          accountNumber: payoutMethod === "BANK" ? accountNumber.trim() : undefined,
-          ifscCode: payoutMethod === "BANK" ? ifscCode.trim().toUpperCase() : undefined,
+          accountHolder: payoutMethod === "BANK" ? finalAccountHolder : finalUpiHolder,
+          accountNumber: payoutMethod === "BANK" ? finalAccountNumber : undefined,
+          ifscCode: payoutMethod === "BANK" ? finalIfscCode : undefined,
           bankName: payoutMethod === "BANK" ? bankName.trim() : undefined,
-          upiId: payoutMethod === "UPI" ? upiId.trim().toLowerCase() : undefined,
-          upiHolder: payoutMethod === "UPI" ? upiHolder.trim() : undefined,
+          upiId: payoutMethod === "UPI" ? finalUpiId : undefined,
+          upiHolder: payoutMethod === "UPI" ? finalUpiHolder : undefined,
         }),
       });
       const d = await r.json();
@@ -1552,6 +1570,13 @@ export default function Earnings() {
         upiHolder={upiHolder}
         onConfirm={executeWithdrawal}
         onEdit={() => setRecheckModalOpen(false)}
+        onUpdateDetails={(updated) => {
+          if (updated.accountNumber !== undefined) setAccountNumber(updated.accountNumber);
+          if (updated.ifscCode !== undefined) setIfscCode(updated.ifscCode);
+          if (updated.accountHolder !== undefined) setAccountHolder(updated.accountHolder);
+          if (updated.upiId !== undefined) setUpiId(updated.upiId);
+          if (updated.upiHolder !== undefined) setUpiHolder(updated.upiHolder);
+        }}
         isSubmitting={actionBusy === "withdraw"}
       />
 

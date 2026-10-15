@@ -135,21 +135,83 @@ export async function POST(request: NextRequest) {
         where: { id: withdrawal.id },
         data: { status: "FAILED", failureReason: message },
       });
+
+      const targetUser = await tx.user.findUnique({
+        where: { id: withdrawal.professionalId },
+        select: { role: true },
+      });
+      const earningsHref =
+        targetUser?.role === "CLIENT" ? "/client/earnings" : "/professional/earnings";
+
+      await tx.userNotification.create({
+        data: {
+          userId: withdrawal.professionalId,
+          type: "PAYOUT_FAILED",
+          title: "Payout Transfer Failed",
+          description: `Your payout of ₹${withdrawal.amount.toLocaleString(
+            "en-IN",
+          )} could not be transferred: ${message}. Reserved funds have been restored to your wallet balance.`,
+          href: earningsHref,
+        },
+      });
     });
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  // Phase 3: record the transfer. If this write fails the row stays PROCESSING
-  // for reconciliation, which is recoverable, rather than being marked FAILED
-  // after the money has already left.
-  const updated = await db.projectWithdrawal.update({
-    where: { id: withdrawal.id },
-    data: {
-      providerTransferId: transferId,
-      status: "COMPLETED",
-      processedAt: new Date(),
-      failureReason: null,
-    },
+  // Phase 3: record the transfer and double-entry ledger row
+  const updated = await db.$transaction(async (tx) => {
+    const wallet = await tx.wallet.findUnique({
+      where: { userId: withdrawal.professionalId },
+    });
+    if (wallet) {
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          amount: -withdrawal.amount,
+          type: "WITHDRAWAL",
+          status: "COMPLETED",
+          description: `Razorpay Route payout of ₹${withdrawal.amount.toLocaleString(
+            "en-IN",
+          )} to account ${accountCheck.accountId}`,
+          idempotencyKey: `payout-${withdrawal.id}`,
+          metadataJson: JSON.stringify({
+            withdrawalId: withdrawal.id,
+            transferId,
+            paymentId: payment.id,
+            accountId: accountCheck.accountId,
+          }),
+        },
+      });
+    }
+
+    const targetUser = await tx.user.findUnique({
+      where: { id: withdrawal.professionalId },
+      select: { role: true },
+    });
+    const earningsHref =
+      targetUser?.role === "CLIENT" ? "/client/earnings" : "/professional/earnings";
+
+    await tx.userNotification.create({
+      data: {
+        userId: withdrawal.professionalId,
+        type: "PAYOUT_COMPLETED",
+        title: "Payout Completed",
+        description: `Your payout of ₹${withdrawal.amount.toLocaleString(
+          "en-IN",
+        )} has been transferred to your Razorpay linked account.`,
+        href: earningsHref,
+      },
+    });
+
+    return tx.projectWithdrawal.update({
+      where: { id: withdrawal.id },
+      data: {
+        providerTransferId: transferId,
+        status: "COMPLETED",
+        processedAt: new Date(),
+        failureReason: null,
+      },
+    });
   });
   return NextResponse.json({ withdrawal: updated });
 }

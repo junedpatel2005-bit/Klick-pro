@@ -39,6 +39,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       const wallet = await tx.wallet.findUnique({ where: { userId: withdrawal.professionalId } });
       if (!wallet) throw new Error("Professional wallet not found.");
 
+      const targetUser = await tx.user.findUnique({
+        where: { id: withdrawal.professionalId },
+        select: { role: true },
+      });
+      const earningsHref =
+        targetUser?.role === "CLIENT" ? "/client/earnings" : "/professional/earnings";
+
       if (parsed.data.status === "COMPLETED") {
         const settled = await tx.wallet.updateMany({
           where: {
@@ -83,7 +90,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             description: `Your withdrawal request of ₹${withdrawal.amount.toLocaleString(
               "en-IN",
             )} has been approved and paid by Admin. Money is in your bank account!`,
-            href: "/professional/earnings",
+            href: earningsHref,
           },
         });
       } else if (parsed.data.status === "PROCESSING") {
@@ -96,7 +103,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             description: `Your withdrawal request of ₹${withdrawal.amount.toLocaleString(
               "en-IN",
             )} was approved by Admin. Payout transfer is in progress — please wait for money in your bank.`,
-            href: "/professional/earnings",
+            href: earningsHref,
           },
         });
       } else {
@@ -117,7 +124,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             )} was rejected: ${
               parsed.data.failureReason ?? "Rejected by admin."
             }. Reserved funds have been restored to your wallet balance.`,
-            href: "/professional/earnings",
+            href: earningsHref,
           },
         });
       }
