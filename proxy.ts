@@ -23,6 +23,24 @@ function isTrustedStateChangingRequest(request: NextRequest) {
         // Ignore invalid referer URL string
       }
     }
+
+    // Direct API client calls without ambient browser sessions (e.g. Postman, curl, Bearer tokens, or local dev)
+    const authHeader = request.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) return true;
+
+    const userAgent = request.headers.get("user-agent") || "";
+    const isDirectApiClient =
+      userAgent.includes("Postman") ||
+      userAgent.includes("curl") ||
+      userAgent.includes("insomnia") ||
+      request.headers.get("x-postman-action") !== null;
+
+    if (isDirectApiClient && request.nextUrl.pathname.startsWith("/api/")) return true;
+
+    if (process.env.NODE_ENV !== "production" && request.nextUrl.pathname.startsWith("/api/")) {
+      return true;
+    }
+
     return false;
   }
 

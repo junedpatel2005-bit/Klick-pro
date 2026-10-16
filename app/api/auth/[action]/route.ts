@@ -292,6 +292,25 @@ export async function GET(
     }
   }
 
+  if (["login", "register", "send-phone-otp", "verify-phone", "check-availability"].includes(action)) {
+    return NextResponse.json(
+      {
+        error: "METHOD_NOT_ALLOWED",
+        message: `HTTP GET is not supported on /api/auth/${action}. You must send an HTTP POST request with a JSON payload.`,
+        requiredMethod: "POST",
+        endpoint: `/api/auth/${action}`,
+        expectedHeaders: { "Content-Type": "application/json" },
+        exampleBody:
+          action === "login"
+            ? { email: "user@example.com", password: "YourPassword123!" }
+            : action === "register"
+              ? { firstName: "John", lastName: "Doe", email: "user@example.com", password: "Password123!", role: "CLIENT", terms: true }
+              : undefined,
+      },
+      { status: 405, headers: { Allow: "POST" } },
+    );
+  }
+
   return safe("Not found", 404);
 }
 
