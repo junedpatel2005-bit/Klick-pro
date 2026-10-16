@@ -1,0 +1,4645 @@
+{
+  "info": {
+    "_postman_id": "servio-klick-pro-api-collection-v1",
+    "name": "Servio (Klick-Pro) Complete API Collection",
+    "description": "Comprehensive, end-to-end API collection for Servio / Klick-Pro marketplace platform. Includes Authentication, Client Workspace, Professional Workspace, Shared Project Tracking & Portal, Wallet & Razorpay Escrow, Marketplace, KYC/Verification, Admin Suite, and Background Webhooks/Cron.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "projectId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "milestoneId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "professionalId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "paymentId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication & Session",
+      "item": [
+        {
+          "name": "Send Phone OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/send-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "send-otp"
+              ],
+              "query": []
+            },
+            "description": "Sends an SMS OTP for login or registration",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+919876543210\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Phone OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "verify-otp"
+              ],
+              "query": []
+            },
+            "description": "Verifies an SMS OTP and returns session cookie",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+919876543210\",\n  \"otp\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ],
+              "query": []
+            },
+            "description": "Registers a new Client or Professional account",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phone\": \"+919876543210\",\n  \"password\": \"SecurePassword123!\",\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ],
+              "query": []
+            },
+            "description": "Authenticates user credentials and sets servio_session cookie",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"SecurePassword123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current Authenticated User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ],
+              "query": []
+            },
+            "description": "Returns the profile of the current active session user"
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "reset-password"
+              ],
+              "query": []
+            },
+            "description": "Resets password using a verified token/OTP",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"otp\": \"123456\",\n  \"newPassword\": \"NewSecurePassword123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Skip Setup (Dev/Demo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/skip-setup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "skip-setup"
+              ],
+              "query": []
+            },
+            "description": "Quick setup skip for demo environments",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ],
+              "query": []
+            },
+            "description": "Invalidates current session and clears cookies",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Client Workspace",
+      "item": [
+        {
+          "name": "Get Client Account Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "account"
+              ],
+              "query": []
+            },
+            "description": "Fetches client profile details and preferences"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Client Account Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "account"
+              ],
+              "query": []
+            },
+            "description": "Updates client names, contact, and settings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"companyName\": \"Acme Corp\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Client Jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs?status=OPEN",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "OPEN",
+                  "description": "Filter by job status"
+                }
+              ]
+            },
+            "description": "Lists all jobs posted by the authenticated client"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Client Job (Post Job)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs"
+              ],
+              "query": []
+            },
+            "description": "Creates a new client job posting with milestone allocations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Full Stack Next.js Application\",\n  \"category\": \"Web Development\",\n  \"description\": \"Need an experienced full stack developer to build MVP\",\n  \"budgetMin\": 30000,\n  \"budgetMax\": 50000,\n  \"jobDate\": \"2026-10-25T10:00:00Z\",\n  \"deadline\": \"2026-11-25T18:00:00Z\",\n  \"paymentMethod\": \"WALLET\",\n  \"milestones\": [\n    {\n      \"title\": \"UI Design & Setup\",\n      \"percentage\": 50,\n      \"amount\": 25000,\n      \"description\": \"Initial Figma screens and Next.js boilerplate\"\n    },\n    {\n      \"title\": \"Core Features & API\",\n      \"percentage\": 25,\n      \"amount\": 12500,\n      \"description\": \"Backend database schemas and route handlers\"\n    },\n    {\n      \"title\": \"Testing & Deployment\",\n      \"percentage\": 25,\n      \"amount\": 12500,\n      \"description\": \"Automated test suite and production launch\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Single Job Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs",
+                "{{jobId}}"
+              ],
+              "query": []
+            },
+            "description": "Fetches job specifications and received proposals"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Client Job",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs",
+                "{{jobId}}"
+              ],
+              "query": []
+            },
+            "description": "Updates job details, dates, or budget",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Full Stack Next.js App\",\n  \"budgetMax\": 55000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel / Delete Job",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs",
+                "{{jobId}}"
+              ],
+              "query": []
+            },
+            "description": "Cancels an unawarded client job"
+          },
+          "response": []
+        },
+        {
+          "name": "Reopen Completed Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs/{{jobId}}/reopen",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs",
+                "{{jobId}}",
+                "reopen"
+              ],
+              "query": []
+            },
+            "description": "Submits a request to reopen a closed or completed project",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Additional scope requested by client\",\n  \"additionalBudget\": 10000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export Client Jobs (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs",
+                "export"
+              ],
+              "query": []
+            },
+            "description": "Exports all client job records as CSV"
+          },
+          "response": []
+        },
+        {
+          "name": "List Project Requests (Bids)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/project-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "project-requests"
+              ],
+              "query": []
+            },
+            "description": "Lists direct inquiries and proposals from professionals"
+          },
+          "response": []
+        },
+        {
+          "name": "Accept / Decline Project Request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/project-requests/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "project-requests",
+                "1"
+              ],
+              "query": []
+            },
+            "description": "Accepts or declines a professional proposal",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACCEPTED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Saved Professionals",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/saved-professionals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "saved-professionals"
+              ],
+              "query": []
+            },
+            "description": "Gets client bookmarked/saved professionals list"
+          },
+          "response": []
+        },
+        {
+          "name": "Save Professional Bookmark",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/saved-professionals/{{professionalId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "saved-professionals",
+                "{{professionalId}}"
+              ],
+              "query": []
+            },
+            "description": "Bookmarks a professional to saved list",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Saved Professional",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/saved-professionals/{{professionalId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "saved-professionals",
+                "{{professionalId}}"
+              ],
+              "query": []
+            },
+            "description": "Removes professional from bookmarked list"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Client Verification Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/verification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "verification"
+              ],
+              "query": []
+            },
+            "description": "Checks client KYC/identity verification level"
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Client KYC Verification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/verification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "verification"
+              ],
+              "query": []
+            },
+            "description": "Submits client verification data",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"AADHAAR\",\n  \"documentNumber\": \"123456789012\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export Payment History (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/payments/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "payments",
+                "export"
+              ],
+              "query": []
+            },
+            "description": "Exports client payment receipts and escrow invoices"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Professional Workspace",
+      "item": [
+        {
+          "name": "Get Professional Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "profile"
+              ],
+              "query": []
+            },
+            "description": "Fetches professional bio, skills, hourly rate, and portfolio"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Professional Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "profile"
+              ],
+              "query": []
+            },
+            "description": "Updates professional bio, skills, and rates",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"headline\": \"Senior Full Stack Engineer\",\n  \"skills\": [\n    \"React\",\n    \"Next.js\",\n    \"Node.js\",\n    \"PostgreSQL\"\n  ],\n  \"hourlyRate\": 1500,\n  \"experienceYears\": 5,\n  \"bio\": \"Experienced developer building robust web applications.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Proposals for Job",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/proposals?jobId=%7B%7BjobId%7D%7D",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "proposals"
+              ],
+              "query": [
+                {
+                  "key": "jobId",
+                  "value": "{{jobId}}",
+                  "description": "Target Job ID"
+                }
+              ]
+            },
+            "description": "Fetches professional's proposal on a specific job"
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Proposal on Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/proposals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "proposals"
+              ],
+              "query": []
+            },
+            "description": "Submits a bid and milestone schedule on an open job",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobId\": 1,\n  \"bidAmount\": 45000,\n  \"coverLetter\": \"I have 5 years experience building Next.js web applications.\",\n  \"estimatedDays\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Favorite / Save Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/favorite-jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "favorite-jobs",
+                "{{jobId}}"
+              ],
+              "query": []
+            },
+            "description": "Bookmarks a job to professional saved jobs",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unfavorite Job",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/favorite-jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "favorite-jobs",
+                "{{jobId}}"
+              ],
+              "query": []
+            },
+            "description": "Removes job from professional saved jobs"
+          },
+          "response": []
+        },
+        {
+          "name": "Export Professional Jobs (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/jobs/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "jobs",
+                "export"
+              ],
+              "query": []
+            },
+            "description": "Exports all completed and active jobs"
+          },
+          "response": []
+        },
+        {
+          "name": "Export Professional Earnings (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/earnings/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "earnings",
+                "export"
+              ],
+              "query": []
+            },
+            "description": "Exports payouts and milestone earnings records"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Linked Razorpay Account",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/razorpay-account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "razorpay-account"
+              ],
+              "query": []
+            },
+            "description": "Checks status of connected Razorpay bank account"
+          },
+          "response": []
+        },
+        {
+          "name": "Connect Bank Account for Payouts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/razorpay-account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "razorpay-account"
+              ],
+              "query": []
+            },
+            "description": "Links Indian bank account or UPI VPA for automated withdrawals",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountHolderName\": \"John Doe\",\n  \"accountNumber\": \"123456789012\",\n  \"ifscCode\": \"HDFC0000123\",\n  \"bankName\": \"HDFC Bank\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Professional KYC Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/verification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "verification"
+              ],
+              "query": []
+            },
+            "description": "Gets status of identity and background verification checks"
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Professional KYC",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/verification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "verification"
+              ],
+              "query": []
+            },
+            "description": "Submits professional documents for approval",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"PAN\",\n  \"documentNumber\": \"ABCDE1234F\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Shared Project Tracking & Portal",
+      "item": [
+        {
+          "name": "Get Project Tracking Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project?id=%7B%7BprojectId%7D%7D",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project"
+              ],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{projectId}}",
+                  "description": "Project ID"
+                }
+              ]
+            },
+            "description": "Fetches live milestones, uploads, dispute status, timeline, and reviews"
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Start Work",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Client authorizes project kick-off",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"start-work\",\n  \"projectId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Create Single Milestone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Adds a new milestone deliverable",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"create-milestone\",\n  \"projectId\": 1,\n  \"title\": \"Database Architecture\",\n  \"amount\": 15000,\n  \"description\": \"Design relational models and seed data\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Create Multiple Milestones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Bulk adds multiple delivery milestones with split allocation",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"create-milestones\",\n  \"projectId\": 1,\n  \"milestones\": [\n    {\n      \"title\": \"Frontend Wireframes\",\n      \"amount\": 15000,\n      \"description\": \"Complete design specifications\"\n    },\n    {\n      \"title\": \"Backend API Integration\",\n      \"amount\": 15000,\n      \"description\": \"REST & Realtime Socket handlers\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Update Milestone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Updates milestone title, amount, or deliverables (unapproved only)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"update-milestone\",\n  \"projectId\": 1,\n  \"milestoneId\": 1,\n  \"title\": \"Updated Milestone Deliverable\",\n  \"amount\": 16000,\n  \"description\": \"Revised milestone deliverables and requirements\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Delete Milestone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Deletes an unapproved, uncompleted milestone",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"delete-milestone\",\n  \"projectId\": 1,\n  \"milestoneId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Update Progress",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Professional updates overall percentage progress and current stage",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"update-progress\",\n  \"projectId\": 1,\n  \"progress\": 60,\n  \"stage\": \"API Integration\",\n  \"note\": \"Completed user authentication and payment webhook handlers\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Submit Milestone Work",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Professional submits deliverable for client review",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"submit-milestone\",\n  \"projectId\": 1,\n  \"milestoneId\": 1,\n  \"note\": \"Milestone deliverable finished and uploaded to staging\",\n  \"attachmentIds\": [\n    1\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Request Revision",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Client requests changes on submitted milestone work",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"request-revision\",\n  \"projectId\": 1,\n  \"milestoneId\": 1,\n  \"note\": \"Please update the responsive mobile navigation layout\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Approve Milestone & Release Escrow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Client approves deliverable and authorizes wallet payout",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"approve-milestone\",\n  \"projectId\": 1,\n  \"milestoneId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Submit Final Work",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Professional submits all completed project assets",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"submit-final-work\",\n  \"projectId\": 1,\n  \"note\": \"All source files and documentation deployed to production\",\n  \"attachmentIds\": [\n    1\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Confirm Project Completion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Confirms project sign-off",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"confirm-project-completion\",\n  \"projectId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Submit Review & Rating",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Submits star rating and feedback upon project conclusion",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"submit-review\",\n  \"projectId\": 1,\n  \"rating\": 5,\n  \"comment\": \"Outstanding collaboration, delivered on schedule with high quality!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Respond to Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Partner responds to public review",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"respond-to-review\",\n  \"projectId\": 1,\n  \"response\": \"Thank you for the fantastic opportunity and prompt communication!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Project Action: Raise Dispute",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ],
+              "query": []
+            },
+            "description": "Flags project for admin dispute mediation and escrow freeze",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"submit-dispute\",\n  \"projectId\": 1,\n  \"issueType\": \"DELIVERY_DELAY\",\n  \"priority\": \"MEDIUM\",\n  \"message\": \"Deliverables have not matched the agreed specification.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Project Files",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-files?projectId=%7B%7BprojectId%7D%7D",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-files"
+              ],
+              "query": [
+                {
+                  "key": "projectId",
+                  "value": "{{projectId}}",
+                  "description": "Project ID"
+                }
+              ]
+            },
+            "description": "Lists all uploaded work files and receipts for project"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Milestone Payment Receipt",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/payment-details/{{paymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "payment-details",
+                "{{paymentId}}"
+              ],
+              "query": []
+            },
+            "description": "Fetches breakdown of charges, commission fee, and net payout"
+          },
+          "response": []
+        },
+        {
+          "name": "Export Project PDF / CSV",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/projects/{{projectId}}/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "projects",
+                "{{projectId}}",
+                "export"
+              ],
+              "query": []
+            },
+            "description": "Generates full audit report of project timeline and payments"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Chat Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages?projectId=%7B%7BprojectId%7D%7D",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "projectId",
+                  "value": "{{projectId}}",
+                  "description": "Project ID"
+                }
+              ]
+            },
+            "description": "Fetches conversation messages for project"
+          },
+          "response": []
+        },
+        {
+          "name": "Send Chat Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ],
+              "query": []
+            },
+            "description": "Sends a real-time message to project partner",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": 1,\n  \"recipientId\": 2,\n  \"content\": \"Hello! I have updated the repository with the latest milestone changes.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Wallet, Escrow & Razorpay",
+      "item": [
+        {
+          "name": "Get Wallet Balance & Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet"
+              ],
+              "query": []
+            },
+            "description": "Returns available balance, escrow locked balance, and transaction history"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Razorpay Wallet Deposit Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/deposit/order",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "deposit",
+                "order"
+              ],
+              "query": []
+            },
+            "description": "Generates Razorpay order ID to add funds to user wallet",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Razorpay Wallet Deposit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/deposit/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "deposit",
+                "verify"
+              ],
+              "query": []
+            },
+            "description": "Verifies payment signature and credits funds to user wallet",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razorpay_order_id\": \"order_KlickPro123\",\n  \"razorpay_payment_id\": \"pay_KlickPro456\",\n  \"razorpay_signature\": \"signature_hash_value\",\n  \"amount\": 5000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Quick Wallet Deposit (Sandbox / Dev)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/deposit/quick",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "deposit",
+                "quick"
+              ],
+              "query": []
+            },
+            "description": "Instantly adds test funds in development mode",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Check Deposit Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/deposit/status?orderId=order_KlickPro123",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "deposit",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "orderId",
+                  "value": "order_KlickPro123",
+                  "description": "Razorpay Order ID"
+                }
+              ]
+            },
+            "description": "Polls status of a pending deposit order"
+          },
+          "response": []
+        },
+        {
+          "name": "Record Failed Deposit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/deposit/fail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "deposit",
+                "fail"
+              ],
+              "query": []
+            },
+            "description": "Logs customer cancelled or failed payment attempt",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"order_KlickPro123\",\n  \"errorReason\": \"Payment cancelled by user\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Fund / Approve Milestone via Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/milestone",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "milestone"
+              ],
+              "query": []
+            },
+            "description": "Debits client wallet and transfers milestone payout to professional",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": 1,\n  \"milestoneId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Indian Bank Account (Penny Drop)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/verify-bank-account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "verify-bank-account"
+              ],
+              "query": []
+            },
+            "description": "Validates bank account IFSC and registered name via Razorpay / Decentro",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNumber\": \"123456789012\",\n  \"ifsc\": \"HDFC0000123\",\n  \"accountHolderName\": \"John Doe\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify UPI VPA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/verify-vpa",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "verify-vpa"
+              ],
+              "query": []
+            },
+            "description": "Validates UPI Virtual Payment Address (e.g. name@okaxis)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vpa\": \"johndoe@okaxis\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Razorpay Public Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/razorpay/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "razorpay",
+                "config"
+              ],
+              "query": []
+            },
+            "description": "Fetches public Razorpay key ID for checkout initialization"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6. Marketplace & Public Search",
+      "item": [
+        {
+          "name": "Browse Marketplace Jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/marketplace/jobs?category=Web%20Development&location=Mumbai&budgetMin=10000&page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "marketplace",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "Web Development",
+                  "description": "Category filter"
+                },
+                {
+                  "key": "location",
+                  "value": "Mumbai",
+                  "description": "City or region"
+                },
+                {
+                  "key": "budgetMin",
+                  "value": "10000",
+                  "description": "Min budget"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                }
+              ]
+            },
+            "description": "Public/authenticated listing of open jobs with search & filters"
+          },
+          "response": []
+        },
+        {
+          "name": "Browse Categories Hierarchy",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/marketplace/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "marketplace",
+                "categories"
+              ],
+              "query": []
+            },
+            "description": "Returns all service categories and subcategories"
+          },
+          "response": []
+        },
+        {
+          "name": "Browse Top Professionals",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/professionals?category=Plumbing&city=Mumbai",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professionals"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "Plumbing",
+                  "description": "Service type"
+                },
+                {
+                  "key": "city",
+                  "value": "Mumbai",
+                  "description": "Location"
+                }
+              ]
+            },
+            "description": "Lists verified service professionals, ratings, and skills"
+          },
+          "response": []
+        },
+        {
+          "name": "Universal Keyword Search",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/search?q=nextjs%20developer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "nextjs developer",
+                  "description": "Search query"
+                }
+              ]
+            },
+            "description": "Searches across jobs, professionals, and service categories"
+          },
+          "response": []
+        },
+        {
+          "name": "Geocoding / Address Autocomplete",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/geocode?address=Andheri%20West%2C%20Mumbai",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "geocode"
+              ],
+              "query": [
+                {
+                  "key": "address",
+                  "value": "Andheri West, Mumbai",
+                  "description": "Address query"
+                }
+              ]
+            },
+            "description": "Translates Indian address query to latitude & longitude coordinates"
+          },
+          "response": []
+        },
+        {
+          "name": "Public Contact Form",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/contact",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "contact"
+              ],
+              "query": []
+            },
+            "description": "Public enquiry form submission",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alice Smith\",\n  \"email\": \"alice@example.com\",\n  \"phone\": \"+919876543210\",\n  \"subject\": \"Partnership Enquiry\",\n  \"message\": \"We would like to discuss enterprise partnership options.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Dashboard Overview Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard"
+              ],
+              "query": []
+            },
+            "description": "Aggregates user active jobs, notifications, and balance metrics"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "7. Identity & KYC Verification",
+      "item": [
+        {
+          "name": "Verify Indian PAN Card",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/verification/indian/pan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "verification",
+                "indian",
+                "pan"
+              ],
+              "query": []
+            },
+            "description": "Automated PAN card validation and holder name match",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"panNumber\": \"ABCDE1234F\",\n  \"holderName\": \"John Doe\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Indian Aadhaar (DigiLocker / OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/verification/indian/aadhaar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "verification",
+                "indian",
+                "aadhaar"
+              ],
+              "query": []
+            },
+            "description": "Initiates Aadhaar KYC OTP or DigiLocker flow",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"aadhaarNumber\": \"123456789012\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Start Persona KYC Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/verification/persona/start",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "verification",
+                "persona",
+                "start"
+              ],
+              "query": []
+            },
+            "description": "Generates an inquiry template session ID for Persona identity check",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Check Persona KYC Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/verification/persona/status?inquiryId=inq_12345",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "verification",
+                "persona",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "inquiryId",
+                  "value": "inq_12345",
+                  "description": "Persona Inquiry ID"
+                }
+              ]
+            },
+            "description": "Retrieves outcome of Persona automated identity inquiry"
+          },
+          "response": []
+        },
+        {
+          "name": "Start SpringVerify Background Check",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/verification/springverify/start",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "verification",
+                "springverify",
+                "start"
+              ],
+              "query": []
+            },
+            "description": "Triggers background address & criminal record verification",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"candidateEmail\": \"john.doe@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "8. Admin Suite",
+      "item": [
+        {
+          "name": "Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "login"
+              ],
+              "query": []
+            },
+            "description": "Authenticates administrator credentials",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@servio.in\",\n  \"password\": \"AdminMasterPassword123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Admin Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "settings"
+              ],
+              "query": []
+            },
+            "description": "Fetches platform fee %, escrow holding limits, and payment gateway switches"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Admin Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "settings"
+              ],
+              "query": []
+            },
+            "description": "Updates commission rates and platform configuration",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientFeePercent\": 10,\n  \"professionalCommissionPercent\": 10,\n  \"autoReleaseDays\": 14,\n  \"offlinePaymentsEnabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Admin Sidebar Counters",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sidebar-counts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sidebar-counts"
+              ],
+              "query": []
+            },
+            "description": "Returns badge counts for pending verifications, disputes, and payouts"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Database & Migration Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/database-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "database-status"
+              ],
+              "query": []
+            },
+            "description": "Returns PostgreSQL connection pool health and migration version info"
+          },
+          "response": []
+        },
+        {
+          "name": "List CMS Pages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/cms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "cms"
+              ],
+              "query": []
+            },
+            "description": "Lists all custom landing and marketing pages"
+          },
+          "response": []
+        },
+        {
+          "name": "Create CMS Page",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/cms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "cms"
+              ],
+              "query": []
+            },
+            "description": "Creates a new SEO content page",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Terms of Service\",\n  \"slug\": \"terms\",\n  \"content\": \"Welcome to Servio...\",\n  \"metaTitle\": \"Terms of Service - Servio\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Services & Categories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "services"
+              ],
+              "query": []
+            },
+            "description": "Lists all admin catalog categories and service items"
+          },
+          "response": []
+        },
+        {
+          "name": "Moderate User Account",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "1"
+              ],
+              "query": []
+            },
+            "description": "Suspends, bans, or verifies a user account",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true,\n  \"isSuspended\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Moderate Job",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/jobs/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "jobs",
+                "1"
+              ],
+              "query": []
+            },
+            "description": "Updates job moderation status or closes violation",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Review KYC Verification Application",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/verifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "verifications"
+              ],
+              "query": []
+            },
+            "description": "Approves or rejects submitted identity documents",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verificationId\": 1,\n  \"status\": \"APPROVED\",\n  \"rejectionReason\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Dispute Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/disputes/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "disputes",
+                "1"
+              ],
+              "query": []
+            },
+            "description": "Fetches dispute evidence, messages, and linked project escrow"
+          },
+          "response": []
+        },
+        {
+          "name": "Resolve Dispute (Escrow Release)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/disputes/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "disputes",
+                "1"
+              ],
+              "query": []
+            },
+            "description": "Resolves dispute with partial refund or payout decision",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"RESOLVED\",\n  \"resolutionNote\": \"Deliverables validated, 80% released to professional, 20% refunded to client.\",\n  \"refundAmountToClient\": 5000,\n  \"payoutAmountToProfessional\": 20000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Admin Message in Dispute Thread",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/disputes/1/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "disputes",
+                "1",
+                "messages"
+              ],
+              "query": []
+            },
+            "description": "Sends official admin mediation message",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Admin reviewing uploaded source files. A final resolution will be posted in 24 hours.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Finance & Payouts Ledger",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/payouts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "payouts"
+              ],
+              "query": []
+            },
+            "description": "Lists queued and processed withdrawal batches"
+          },
+          "response": []
+        },
+        {
+          "name": "Approve / Reject Withdrawal Request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/withdrawals/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "withdrawals",
+                "1"
+              ],
+              "query": []
+            },
+            "description": "Approves bank transfer payout to professional",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"APPROVED\",\n  \"referenceNumber\": \"UTR9876543210\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Email Templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/email-templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "email-templates"
+              ],
+              "query": []
+            },
+            "description": "Lists all transactional email notification templates"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Send Email Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/email-templates/PROJECT_INVITATION/test-send",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "email-templates",
+                "PROJECT_INVITATION",
+                "test-send"
+              ],
+              "query": []
+            },
+            "description": "Sends a preview email to admin inbox",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientEmail\": \"admin@servio.in\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get SMS Templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sms-templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sms-templates"
+              ],
+              "query": []
+            },
+            "description": "Lists DLT registered SMS notification templates"
+          },
+          "response": []
+        },
+        {
+          "name": "Create System Announcement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/extra/announcements",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "extra",
+                "announcements"
+              ],
+              "query": []
+            },
+            "description": "Broadcasts an announcement banner across client and professional portals",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Scheduled Maintenance Notice\",\n  \"content\": \"Platform maintenance will take place Sunday 2:00 AM - 3:00 AM IST.\",\n  \"targetRole\": \"ALL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Security Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/extra/audit-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "extra",
+                "audit-logs"
+              ],
+              "query": []
+            },
+            "description": "Queries audit logs for authentication, financial, and admin actions"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Escrow Holdings Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/extra/escrow",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "extra",
+                "escrow"
+              ],
+              "query": []
+            },
+            "description": "Audits total funds currently held in client escrow vs payable"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "9. Webhooks & Cron Automation",
+      "item": [
+        {
+          "name": "Razorpay Payment Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/razorpay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "razorpay"
+              ],
+              "query": []
+            },
+            "description": "Processes payment.captured, order.paid, and refund events",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"payment.captured\",\n  \"payload\": {\n    \"payment\": {\n      \"entity\": {\n        \"id\": \"pay_123456\",\n        \"order_id\": \"order_123456\",\n        \"amount\": 500000,\n        \"currency\": \"INR\",\n        \"status\": \"captured\"\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Persona KYC Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/persona",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "persona"
+              ],
+              "query": []
+            },
+            "description": "Receives automated identity verification approval callbacks",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"type\": \"inquiry\",\n    \"id\": \"inq_12345\",\n    \"attributes\": {\n      \"status\": \"completed\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "SpringVerify Background Check Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/springverify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "springverify"
+              ],
+              "query": []
+            },
+            "description": "Receives background check report callbacks",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reportId\": \"rep_12345\",\n  \"status\": \"CLEAR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Milestone Auto-Release Cron",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{baseUrl}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cron/milestone-releases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cron",
+                "milestone-releases"
+              ],
+              "query": []
+            },
+            "description": "Triggers scheduled 15-minute cron to auto-approve completed milestones after review window",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
