@@ -37,6 +37,7 @@ import {
   ArrowUpDown,
   X,
   ChevronUp,
+  ChevronRight,
   Star,
   Reply,
   Loader2,
@@ -63,7 +64,7 @@ import {
   DisputeData,
   DisputeMessage,
 } from "@/components/ProjectDisputeCenter";
-import { formatReadableLabel } from "@/lib/utils";
+import { formatReadableLabel, capitalizeWords } from "@/lib/utils";
 
 type Person = { firstName: string | null; lastName: string | null } | null;
 export type DraftMilestone = {
@@ -2857,6 +2858,14 @@ export default function SharedProjectTrackingPage() {
                   </div>
                   <div className="flex h-2.5 w-full items-center gap-1.5 rounded-full bg-muted/40 p-0.5">
                     {data.milestones.map((milestone, index) => {
+                      const isDisputed = Boolean(
+                        (data.disputes || (data.dispute ? [data.dispute] : [])).some(
+                          (d) =>
+                            (d.milestoneId === milestone.id || (!d.milestoneId && data.milestones.length === 1)) &&
+                            d.status !== "RESOLVED" &&
+                            d.status !== "CLOSED",
+                        ),
+                      );
                       const filled =
                         milestone?.status === "APPROVED" ||
                         milestone?.status === "COMPLETED" ||
@@ -2872,13 +2881,15 @@ export default function SharedProjectTrackingPage() {
                         <div
                           key={index}
                           className={`h-full flex-1 rounded-full transition-all duration-300 ${
-                            filled
-                              ? "bg-emerald-500"
-                              : milestone?.status === "REVISION_REQUESTED"
-                                ? "bg-rose-500"
-                                : active
-                                  ? "bg-amber-400"
-                                  : "bg-muted-foreground/20"
+                            isDisputed
+                              ? "bg-rose-500 animate-pulse"
+                              : filled
+                                ? "bg-emerald-500"
+                                : milestone?.status === "REVISION_REQUESTED"
+                                  ? "bg-rose-500"
+                                  : active
+                                    ? "bg-amber-400"
+                                    : "bg-muted-foreground/20"
                           }`}
                         />
                       );
@@ -2932,6 +2943,22 @@ export default function SharedProjectTrackingPage() {
                       (["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status) ||
                         isPrecedingApproved);
 
+                    const milestoneDispute =
+                      (data.disputes || (data.dispute ? [data.dispute] : [])).find(
+                        (d) =>
+                          (d.milestoneId === m.id || (!d.milestoneId && data.milestones.length === 1)) &&
+                          d.status !== "RESOLVED" &&
+                          d.status !== "CLOSED",
+                      ) ||
+                      (data.dispute &&
+                      data.dispute.status !== "RESOLVED" &&
+                      data.dispute.status !== "CLOSED" &&
+                      (!data.dispute.milestoneId || data.dispute.milestoneId === m.id)
+                        ? data.dispute
+                        : null);
+
+                    const isMilestoneDisputed = Boolean(milestoneDispute);
+
                     const isTargetMilestone = queryMilestoneId === String(m.id);
 
                     return (
@@ -2939,19 +2966,21 @@ export default function SharedProjectTrackingPage() {
                         key={m.id}
                         id={`milestone-${m.id}`}
                         className={`relative rounded-2xl border bg-card p-5 sm:p-6 shadow-xs transition-all hover:shadow-soft space-y-4 scroll-mt-24 ${
-                          isTargetMilestone
-                            ? "ring-2 ring-primary ring-offset-2 ring-offset-background border-primary/60 shadow-lg"
-                            : isApproved
-                              ? "border-emerald-500/30 hover:border-emerald-500/50"
-                              : isAwaitingAdmin
-                                ? "border-indigo-500/30 hover:border-indigo-500/50"
-                                : isAwaitingReview
-                                  ? "border-purple-500/30 hover:border-purple-500/50"
-                                  : isRevision
-                                    ? "border-rose-500/30 hover:border-rose-500/50"
-                                    : isInProgress
-                                      ? "border-amber-500/30 hover:border-amber-500/50"
-                                      : "border-border"
+                          isMilestoneDisputed
+                            ? "border-2 border-rose-500/80 bg-rose-500/5 ring-2 ring-rose-500/20 shadow-md shadow-rose-500/10"
+                            : isTargetMilestone
+                              ? "ring-2 ring-primary ring-offset-2 ring-offset-background border-primary/60 shadow-lg"
+                              : isApproved
+                                ? "border-emerald-500/30 hover:border-emerald-500/50"
+                                : isAwaitingAdmin
+                                  ? "border-indigo-500/30 hover:border-indigo-500/50"
+                                  : isAwaitingReview
+                                    ? "border-purple-500/30 hover:border-purple-500/50"
+                                    : isRevision
+                                      ? "border-rose-500/30 hover:border-rose-500/50"
+                                      : isInProgress
+                                        ? "border-amber-500/30 hover:border-amber-500/50"
+                                        : "border-border"
                         }`}
                       >
                         {/* Top Row: Index, Title, Amount & Status */}
@@ -2959,24 +2988,38 @@ export default function SharedProjectTrackingPage() {
                           <div className="flex items-start gap-3 min-w-0 flex-1">
                             <span
                               className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${
-                                isApproved
-                                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                                  : isAwaitingAdmin
-                                    ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
-                                    : isAwaitingReview
-                                      ? "bg-purple-500/10 text-purple-700 dark:text-purple-400"
-                                      : isInProgress
-                                        ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                                        : "bg-primary/10 text-primary"
+                                isMilestoneDisputed
+                                  ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
+                                  : isApproved
+                                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                                    : isAwaitingAdmin
+                                      ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
+                                      : isAwaitingReview
+                                        ? "bg-purple-500/10 text-purple-700 dark:text-purple-400"
+                                        : isInProgress
+                                          ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                          : "bg-primary/10 text-primary"
                               }`}
                             >
-                              {index + 1}
+                              {isMilestoneDisputed ? (
+                                <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                              ) : (
+                                index + 1
+                              )}
                             </span>
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
                                 <h3 className="font-bold text-base sm:text-lg text-foreground break-words line-clamp-2">
                                   {m.title}
                                 </h3>
+                              {isMilestoneDisputed && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-600 text-white px-2.5 py-0.5 text-xs font-bold shadow-xs animate-pulse">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  <span>
+                                    Payment Frozen · Dispute {milestoneDispute?.id ? `#${milestoneDispute.id}` : "Active"}
+                                  </span>
+                                </span>
+                              )}
                               {isTargetMilestone && (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-primary text-primary-foreground px-2.5 py-0.5 text-[11px] font-bold shadow-xs animate-pulse">
                                   <Flag className="h-3 w-3" />
@@ -3002,31 +3045,77 @@ export default function SharedProjectTrackingPage() {
                                 </span>
                               )}
                             </div>
-                            {(m.payment || isApproved) && (
+                            {(m.payment || isApproved || isMilestoneDisputed) && (
                               <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Wallet className="h-3.5 w-3.5 text-emerald-600" />
+                                <Wallet className={`h-3.5 w-3.5 ${isMilestoneDisputed ? "text-rose-600" : "text-emerald-600"}`} />
                                 <span>
                                   {isClient ? "Payment: " : "Payout: "}
-                                  <strong className="text-foreground font-semibold">
-                                    {isClient
-                                      ? isApproved ||
-                                        m.payment?.status === "FUNDED" ||
-                                        m.payment?.status === "COMPLETED"
-                                        ? "Paid"
-                                        : (m.payment?.status ?? "Pending")
-                                      : m.payment?.status === "COMPLETED"
-                                        ? "Paid Out"
-                                        : m.payment?.status === "FUNDED"
-                                          ? "Funded"
-                                          : isApproved
-                                            ? "Approved"
-                                            : (m.payment?.status ?? "Pending")}
+                                  <strong className={`font-semibold ${isMilestoneDisputed ? "text-rose-600 dark:text-rose-400 font-bold" : "text-foreground"}`}>
+                                    {isMilestoneDisputed
+                                      ? "Frozen (Disputed)"
+                                      : isClient
+                                        ? isApproved ||
+                                          m.payment?.status === "FUNDED" ||
+                                          m.payment?.status === "COMPLETED"
+                                          ? "Paid"
+                                          : (m.payment?.status ?? "Pending")
+                                        : m.payment?.status === "COMPLETED"
+                                          ? "Paid Out"
+                                          : m.payment?.status === "FUNDED"
+                                            ? "Funded"
+                                            : isApproved
+                                              ? "Approved"
+                                              : (m.payment?.status ?? "Pending")}
                                   </strong>
                                 </span>
                               </p>
                             )}
-                            {m.autoReleaseStatus === "PENDING" && m.releaseAt && (() => {
-                              const hasOpenDispute = (data.openDisputeCount ?? 0) > 0 || Boolean(data.dispute && data.dispute.status !== "RESOLVED");
+
+                            {/* Dispute Alert Box or Inspection Auto-Release Timer */}
+                            {isMilestoneDisputed ? (
+                              <div className="mt-3 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3.5 text-xs text-rose-900 dark:text-rose-200">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                  <div className="flex items-start gap-2.5">
+                                    <div className="p-1 rounded-lg bg-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5">
+                                      <AlertTriangle className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                      <p className="font-bold text-sm text-rose-950 dark:text-rose-100 flex items-center gap-1.5">
+                                        Payment Frozen Under Dispute
+                                        {milestoneDispute?.id ? ` #${milestoneDispute.id}` : ""}
+                                      </p>
+                                      <p className="text-xs text-rose-800 dark:text-rose-300 mt-0.5 leading-relaxed">
+                                        Escrow release for ₹{m.amount.toLocaleString("en-IN")} is paused.
+                                        {milestoneDispute?.issueType
+                                          ? ` Issue: ${capitalizeWords(milestoneDispute.issueType.replace(/_/g, " "))}.`
+                                          : ""}{" "}
+                                        Funds are safely held until resolved by client, professional, or platform admin.
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setActiveTab("overview");
+                                      setTimeout(() => {
+                                        document.getElementById("project-dispute-center")?.scrollIntoView({
+                                          behavior: "smooth",
+                                          block: "start",
+                                        });
+                                      }, 100);
+                                    }}
+                                    className="shrink-0 bg-white dark:bg-zinc-900 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/40 font-semibold gap-1.5 text-xs h-8"
+                                  >
+                                    <ShieldAlert className="h-3.5 w-3.5 text-rose-600" />
+                                    Open Dispute Center
+                                    <ChevronRight className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (m.autoReleaseStatus === "PENDING" || m.autoReleaseStatus === "PAUSED_DISPUTE") && m.releaseAt ? (() => {
+                              const hasOpenDispute = (data.openDisputeCount ?? 0) > 0 || Boolean(data.dispute && data.dispute.status !== "RESOLVED" && data.dispute.status !== "CLOSED");
                               return (
                                 <div
                                   className={`mt-2 rounded-xl p-3 border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 ${
@@ -3063,7 +3152,7 @@ export default function SharedProjectTrackingPage() {
                                   </div>
                                 </div>
                               );
-                            })()}
+                            })() : null}
                             {m.autoReleaseStatus === "RELEASED" && Number(m.validityDays) > 0 && (
                               <p className="mt-1 flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
                                 <CheckCircle2 className="h-3.5 w-3.5" />
@@ -3078,6 +3167,7 @@ export default function SharedProjectTrackingPage() {
                         {/* Status Badge & Edit */}
                         <div className="flex h-fit flex-wrap items-center gap-2">
                           {isClient &&
+                            !isMilestoneDisputed &&
                             data.project.status !== "COMPLETED" &&
                             m.status !== "APPROVED" &&
                             m.status !== "COMPLETED" &&
@@ -3095,40 +3185,46 @@ export default function SharedProjectTrackingPage() {
                             )}
                           <span
                             className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${
-                              isApproved
-                                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                                : isAwaitingAdmin
-                                  ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
-                                  : isAwaitingReview
-                                    ? "border-purple-500/20 bg-purple-500/10 text-purple-700 dark:text-purple-400"
-                                    : isRevision
-                                      ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
-                                      : isInProgress
-                                        ? "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                                        : "border-border bg-muted/60 text-muted-foreground"
+                              isMilestoneDisputed
+                                ? "border-rose-500/30 bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold"
+                                : isApproved
+                                  ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                                  : isAwaitingAdmin
+                                    ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
+                                    : isAwaitingReview
+                                      ? "border-purple-500/20 bg-purple-500/10 text-purple-700 dark:text-purple-400"
+                                      : isRevision
+                                        ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
+                                        : isInProgress
+                                          ? "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                          : "border-border bg-muted/60 text-muted-foreground"
                             }`}
                           >
-                            {isApproved && <CheckCircle2 className="h-3.5 w-3.5" />}
-                            {isAwaitingAdmin && <Clock3 className="h-3.5 w-3.5" />}
-                            {isAwaitingReview && <Sparkles className="h-3.5 w-3.5" />}
-                            {isRevision && <AlertCircle className="h-3.5 w-3.5" />}
-                            {isInProgress && <Clock3 className="h-3.5 w-3.5" />}
-                            {!isApproved &&
+                            {isMilestoneDisputed && <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />}
+                            {!isMilestoneDisputed && isApproved && <CheckCircle2 className="h-3.5 w-3.5" />}
+                            {!isMilestoneDisputed && isAwaitingAdmin && <Clock3 className="h-3.5 w-3.5" />}
+                            {!isMilestoneDisputed && isAwaitingReview && <Sparkles className="h-3.5 w-3.5" />}
+                            {!isMilestoneDisputed && isRevision && <AlertCircle className="h-3.5 w-3.5" />}
+                            {!isMilestoneDisputed && isInProgress && <Clock3 className="h-3.5 w-3.5" />}
+                            {!isMilestoneDisputed &&
+                              !isApproved &&
                               !isAwaitingAdmin &&
                               !isAwaitingReview &&
                               !isRevision &&
                               !isInProgress && <Layers className="h-3.5 w-3.5" />}
-                            {isApproved
-                              ? isClient
-                                ? "Done · Paid"
-                                : m.payment?.status === "COMPLETED"
-                                  ? "Done · Paid Out"
-                                  : "Done · Approved"
-                              : isInProgress
-                                ? "In Progress"
-                                : label(m.status)}
+                            {isMilestoneDisputed
+                              ? "Disputed · Frozen"
+                              : isApproved
+                                ? isClient
+                                  ? "Done · Paid"
+                                  : m.payment?.status === "COMPLETED"
+                                    ? "Done · Paid Out"
+                                    : "Done · Approved"
+                                : isInProgress
+                                  ? "In Progress"
+                                  : label(m.status)}
                           </span>
-                          {overdueDays !== null && (
+                          {overdueDays !== null && !isMilestoneDisputed && (
                             <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">
                               {overdueDays}d overdue
                             </span>

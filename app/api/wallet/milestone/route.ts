@@ -38,16 +38,38 @@ export async function POST(request: NextRequest) {
     where: { id: parsed.data.projectId, clientId: session.userId },
     include: { job: { select: { title: true } } },
   });
-  const milestone = project
-    ? await db.projectMilestone.findFirst({
-        where: {
-          id: parsed.data.milestoneId,
-          trackingId: project.id,
-          status: { in: ["AWAITING_CLIENT_REVIEW", "REVISION_REQUESTED", "IN_PROGRESS"] },
-        },
-      })
-    : null;
-  if (!project || !milestone)
+  if (!project) {
+    return NextResponse.json({ error: "Project tracking record not found." }, { status: 404 });
+  }
+
+  const rawMilestone = await db.projectMilestone.findFirst({
+    where: {
+      id: parsed.data.milestoneId,
+      trackingId: project.id,
+    },
+  });
+
+  if (!rawMilestone) {
+    return NextResponse.json({ error: "Milestone record not found." }, { status: 404 });
+  }
+
+  // Idempotency: If this milestone was already approved or funded into escrow, return 200 OK
+  if (rawMilestone.status === "APPROVED" || rawMilestone.status === "COMPLETED") {
+    return NextResponse.json({
+      ok: true,
+      alreadyProcessed: true,
+      milestoneAmount: rawMilestone.amount,
+      status: rawMilestone.status,
+      message: "Milestone has already been approved and funded in escrow.",
+    });
+  }
+
+  const milestone =
+    ["AWAITING_CLIENT_REVIEW", "REVISION_REQUESTED", "IN_PROGRESS"].includes(rawMilestone.status)
+      ? rawMilestone
+      : null;
+
+  if (!milestone)
     return NextResponse.json(
       { error: "This milestone is not ready for payment." },
       { status: 409 },

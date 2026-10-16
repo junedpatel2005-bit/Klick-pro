@@ -67,7 +67,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     if (job.status === "OPEN") {
-      return NextResponse.json({ error: "This job is already open." }, { status: 409 });
+      return NextResponse.json({
+        ok: true,
+        alreadyOpen: true,
+        job,
+        message: "This job is already open.",
+      });
     }
 
     // Check if an unresolved dispute exists on the job's project

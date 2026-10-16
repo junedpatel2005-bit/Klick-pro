@@ -104,13 +104,120 @@ export async function GET(request: NextRequest) {
     : [];
   const available = canWithdraw ? Math.max(0, wallet.balance - withdrawals) : wallet.balance;
   const minWithdrawalAmount = await getMinWithdrawalAmount();
+
+  // Active Locked / Frozen Milestones for Clients during Validity Period
+  let lockedMilestones: Array<{
+    id: number;
+    title: string;
+    amount: number;
+    validityDays: number;
+    releaseAt: Date | null;
+    autoReleaseStatus: string;
+    createdAt: Date;
+    jobTitle: string;
+    jobId: number;
+    projectId: number;
+    professionalName: string;
+    hasDispute: boolean;
+    disputeId: number | null;
+    disputeStatus: string | null;
+    disputeIssueType: string | null;
+  }> = [];
+
+  let frozenAmount = 0;
+  let disputedFrozenAmount = 0;
+
+  if (session.role === "CLIENT") {
+    const [rawLocked, activeDisputes] = await Promise.all([
+      db.projectMilestone.findMany({
+        where: {
+          clientId: session.userId,
+          validityDays: { gt: 0 },
+          autoReleaseStatus: { in: ["PENDING", "PAUSED_DISPUTE"] },
+          payment: {
+            status: { in: ["FUNDED", "PENDING"] },
+          },
+        },
+        include: {
+          tracking: {
+            select: {
+              id: true,
+              job: { select: { id: true, title: true } },
+              professional: { select: { id: true, firstName: true, lastName: true } },
+            },
+          },
+          payment: { select: { id: true, amount: true, status: true } },
+        },
+        orderBy: { releaseAt: "asc" },
+      }),
+      db.projectDispute.findMany({
+        where: {
+          clientId: session.userId,
+          status: { notIn: ["RESOLVED", "CLOSED"] },
+        },
+        select: {
+          id: true,
+          trackingId: true,
+          milestoneId: true,
+          status: true,
+          issueType: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    lockedMilestones = rawLocked.map((m) => {
+      const profName = `${m.tracking?.professional?.firstName ?? "Professional"} ${m.tracking?.professional?.lastName ?? ""}`.trim();
+      const dispute = activeDisputes.find(
+        (d) => d.trackingId === m.trackingId && (d.milestoneId === m.id || d.milestoneId === null),
+      );
+      const isDisputed = Boolean(dispute);
+
+      if (!isDisputed && m.autoReleaseStatus === "PAUSED_DISPUTE") {
+        void db.projectMilestone.update({
+          where: { id: m.id },
+          data: { autoReleaseStatus: "PENDING" },
+        }).catch(() => {});
+      }
+
+      return {
+        id: m.id,
+        title: m.title,
+        amount: m.amount,
+        validityDays: m.validityDays,
+        releaseAt: m.releaseAt,
+        autoReleaseStatus: isDisputed ? "PAUSED_DISPUTE" : (m.autoReleaseStatus === "PAUSED_DISPUTE" ? "PENDING" : (m.autoReleaseStatus ?? "PENDING")),
+        createdAt: m.createdAt,
+        jobTitle: m.tracking?.job?.title ?? "Contract Milestone",
+        jobId: m.tracking?.job?.id ?? 0,
+        projectId: m.tracking?.id ?? m.trackingId,
+        professionalName: profName,
+        hasDispute: isDisputed,
+        disputeId: dispute?.id ?? null,
+        disputeStatus: dispute?.status ?? null,
+        disputeIssueType: dispute?.issueType ?? null,
+      };
+    });
+
+    frozenAmount = lockedMilestones.reduce((acc, curr) => acc + curr.amount, 0);
+    disputedFrozenAmount = lockedMilestones
+      .filter((m) => m.hasDispute)
+      .reduce((acc, curr) => acc + curr.amount, 0);
+  }
+
+  const totalFunds = session.role === "CLIENT" ? wallet.balance + frozenAmount : wallet.balance;
+
   return NextResponse.json({
     wallet,
     total: totalEarned,
     grossTotal,
     commission: totalCommission,
     available,
-    reserved: withdrawals,
+    reserved: withdrawals + frozenAmount,
+    frozenAmount,
+    disputedFrozenAmount,
+    totalFunds,
+    lockedMilestones,
     withdrawals: withdrawalHistory,
     transactions,
     minWithdrawalAmount,

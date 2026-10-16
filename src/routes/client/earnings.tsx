@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
   Briefcase,
@@ -22,8 +23,10 @@ import {
   CreditCard,
   FolderKanban,
   History,
+  Info,
   Landmark,
   Loader2,
+  Lock,
   LockKeyhole,
   Percent,
   ReceiptText,
@@ -33,6 +36,7 @@ import {
   Star,
   WalletCards,
   Building2,
+  ExternalLink,
   Pencil,
   Search,
   X,
@@ -81,10 +85,31 @@ type Withdrawal = {
   utr?: string | null;
   failureReason?: string | null;
 };
+type LockedMilestone = {
+  id: number;
+  title: string;
+  amount: number;
+  validityDays: number;
+  releaseAt: string | null;
+  autoReleaseStatus: string;
+  createdAt: string;
+  jobTitle: string;
+  jobId: number;
+  projectId: number;
+  professionalName: string;
+  hasDispute?: boolean;
+  disputeId?: number | null;
+  disputeStatus?: string | null;
+  disputeIssueType?: string | null;
+};
 type Wallet = {
   balance: number;
   available: number;
   reserved: number;
+  frozenAmount?: number;
+  disputedFrozenAmount?: number;
+  totalFunds?: number;
+  lockedMilestones?: LockedMilestone[];
   transactions: WalletTransaction[];
   withdrawals: Withdrawal[];
   minWithdrawalAmount?: number;
@@ -203,6 +228,10 @@ export default function ClientEarnings() {
         balance: walletQueryData.wallet?.balance ?? 0,
         available: walletQueryData.available ?? walletQueryData.wallet?.balance ?? 0,
         reserved: walletQueryData.reserved ?? 0,
+        frozenAmount: walletQueryData.frozenAmount ?? 0,
+        disputedFrozenAmount: walletQueryData.disputedFrozenAmount ?? 0,
+        totalFunds: walletQueryData.totalFunds ?? walletQueryData.wallet?.balance ?? 0,
+        lockedMilestones: walletQueryData.lockedMilestones ?? [],
         transactions: walletQueryData.transactions ?? [],
         withdrawals: walletQueryData.withdrawals ?? [],
         minWithdrawalAmount: walletQueryData.minWithdrawalAmount,
@@ -219,7 +248,7 @@ export default function ClientEarnings() {
   >(null);
   const [paymentDetailsError, setPaymentDetailsError] = useState("");
   const [historyFilter, setHistoryFilter] = useState<
-    "all" | "milestones" | "deposits" | "failed"
+    "all" | "milestones" | "deposits" | "failed" | "validity"
   >("all");
   const [withdrawMethod, setWithdrawMethod] = useState<"BANK" | "UPI">("BANK");
   const [withdrawDestination, setWithdrawDestination] = useState("");
@@ -391,6 +420,10 @@ export default function ClientEarnings() {
             wallet?: { balance: number };
             available?: number;
             reserved?: number;
+            frozenAmount?: number;
+            disputedFrozenAmount?: number;
+            totalFunds?: number;
+            lockedMilestones?: LockedMilestone[];
             transactions?: WalletTransaction[];
             withdrawals?: Withdrawal[];
             minWithdrawalAmount?: number;
@@ -416,6 +449,10 @@ export default function ClientEarnings() {
               balance: data.wallet?.balance ?? 0,
               available: data.available ?? data.wallet?.balance ?? 0,
               reserved: data.reserved ?? 0,
+              frozenAmount: data.frozenAmount ?? 0,
+              disputedFrozenAmount: data.disputedFrozenAmount ?? 0,
+              totalFunds: data.totalFunds ?? data.wallet?.balance ?? 0,
+              lockedMilestones: data.lockedMilestones ?? [],
               transactions: data.transactions ?? [],
               withdrawals: data.withdrawals ?? [],
               minWithdrawalAmount: data.minWithdrawalAmount,
@@ -882,8 +919,9 @@ export default function ClientEarnings() {
         (item) => item.kind === "topup" && item.transaction.type === "WALLET_TOP_UP",
       ).length,
       failed: historyItems.filter((item) => item.status === "FAILED").length,
+      validity: wallet?.lockedMilestones?.length ?? 0,
     }),
-    [historyItems],
+    [historyItems, wallet?.lockedMilestones],
   );
   const filteredHistoryItems = useMemo(
     () =>
@@ -995,16 +1033,159 @@ export default function ClientEarnings() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Stat
-              icon={CircleDollarSign}
-              value={
-                (wallet?.available ?? 0) < 0
-                  ? `-₹${Math.abs(wallet?.available ?? 0).toLocaleString("en-IN")}`
-                  : `₹${(wallet?.available ?? 0).toLocaleString("en-IN")}`
-              }
-              label="Wallet balance"
-              loading={walletLoading}
-            />
+            <div className="relative rounded-2xl border border-border bg-card p-5 shadow-soft flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <CircleDollarSign className="h-5 w-5 text-primary" />
+                  {(wallet?.frozenAmount ?? 0) > 0 && (
+                    <div className="relative group">
+                      <button
+                        type="button"
+                        aria-label="View frozen funds breakdown"
+                        onClick={() => {
+                          setHistoryFilter("validity");
+                          document.getElementById("payment-history-section")?.scrollIntoView({ behavior: "smooth" });
+                        }}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${
+                          (wallet?.disputedFrozenAmount ?? 0) > 0
+                            ? "bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/25"
+                            : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20"
+                        }`}
+                      >
+                        {(wallet?.disputedFrozenAmount ?? 0) > 0 ? (
+                          <AlertTriangle className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                        ) : (
+                          <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                        )}
+                        <span>
+                          ₹{(wallet?.frozenAmount ?? 0).toLocaleString("en-IN")}{" "}
+                          {(wallet?.disputedFrozenAmount ?? 0) > 0 ? "Frozen (Disputed)" : "Frozen"}
+                        </span>
+                        <Info className="h-3 w-3 opacity-70" />
+                      </button>
+
+                      {/* Hover Mini Popup */}
+                      <div className="pointer-events-none group-hover:pointer-events-auto opacity-0 group-hover:opacity-100 transition-all duration-200 absolute left-0 sm:left-auto sm:right-0 top-full mt-2 z-50 w-72 sm:w-80 rounded-2xl border border-border bg-popover/95 p-3.5 shadow-xl backdrop-blur-md text-popover-foreground">
+                        <div className="flex items-center justify-between border-b border-border/70 pb-2 mb-2.5">
+                          <div className={`flex items-center gap-1.5 font-semibold text-xs ${
+                            (wallet?.disputedFrozenAmount ?? 0) > 0
+                              ? "text-rose-600 dark:text-rose-400"
+                              : "text-amber-600 dark:text-amber-400"
+                          }`}>
+                            {(wallet?.disputedFrozenAmount ?? 0) > 0 ? (
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                            ) : (
+                              <Lock className="h-3.5 w-3.5" />
+                            )}
+                            <span>Frozen Milestone Funds</span>
+                          </div>
+                          <span className={`text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded ${
+                            (wallet?.disputedFrozenAmount ?? 0) > 0
+                              ? "bg-rose-500/20 text-rose-700 dark:text-rose-400"
+                              : "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                          }`}>
+                            {(wallet?.disputedFrozenAmount ?? 0) > 0 ? "Dispute Alert" : "In Review"}
+                          </span>
+                        </div>
+
+                        {(wallet?.disputedFrozenAmount ?? 0) > 0 && (
+                          <div className="mb-2.5 rounded-xl border border-rose-500/30 bg-rose-500/15 p-2 text-rose-800 dark:text-rose-300">
+                            <div className="flex items-center gap-1 font-bold text-[11px]">
+                              <AlertTriangle className="h-3 w-3 text-rose-600 shrink-0" />
+                              <span>Dispute Active (₹{(wallet?.disputedFrozenAmount ?? 0).toLocaleString("en-IN")})</span>
+                            </div>
+                            <p className="mt-0.5 text-[10px] leading-tight text-rose-700 dark:text-rose-400">
+                              Payment auto-release is suspended. Funds remain securely locked in escrow.
+                            </p>
+                          </div>
+                        )}
+
+                        <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
+                          Reserved exclusively for active reviews. Cannot be used for other jobs or withdrawn.
+                        </p>
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {wallet?.lockedMilestones?.map((m) => (
+                            <div
+                              key={m.id}
+                              className={`rounded-xl border p-2.5 text-xs ${
+                                m.hasDispute
+                                  ? "border-rose-500/50 bg-rose-500/10 dark:bg-rose-950/20"
+                                  : "border-border/60 bg-muted/40"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1">
+                                    {m.hasDispute && (
+                                      <AlertTriangle className="h-3 w-3 text-rose-600 shrink-0" />
+                                    )}
+                                    <p className="font-semibold text-foreground truncate">{capitalizeWords(m.jobTitle)}</p>
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground truncate">{capitalizeWords(m.title)}</p>
+                                </div>
+                                <span className={`font-bold shrink-0 ${
+                                  m.hasDispute
+                                    ? "text-rose-600 dark:text-rose-400"
+                                    : "text-amber-600 dark:text-amber-400"
+                                }`}>
+                                  ₹{m.amount.toLocaleString("en-IN")}
+                                </span>
+                              </div>
+                              <div className="mt-1.5 flex items-center justify-between text-[10px]">
+                                <span className="text-muted-foreground">{m.validityDays}-Day Validity</span>
+                                <span className={`font-bold px-1.5 py-0.2 rounded text-[9px] uppercase tracking-wider ${
+                                  m.hasDispute
+                                    ? "bg-rose-500/20 text-rose-700 dark:text-rose-400"
+                                    : "text-primary font-medium"
+                                }`}>
+                                  {m.hasDispute ? `Dispute #${m.disputeId ?? "Active"}` : "Active Review"}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 pt-2.5 border-t border-border/70 flex items-center justify-between text-xs font-semibold">
+                          <span className="text-muted-foreground">Total Frozen:</span>
+                          <span className={`font-bold ${
+                            (wallet?.disputedFrozenAmount ?? 0) > 0
+                              ? "text-rose-600 dark:text-rose-400"
+                              : "text-amber-600 dark:text-amber-400"
+                          }`}>
+                            ₹{(wallet?.frozenAmount ?? 0).toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHistoryFilter("validity");
+                            document.getElementById("payment-history-section")?.scrollIntoView({ behavior: "smooth" });
+                          }}
+                          className="mt-2.5 w-full flex items-center justify-center gap-1.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary py-1.5 text-xs font-semibold transition cursor-pointer"
+                        >
+                          <span>View in Transactions</span>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {walletLoading ? (
+                  <div className="mt-4 h-9 w-28 animate-pulse rounded-lg bg-muted" />
+                ) : (
+                  <p className="mt-4 text-3xl font-bold">
+                    {(wallet?.available ?? 0) < 0
+                      ? `-₹${Math.abs(wallet?.available ?? 0).toLocaleString("en-IN")}`
+                      : `₹${(wallet?.available ?? 0).toLocaleString("en-IN")}`}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">Available balance</p>
+              </div>
+              {(wallet?.frozenAmount ?? 0) > 0 && (
+                <p className="mt-2 text-[11px] text-muted-foreground border-t border-border/60 pt-2">
+                  Total in wallet: <span className="font-semibold text-foreground">₹{((wallet?.available ?? 0) + (wallet?.frozenAmount ?? 0)).toLocaleString("en-IN")}</span>
+                </p>
+              )}
+            </div>
             <Stat
               icon={CircleDollarSign}
               value={`₹${total.toLocaleString()}`}
@@ -1740,7 +1921,10 @@ export default function ClientEarnings() {
             </section>
           </div>
           <div className="grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
-            <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+            <section
+              id="payment-history-section"
+              className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft scroll-mt-6"
+            >
               <div className="flex items-center justify-between border-b border-border p-5">
                 <div>
                   <h2 className="font-display text-xl font-semibold">Payment history</h2>
@@ -1757,6 +1941,7 @@ export default function ClientEarnings() {
                     { key: "milestones", label: "Milestones", count: tabCounts.milestones },
                     { key: "deposits", label: "Deposits", count: tabCounts.deposits },
                     { key: "failed", label: "Failed", count: tabCounts.failed },
+                    { key: "validity", label: "Validity", count: tabCounts.validity },
                   ] as const
                 ).map((tab) => (
                   <button
@@ -1766,7 +1951,7 @@ export default function ClientEarnings() {
                       setHistoryFilter(tab.key);
                       setVisibleCount(10);
                     }}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all ${
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
                       historyFilter === tab.key
                         ? "border-primary bg-primary text-primary-foreground shadow-xs"
                         : "border-border/80 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
@@ -1785,7 +1970,100 @@ export default function ClientEarnings() {
                   </button>
                 ))}
               </div>
-              {filteredHistoryItems.slice(0, visibleCount).map((item) =>
+              {historyFilter === "validity" ? (
+                wallet?.lockedMilestones?.length ? (
+                  wallet.lockedMilestones.slice(0, visibleCount).map((m) => {
+                    const releaseDate = m.releaseAt ? new Date(m.releaseAt) : null;
+                    const now = new Date();
+                    const diffMs = releaseDate ? releaseDate.getTime() - now.getTime() : 0;
+                    const diffHours = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60)));
+                    const diffDays = Math.floor(diffHours / 24);
+                    const remHours = diffHours % 24;
+
+                    return (
+                      <div
+                        key={`validity-${m.id}`}
+                        className="group flex items-center justify-between gap-4 border-b border-border/60 p-4 sm:p-5 transition-all hover:bg-muted/40 last:border-0"
+                      >
+                        <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                          <div className="h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 border bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 transition-transform group-hover:scale-105">
+                            <Clock className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-foreground text-sm sm:text-base truncate">
+                                {capitalizeWords(m.title)}
+                              </p>
+                              <span className="shrink-0 rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                                Validity Active · {m.validityDays}d review
+                              </span>
+                            </div>
+                            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                              <span>
+                                Job:{" "}
+                                <strong className="text-foreground font-medium">
+                                  {capitalizeWords(m.jobTitle)}
+                                </strong>
+                              </span>
+                              <span className="text-muted-foreground/40">·</span>
+                              <span>
+                                Pro:{" "}
+                                <strong className="text-foreground font-medium">
+                                  {capitalizeWords(m.professionalName)}
+                                </strong>
+                              </span>
+                              <span className="text-muted-foreground/40">·</span>
+                              {diffMs > 0 ? (
+                                <span className="font-medium text-amber-700 dark:text-amber-400">
+                                  ⏳ {diffDays > 0 ? `${diffDays}d ` : ""}
+                                  {remHours}h remaining of {m.validityDays}d validity
+                                </span>
+                              ) : (
+                                <span className="text-emerald-600 font-medium">
+                                  Validity ending · Ready for release
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-right">
+                            <p className="text-sm sm:text-base font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                              ₹{m.amount.toLocaleString("en-IN")}{" "}
+                              <span className="text-xs font-normal text-muted-foreground">INR</span>
+                            </p>
+                            <div className="mt-1 flex justify-end">
+                              <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                                <Clock className="h-3 w-3" />
+                                Payment Frozen
+                              </span>
+                            </div>
+                          </div>
+                          <Link
+                            href={`/project/${m.projectId}/tracking`}
+                            className="inline-flex items-center justify-center p-2 rounded-xl text-primary hover:bg-primary/10 transition"
+                            title="View milestone in project tracking"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-8 text-center">
+                    <CheckCircle2 className="mx-auto h-7 w-7 text-emerald-600/80 mb-2" />
+                    <p className="text-sm font-semibold text-foreground">
+                      Zero Milestones in Validity Period
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5 max-w-sm mx-auto">
+                      All completed milestone payments have finished their validity inspection period and been released. When a professional completes a milestone, it will show here while its payment is held.
+                    </p>
+                  </div>
+                )
+              ) :
+                filteredHistoryItems.slice(0, visibleCount).map((item) =>
                 item.kind === "payment" ? (
                   <div
                     key={item.key}
@@ -2011,22 +2289,38 @@ export default function ClientEarnings() {
                   </div>
                 ),
               )}
-              {filteredHistoryItems.length > visibleCount && (
-                <div className="border-t border-border/60 bg-muted/10 p-4 text-center">
-                  <button
-                    type="button"
-                    onClick={() => setVisibleCount((prev) => prev + 10)}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 py-2.5 text-xs font-semibold text-foreground shadow-xs transition-all hover:bg-accent hover:border-primary/40 hover:shadow-sm active:scale-[0.98]"
-                  >
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    <span>Show more transactions</span>
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-                      {filteredHistoryItems.length - visibleCount} remaining
-                    </span>
-                  </button>
-                </div>
-              )}
-              {!filteredHistoryItems.length && (
+              {historyFilter === "validity"
+                ? (wallet?.lockedMilestones?.length ?? 0) > visibleCount && (
+                    <div className="border-t border-border/60 bg-muted/10 p-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setVisibleCount((prev) => prev + 10)}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 py-2.5 text-xs font-semibold text-foreground shadow-xs transition-all hover:bg-accent hover:border-primary/40 hover:shadow-sm active:scale-[0.98]"
+                      >
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        <span>Show more milestones</span>
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                          {(wallet?.lockedMilestones?.length ?? 0) - visibleCount} remaining
+                        </span>
+                      </button>
+                    </div>
+                  )
+                : filteredHistoryItems.length > visibleCount && (
+                    <div className="border-t border-border/60 bg-muted/10 p-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setVisibleCount((prev) => prev + 10)}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 py-2.5 text-xs font-semibold text-foreground shadow-xs transition-all hover:bg-accent hover:border-primary/40 hover:shadow-sm active:scale-[0.98]"
+                      >
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        <span>Show more transactions</span>
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                          {filteredHistoryItems.length - visibleCount} remaining
+                        </span>
+                      </button>
+                    </div>
+                  )}
+              {historyFilter !== "validity" && !filteredHistoryItems.length && (
                 <p className="p-8 text-sm text-muted-foreground">
                   {historyFilter === "all"
                     ? "No payment activity yet."

@@ -1027,6 +1027,22 @@ export async function POST(request: NextRequest) {
           );
         }
       }
+
+      // If milestone was already approved or funded into escrow via wallet, return 200 OK
+      const existingPayment = await db.payment.findFirst({
+        where: { milestoneId: input.milestoneId },
+      });
+      const currentMilestone = await db.projectMilestone.findUnique({
+        where: { id: input.milestoneId },
+      });
+      if (existingPayment?.status === "COMPLETED" || currentMilestone?.status === "APPROVED") {
+        return NextResponse.json({
+          ok: true,
+          status: currentMilestone?.status ?? "APPROVED",
+          message: "Milestone payment is already approved and held in escrow.",
+        });
+      }
+
       return NextResponse.json(
         { error: "Milestones must be paid from the client wallet.", paymentRequired: true },
         { status: 402 },
@@ -1624,10 +1640,13 @@ export async function POST(request: NextRequest) {
         where: { trackingId: project.id, status: { not: "RESOLVED" } },
       });
       if (existingActiveDispute)
-        return NextResponse.json(
-          { error: "This project already has an active dispute awaiting resolution." },
-          { status: 409 },
-        );
+        return NextResponse.json({
+          ok: true,
+          alreadyOpen: true,
+          disputeId: existingActiveDispute.id,
+          disputeRound: existingActiveDispute.disputeRound,
+          message: "This project already has an active dispute awaiting resolution.",
+        });
 
       const attachmentsJson = input.evidence?.length ? JSON.stringify(input.evidence) : "[]";
 

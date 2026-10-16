@@ -47,7 +47,7 @@ export async function processMilestoneValidityReleases(trackingId?: number) {
       const openDispute = await db.projectDispute.findFirst({
         where: {
           trackingId: milestone.trackingId,
-          status: { not: "RESOLVED" },
+          status: { notIn: ["RESOLVED", "CLOSED"] },
           OR: [
             { milestoneId: milestone.id },
             { milestoneId: null },
@@ -64,6 +64,13 @@ export async function processMilestoneValidityReleases(trackingId?: number) {
           }).catch(() => {});
         }
         continue;
+      } else if (milestone.autoReleaseStatus === "PAUSED_DISPUTE") {
+        // Dispute was resolved/closed! Reset milestone autoReleaseStatus to PENDING
+        await db.projectMilestone.update({
+          where: { id: milestone.id },
+          data: { autoReleaseStatus: "PENDING" },
+        }).catch(() => {});
+        milestone.autoReleaseStatus = "PENDING";
       }
 
       // 2. Perform release in an isolated transaction

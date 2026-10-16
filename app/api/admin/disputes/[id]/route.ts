@@ -141,6 +141,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
 
       const updatedDispute = await db.$transaction(async (tx) => {
+        // Reset any paused milestone validity holds as the dispute is being decided
+        await tx.projectMilestone.updateMany({
+          where: {
+            trackingId: dispute.trackingId,
+            autoReleaseStatus: "PAUSED_DISPUTE",
+          },
+          data: {
+            autoReleaseStatus: "PENDING",
+          },
+        });
+
         if (decision === "CLIENT_WINS") {
           const isRevision =
             parsed.data.clientAction === "REVISION" ||
@@ -642,6 +653,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     // Status toggle without decision (e.g. reopen or status change)
     const nextStatus = parsed.data.status ?? "RESOLVED";
+    if (nextStatus === "RESOLVED") {
+      await db.projectMilestone.updateMany({
+        where: {
+          trackingId: dispute.trackingId,
+          autoReleaseStatus: "PAUSED_DISPUTE",
+        },
+        data: {
+          autoReleaseStatus: "PENDING",
+        },
+      });
+    }
     const updated = await db.projectDispute.update({
       where: { id: disputeId },
       data: { status: nextStatus },

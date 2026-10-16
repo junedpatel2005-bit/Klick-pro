@@ -110,7 +110,9 @@ export async function proxy(request: NextRequest) {
   // Optimistic check only: the JWT signature is verified here, never the
   // database. Revocation, account status and email verification are enforced
   // by the layouts and route handlers that call verifySession().
-  const token = request.cookies.get(sessionCookie)?.value;
+  const authHeader = request.headers.get("authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  const token = bearerToken || request.cookies.get(sessionCookie)?.value;
   const session = token ? await decodeSessionToken(token) : null;
 
   // Every /admin/* page (besides the login screen itself) requires an ADMIN session.
@@ -131,6 +133,17 @@ export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-request-id", requestId);
   requestHeaders.set("x-pathname", pathname);
+
+  // Bridge Bearer token to session cookie header for downstream route handlers
+  if (bearerToken && !request.cookies.has(sessionCookie)) {
+    const existingCookie = request.headers.get("cookie");
+    requestHeaders.set(
+      "cookie",
+      existingCookie
+        ? `${existingCookie}; ${sessionCookie}=${bearerToken}`
+        : `${sessionCookie}=${bearerToken}`,
+    );
+  }
 
   // Canonical rewrite for /api/v1/* calls to existing /api/* handlers
   // (except routes that physically exist under app/api/v1)

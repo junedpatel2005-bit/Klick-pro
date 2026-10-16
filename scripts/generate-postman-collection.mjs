@@ -12,10 +12,15 @@ const collection = {
     { key: "baseUrl", value: "http://localhost:3000", type: "string" },
     { key: "token", value: "", type: "string" },
     { key: "cronSecret", value: "servio-cron-internal-secret-2026", type: "string" },
-    { key: "jobId", value: "1", type: "string" },
-    { key: "projectId", value: "1", type: "string" },
-    { key: "milestoneId", value: "1", type: "string" },
-    { key: "paymentId", value: "1", type: "string" }
+    { key: "jobId", value: "28", type: "string" },
+    { key: "projectId", value: "27", type: "string" },
+    { key: "milestoneId", value: "26", type: "string" },
+    { key: "paymentId", value: "17", type: "string" },
+    { key: "clientEmail", value: "client_test@klickpro.test", type: "string" },
+    { key: "proEmail", value: "pro_test@klickpro.test", type: "string" },
+    { key: "razorpayOrderId", value: "", type: "string" },
+    { key: "razorpayPaymentId", value: "", type: "string" },
+    { key: "razorpaySignature", value: "", type: "string" }
   ],
   item: [
     {
@@ -23,18 +28,30 @@ const collection = {
       item: [
         {
           name: "Register Client",
+          event: [
+            {
+              listen: "prerequest",
+              script: {
+                exec: [
+                  "const ts = Date.now();",
+                  "pm.collectionVariables.set('clientEmail', 'client_' + ts + '@klickpro.test');"
+                ],
+                type: "text/javascript"
+              }
+            }
+          ],
           request: {
             method: "POST",
             header: [{ key: "Content-Type", value: "application/json" }],
             body: {
               mode: "raw",
               raw: JSON.stringify({
-                email: "client@example.com",
+                email: "{{clientEmail}}",
                 password: "Password123!",
                 firstName: "Aarav",
                 lastName: "Sharma",
                 role: "CLIENT",
-                phone: "+919876543210"
+                terms: true
               }, null, 2)
             },
             url: { raw: "{{baseUrl}}/api/auth/register", host: ["{{baseUrl}}"], path: ["api", "auth", "register"] }
@@ -42,20 +59,30 @@ const collection = {
         },
         {
           name: "Register Professional",
+          event: [
+            {
+              listen: "prerequest",
+              script: {
+                exec: [
+                  "const ts = Date.now();",
+                  "pm.collectionVariables.set('proEmail', 'pro_' + ts + '@klickpro.test');"
+                ],
+                type: "text/javascript"
+              }
+            }
+          ],
           request: {
             method: "POST",
             header: [{ key: "Content-Type", value: "application/json" }],
             body: {
               mode: "raw",
               raw: JSON.stringify({
-                email: "pro@example.com",
+                email: "{{proEmail}}",
                 password: "Password123!",
                 firstName: "Rohan",
                 lastName: "Verma",
                 role: "PROFESSIONAL",
-                phone: "+919876543211",
-                category: "Electrical Engineering",
-                city: "Surat"
+                terms: true
               }, null, 2)
             },
             url: { raw: "{{baseUrl}}/api/auth/register", host: ["{{baseUrl}}"], path: ["api", "auth", "register"] }
@@ -85,8 +112,8 @@ const collection = {
             body: {
               mode: "raw",
               raw: JSON.stringify({
-                email: "client@example.com",
-                password: "Password123!"
+                email: "seed.client@servio.example",
+                password: "ServioSeed#2026"
               }, null, 2)
             },
             url: { raw: "{{baseUrl}}/api/auth/login", host: ["{{baseUrl}}"], path: ["api", "auth", "login"] }
@@ -138,9 +165,7 @@ const collection = {
             body: {
               mode: "raw",
               raw: JSON.stringify({
-                amount: 5000,
-                currency: "INR",
-                notes: { purpose: "Wallet Balance Top-Up" }
+                amount: 5000
               }, null, 2)
             },
             url: { raw: "{{baseUrl}}/api/wallet/deposit/order", host: ["{{baseUrl}}"], path: ["api", "wallet", "deposit", "order"] }
@@ -148,6 +173,22 @@ const collection = {
         },
         {
           name: "Verify Razorpay Payment Signature",
+          event: [
+            {
+              listen: "prerequest",
+              script: {
+                exec: [
+                  "const orderId = pm.collectionVariables.get('razorpayOrderId') || 'order_mock';",
+                  "const paymentId = 'pay_test_' + Date.now();",
+                  "const keySecret = '5ryRjcIKPwsT7UeAACX1JJZM';",
+                  "const signature = CryptoJS.HmacSHA256(orderId + '|' + paymentId, keySecret).toString();",
+                  "pm.collectionVariables.set('razorpayPaymentId', paymentId);",
+                  "pm.collectionVariables.set('razorpaySignature', signature);"
+                ],
+                type: "text/javascript"
+              }
+            }
+          ],
           request: {
             method: "POST",
             header: [
@@ -157,9 +198,9 @@ const collection = {
             body: {
               mode: "raw",
               raw: JSON.stringify({
-                razorpay_order_id: "{{razorpayOrderId}}",
-                razorpay_payment_id: "pay_test_123456789",
-                razorpay_signature: "mock_signature_for_test_environment"
+                razorpayOrderId: "{{razorpayOrderId}}",
+                razorpayPaymentId: "{{razorpayPaymentId}}",
+                razorpaySignature: "{{razorpaySignature}}"
               }, null, 2)
             },
             url: { raw: "{{baseUrl}}/api/wallet/deposit/verify", host: ["{{baseUrl}}"], path: ["api", "wallet", "deposit", "verify"] }
@@ -189,9 +230,9 @@ const collection = {
             body: {
               mode: "raw",
               raw: JSON.stringify({
-                accountNumber: "123456789012",
-                ifsc: "SBIN0001234",
-                accountHolderName: "Rohan Verma"
+                accountNumber: "12345678901",
+                ifscCode: "SBIN0001234",
+                accountHolder: "Rohan Verma"
               }, null, 2)
             },
             url: { raw: "{{baseUrl}}/api/wallet/verify-bank-account", host: ["{{baseUrl}}"], path: ["api", "wallet", "verify-bank-account"] }
@@ -225,12 +266,16 @@ const collection = {
             body: {
               mode: "raw",
               raw: JSON.stringify({
-                amount: 3000,
-                method: "BANK_ACCOUNT",
-                accountId: "1"
+                amount: 500,
+                destinationType: "BANK",
+                destinationLabel: "State Bank of India - 1234",
+                accountNumber: "12345678901",
+                ifscCode: "SBIN0001234",
+                accountHolder: "Rohan Verma",
+                bankName: "State Bank of India"
               }, null, 2)
             },
-            url: { raw: "{{baseUrl}}/api/wallet/withdraw", host: ["{{baseUrl}}"], path: ["api", "wallet", "withdraw"] }
+            url: { raw: "{{baseUrl}}/api/wallet", host: ["{{baseUrl}}"], path: ["api", "wallet"] }
           }
         }
       ]
@@ -249,9 +294,8 @@ const collection = {
             body: {
               mode: "raw",
               raw: JSON.stringify({
-                milestoneId: "{{milestoneId}}",
-                amount: 4000,
-                action: "FUND"
+                projectId: 27,
+                milestoneId: 26
               }, null, 2)
             },
             url: { raw: "{{baseUrl}}/api/wallet/milestone", host: ["{{baseUrl}}"], path: ["api", "wallet", "milestone"] }
@@ -268,8 +312,9 @@ const collection = {
             body: {
               mode: "raw",
               raw: JSON.stringify({
-                action: "RELEASE_MILESTONE",
-                milestoneId: "{{milestoneId}}"
+                action: "approve-milestone",
+                projectId: 27,
+                milestoneId: 26
               }, null, 2)
             },
             url: { raw: "{{baseUrl}}/api/portal/project-actions", host: ["{{baseUrl}}"], path: ["api", "portal", "project-actions"] }
@@ -286,9 +331,12 @@ const collection = {
             body: {
               mode: "raw",
               raw: JSON.stringify({
-                action: "RAISE_DISPUTE",
-                milestoneId: "{{milestoneId}}",
-                reason: "Work submitted requires rectification and revision."
+                action: "submit-dispute",
+                projectId: 27,
+                milestoneId: 26,
+                issueType: "Quality of Work",
+                priority: "MEDIUM",
+                message: "Work submitted requires rectification and revision."
               }, null, 2)
             },
             url: { raw: "{{baseUrl}}/api/portal/project-actions", host: ["{{baseUrl}}"], path: ["api", "portal", "project-actions"] }
@@ -323,13 +371,15 @@ const collection = {
               raw: JSON.stringify({
                 title: "Complete Office CCTV & Network Setup",
                 description: "Need licensed technician to set up 8 IP cameras and patch panel.",
-                category: "Security & Networking",
+                category: "Commercial Services",
                 timingType: "FIXED",
                 budgetMin: 8000,
                 budgetMax: 12000,
+                deadline: "2026-12-31",
                 locationAddress: "Athwa Gate, Surat, Gujarat",
-                latitude: 21.1702,
-                longitude: 72.8311
+                locationLat: 21.1702,
+                locationLng: 72.8311,
+                mode: "publish"
               }, null, 2)
             },
             url: { raw: "{{baseUrl}}/api/client/jobs", host: ["{{baseUrl}}"], path: ["api", "client", "jobs"] }
@@ -382,7 +432,11 @@ const collection = {
             body: {
               mode: "raw",
               raw: JSON.stringify({
-                reason: "Additional scope requested by client."
+                workDescription: "Additional network cables and switch testing needed.",
+                amount: 1500,
+                reason: "ADDITIONAL_WORK",
+                assignPreviousPro: true,
+                duration: "1-3 days"
               }, null, 2)
             },
             url: { raw: "{{baseUrl}}/api/client/jobs/{{jobId}}/reopen", host: ["{{baseUrl}}"], path: ["api", "client", "jobs", "{{jobId}}", "reopen"] }

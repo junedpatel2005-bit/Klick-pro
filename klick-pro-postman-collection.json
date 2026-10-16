@@ -23,22 +23,47 @@
     },
     {
       "key": "jobId",
-      "value": "1",
+      "value": "28",
       "type": "string"
     },
     {
       "key": "projectId",
-      "value": "1",
+      "value": "27",
       "type": "string"
     },
     {
       "key": "milestoneId",
-      "value": "1",
+      "value": "26",
       "type": "string"
     },
     {
       "key": "paymentId",
-      "value": "1",
+      "value": "17",
+      "type": "string"
+    },
+    {
+      "key": "clientEmail",
+      "value": "client_test@klickpro.test",
+      "type": "string"
+    },
+    {
+      "key": "proEmail",
+      "value": "pro_test@klickpro.test",
+      "type": "string"
+    },
+    {
+      "key": "razorpayOrderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "razorpayPaymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "razorpaySignature",
+      "value": "",
       "type": "string"
     }
   ],
@@ -48,6 +73,18 @@
       "item": [
         {
           "name": "Register Client",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const ts = Date.now();",
+                  "pm.collectionVariables.set('clientEmail', 'client_' + ts + '@klickpro.test');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -58,7 +95,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"client@example.com\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Aarav\",\n  \"lastName\": \"Sharma\",\n  \"role\": \"CLIENT\",\n  \"phone\": \"+919876543210\"\n}"
+              "raw": "{\n  \"email\": \"{{clientEmail}}\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Aarav\",\n  \"lastName\": \"Sharma\",\n  \"role\": \"CLIENT\",\n  \"terms\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/register",
@@ -75,6 +112,18 @@
         },
         {
           "name": "Register Professional",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const ts = Date.now();",
+                  "pm.collectionVariables.set('proEmail', 'pro_' + ts + '@klickpro.test');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -85,7 +134,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"pro@example.com\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Rohan\",\n  \"lastName\": \"Verma\",\n  \"role\": \"PROFESSIONAL\",\n  \"phone\": \"+919876543211\",\n  \"category\": \"Electrical Engineering\",\n  \"city\": \"Surat\"\n}"
+              "raw": "{\n  \"email\": \"{{proEmail}}\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Rohan\",\n  \"lastName\": \"Verma\",\n  \"role\": \"PROFESSIONAL\",\n  \"terms\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/register",
@@ -128,7 +177,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"client@example.com\",\n  \"password\": \"Password123!\"\n}"
+              "raw": "{\n  \"email\": \"seed.client@servio.example\",\n  \"password\": \"ServioSeed#2026\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
@@ -225,7 +274,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"amount\": 5000,\n  \"currency\": \"INR\",\n  \"notes\": {\n    \"purpose\": \"Wallet Balance Top-Up\"\n  }\n}"
+              "raw": "{\n  \"amount\": 5000\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/wallet/deposit/order",
@@ -243,6 +292,22 @@
         },
         {
           "name": "Verify Razorpay Payment Signature",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const orderId = pm.collectionVariables.get('razorpayOrderId') || 'order_mock';",
+                  "const paymentId = 'pay_test_' + Date.now();",
+                  "const keySecret = '5ryRjcIKPwsT7UeAACX1JJZM';",
+                  "const signature = CryptoJS.HmacSHA256(orderId + '|' + paymentId, keySecret).toString();",
+                  "pm.collectionVariables.set('razorpayPaymentId', paymentId);",
+                  "pm.collectionVariables.set('razorpaySignature', signature);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -257,7 +322,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"razorpay_order_id\": \"{{razorpayOrderId}}\",\n  \"razorpay_payment_id\": \"pay_test_123456789\",\n  \"razorpay_signature\": \"mock_signature_for_test_environment\"\n}"
+              "raw": "{\n  \"razorpayOrderId\": \"{{razorpayOrderId}}\",\n  \"razorpayPaymentId\": \"{{razorpayPaymentId}}\",\n  \"razorpaySignature\": \"{{razorpaySignature}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/wallet/deposit/verify",
@@ -316,7 +381,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"accountNumber\": \"123456789012\",\n  \"ifsc\": \"SBIN0001234\",\n  \"accountHolderName\": \"Rohan Verma\"\n}"
+              "raw": "{\n  \"accountNumber\": \"12345678901\",\n  \"ifscCode\": \"SBIN0001234\",\n  \"accountHolder\": \"Rohan Verma\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/wallet/verify-bank-account",
@@ -378,17 +443,16 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"amount\": 3000,\n  \"method\": \"BANK_ACCOUNT\",\n  \"accountId\": \"1\"\n}"
+              "raw": "{\n  \"amount\": 500,\n  \"destinationType\": \"BANK\",\n  \"destinationLabel\": \"State Bank of India - 1234\",\n  \"accountNumber\": \"12345678901\",\n  \"ifscCode\": \"SBIN0001234\",\n  \"accountHolder\": \"Rohan Verma\",\n  \"bankName\": \"State Bank of India\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/wallet/withdraw",
+              "raw": "{{baseUrl}}/api/wallet",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "wallet",
-                "withdraw"
+                "wallet"
               ]
             }
           }
@@ -414,7 +478,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"milestoneId\": \"{{milestoneId}}\",\n  \"amount\": 4000,\n  \"action\": \"FUND\"\n}"
+              "raw": "{\n  \"projectId\": 27,\n  \"milestoneId\": 26\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/wallet/milestone",
@@ -445,7 +509,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"action\": \"RELEASE_MILESTONE\",\n  \"milestoneId\": \"{{milestoneId}}\"\n}"
+              "raw": "{\n  \"action\": \"approve-milestone\",\n  \"projectId\": 27,\n  \"milestoneId\": 26\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/portal/project-actions",
@@ -476,7 +540,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"action\": \"RAISE_DISPUTE\",\n  \"milestoneId\": \"{{milestoneId}}\",\n  \"reason\": \"Work submitted requires rectification and revision.\"\n}"
+              "raw": "{\n  \"action\": \"submit-dispute\",\n  \"projectId\": 27,\n  \"milestoneId\": 26,\n  \"issueType\": \"Quality of Work\",\n  \"priority\": \"MEDIUM\",\n  \"message\": \"Work submitted requires rectification and revision.\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/portal/project-actions",
@@ -539,7 +603,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Complete Office CCTV & Network Setup\",\n  \"description\": \"Need licensed technician to set up 8 IP cameras and patch panel.\",\n  \"category\": \"Security & Networking\",\n  \"timingType\": \"FIXED\",\n  \"budgetMin\": 8000,\n  \"budgetMax\": 12000,\n  \"locationAddress\": \"Athwa Gate, Surat, Gujarat\",\n  \"latitude\": 21.1702,\n  \"longitude\": 72.8311\n}"
+              "raw": "{\n  \"title\": \"Complete Office CCTV & Network Setup\",\n  \"description\": \"Need licensed technician to set up 8 IP cameras and patch panel.\",\n  \"category\": \"Commercial Services\",\n  \"timingType\": \"FIXED\",\n  \"budgetMin\": 8000,\n  \"budgetMax\": 12000,\n  \"deadline\": \"2026-12-31\",\n  \"locationAddress\": \"Athwa Gate, Surat, Gujarat\",\n  \"locationLat\": 21.1702,\n  \"locationLng\": 72.8311,\n  \"mode\": \"publish\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/client/jobs",
@@ -652,7 +716,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"reason\": \"Additional scope requested by client.\"\n}"
+              "raw": "{\n  \"workDescription\": \"Additional network cables and switch testing needed.\",\n  \"amount\": 1500,\n  \"reason\": \"ADDITIONAL_WORK\",\n  \"assignPreviousPro\": true,\n  \"duration\": \"1-3 days\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/client/jobs/{{jobId}}/reopen",
