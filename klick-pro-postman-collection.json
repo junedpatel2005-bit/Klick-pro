@@ -1,0 +1,761 @@
+{
+  "info": {
+    "_postman_id": "c4b12345-6789-4abc-def0-123456789abc",
+    "name": "Klick Pro - Marketplace & Escrow API Collection",
+    "description": "Official comprehensive API test collection for Klick Pro platform. Includes Auth, Razorpay deposit & order generation, Escrow funding, 3-day validity release cron worker, dispute freeze/resume, professional withdrawals, and PDF exports.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cronSecret",
+      "value": "servio-cron-internal-secret-2026",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "projectId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "milestoneId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "paymentId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Authentication",
+      "item": [
+        {
+          "name": "Register Client",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"client@example.com\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Aarav\",\n  \"lastName\": \"Sharma\",\n  \"role\": \"CLIENT\",\n  \"phone\": \"+919876543210\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Register Professional",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"pro@example.com\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Rohan\",\n  \"lastName\": \"Verma\",\n  \"role\": \"PROFESSIONAL\",\n  \"phone\": \"+919876543211\",\n  \"category\": \"Electrical Engineering\",\n  \"city\": \"Surat\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Login User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response.token) {",
+                  "  pm.collectionVariables.set('token', response.token);",
+                  "  pm.environment.set('token', response.token);",
+                  "  console.log('Saved auth token:', response.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"client@example.com\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Current Profile (Me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Wallet & Razorpay Deposits",
+      "item": [
+        {
+          "name": "Get Razorpay Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/razorpay/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "razorpay",
+                "config"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Razorpay Deposit Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.orderId) {",
+                  "  pm.collectionVariables.set('razorpayOrderId', res.orderId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000,\n  \"currency\": \"INR\",\n  \"notes\": {\n    \"purpose\": \"Wallet Balance Top-Up\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/deposit/order",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "deposit",
+                "order"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verify Razorpay Payment Signature",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razorpay_order_id\": \"{{razorpayOrderId}}\",\n  \"razorpay_payment_id\": \"pay_test_123456789\",\n  \"razorpay_signature\": \"mock_signature_for_test_environment\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/deposit/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "deposit",
+                "verify"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Wallet Balance & Ledger",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Wallet Withdrawals & Banking",
+      "item": [
+        {
+          "name": "Verify Bank Account (Penny Drop / IFSC)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNumber\": \"123456789012\",\n  \"ifsc\": \"SBIN0001234\",\n  \"accountHolderName\": \"Rohan Verma\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/verify-bank-account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "verify-bank-account"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verify UPI VPA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vpa\": \"rohanverma@okhdfcbank\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/verify-vpa",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "verify-vpa"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Request Payout / Withdrawal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 3000,\n  \"method\": \"BANK_ACCOUNT\",\n  \"accountId\": \"1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/withdraw",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "withdraw"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Milestone Escrow, Disputes & 15m Cron",
+      "item": [
+        {
+          "name": "Fund Milestone Escrow (Deposit to Escrow)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"milestoneId\": \"{{milestoneId}}\",\n  \"amount\": 4000,\n  \"action\": \"FUND\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/milestone",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "milestone"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Release Milestone Payment (Client Approval)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"RELEASE_MILESTONE\",\n  \"milestoneId\": \"{{milestoneId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Raise Dispute (Instantly Freezes Auto-Payout)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"RAISE_DISPUTE\",\n  \"milestoneId\": \"{{milestoneId}}\",\n  \"reason\": \"Work submitted requires rectification and revision.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Autonomous 15m Milestone Cron Worker (Server Background Release)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-internal-loopback",
+                "value": "true"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cronSecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cron/milestone-releases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cron",
+                "milestone-releases"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Marketplace & Radius Discovery (1-100 km)",
+      "item": [
+        {
+          "name": "Post New Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Complete Office CCTV & Network Setup\",\n  \"description\": \"Need licensed technician to set up 8 IP cameras and patch panel.\",\n  \"category\": \"Security & Networking\",\n  \"timingType\": \"FIXED\",\n  \"budgetMin\": 8000,\n  \"budgetMax\": 12000,\n  \"locationAddress\": \"Athwa Gate, Surat, Gujarat\",\n  \"latitude\": 21.1702,\n  \"longitude\": 72.8311\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Discovery Jobs with 25 km Radius Filter",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/marketplace/jobs?radiusKm=25&lat=21.1702&lng=72.8311&nearMe=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "marketplace",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "radiusKm",
+                  "value": "25"
+                },
+                {
+                  "key": "lat",
+                  "value": "21.1702"
+                },
+                {
+                  "key": "lng",
+                  "value": "72.8311"
+                },
+                {
+                  "key": "nearMe",
+                  "value": "true"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Discovery Jobs with 50 km Radius Filter",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/marketplace/jobs?radiusKm=50&lat=21.1702&lng=72.8311&nearMe=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "marketplace",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "radiusKm",
+                  "value": "50"
+                },
+                {
+                  "key": "lat",
+                  "value": "21.1702"
+                },
+                {
+                  "key": "lng",
+                  "value": "72.8311"
+                },
+                {
+                  "key": "nearMe",
+                  "value": "true"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reopen Completed Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Additional scope requested by client.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs/{{jobId}}/reopen",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs",
+                "{{jobId}}",
+                "reopen"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Reports & Official PDF Dossiers",
+      "item": [
+        {
+          "name": "Export Full Job Dossier PDF",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/jobs/{{jobId}}/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "jobs",
+                "{{jobId}}",
+                "export"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Export Client Projects Statement PDF / CSV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"all\",\n  \"pageSize\": \"A4\",\n  \"orientation\": \"portrait\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs",
+                "export"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Export Milestone Tax Invoice PDF",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/invoices/{{paymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "invoices",
+                "{{paymentId}}"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

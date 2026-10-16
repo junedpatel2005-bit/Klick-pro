@@ -205,3 +205,45 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "The report could not be generated." }, { status: 500 });
   }
 }
+
+export async function GET(request: NextRequest) {
+  const user = await getClient(request);
+  if (!user) return NextResponse.json({ error: "Client sign-in is required." }, { status: 401 });
+
+  const rawJobId = request.nextUrl.searchParams.get("jobId");
+  if (!rawJobId) {
+    return NextResponse.json({ error: "Job ID query parameter is required." }, { status: 400 });
+  }
+
+  const jobId = Number(rawJobId);
+  if (!Number.isInteger(jobId) || jobId <= 0) {
+    return NextResponse.json({ error: "Invalid Job ID." }, { status: 400 });
+  }
+
+  try {
+    const dossierData = await fetchJobDossierData(jobId, {
+      userId: user.id,
+      role: "CLIENT",
+    });
+
+    if (!dossierData) {
+      return NextResponse.json({ error: "Job dossier not found or unauthorized." }, { status: 404 });
+    }
+
+    const buffer = await renderReportPdf(
+      createElement(JobDossierDocument, { data: dossierData }) as unknown as Parameters<
+        typeof renderReportPdf
+      >[0],
+    );
+
+    const safeTitle = (dossierData.title || `job-${jobId}`)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+    return pdfResponse(buffer, `klick-pro-${safeTitle}-dossier.pdf`);
+  } catch (error) {
+    console.error("Job dossier PDF GET failed:", error);
+    return NextResponse.json({ error: "Failed to generate job dossier." }, { status: 500 });
+  }
+}

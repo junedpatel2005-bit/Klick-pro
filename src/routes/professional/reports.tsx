@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import {
@@ -14,6 +15,15 @@ import {
   CircleDollarSign,
   ArrowDownToLine,
   TrendingUp,
+  LayoutGrid,
+  List,
+  MapPin,
+  CalendarDays,
+  ExternalLink,
+  FileDown,
+  Briefcase,
+  SlidersHorizontal,
+  RotateCcw,
 } from "lucide-react";
 import { ExportMenu } from "@/components/reports/ExportMenu";
 import { SelectableReportTable } from "@/components/reports/SelectableReportTable";
@@ -24,6 +34,7 @@ import {
   type DatePreset,
   isWithinCustomDateRange,
 } from "@/components/reports/DateRangeFilter";
+import { formatReadableLabel, capitalizeWords, capitalizeFirst } from "@/lib/utils";
 
 type RunningProject = {
   id: number;
@@ -156,9 +167,11 @@ function ProjectsReport() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [contractTypeFilter, setContractTypeFilter] = useState("ALL");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [viewMode, setViewMode] = useState<"boxes" | "table">("boxes");
 
   const loadData = () => {
     setLoading(true);
@@ -189,6 +202,7 @@ function ProjectsReport() {
           const completed: RunningProject[] = Array.isArray(data.completedProjects)
             ? data.completedProjects.map((cp) => ({
                 id: cp.id,
+                jobId: cp.jobId,
                 jobTitle: cp.jobTitle ?? `Job #${cp.jobId}`,
                 clientName: cp.clientName ?? "Client",
                 status: "COMPLETED",
@@ -202,6 +216,7 @@ function ProjectsReport() {
           const closed: RunningProject[] = Array.isArray(data.closedProjects)
             ? data.closedProjects.map((cl) => ({
                 id: cl.id,
+                jobId: cl.jobId,
                 jobTitle: cl.jobTitle ?? `Job #${cl.jobId}`,
                 clientName: cl.clientName ?? "Client",
                 status: "CLOSED",
@@ -225,24 +240,63 @@ function ProjectsReport() {
 
   useRealtimeRefresh(["servio:project-update", "servio:proposal", "servio:notification"], loadData);
 
+  const statusCounts = useMemo(() => {
+    const counts = { ALL: projects.length, IN_PROGRESS: 0, COMPLETED: 0, CLOSED: 0 };
+    projects.forEach((p) => {
+      const s = p.status.toUpperCase();
+      if (s === "RUNNING" || s === "IN_PROGRESS" || s === "ACTIVE") counts.IN_PROGRESS++;
+      else if (s === "COMPLETED") counts.COMPLETED++;
+      else if (s === "CLOSED") counts.CLOSED++;
+    });
+    return counts;
+  }, [projects]);
+
+  const clearAllFilters = () => {
+    setSearch("");
+    setStatusFilter("ALL");
+    setContractTypeFilter("ALL");
+    setDatePreset("all");
+    setStartDate("");
+    setEndDate("");
+  };
+
+  const hasActiveFilters =
+    search.trim() !== "" ||
+    statusFilter !== "ALL" ||
+    contractTypeFilter !== "ALL" ||
+    datePreset !== "all" ||
+    startDate !== "" ||
+    endDate !== "";
+
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
+      const q = search.trim().toLowerCase();
       const matchesSearch =
-        search.trim() === "" ||
-        (project.jobTitle && project.jobTitle.toLowerCase().includes(search.toLowerCase())) ||
-        (project.clientName && project.clientName.toLowerCase().includes(search.toLowerCase())) ||
-        String(project.id).includes(search);
+        q === "" ||
+        (project.jobTitle && project.jobTitle.toLowerCase().includes(q)) ||
+        (project.clientName && project.clientName.toLowerCase().includes(q)) ||
+        String(project.id).includes(q);
+
+      const s = project.status.toUpperCase();
       const matchesStatus =
-        statusFilter === "ALL" || project.status.toUpperCase() === statusFilter.toUpperCase();
+        statusFilter === "ALL" ||
+        (statusFilter === "IN_PROGRESS" &&
+          (s === "RUNNING" || s === "IN_PROGRESS" || s === "ACTIVE")) ||
+        s === statusFilter.toUpperCase();
+
+      const matchesContract =
+        contractTypeFilter === "ALL" || project.timingType === contractTypeFilter;
+
       const matchesDate = isWithinCustomDateRange(
         project.acceptedAt || project.deadline,
         datePreset,
         startDate,
         endDate,
       );
-      return matchesSearch && matchesStatus && matchesDate;
+
+      return matchesSearch && matchesStatus && matchesContract && matchesDate;
     });
-  }, [projects, search, statusFilter, datePreset, startDate, endDate]);
+  }, [projects, search, statusFilter, contractTypeFilter, datePreset, startDate, endDate]);
 
   const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
     useRowSelection(filteredProjects);
@@ -387,32 +441,96 @@ function ProjectsReport() {
         </div>
       </div>
 
-      {/* Control Bar */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between shadow-xs">
-        <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by job title or client…"
-              className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
+      {/* Main Two-Column Layout (Sidebar Filters + Engagements View) */}
+      <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+        {/* Left Column: Sidebar Filters */}
+        <aside className="h-fit rounded-2xl border border-border bg-card p-5 shadow-soft lg:sticky lg:top-24 space-y-5">
+          <div className="flex items-center justify-between border-b border-border pb-3">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4 text-primary" />
+              <h2 className="font-semibold text-foreground text-sm">Filters</h2>
+            </div>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline cursor-pointer"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Clear all
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-10 rounded-xl border border-border bg-background px-3 text-xs sm:text-sm font-medium text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="COMPLETED">Completed</option>
-              <option value="RUNNING">Running</option>
-            </select>
+          {/* Status Filter Pills */}
+          <div className="space-y-2">
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Engagement Status
+            </label>
+            <div className="flex flex-col gap-1">
+              {[
+                { id: "ALL", label: "All Engagements", count: statusCounts.ALL },
+                { id: "IN_PROGRESS", label: "In Progress", count: statusCounts.IN_PROGRESS },
+                { id: "COMPLETED", label: "Completed", count: statusCounts.COMPLETED },
+                { id: "CLOSED", label: "Closed / Archived", count: statusCounts.CLOSED },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setStatusFilter(item.id)}
+                  className={`flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition cursor-pointer ${
+                    statusFilter === item.id
+                      ? "bg-primary text-primary-foreground shadow-xs font-semibold"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  <span
+                    className={`rounded-md px-1.5 py-0.5 text-[10px] ${
+                      statusFilter === item.id
+                        ? "bg-white/20 text-white"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {item.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
 
+          {/* Contract Type */}
+          <div className="space-y-2 pt-2 border-t border-border">
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Contract Type
+            </label>
+            <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted/60 p-1 text-xs">
+              {[
+                { id: "ALL", label: "All" },
+                { id: "FIXED", label: "Fixed" },
+                { id: "HOURLY", label: "Hourly" },
+              ].map((type) => (
+                <button
+                  key={type.id}
+                  type="button"
+                  onClick={() => setContractTypeFilter(type.id)}
+                  className={`rounded-lg py-1.5 text-center text-xs font-semibold transition cursor-pointer ${
+                    contractTypeFilter === type.id
+                      ? "bg-card text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {type.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Date Period Filter */}
+          <div className="space-y-2 pt-2 border-t border-border">
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Date Period
+            </label>
             <DateRangeFilter
               preset={datePreset}
               onPresetChange={setDatePreset}
@@ -422,132 +540,309 @@ function ProjectsReport() {
               onEndDateChange={setEndDate}
             />
           </div>
-        </div>
+        </aside>
 
-        <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
-          <button
-            type="button"
-            onClick={() => handleExportCsv()}
-            disabled={filteredProjects.length === 0}
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-background px-3 text-xs sm:text-sm font-semibold text-foreground transition hover:bg-muted disabled:opacity-50"
-            title="Download CSV for Excel / Accounting"
-          >
-            <ArrowDownToLine className="h-4 w-4" />
-            <span>CSV</span>
-          </button>
+        {/* Right Column: Search, Toolbar & Content */}
+        <div className="space-y-4">
+          {/* Controls Bar: Search, View Mode, CSV & PDF Export */}
+          <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between shadow-xs">
+            <div className="relative flex-1 max-w-md">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by job title or client…"
+                className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
 
-          <ExportMenu
-            endpoint="/api/professional/jobs/export"
-            selectedIds={selectedList}
-            fileBaseName="running-projects"
-            emptyMessage="Select project first"
-            onExportCsv={handleExportCsv}
-          />
-        </div>
-      </div>
-
-      {error ? (
-        <p className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-
-      {/* Statement Table */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
-        <SelectableReportTable
-          loading={loading}
-          rows={filteredProjects}
-          emptyMessage="No active project records match your criteria."
-          selectedIds={selectedIds}
-          onToggle={toggle}
-          allSelected={allVisibleSelected}
-          onToggleAll={toggleAllVisible}
-          rowLabel={(project) => project.jobTitle ?? `Project #${project.id}`}
-          columns={[
-            {
-              key: "id",
-              header: "Reference",
-              render: (project) => (
-                <span className="font-mono text-xs font-semibold text-muted-foreground">
-                  #PRJ-{project.id}
-                </span>
-              ),
-            },
-            {
-              key: "jobTitle",
-              header: "Job Scope",
-              render: (project) => (
-                <span className="font-medium text-foreground">
-                  {project.jobTitle ?? `Project #${project.id}`}
-                </span>
-              ),
-            },
-            {
-              key: "clientName",
-              header: "Client",
-              render: (project) => (
-                <span className="text-sm font-medium text-muted-foreground">
-                  {project.clientName ?? "Verified Client"}
-                </span>
-              ),
-            },
-            {
-              key: "status",
-              header: "Status",
-              render: (project) => (
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(
-                    project.status,
-                  )}`}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* View Switcher: Boxes (Grid) vs Table */}
+              <div className="flex items-center rounded-xl border border-border bg-muted/60 p-1">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("boxes")}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                    viewMode === "boxes"
+                      ? "bg-card text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="Show projects in 2-column boxes"
                 >
-                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                  {displayStatus(project.status)}
-                </span>
-              ),
-            },
-            {
-              key: "budget",
-              header: "Contract Amount",
-              render: (project) => (
-                <span className="font-mono font-bold text-foreground">{money(project)}</span>
-              ),
-            },
-            {
-              key: "progress",
-              header: "Progress",
-              align: "right",
-              render: (project) => (
-                <div className="flex items-center justify-end gap-2">
-                  <div className="w-16 rounded-full bg-muted h-1.5 overflow-hidden hidden sm:block">
-                    <div
-                      className="bg-indigo-600 h-full rounded-full transition-all"
-                      style={{ width: `${Math.min(100, Math.max(0, project.progress))}%` }}
-                    />
-                  </div>
-                  <span className="font-mono text-xs font-semibold text-foreground">
-                    {project.progress}%
-                  </span>
-                </div>
-              ),
-            },
-          ]}
-        />
-      </div>
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span>Boxes</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("table")}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                    viewMode === "table"
+                      ? "bg-card text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="Show structured statement table"
+                >
+                  <List className="h-3.5 w-3.5" />
+                  <span>Table</span>
+                </button>
+              </div>
 
-      {/* Period Reconciliation Summary */}
-      <div className="flex flex-col gap-2 rounded-2xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground">
-        <div>
-          Showing <span className="font-semibold text-foreground">{filteredProjects.length}</span>{" "}
-          of <span className="font-semibold text-foreground">{projects.length}</span> engagements.
-          {selectedList.length > 0 && (
-            <span className="ml-2 font-semibold text-primary">
-              ({selectedList.length} rows selected for export)
-            </span>
+              {/* CSV Export */}
+              <button
+                type="button"
+                onClick={() => handleExportCsv()}
+                disabled={filteredProjects.length === 0}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-background px-3 text-xs font-semibold text-foreground transition hover:bg-muted disabled:opacity-50 cursor-pointer"
+                title="Download CSV for Excel / Accounting"
+              >
+                <ArrowDownToLine className="h-3.5 w-3.5" />
+                <span>CSV</span>
+              </button>
+
+              <ExportMenu
+                endpoint="/api/professional/jobs/export"
+                selectedIds={selectedList}
+                fileBaseName="running-projects"
+                emptyMessage="Select project first"
+                onExportCsv={handleExportCsv}
+              />
+            </div>
+          </div>
+
+          {error ? (
+            <p className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
+
+          {/* View Mode 1: Box Grid View (Boxes: 1 & 2 in Row 1, 3 & 4 in Row 2) */}
+          {viewMode === "boxes" ? (
+            loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-56 rounded-2xl border border-border bg-muted/40 animate-pulse" />
+                ))}
+              </div>
+            ) : filteredProjects.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-12 text-center text-muted-foreground">
+                <Briefcase className="h-10 w-10 text-muted-foreground/50 mb-3" />
+                <p className="font-semibold text-foreground">No engagements found</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                  Try adjusting or clearing your filters to see more project records.
+                </p>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Reset all filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredProjects.map((project) => {
+                  const trackingHref = `/project/${project.id}/tracking`;
+                  return (
+                    <article
+                      key={project.id}
+                      className="group relative flex flex-col justify-between rounded-2xl border border-border bg-card p-5 shadow-xs transition hover:border-primary/40 hover:shadow-soft"
+                    >
+                      <div>
+                        {/* Reference & Status */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-xs font-semibold text-muted-foreground bg-muted/70 px-2.5 py-0.5 rounded-md">
+                            #PRJ-{project.id}
+                          </span>
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusBadgeClass(
+                              project.status,
+                            )}`}
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                            {displayStatus(project.status)}
+                          </span>
+                        </div>
+
+                        {/* Job Scope Title */}
+                        <h3 className="mt-3 text-base font-semibold leading-snug text-foreground">
+                          <Link href={trackingHref} className="hover:text-primary transition-colors">
+                            {capitalizeWords(project.jobTitle) || `Project #${project.id}`}
+                          </Link>
+                        </h3>
+
+                        {/* Client Name & Deadline */}
+                        <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+                          <span>
+                            Client:{" "}
+                            <strong className="font-semibold text-foreground">
+                              {capitalizeWords(project.clientName) || "Verified Client"}
+                            </strong>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            {project.deadline ? formatDateSafely(project.deadline) : "Flexible schedule"}
+                          </span>
+                        </div>
+
+                        {/* Delivery Progress Bar */}
+                        <div className="mt-3.5 rounded-xl border border-border/60 bg-muted/30 p-2.5 text-xs">
+                          <div className="flex items-center justify-between font-medium">
+                            <span className="text-muted-foreground">Delivery Progress</span>
+                            <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                              {project.progress}%
+                            </span>
+                          </div>
+                          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full bg-indigo-600 rounded-full transition-all duration-300"
+                              style={{ width: `${Math.min(100, Math.max(0, project.progress))}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Financial Footer & Action Buttons */}
+                      <div className="mt-4 pt-3.5 border-t border-border flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            Contract Amount
+                          </p>
+                          <p className="font-mono text-sm sm:text-base font-bold text-foreground">
+                            {money(project)}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`/api/portal/projects/${project.id}/export`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground shadow-xs transition hover:bg-muted hover:border-primary/40 cursor-pointer"
+                            title="Download official Project Dossier PDF"
+                          >
+                            <FileDown className="h-3.5 w-3.5 text-primary" />
+                            <span>Dossier PDF</span>
+                          </a>
+                          <Link
+                            href={trackingHref}
+                            className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs transition hover:bg-primary/90"
+                          >
+                            <span>Tracking</span>
+                            <ExternalLink className="h-3 w-3" />
+                          </Link>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            /* View Mode 2: Structured Statement Table */
+            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+              <SelectableReportTable
+                loading={loading}
+                rows={filteredProjects}
+                emptyMessage="No active project records match your criteria."
+                selectedIds={selectedIds}
+                onToggle={toggle}
+                allSelected={allVisibleSelected}
+                onToggleAll={toggleAllVisible}
+                rowLabel={(project) => capitalizeWords(project.jobTitle) || `Project #${project.id}`}
+                columns={[
+                  {
+                    key: "id",
+                    header: "Reference",
+                    render: (project) => (
+                      <span className="font-mono text-xs font-semibold text-muted-foreground">
+                        #PRJ-{project.id}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "jobTitle",
+                    header: "Job Scope",
+                    render: (project) => (
+                      <span className="font-medium text-foreground">
+                        {capitalizeWords(project.jobTitle) || `Project #${project.id}`}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "clientName",
+                    header: "Client",
+                    render: (project) => (
+                      <span className="text-sm font-medium text-muted-foreground">
+                        {capitalizeWords(project.clientName) || "Verified Client"}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "status",
+                    header: "Status",
+                    render: (project) => (
+                      <span
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(
+                          project.status,
+                        )}`}
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                        {displayStatus(project.status)}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "budget",
+                    header: "Contract Amount",
+                    render: (project) => (
+                      <span className="font-mono font-bold text-foreground">{money(project)}</span>
+                    ),
+                  },
+                  {
+                    key: "progress",
+                    header: "Progress",
+                    align: "right",
+                    render: (project) => (
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="w-16 rounded-full bg-muted h-1.5 overflow-hidden hidden sm:block">
+                          <div
+                            className="bg-indigo-600 h-full rounded-full transition-all"
+                            style={{ width: `${Math.min(100, Math.max(0, project.progress))}%` }}
+                          />
+                        </div>
+                        <span className="font-mono text-xs font-semibold text-foreground">
+                          {project.progress}%
+                        </span>
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+            </div>
           )}
-        </div>
-        <div className="font-mono">
-          Total Committed Value:{" "}
-          <span className="font-bold text-foreground">₹{totalContractValue.toLocaleString()}</span>
+
+          {/* Period Reconciliation Summary */}
+          <div className="flex flex-col gap-2 rounded-2xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground">
+            <div>
+              Showing <span className="font-semibold text-foreground">{filteredProjects.length}</span>{" "}
+              of <span className="font-semibold text-foreground">{projects.length}</span> engagements.
+              {selectedList.length > 0 && (
+                <span className="ml-2 font-semibold text-primary">
+                  ({selectedList.length} rows selected for export)
+                </span>
+              )}
+            </div>
+            <div className="font-mono">
+              Total Committed Value:{" "}
+              <span className="font-bold text-foreground">
+                ₹{totalContractValue.toLocaleString("en-IN")}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
