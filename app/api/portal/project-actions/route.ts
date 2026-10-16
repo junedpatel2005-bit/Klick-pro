@@ -1056,10 +1056,20 @@ export async function POST(request: NextRequest) {
           },
           { status: 409 },
         );
-      const milestones = await db.projectMilestone.findMany({ where: { trackingId: project.id } });
-      if (milestones.length === 0 || !milestones.every((item) => item.status === "APPROVED"))
+      const milestones = await db.projectMilestone.findMany({
+        where: { trackingId: project.id },
+        include: { payment: true },
+      });
+      if (
+        milestones.length === 0 ||
+        !milestones.every(
+          (item) =>
+            (item.status === "APPROVED" || item.status === "COMPLETED") &&
+            (item.payment?.status === "COMPLETED" || item.payment?.status === "FUNDED"),
+        )
+      )
         return NextResponse.json(
-          { error: "All milestones must be approved before final work can be submitted." },
+          { error: "All milestones must be approved and funded/paid before final work can be submitted." },
           { status: 409 },
         );
       const attachments = await attachmentsFor(input.attachmentIds);
@@ -1100,16 +1110,29 @@ export async function POST(request: NextRequest) {
     if (input.action === "complete-project") {
       if (project.status === "COMPLETED")
         return NextResponse.json({ error: "This project is already completed." }, { status: 409 });
-      const pendingMilestonesCount = await db.projectMilestone.count({
-        where: {
-          trackingId: project.id,
-          status: { not: "APPROVED" },
-        },
+      const allMilestones = await db.projectMilestone.findMany({
+        where: { trackingId: project.id },
+        include: { payment: true },
       });
-      if (pendingMilestonesCount > 0) {
+      const unapprovedMilestones = allMilestones.filter(
+        (m) => m.status !== "APPROVED" && m.status !== "COMPLETED",
+      );
+      if (unapprovedMilestones.length > 0) {
         return NextResponse.json(
           {
-            error: `Cannot close project yet: there are still ${pendingMilestonesCount} unapproved milestone(s). Please approve all deliverables first.`,
+            error: `Cannot close project yet: there are still ${unapprovedMilestones.length} unapproved milestone(s). Please approve all deliverables first.`,
+          },
+          { status: 409 },
+        );
+      }
+      const unpaidMilestones = allMilestones.filter(
+        (m) => m.payment?.status !== "COMPLETED" && m.payment?.status !== "FUNDED",
+      );
+      if (unpaidMilestones.length > 0) {
+        const remainingAmount = unpaidMilestones.reduce((acc, m) => acc + m.amount, 0);
+        return NextResponse.json(
+          {
+            error: `Cannot close project yet: ₹${remainingAmount.toLocaleString("en-IN")} payment is remaining across ${unpaidMilestones.length} milestone(s). Milestones with remaining payments must be paid before closing the project.`,
           },
           { status: 409 },
         );

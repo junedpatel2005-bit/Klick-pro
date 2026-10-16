@@ -25,8 +25,10 @@ async function sessionFromRequest(request: NextRequest) {
 }
 
 function milestoneProgress(status: string, paymentStatus?: string) {
-  if (status === "APPROVED" || paymentStatus === "COMPLETED") return 100;
-  if (status === "SUBMITTED") return 75;
+  const isPaid = paymentStatus === "COMPLETED" || paymentStatus === "FUNDED";
+  if ((status === "APPROVED" || status === "COMPLETED") && isPaid) return 100;
+  if (status === "APPROVED" && !isPaid) return 50;
+  if (status === "SUBMITTED" || status === "AWAITING_CLIENT_REVIEW") return 75;
   if (status === "IN_PROGRESS") return 50;
   return 0;
 }
@@ -1134,15 +1136,24 @@ export async function GET(
                     ) / project.milestones.length,
                   )
                 : 0,
-          milestones: project.milestones.map((milestone) => ({
-            id: milestone.id,
-            title: milestone.title,
-            status: milestone.status,
-            isCompleted:
-              milestone.status === "APPROVED" ||
-              milestone.status === "COMPLETED" ||
-              milestone.payment?.status === "COMPLETED",
-          })),
+          milestones: project.milestones.map((milestone) => {
+            const isPaymentRemaining =
+              milestone.payment?.status !== "COMPLETED" &&
+              milestone.payment?.status !== "FUNDED";
+            const isCompleted =
+              !isPaymentRemaining &&
+              (milestone.status === "APPROVED" || milestone.status === "COMPLETED");
+            return {
+              id: milestone.id,
+              title: milestone.title,
+              status:
+                isPaymentRemaining &&
+                (milestone.status === "APPROVED" || milestone.status === "COMPLETED")
+                  ? "PENDING_PAYMENT"
+                  : milestone.status,
+              isCompleted,
+            };
+          }),
           currentStage: project.currentStage,
         })),
         completedProjects: completedProjects.map((project) => ({

@@ -53,8 +53,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Milestone record not found." }, { status: 404 });
   }
 
-  // Idempotency: If this milestone was already approved or funded into escrow, return 200 OK
-  if (rawMilestone.status === "APPROVED" || rawMilestone.status === "COMPLETED") {
+  const existingPayment = await db.payment.findFirst({
+    where: { milestoneId: rawMilestone.id },
+  });
+
+  // Idempotency: If this milestone was already funded into escrow or completed, return 200 OK
+  if (
+    existingPayment?.status === "COMPLETED" ||
+    existingPayment?.status === "FUNDED" ||
+    existingPayment?.status === "AWAITING_ADMIN_APPROVAL"
+  ) {
     return NextResponse.json({
       ok: true,
       alreadyProcessed: true,
@@ -65,7 +73,7 @@ export async function POST(request: NextRequest) {
   }
 
   const milestone =
-    ["AWAITING_CLIENT_REVIEW", "REVISION_REQUESTED", "IN_PROGRESS"].includes(rawMilestone.status)
+    ["AWAITING_CLIENT_REVIEW", "REVISION_REQUESTED", "IN_PROGRESS", "APPROVED"].includes(rawMilestone.status)
       ? rawMilestone
       : null;
 
@@ -85,7 +93,7 @@ export async function POST(request: NextRequest) {
           where: {
             id: milestone.id,
             trackingId: project.id,
-            status: { in: ["AWAITING_CLIENT_REVIEW", "REVISION_REQUESTED", "IN_PROGRESS"] },
+            status: { in: ["AWAITING_CLIENT_REVIEW", "REVISION_REQUESTED", "IN_PROGRESS", "APPROVED"] },
           },
           data: { status: "PAYMENT_PROCESSING" },
         });

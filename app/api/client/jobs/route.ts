@@ -215,9 +215,8 @@ export async function GET(request: NextRequest) {
         const total = projectMilestones.length;
         const completed = projectMilestones.filter(
           (m) =>
-            m.status === "APPROVED" ||
-            m.status === "COMPLETED" ||
-            m.payment?.status === "COMPLETED",
+            (m.status === "APPROVED" || m.status === "COMPLETED") &&
+            (m.payment?.status === "COMPLETED" || m.payment?.status === "FUNDED"),
         ).length;
         const remaining = Math.max(0, total - completed);
         const milestoneStats =

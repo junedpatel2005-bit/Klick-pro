@@ -86,7 +86,9 @@ export async function GET(request: NextRequest) {
 
   const allUserProjects = allUserProjectsRaw.map((p) => {
     const completedMilestones = p.milestones.filter(
-      (m) => m.status === "APPROVED" || m.payment?.status === "COMPLETED",
+      (m) =>
+        (m.status === "APPROVED" || m.status === "COMPLETED") &&
+        (m.payment?.status === "COMPLETED" || m.payment?.status === "FUNDED"),
     ).length;
     const totalMilestones = p.milestones.length;
     const isCompleted = p.status === "COMPLETED";
