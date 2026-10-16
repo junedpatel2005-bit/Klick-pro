@@ -174,6 +174,9 @@ export async function GET(request: NextRequest) {
             id: true,
             status: true,
             amount: true,
+            validityDays: true,
+            releaseAt: true,
+            autoReleaseStatus: true,
             payment: { select: { status: true } },
           },
         },
@@ -203,21 +206,34 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       jobs: jobs.map((job) => {
         const project = trackingByJob.get(job.id);
+        const hasActiveValidity = project?.milestones.some(
+          (m) =>
+            Number(m.validityDays) > 0 &&
+            m.payment?.status !== "COMPLETED" &&
+            m.autoReleaseStatus !== "RELEASED" &&
+            (!m.releaseAt || new Date(m.releaseAt).getTime() > Date.now()),
+        );
         const status = project
-          ? project.status === "COMPLETED"
+          ? project.status === "COMPLETED" && !hasActiveValidity
             ? "COMPLETED"
-            : project.status === "CLOSED"
+            : project.status === "CLOSED" && !hasActiveValidity
               ? "CLOSED"
               : "RUNNING"
           : job.status;
 
         const projectMilestones = project?.milestones ?? [];
         const total = projectMilestones.length;
-        const completed = projectMilestones.filter(
-          (m) =>
+        const completed = projectMilestones.filter((m) => {
+          const inValidity =
+            Number(m.validityDays) > 0 &&
+            m.payment?.status !== "COMPLETED" &&
+            m.autoReleaseStatus !== "RELEASED" &&
+            (!m.releaseAt || new Date(m.releaseAt).getTime() > Date.now());
+          return (
             (m.status === "APPROVED" || m.status === "COMPLETED") &&
-            (m.payment?.status === "COMPLETED" || m.payment?.status === "FUNDED"),
-        ).length;
+            (m.payment?.status === "COMPLETED" || (m.payment?.status === "FUNDED" && !inValidity))
+          );
+        }).length;
         const remaining = Math.max(0, total - completed);
         const milestoneStats =
           total > 0

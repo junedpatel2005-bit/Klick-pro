@@ -1137,6 +1137,30 @@ export async function POST(request: NextRequest) {
           { status: 409 },
         );
       }
+      const activeValidityMilestones = allMilestones.filter(
+        (m) =>
+          Number(m.validityDays) > 0 &&
+          m.payment?.status !== "COMPLETED" &&
+          m.autoReleaseStatus !== "RELEASED" &&
+          (!m.releaseAt || new Date(m.releaseAt).getTime() > Date.now()),
+      );
+      const [firstValidity] = activeValidityMilestones;
+      if (firstValidity) {
+        const releaseStr = firstValidity.releaseAt
+          ? new Date(firstValidity.releaseAt).toLocaleDateString("en-IN", {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "soon";
+        return NextResponse.json(
+          {
+            error: `Cannot close project yet: Milestone "${firstValidity.title}" is currently in its ${firstValidity.validityDays}-day inspection validity period. The milestone and project will complete once the inspection period ends on ${releaseStr}.`,
+          },
+          { status: 409 },
+        );
+      }
       const completed = await db.projectTracking.updateMany({
         where: {
           id: project.id,

@@ -244,6 +244,35 @@ function milestoneOverdueDays(milestone: Milestone): number | null {
   const days = Math.ceil(diffMs / 86400000);
   return days > 0 ? days : null;
 }
+function isMilestoneInValidityPeriod(milestone?: Milestone | null): boolean {
+  if (!milestone) return false;
+  const validityDays = Number(milestone.validityDays);
+  if (!validityDays || validityDays <= 0) return false;
+  if (milestone.payment?.status === "COMPLETED") return false;
+  if (milestone.autoReleaseStatus === "RELEASED") return false;
+  if (milestone.releaseAt) {
+    return new Date(milestone.releaseAt).getTime() > Date.now();
+  }
+  return (
+    milestone.payment?.status === "FUNDED" ||
+    milestone.autoReleaseStatus === "PENDING" ||
+    milestone.autoReleaseStatus === "PAUSED_DISPUTE"
+  );
+}
+function getValidityDaysRemaining(releaseAt: string | null | undefined): number {
+  if (!releaseAt) return 0;
+  const diffMs = new Date(releaseAt).getTime() - Date.now();
+  if (diffMs <= 0) return 0;
+  return Math.max(1, Math.ceil(diffMs / 86400000));
+}
+function isMilestoneFullyCompleted(milestone?: Milestone | null): boolean {
+  if (!milestone) return false;
+  if (isMilestoneInValidityPeriod(milestone)) return false;
+  const isPaid =
+    milestone.payment?.status === "COMPLETED" ||
+    (milestone.payment?.status === "FUNDED" && (!milestone.validityDays || Number(milestone.validityDays) <= 0));
+  return (milestone.status === "APPROVED" || milestone.status === "COMPLETED") && isPaid;
+}
 const needsAction = (status: string) =>
   status === "REVISION_REQUESTED" ||
   status === "AWAITING_CLIENT_REVIEW" ||
@@ -795,17 +824,14 @@ export default function SharedProjectTrackingPage() {
     data.milestones.find((m) =>
       ["IN_PROGRESS", "REVISION_REQUESTED", "AWAITING_CLIENT_REVIEW"].includes(m.status),
     ) ||
+    data.milestones.find((m) => isMilestoneInValidityPeriod(m)) ||
     data.milestones.find(
       (m) =>
         m.payment?.status !== "COMPLETED" &&
         m.payment?.status !== "FUNDED",
     ) ||
     data.milestones.find((m) => !["APPROVED", "COMPLETED", "CANCELLED"].includes(m.status));
-  const completed = data.milestones.filter(
-    (m) =>
-      (m.status === "APPROVED" || m.status === "COMPLETED") &&
-      (m.payment?.status === "COMPLETED" || m.payment?.status === "FUNDED"),
-  ).length;
+  const completed = data.milestones.filter(isMilestoneFullyCompleted).length;
   const remaining = data.job?.deadline
     ? Math.ceil((new Date(data.job.deadline).getTime() - Date.now()) / 86400000)
     : null;
@@ -821,11 +847,7 @@ export default function SharedProjectTrackingPage() {
   const remainingMilestoneAmount = unassignedMilestoneAmount;
   const canFinal =
     data.milestones.length > 0 &&
-    data.milestones.every(
-      (m) =>
-        (m.status === "APPROVED" || m.status === "COMPLETED") &&
-        (m.payment?.status === "COMPLETED" || m.payment?.status === "FUNDED"),
-    ) &&
+    data.milestones.every(isMilestoneFullyCompleted) &&
     unassignedMilestoneAmount === 0;
 
   const pendingMilestone = data.milestones.find((m) => m.status === "PENDING_CONFIRMATION");
@@ -1478,11 +1500,7 @@ export default function SharedProjectTrackingPage() {
         : 0),
     0,
   );
-  const completedMilestones = data.milestones.filter(
-    (m) =>
-      (m.status === "APPROVED" || m.status === "COMPLETED") &&
-      (m.payment?.status === "COMPLETED" || m.payment?.status === "FUNDED"),
-  );
+  const completedMilestones = data.milestones.filter(isMilestoneFullyCompleted);
   const remainingProjectBalance = Math.max(
     0,
     (totalMilestoneValue > 0 ? totalMilestoneValue : totalAgreed) - clientPaidMilestoneTotal,
@@ -2858,16 +2876,15 @@ export default function SharedProjectTrackingPage() {
                             d.status !== "CLOSED",
                         ),
                       );
-                      const isMilestoneCompleted =
-                        (milestone?.status === "APPROVED" || milestone?.status === "COMPLETED") &&
-                        (milestone?.payment?.status === "COMPLETED" ||
-                          milestone?.payment?.status === "FUNDED");
-                      const filled = isMilestoneCompleted;
+                      const isCompleted = isMilestoneFullyCompleted(milestone);
+                      const inValidity = isMilestoneInValidityPeriod(milestone);
                       const isPendingPayment =
+                        !inValidity &&
                         (milestone?.status === "APPROVED" || milestone?.status === "COMPLETED") &&
                         milestone?.payment?.status !== "COMPLETED" &&
                         milestone?.payment?.status !== "FUNDED";
                       const active =
+                        inValidity ||
                         isPendingPayment ||
                         (milestone &&
                           ["IN_PROGRESS", "REVISION_REQUESTED", "AWAITING_CLIENT_REVIEW"].includes(
@@ -2879,13 +2896,15 @@ export default function SharedProjectTrackingPage() {
                           className={`h-full flex-1 rounded-full transition-all duration-300 ${
                             isDisputed
                               ? "bg-rose-500 animate-pulse"
-                              : filled
+                              : isCompleted
                                 ? "bg-emerald-500"
-                                : milestone?.status === "REVISION_REQUESTED"
-                                  ? "bg-rose-500"
-                                  : active
-                                    ? "bg-amber-400"
-                                    : "bg-muted-foreground/20"
+                                : inValidity
+                                  ? "bg-indigo-500 animate-pulse"
+                                  : milestone?.status === "REVISION_REQUESTED"
+                                    ? "bg-rose-500"
+                                    : active
+                                      ? "bg-amber-400"
+                                      : "bg-muted-foreground/20"
                           }`}
                         />
                       );
@@ -2908,13 +2927,12 @@ export default function SharedProjectTrackingPage() {
                     const pct = totalAgreed > 0 ? Math.round((m.amount / totalAgreed) * 100) : 0;
                     const isPaymentRemaining =
                       m.payment?.status !== "COMPLETED" && m.payment?.status !== "FUNDED";
-                    const isApproved =
-                      !isPaymentRemaining &&
-                      (m.status === "APPROVED" ||
-                        m.status === "COMPLETED" ||
-                        m.status === "AWAITING_ADMIN_APPROVAL");
+                    const inValidity = isMilestoneInValidityPeriod(m);
                     const isPendingPayment =
-                      isPaymentRemaining && (m.status === "APPROVED" || m.status === "COMPLETED");
+                      !inValidity &&
+                      isPaymentRemaining &&
+                      (m.status === "APPROVED" || m.status === "COMPLETED");
+                    const isApproved = isMilestoneFullyCompleted(m);
                     const isAwaitingReview = m.status === "AWAITING_CLIENT_REVIEW";
                     const isAwaitingAdmin = false;
                     const isRevision = m.status === "REVISION_REQUESTED";
@@ -2922,16 +2940,12 @@ export default function SharedProjectTrackingPage() {
                       index === 0 ||
                       data.milestones
                         .slice(0, index)
-                        .every(
-                          (prev) =>
-                            (prev.status === "APPROVED" || prev.status === "COMPLETED") &&
-                            (prev.payment?.status === "COMPLETED" ||
-                              prev.payment?.status === "FUNDED"),
-                        );
+                        .every(isMilestoneFullyCompleted);
                     const isCurrentActive = current?.id === m.id;
                     const isInProgress =
                       m.status === "IN_PROGRESS" ||
                       (!isApproved &&
+                        !inValidity &&
                         !isPendingPayment &&
                         !isAwaitingReview &&
                         !isRevision &&
@@ -2939,6 +2953,7 @@ export default function SharedProjectTrackingPage() {
                         isCurrentActive);
                     const isEligibleToWork =
                       !isApproved &&
+                      !inValidity &&
                       !isPendingPayment &&
                       (["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status) ||
                         isPrecedingApproved);
@@ -2972,17 +2987,19 @@ export default function SharedProjectTrackingPage() {
                               ? "ring-2 ring-primary ring-offset-2 ring-offset-background border-primary/60 shadow-lg"
                               : isApproved
                                 ? "border-emerald-500/30 hover:border-emerald-500/50"
-                                : isPendingPayment
-                                  ? "border-amber-500/40 hover:border-amber-500/60 bg-amber-500/[0.02]"
-                                  : isAwaitingAdmin
-                                    ? "border-indigo-500/30 hover:border-indigo-500/50"
-                                    : isAwaitingReview
-                                      ? "border-purple-500/30 hover:border-purple-500/50"
-                                      : isRevision
-                                        ? "border-rose-500/30 hover:border-rose-500/50"
-                                        : isInProgress
-                                          ? "border-amber-500/30 hover:border-amber-500/50"
-                                          : "border-border"
+                                : inValidity
+                                  ? "border-indigo-500/40 hover:border-indigo-500/60 bg-indigo-500/[0.02] ring-1 ring-indigo-500/20"
+                                  : isPendingPayment
+                                    ? "border-amber-500/40 hover:border-amber-500/60 bg-amber-500/[0.02]"
+                                    : isAwaitingAdmin
+                                      ? "border-indigo-500/30 hover:border-indigo-500/50"
+                                      : isAwaitingReview
+                                        ? "border-purple-500/30 hover:border-purple-500/50"
+                                        : isRevision
+                                          ? "border-rose-500/30 hover:border-rose-500/50"
+                                          : isInProgress
+                                            ? "border-amber-500/30 hover:border-amber-500/50"
+                                            : "border-border"
                         }`}
                       >
                         {/* Top Row: Index, Title, Amount & Status */}
@@ -2994,15 +3011,17 @@ export default function SharedProjectTrackingPage() {
                                   ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
                                   : isApproved
                                     ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                                    : isPendingPayment
-                                      ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30"
-                                      : isAwaitingAdmin
-                                        ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
-                                        : isAwaitingReview
-                                          ? "bg-purple-500/10 text-purple-700 dark:text-purple-400"
-                                          : isInProgress
-                                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                                            : "bg-primary/10 text-primary"
+                                    : inValidity
+                                      ? "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-500/30"
+                                      : isPendingPayment
+                                        ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30"
+                                        : isAwaitingAdmin
+                                          ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
+                                          : isAwaitingReview
+                                            ? "bg-purple-500/10 text-purple-700 dark:text-purple-400"
+                                            : isInProgress
+                                              ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                              : "bg-primary/10 text-primary"
                               }`}
                             >
                               {isMilestoneDisputed ? (
@@ -3049,25 +3068,43 @@ export default function SharedProjectTrackingPage() {
                                 </span>
                               )}
                             </div>
-                            {(m.payment || isApproved || isMilestoneDisputed || isPendingPayment || isPaymentRemaining) && (
+                            {(m.payment || isApproved || isMilestoneDisputed || inValidity || isPendingPayment || isPaymentRemaining) && (
                               <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Wallet className={`h-3.5 w-3.5 ${isMilestoneDisputed ? "text-rose-600" : isPaymentRemaining ? "text-amber-600" : "text-emerald-600"}`} />
+                                <Wallet
+                                  className={`h-3.5 w-3.5 ${
+                                    isMilestoneDisputed
+                                      ? "text-rose-600"
+                                      : inValidity
+                                        ? "text-indigo-600"
+                                        : isPaymentRemaining
+                                          ? "text-amber-600"
+                                          : "text-emerald-600"
+                                  }`}
+                                />
                                 <span>
                                   {isClient ? "Payment: " : "Payout: "}
-                                  <strong className={`font-semibold ${isMilestoneDisputed ? "text-rose-600 dark:text-rose-400 font-bold" : isPaymentRemaining ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>
+                                  <strong
+                                    className={`font-semibold ${
+                                      isMilestoneDisputed
+                                        ? "text-rose-600 dark:text-rose-400 font-bold"
+                                        : inValidity
+                                          ? "text-indigo-600 dark:text-indigo-400 font-bold"
+                                          : isPaymentRemaining
+                                            ? "text-amber-600 dark:text-amber-400"
+                                            : "text-foreground"
+                                    }`}
+                                  >
                                     {isMilestoneDisputed
                                       ? "Frozen (Disputed)"
-                                      : isPaymentRemaining
-                                        ? `Pending (₹${m.amount.toLocaleString("en-IN")} Remaining)`
-                                        : isClient
-                                          ? "Paid"
-                                          : m.payment?.status === "COMPLETED"
-                                            ? "Paid Out"
-                                            : m.payment?.status === "FUNDED"
-                                              ? "Funded"
-                                              : isApproved
-                                                ? "Approved"
-                                                : (m.payment?.status ?? "Pending")}
+                                      : inValidity
+                                        ? `Escrow Held · Validity Period (${getValidityDaysRemaining(m.releaseAt)}d left)`
+                                        : isPaymentRemaining
+                                          ? `Pending (₹${m.amount.toLocaleString("en-IN")} Remaining)`
+                                          : isClient
+                                            ? "Paid"
+                                            : m.payment?.status === "COMPLETED"
+                                              ? "Paid Out"
+                                              : "Funded"}
                                   </strong>
                                 </span>
                               </p>
@@ -3211,28 +3248,32 @@ export default function SharedProjectTrackingPage() {
                                 ? "border-rose-500/30 bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold"
                                 : isApproved
                                   ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                                  : isPendingPayment
-                                    ? "border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-400 font-semibold"
-                                    : isAwaitingAdmin
-                                      ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
-                                      : isAwaitingReview
-                                        ? "border-purple-500/20 bg-purple-500/10 text-purple-700 dark:text-purple-400"
-                                        : isRevision
-                                          ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
-                                          : isInProgress
-                                            ? "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                                            : "border-border bg-muted/60 text-muted-foreground"
+                                  : inValidity
+                                    ? "border-indigo-500/30 bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 font-semibold"
+                                    : isPendingPayment
+                                      ? "border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-400 font-semibold"
+                                      : isAwaitingAdmin
+                                        ? "border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
+                                        : isAwaitingReview
+                                          ? "border-purple-500/20 bg-purple-500/10 text-purple-700 dark:text-purple-400"
+                                          : isRevision
+                                            ? "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400"
+                                            : isInProgress
+                                              ? "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                              : "border-border bg-muted/60 text-muted-foreground"
                             }`}
                           >
                             {isMilestoneDisputed && <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />}
                             {!isMilestoneDisputed && isApproved && <CheckCircle2 className="h-3.5 w-3.5" />}
-                            {!isMilestoneDisputed && isPendingPayment && <Clock3 className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />}
+                            {!isMilestoneDisputed && inValidity && <Clock3 className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 animate-pulse" />}
+                            {!isMilestoneDisputed && !inValidity && isPendingPayment && <Clock3 className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />}
                             {!isMilestoneDisputed && isAwaitingAdmin && <Clock3 className="h-3.5 w-3.5" />}
                             {!isMilestoneDisputed && isAwaitingReview && <Sparkles className="h-3.5 w-3.5" />}
                             {!isMilestoneDisputed && isRevision && <AlertCircle className="h-3.5 w-3.5" />}
                             {!isMilestoneDisputed && isInProgress && <Clock3 className="h-3.5 w-3.5" />}
                             {!isMilestoneDisputed &&
                               !isApproved &&
+                              !inValidity &&
                               !isPendingPayment &&
                               !isAwaitingAdmin &&
                               !isAwaitingReview &&
@@ -3246,11 +3287,13 @@ export default function SharedProjectTrackingPage() {
                                   : m.payment?.status === "COMPLETED"
                                     ? "Done · Paid Out"
                                     : "Done · Escrow Funded"
-                                : isPendingPayment
-                                  ? "Pending Payment"
-                                  : isInProgress
-                                    ? "In Progress"
-                                    : label(m.status)}
+                                : inValidity
+                                  ? `Approved · Validity Period (${getValidityDaysRemaining(m.releaseAt)}d left)`
+                                  : isPendingPayment
+                                    ? "Pending Payment"
+                                    : isInProgress
+                                      ? "In Progress"
+                                      : label(m.status)}
                           </span>
                           {overdueDays !== null && !isMilestoneDisputed && (
                             <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">

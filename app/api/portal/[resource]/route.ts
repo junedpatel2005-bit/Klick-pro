@@ -24,8 +24,20 @@ async function sessionFromRequest(request: NextRequest) {
   }
 }
 
-function milestoneProgress(status: string, paymentStatus?: string) {
-  const isPaid = paymentStatus === "COMPLETED" || paymentStatus === "FUNDED";
+function milestoneProgress(
+  status: string,
+  paymentStatus?: string,
+  validityDays?: number,
+  releaseAt?: Date | string | null,
+  autoReleaseStatus?: string | null,
+) {
+  const inValidity =
+    Number(validityDays) > 0 &&
+    paymentStatus !== "COMPLETED" &&
+    autoReleaseStatus !== "RELEASED" &&
+    (!releaseAt || new Date(releaseAt).getTime() > Date.now());
+  if (inValidity) return 75;
+  const isPaid = paymentStatus === "COMPLETED" || (paymentStatus === "FUNDED" && !inValidity);
   if ((status === "APPROVED" || status === "COMPLETED") && isPaid) return 100;
   if (status === "APPROVED" && !isPaid) return 50;
   if (status === "SUBMITTED" || status === "AWAITING_CLIENT_REVIEW") return 75;
@@ -1131,24 +1143,39 @@ export async function GET(
                 ? Math.round(
                     project.milestones.reduce(
                       (total, milestone) =>
-                        total + milestoneProgress(milestone.status, milestone.payment?.status),
+                        total +
+                        milestoneProgress(
+                          milestone.status,
+                          milestone.payment?.status,
+                          milestone.validityDays,
+                          milestone.releaseAt,
+                          milestone.autoReleaseStatus,
+                        ),
                       0,
                     ) / project.milestones.length,
                   )
                 : 0,
           milestones: project.milestones.map((milestone) => {
+            const inValidity =
+              Number(milestone.validityDays) > 0 &&
+              milestone.payment?.status !== "COMPLETED" &&
+              milestone.autoReleaseStatus !== "RELEASED" &&
+              (!milestone.releaseAt || new Date(milestone.releaseAt).getTime() > Date.now());
+
             const isPaymentRemaining =
               milestone.payment?.status !== "COMPLETED" &&
               milestone.payment?.status !== "FUNDED";
             const isCompleted =
               !isPaymentRemaining &&
+              !inValidity &&
               (milestone.status === "APPROVED" || milestone.status === "COMPLETED");
             return {
               id: milestone.id,
               title: milestone.title,
-              status:
-                isPaymentRemaining &&
-                (milestone.status === "APPROVED" || milestone.status === "COMPLETED")
+              status: inValidity
+                ? "VALIDITY_HOLD"
+                : isPaymentRemaining &&
+                  (milestone.status === "APPROVED" || milestone.status === "COMPLETED")
                   ? "PENDING_PAYMENT"
                   : milestone.status,
               isCompleted,
@@ -1303,6 +1330,38 @@ export async function GET(
         });
         project.status = "IN_PROGRESS";
         project.currentStage = activeWorkMilestone.title;
+      }
+
+      // Self-healing: If any milestone is currently in active validity period (funded/approved, awaiting releaseAt),
+      // the project MUST NOT be in COMPLETED or CLOSED status. Restore project to IN_PROGRESS so tracking and escrow validity are active.
+      const activeValidityMilestone = milestones.find(
+        (m) =>
+          Number(m.validityDays) > 0 &&
+          m.payment?.status !== "COMPLETED" &&
+          m.autoReleaseStatus !== "RELEASED" &&
+          (!m.releaseAt || new Date(m.releaseAt).getTime() > Date.now()),
+      );
+      if (
+        activeValidityMilestone &&
+        (project.status === "COMPLETED" || project.status === "CLOSED")
+      ) {
+        await db.projectTracking.update({
+          where: { id: project.id },
+          data: {
+            status: "IN_PROGRESS",
+            currentStage: `${activeValidityMilestone.title} (Validity Period)`,
+            completedAt: null,
+          },
+        });
+        project.status = "IN_PROGRESS";
+        project.currentStage = `${activeValidityMilestone.title} (Validity Period)`;
+        project.completedAt = null;
+        if (project.jobId) {
+          await db.clientJob.updateMany({
+            where: { id: project.jobId, status: "CLOSED" },
+            data: { status: "OPEN" },
+          });
+        }
       }
       const [
         job,

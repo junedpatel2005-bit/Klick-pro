@@ -77,6 +77,9 @@ export async function GET(request: NextRequest) {
               select: {
                 id: true,
                 status: true,
+                validityDays: true,
+                releaseAt: true,
+                autoReleaseStatus: true,
                 payment: { select: { status: true } },
               },
             },
@@ -85,17 +88,30 @@ export async function GET(request: NextRequest) {
         });
 
   const allUserProjects = allUserProjectsRaw.map((p) => {
-    const completedMilestones = p.milestones.filter(
+    const hasActiveValidity = p.milestones.some(
       (m) =>
+        Number(m.validityDays) > 0 &&
+        m.payment?.status !== "COMPLETED" &&
+        m.autoReleaseStatus !== "RELEASED" &&
+        (!m.releaseAt || new Date(m.releaseAt).getTime() > Date.now()),
+    );
+    const completedMilestones = p.milestones.filter((m) => {
+      const inValidity =
+        Number(m.validityDays) > 0 &&
+        m.payment?.status !== "COMPLETED" &&
+        m.autoReleaseStatus !== "RELEASED" &&
+        (!m.releaseAt || new Date(m.releaseAt).getTime() > Date.now());
+      return (
         (m.status === "APPROVED" || m.status === "COMPLETED") &&
-        (m.payment?.status === "COMPLETED" || m.payment?.status === "FUNDED"),
-    ).length;
+        (m.payment?.status === "COMPLETED" || (m.payment?.status === "FUNDED" && !inValidity))
+      );
+    }).length;
     const totalMilestones = p.milestones.length;
-    const isCompleted = p.status === "COMPLETED";
+    const isCompleted = p.status === "COMPLETED" && !hasActiveValidity;
     const calcProgress = isCompleted
       ? 100
       : totalMilestones > 0
-        ? Math.max(p.progress, Math.round((completedMilestones / totalMilestones) * 100))
+        ? Math.round((completedMilestones / totalMilestones) * 100)
         : p.progress;
 
     return {
