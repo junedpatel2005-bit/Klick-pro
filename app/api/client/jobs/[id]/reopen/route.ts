@@ -88,6 +88,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       );
     }
 
+    // Limit maximum consecutive reopens to 3 per job post to prevent unbounded reworks
+    const reopenCount = (job.description?.match(/\[REOPENED:/g) || []).length;
+    if (reopenCount >= 3) {
+      return NextResponse.json(
+        {
+          error:
+            "This job has reached the maximum limit of 3 reopens. Please post a new job for further work.",
+        },
+        { status: 400 },
+      );
+    }
+
     const reasonLabel = reason === "ISSUE" ? "Issue / Warranty Rework" : "Additional Work";
     const timestamp = new Date().toLocaleDateString("en-IN", {
       day: "numeric",
@@ -95,7 +107,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       year: "numeric",
     });
     const appendNote = `\n\n--- [REOPENED: ${reasonLabel} (${timestamp})] ---\nWork Needed: ${workDescription}\nOffered Amount: ₹${amount.toLocaleString("en-IN")}`;
-    const updatedDescription = (job.description ? job.description.trim() : "") + appendNote;
+    const baseDesc = job.description ? job.description.trim() : "";
+    const maxBaseLen = Math.max(0, 4500 - appendNote.length);
+    const safeBaseDesc = baseDesc.length > maxBaseLen ? baseDesc.slice(0, maxBaseLen) + "..." : baseDesc;
+    const updatedDescription = safeBaseDesc + appendNote;
 
     const previousTracking = job.projectTrackings[0];
     const previousPro = previousTracking?.professional;

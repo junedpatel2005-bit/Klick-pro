@@ -105,16 +105,35 @@ export async function POST(request: NextRequest) {
 
         if (hasValidityHold) {
           // Validity Hold (e.g. 3, 5, or 7 days):
-          // DO NOT CUT MONEY FROM CLIENT WALLET TODAY!
-          // Client wallet balance remains untouched today.
-          // Money will be automatically debited and released after validityDays elapse,
-          // provided no dispute is open.
+          // Verify client has sufficient balance and lock funds into Platform Escrow.
+          // Funds remain safely in escrow during the inspection period.
+          // If no dispute is opened within validityDays, funds are auto-released to the professional.
+          const clientWallet = await tx.wallet.findUnique({
+            where: { userId: project.clientId },
+            select: { balance: true },
+          });
+          if (!clientWallet || clientWallet.balance < money.clientChargeAmount) {
+            throw new Error(
+              `Insufficient wallet balance. You need ₹${money.clientChargeAmount.toLocaleString("en-IN")} to fund escrow for this milestone.`,
+            );
+          }
+
+          await fundMilestoneFromWallet(tx, {
+            paymentId: payment.id,
+            clientId: project.clientId,
+            professionalId: project.professionalId,
+            baseAmount: milestone.amount,
+            milestoneId: milestone.id,
+            customCommissionRate: commissionRate,
+            allowNegativeBalance: false,
+          });
+
           releaseAtDate = new Date(Date.now() + (milestone.validityDays ?? 0) * 86400000);
           await tx.payment.update({
             where: { id: payment.id },
             data: {
-              status: "PENDING",
-              capturedAt: null,
+              status: "FUNDED",
+              capturedAt: new Date(),
               professionalPayoutAmount: money.professionalPayoutAmount,
               commissionAmount: money.professionalFeeAmount,
               adminNetAmount: money.adminNetAmount,
@@ -136,7 +155,7 @@ export async function POST(request: NextRequest) {
               actorId: project.clientId,
               type: "MILESTONE_APPROVED",
               title: `Milestone approved (${milestone.validityDays}-day inspection period)`,
-              description: `Client approved "${milestone.title}". ${milestone.validityDays}-day inspection active. No funds were debited today; payment will be deducted and released after ${milestone.validityDays} days if no dispute is opened.`,
+              description: `Client approved "${milestone.title}". Funds (₹${money.clientChargeAmount.toLocaleString("en-IN")}) held safely in platform escrow during the ${milestone.validityDays}-day inspection period. Payment will be released to the professional after ${milestone.validityDays} days if no dispute is opened.`,
             },
           });
 
@@ -174,6 +193,17 @@ export async function POST(request: NextRequest) {
           }
         } else if (autopay) {
           // Instant Auto-Pay (Validity: None / 0 days):
+          // Verify balance first, debit into escrow, and release to professional immediately
+          const clientWallet = await tx.wallet.findUnique({
+            where: { userId: project.clientId },
+            select: { balance: true },
+          });
+          if (!clientWallet || clientWallet.balance < money.clientChargeAmount) {
+            throw new Error(
+              `Insufficient wallet balance. You need ₹${money.clientChargeAmount.toLocaleString("en-IN")} to approve this milestone.`,
+            );
+          }
+
           // Debit from client wallet into platform escrow
           await fundMilestoneFromWallet(tx, {
             paymentId: payment.id,
@@ -182,7 +212,7 @@ export async function POST(request: NextRequest) {
             baseAmount: milestone.amount,
             milestoneId: milestone.id,
             customCommissionRate: commissionRate,
-            allowNegativeBalance: true,
+            allowNegativeBalance: false,
           });
 
           // Immediately credit to professional wallet directly

@@ -293,7 +293,7 @@ export async function listProfessionals(): Promise<MarketplaceProfessional[]> {
 }
 
 export async function listOpenJobs(): Promise<MarketplaceJob[]> {
-  const [runningJobs, acceptedRequests] = await Promise.all([
+  const [runningJobs, acceptedRequests, pendingDirectHires] = await Promise.all([
     db.projectTracking.findMany({
       select: { jobId: true },
     }),
@@ -301,10 +301,15 @@ export async function listOpenJobs(): Promise<MarketplaceJob[]> {
       where: { status: "ACCEPTED" },
       select: { jobId: true },
     }),
+    db.projectRequest.findMany({
+      where: { origin: "CLIENT_HIRE", status: "PENDING" },
+      select: { jobId: true },
+    }),
   ]);
   const hiddenJobIds = new Set([
     ...runningJobs.map((project) => project.jobId),
     ...acceptedRequests.map((request) => request.jobId),
+    ...pendingDirectHires.map((request) => request.jobId),
   ]);
 
   const jobs = await db.clientJob.findMany({

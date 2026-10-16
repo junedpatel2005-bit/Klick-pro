@@ -1195,6 +1195,21 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const jobRecord = await db.clientJob.findUnique({
+        where: { id: project.jobId },
+        select: { description: true },
+      });
+      const reopenCount = (jobRecord?.description?.match(/\[REOPENED:/g) || []).length;
+      if (reopenCount >= 3) {
+        return NextResponse.json(
+          {
+            error:
+              "Maximum limit of 3 reopens reached for this project. Please create a new contract.",
+          },
+          { status: 400 },
+        );
+      }
+
       const reasonLabel = input.reason === "ISSUE" ? "Warranty Fix / Rework" : "Additional Work";
       const timestamp = new Date().toLocaleDateString("en-IN", {
         day: "numeric",
@@ -1629,6 +1644,17 @@ export async function POST(request: NextRequest) {
             throw new Error("ACTIVE_DISPUTE_EXISTS");
           }
           const disputeRound = disputeCount + 1;
+          let disputeMessage = input.message;
+          if (input.milestoneId) {
+            const targetMilestone = await tx.projectMilestone.findUnique({
+              where: { id: input.milestoneId },
+              select: { autoReleaseStatus: true, title: true },
+            });
+            if (targetMilestone?.autoReleaseStatus === "RELEASED") {
+              disputeMessage = `[POST-RELEASE DISPUTE: Inspection validity period elapsed and funds were previously released for "${targetMilestone.title}"]\n\n${input.message}`;
+            }
+          }
+
           const created = await tx.projectDispute.create({
             data: {
               trackingId: project.id,
@@ -1638,7 +1664,7 @@ export async function POST(request: NextRequest) {
               professionalId: project.professionalId,
               issueType: input.issueType,
               priority: input.priority ?? "MEDIUM",
-              message: input.message,
+              message: disputeMessage,
               attachmentsJson,
               status: "WAITING_RESPONSE",
               disputeRound,

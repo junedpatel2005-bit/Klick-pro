@@ -86,18 +86,20 @@ export async function processMilestoneValidityReleases(trackingId?: number) {
             const commissionRate = await getPlatformCommissionRate();
             const money = calculateMilestoneMoney(milestone.amount, commissionRate);
 
-            // Step 1: Debit from client wallet (with negative balance enabled)
-            await fundMilestoneFromWallet(tx, {
-              paymentId: payment.id,
-              clientId: milestone.clientId,
-              professionalId: milestone.professionalId,
-              baseAmount: milestone.amount,
-              milestoneId: milestone.id,
-              customCommissionRate: commissionRate,
-              allowNegativeBalance: true,
-            });
+            // Step 1: If not already held in escrow, debit from client wallet (no negative overdraft)
+            if (payment.status !== "FUNDED") {
+              await fundMilestoneFromWallet(tx, {
+                paymentId: payment.id,
+                clientId: milestone.clientId,
+                professionalId: milestone.professionalId,
+                baseAmount: milestone.amount,
+                milestoneId: milestone.id,
+                customCommissionRate: commissionRate,
+                allowNegativeBalance: false,
+              });
+            }
 
-            // Step 2: Release to professional wallet
+            // Step 2: Release from platform escrow to professional wallet
             await releaseMilestoneToProfessional(tx, {
               paymentId: payment.id,
               clientId: milestone.clientId,

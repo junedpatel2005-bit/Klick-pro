@@ -97,6 +97,20 @@ export async function POST(request: NextRequest) {
         { error: "You cannot send a proposal to your own job." },
         { status: 403 },
       );
+    const pendingDirectHire = await db.projectRequest.findFirst({
+      where: {
+        jobId: job.id,
+        origin: "CLIENT_HIRE",
+        status: "PENDING",
+      },
+      select: { professionalId: true },
+    });
+    if (pendingDirectHire && pendingDirectHire.professionalId !== session.userId) {
+      return NextResponse.json(
+        { error: "This job currently has a private direct-hire offer pending with another professional." },
+        { status: 409 },
+      );
+    }
     const hourlyProjectTotal =
       job.timingType === "HOURLY" && parsed.data.hourlyRate && parsed.data.totalJobHours
         ? parsed.data.hourlyRate * parsed.data.totalJobHours

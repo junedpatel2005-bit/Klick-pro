@@ -4,9 +4,16 @@ import { db } from "@/lib/db";
 export const runtime = "nodejs";
 
 export async function GET() {
+  const pendingDirectHires = await db.projectRequest.findMany({
+    where: { origin: "CLIENT_HIRE", status: "PENDING" },
+    select: { jobId: true },
+  });
+  const hiddenJobIds = new Set(pendingDirectHires.map((req) => req.jobId));
+
   const jobs = await db.clientJob.findMany({
     where: {
       status: "OPEN",
+      ...(hiddenJobIds.size > 0 ? { id: { notIn: [...hiddenJobIds] } } : {}),
       AND: [
         { OR: [{ jobDate: null }, { jobDate: { lte: new Date() } }] },
         { OR: [{ deadline: null }, { deadline: { gte: new Date() } }] },
