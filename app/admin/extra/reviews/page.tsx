@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Star,
@@ -20,6 +20,8 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+import { capitalizeWords } from "@/lib/utils";
 
 type ReviewItem = {
   id: number;
@@ -64,6 +66,18 @@ export default function ReviewModerationPage() {
   const [editingReview, setEditingReview] = useState<ReviewItem | null>(null);
   const [editComment, setEditComment] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [ratingFilter, search]);
+
+  const paginatedReviews = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return reviews.slice(start, start + PAGE_SIZE);
+  }, [reviews, page]);
 
   async function fetchReviews() {
     setLoading(true);
@@ -273,7 +287,7 @@ export default function ReviewModerationPage() {
             </p>
           </div>
         ) : (
-          reviews.map((r) => (
+          paginatedReviews.map((r) => (
             <div
               key={r.id}
               className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs space-y-4 hover:border-slate-300 transition"
@@ -318,7 +332,7 @@ export default function ReviewModerationPage() {
                       Client Feedback
                     </span>
                     <span className="text-[11px] font-semibold text-slate-500">
-                      by {r.clientName}
+                      by {capitalizeWords(r.clientName)}
                     </span>
                   </div>
 
@@ -351,7 +365,7 @@ export default function ReviewModerationPage() {
                       Professional Feedback
                     </span>
                     <span className="text-[11px] font-semibold text-slate-500">
-                      by {r.professionalName}
+                      by {capitalizeWords(r.professionalName)}
                     </span>
                   </div>
 
@@ -406,6 +420,15 @@ export default function ReviewModerationPage() {
               </div>
             </div>
           ))
+        )}
+        {!loading && reviews.length > 0 && (
+          <AdminPagination
+            currentPage={page}
+            totalItems={reviews.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            className="mt-4"
+          />
         )}
       </div>
 

@@ -15,6 +15,7 @@
     "db:restore": "node --conditions=react-server --import tsx scripts/backup-database.ts --restore",
     "check:razorpay": "tsx scripts/check-razorpay-sandbox.ts",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed-categories": "tsx scripts/seed-category-hierarchy.ts",
     "db:add-subcategory-jobs": "tsx scripts/add-faker-subcategory-jobs.ts",
     "db:add-juned-jobs": "tsx scripts/add-faker-jobs-for-juned.ts",
     "db:add-faker-clients": "tsx scripts/add-faker-clients.ts",

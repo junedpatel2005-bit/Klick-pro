@@ -9,7 +9,7 @@ import {
   Clock,
   MapPin,
   Calendar,
-  DollarSign,
+  IndianRupee,
   FileText,
   Paperclip,
   AlertTriangle,
@@ -34,6 +34,7 @@ import {
   Download,
   FileDown,
 } from "lucide-react";
+import { capitalizeWords, capitalizeFirst, formatReadableLabel } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -68,6 +69,7 @@ export type JobMilestoneView = {
   percentage: number;
   amount?: number | null;
   description?: string | null;
+  validityDays?: number | null;
 };
 
 type OwnerJob = {
@@ -1062,19 +1064,19 @@ export default function JobDetails({
           <div className="flex flex-wrap gap-2 text-xs">
             {job.mainCategory && job.mainCategory !== job.category && (
               <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">
-                {job.mainCategory}
+                {capitalizeWords(job.mainCategory)}
               </span>
             )}
             {job.categorySegment && (
-              <span className="rounded-full bg-muted px-3 py-1 capitalize">
-                {job.categorySegment.toLowerCase()}
+              <span className="rounded-full bg-muted px-3 py-1">
+                {formatReadableLabel(job.categorySegment)}
               </span>
             )}
             <span className="rounded-full bg-primary/10 px-3 py-1 text-primary">
-              {job.category}
+              {capitalizeWords(job.category)}
             </span>
             <span className="rounded-full bg-muted px-3 py-1">
-              {job.urgency.toLowerCase()} urgency
+              {job.urgency ? `${formatReadableLabel(job.urgency)} Urgency` : "Standard Urgency"}
             </span>
             {job.status && (
               <span
@@ -1086,7 +1088,7 @@ export default function JobDetails({
                       : "bg-muted"
                 }`}
               >
-                {job.status.toLowerCase()}
+                {formatReadableLabel(job.status)}
               </span>
             )}
             <span className="rounded-full bg-blue/10 px-3 py-1 text-blue">
@@ -1125,7 +1127,7 @@ export default function JobDetails({
             </DropdownMenu>
           )}
         </div>
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight">{job.title}</h1>
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight">{capitalizeWords(job.title)}</h1>
         <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <MapPin className="h-4 w-4" />
@@ -1147,7 +1149,7 @@ export default function JobDetails({
         <dl className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-border p-4">
             <dt className="text-xs text-muted-foreground flex items-center gap-1">
-              <DollarSign className="h-3 w-3" />
+              <IndianRupee className="h-3.5 w-3.5" />
               Budget
             </dt>
             <dd className="mt-1 font-semibold">{formatBudget(job)}</dd>
@@ -1157,7 +1159,7 @@ export default function JobDetails({
               <MapPin className="h-3 w-3" />
               Work mode
             </dt>
-            <dd className="mt-1 font-semibold">{job.workMode.replace("_", " ")}</dd>
+            <dd className="mt-1 font-semibold">{formatReadableLabel(job.workMode)}</dd>
           </div>
           {jobDateFormatted && (
             <div className="rounded-xl border border-border p-4">
@@ -1295,39 +1297,52 @@ export default function JobDetails({
               </h2>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Payment milestones defined by the client for this project
+              Payment milestones and escrow validity periods defined by the client for this project
             </p>
             <div className="mt-4 space-y-3">
-              {job.milestones.map((milestone, idx) => (
-                <div
-                  key={milestone.id ?? idx}
-                  className="rounded-xl border border-border bg-card/60 p-4 transition-colors"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                        {idx + 1}
-                      </span>
-                      <h3 className="font-semibold text-sm sm:text-base">{milestone.title}</h3>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                        {milestone.percentage}%
-                      </span>
-                      {milestone.amount != null && (
-                        <span className="text-xs font-medium text-muted-foreground">
-                          ≈ ₹{milestone.amount.toLocaleString("en-IN")}
+              {job.milestones.map((milestone, idx) => {
+                const validityDays = Number(milestone.validityDays) || 0;
+                return (
+                  <div
+                    key={milestone.id ?? idx}
+                    className="rounded-xl border border-border bg-card/60 p-4 transition-colors"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                          {idx + 1}
                         </span>
-                      )}
+                        <h3 className="font-semibold text-sm sm:text-base">{capitalizeWords(milestone.title)}</h3>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                          {milestone.percentage}%
+                        </span>
+                        {milestone.amount != null && (
+                          <span className="text-xs font-medium text-muted-foreground">
+                            ≈ ₹{milestone.amount.toLocaleString("en-IN")}
+                          </span>
+                        )}
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold border ${
+                            validityDays > 0
+                              ? "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                              : "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                          }`}
+                        >
+                          <Clock className="h-3 w-3" />
+                          {validityDays > 0 ? `${validityDays}-Day Validity Hold` : "Instant Release"}
+                        </span>
+                      </div>
                     </div>
+                    {milestone.description && (
+                      <p className="mt-2 text-sm text-muted-foreground pl-8">
+                        {capitalizeFirst(milestone.description)}
+                      </p>
+                    )}
                   </div>
-                  {milestone.description && (
-                    <p className="mt-2 text-sm text-muted-foreground pl-8">
-                      {milestone.description}
-                    </p>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}

@@ -858,7 +858,7 @@ export async function GET(
           where: { professionalId: session.userId, origin: "PROFESSIONAL_PROPOSAL" },
           orderBy: { createdAt: "desc" },
           include: { tracking: { select: { id: true } } },
-          take: 20,
+          take: 100,
         }),
         db.projectRequest.findMany({
           where: { professionalId: session.userId, origin: "CLIENT_HIRE" },

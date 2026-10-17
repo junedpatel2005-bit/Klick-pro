@@ -619,6 +619,7 @@ export async function getOpenJob(id: number): Promise<MarketplaceJob | null> {
           percentage: true,
           amount: true,
           sortOrder: true,
+          validityDays: true,
         },
         orderBy: { sortOrder: "asc" },
       },

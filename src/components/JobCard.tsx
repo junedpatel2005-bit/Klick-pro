@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Briefcase, MapPin, DollarSign, UserRound } from "lucide-react";
+import { Briefcase, MapPin, IndianRupee, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { capitalizeWords, capitalizeFirst, formatReadableLabel } from "@/lib/utils";
 
 export type JobCardProps = {
   title: string;
@@ -79,11 +80,11 @@ export function JobCard({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-[0.32em] text-muted-foreground">
-            {category ?? "General"}
+            {capitalizeWords(category ?? "General")}
           </p>
-          <h2 className="mt-2 text-lg font-semibold text-foreground truncate">{title}</h2>
+          <h2 className="mt-2 text-lg font-semibold text-foreground truncate">{capitalizeWords(title)}</h2>
           {description ? (
-            <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{description}</p>
+            <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{capitalizeFirst(description)}</p>
           ) : null}
           <div className="mt-3 flex flex-wrap gap-3 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1">
@@ -93,7 +94,7 @@ export function JobCard({
             {clientName ? (
               <span className="inline-flex items-center gap-1">
                 <UserRound className="h-4 w-4" />
-                {clientName}
+                {capitalizeWords(clientName)}
               </span>
             ) : null}
             {proposalCount != null ? (
@@ -107,12 +108,12 @@ export function JobCard({
         <div className="flex flex-col items-start gap-2 sm:items-end">
           {badgeLabel ? (
             <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.32em] text-primary">
-              {badgeLabel}
+              {formatReadableLabel(badgeLabel)}
             </span>
           ) : null}
           {status ? (
             <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold uppercase tracking-[0.32em] text-muted-foreground">
-              {status}
+              {formatReadableLabel(status)}
             </span>
           ) : null}
         </div>
@@ -121,7 +122,7 @@ export function JobCard({
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 text-sm text-muted-foreground">
         <div className="flex flex-wrap items-center gap-3">
           <span className="inline-flex items-center gap-1">
-            <DollarSign className="h-4 w-4" />
+            <IndianRupee className="h-4 w-4" />
             {budget}
           </span>
           {footerText ? <span>{footerText}</span> : null}

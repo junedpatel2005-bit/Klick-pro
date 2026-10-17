@@ -20,6 +20,9 @@ const serviceOptions = [
   ["RESIDENTIAL", "Residential"],
   ["COMMERCIAL", "Commercial"],
   ["INDUSTRIAL", "Industrial"],
+  ["HEALTH_CARE", "Health Care"],
+  ["PERSONAL_CARE", "Personal Care & Home Services"],
+  ["EDUCATION", "Education"],
 ] as const;
 
 function getRecommendedSkills(category: string) {

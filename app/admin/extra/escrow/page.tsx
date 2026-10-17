@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Landmark,
@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 
 type EscrowRecord = {
   id: number;
@@ -56,6 +57,18 @@ export default function AdminEscrowLedgerPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, search]);
+
+  const paginatedRecords = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return records.slice(start, start + PAGE_SIZE);
+  }, [records, page]);
 
   async function fetchEscrow() {
     setLoading(true);
@@ -256,7 +269,7 @@ export default function AdminEscrowLedgerPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {records.map((r) => (
+                {paginatedRecords.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50/80 transition">
                     <td className="py-3.5 px-4">
                       <div>
@@ -339,6 +352,14 @@ export default function AdminEscrowLedgerPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {!loading && records.length > 0 && (
+          <AdminPagination
+            currentPage={page}
+            totalItems={records.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
         )}
       </div>
     </div>

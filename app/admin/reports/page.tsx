@@ -25,6 +25,7 @@ import {
   isWithinCustomDateRange,
 } from "@/components/reports/DateRangeFilter";
 import { formatReadableLabel, capitalizeWords } from "@/lib/utils";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 
 type UserRow = {
   id: number;
@@ -182,6 +183,18 @@ function UsersReport() {
   const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
     useRowSelection(filteredUsers);
   const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, roleFilter, verificationFilter, statusFilter, datePreset, startDate, endDate]);
+
+  const paginatedUsers = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredUsers.slice(start, start + PAGE_SIZE);
+  }, [filteredUsers, page]);
 
   // KPIs
   const totalCount = filteredUsers.length;
@@ -450,7 +463,7 @@ function UsersReport() {
       <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs [&_th]:text-slate-500 [&_th]:bg-slate-50/80 dark:[&_th]:bg-slate-800/40 dark:[&_th]:text-slate-400 [&_tr]:border-slate-100 dark:[&_tr]:border-slate-800">
         <SelectableReportTable
           loading={loading}
-          rows={filteredUsers}
+          rows={paginatedUsers}
           emptyMessage="No user accounts match your filter criteria."
           selectedIds={selectedIds}
           onToggle={toggle}
@@ -603,6 +616,12 @@ function UsersReport() {
             },
           ]}
         />
+        <AdminPagination
+          currentPage={page}
+          totalItems={filteredUsers.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Period Reconciliation Summary */}
@@ -665,6 +684,18 @@ function JobsReport() {
   const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
     useRowSelection(filteredJobs);
   const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, datePreset, startDate, endDate]);
+
+  const paginatedJobs = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredJobs.slice(start, start + PAGE_SIZE);
+  }, [filteredJobs, page]);
 
   // KPIs
   const totalJobs = filteredJobs.length;
@@ -846,7 +877,7 @@ function JobsReport() {
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs [&_th]:text-slate-500 [&_th]:bg-slate-50/80 [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/70">
         <SelectableReportTable
           loading={loading}
-          rows={filteredJobs}
+          rows={paginatedJobs}
           emptyMessage="No job records match your filter criteria."
           selectedIds={selectedIds}
           onToggle={toggle}
@@ -906,6 +937,12 @@ function JobsReport() {
               ),
             },
           ]}
+        />
+        <AdminPagination
+          currentPage={page}
+          totalItems={filteredJobs.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
         />
       </div>
 
@@ -1038,6 +1075,18 @@ function FinanceReport() {
   const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
     useRowSelection(filteredRows);
   const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, kindFilter, datePreset, startDate, endDate]);
+
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredRows.slice(start, start + PAGE_SIZE);
+  }, [filteredRows, page]);
 
   // Financial KPIs
   const totalVolume = filteredRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
@@ -1259,7 +1308,7 @@ function FinanceReport() {
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs [&_th]:text-slate-500 [&_th]:bg-slate-50/80 [&_tr]:border-slate-100 [&_tr:hover]:bg-slate-50/70">
         <SelectableReportTable
           loading={loading}
-          rows={filteredRows}
+          rows={paginatedRows}
           emptyMessage="No financial transactions match your filter criteria."
           selectedIds={selectedIds}
           onToggle={toggle}
@@ -1333,6 +1382,12 @@ function FinanceReport() {
               ),
             },
           ]}
+        />
+        <AdminPagination
+          currentPage={page}
+          totalItems={filteredRows.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
         />
       </div>
 

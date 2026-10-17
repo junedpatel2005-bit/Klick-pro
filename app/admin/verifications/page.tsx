@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   ChevronRight,
@@ -11,6 +11,8 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+import { capitalizeWords } from "@/lib/utils";
 
 type DocumentKey =
   "governmentIdUrl" | "licenseUrl" | "certificationsJson" | "insuranceUrl" | "selfieUrl";
@@ -65,6 +67,22 @@ export default function AdminVerificationsPage() {
     label: string;
     status: "APPROVED" | "REJECTED";
   } | null>(null);
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+  const [personaPage, setPersonaPage] = useState(1);
+  const PERSONA_PAGE_SIZE = 10;
+
+  const paginatedItems = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return items.slice(start, start + PAGE_SIZE);
+  }, [items, page]);
+
+  const paginatedPersonaItems = useMemo(() => {
+    const start = (personaPage - 1) * PERSONA_PAGE_SIZE;
+    return personaItems.slice(start, start + PERSONA_PAGE_SIZE);
+  }, [personaItems, personaPage]);
+
   const load = () => {
     setLoading(true);
     void fetch("/api/v1/admin/verifications", { cache: "no-store" })
@@ -220,7 +238,7 @@ export default function AdminVerificationsPage() {
             </div>
           ))}
         {!loading &&
-          items.map((item) => {
+          paginatedItems.map((item) => {
             const submitted = docs(item).filter((document) => document.value).length;
             return (
               <button
@@ -236,7 +254,7 @@ export default function AdminVerificationsPage() {
                     </div>
                     <div>
                       <h2 className="font-bold text-slate-900 text-base">
-                        {item.user.firstName} {item.user.lastName}
+                        {capitalizeWords(`${item.user.firstName} ${item.user.lastName}`)}
                       </h2>
                       <p className="text-xs font-medium text-slate-400 truncate max-w-[160px]">
                         {item.user.email}
@@ -256,7 +274,7 @@ export default function AdminVerificationsPage() {
 
                 <div className="mt-4 flex items-center gap-2">
                   <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                    {item.user.professionalCategory ?? "General Professional"}
+                    {item.user.professionalCategory ? capitalizeWords(item.user.professionalCategory) : "General Professional"}
                   </span>
                 </div>
 
@@ -285,6 +303,15 @@ export default function AdminVerificationsPage() {
             );
           })}
       </div>
+      {!loading && items.length > 0 && (
+        <AdminPagination
+          currentPage={page}
+          totalItems={items.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+          className="mt-4"
+        />
+      )}
       {personaItems.length > 0 && (
         <section className="mt-10">
           <h2 className="font-display text-2xl font-bold text-slate-900">
@@ -305,13 +332,13 @@ export default function AdminVerificationsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {personaItems.map((item) => (
+                {paginatedPersonaItems.map((item) => (
                   <tr
                     key={item.providerInquiryId}
                     className="text-slate-700 hover:bg-slate-50/70 transition"
                   >
                     <td className="p-4 font-medium text-slate-900">
-                      {item.user.firstName} {item.user.lastName}
+                      {capitalizeWords(`${item.user.firstName} ${item.user.lastName}`)}
                     </td>
                     <td className="p-4">
                       <span
@@ -358,6 +385,12 @@ export default function AdminVerificationsPage() {
                 ))}
               </tbody>
             </table>
+            <AdminPagination
+              currentPage={personaPage}
+              totalItems={personaItems.length}
+              pageSize={PERSONA_PAGE_SIZE}
+              onPageChange={setPersonaPage}
+            />
           </div>
         </section>
       )}

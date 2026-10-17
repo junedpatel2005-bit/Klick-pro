@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { HydratedEmailTemplate } from "@/lib/email-templates/types";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 
 type AudienceFilter = "ALL" | "CLIENT" | "PROFESSIONAL" | "SYSTEM";
 
@@ -92,6 +93,18 @@ export function AdminTemplateLibraryCatalog() {
       return matchesAudience && matchesCategory && matchesSearch;
     });
   }, [templates, audienceFilter, categoryFilter, searchQuery]);
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [audienceFilter, categoryFilter, searchQuery]);
+
+  const paginatedTemplates = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredTemplates.slice(start, start + PAGE_SIZE);
+  }, [filteredTemplates, page]);
 
   if (loading) {
     return (
@@ -238,7 +251,7 @@ export function AdminTemplateLibraryCatalog() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {filteredTemplates.map((tpl) => (
+          {paginatedTemplates.map((tpl) => (
             <Link
               key={tpl.key}
               href={`/admin/templates/${tpl.key}`}
@@ -311,6 +324,15 @@ export function AdminTemplateLibraryCatalog() {
             </Link>
           ))}
         </div>
+      )}
+      {!loading && filteredTemplates.length > 0 && (
+        <AdminPagination
+          currentPage={page}
+          totalItems={filteredTemplates.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+          className="mt-6"
+        />
       )}
     </div>
   );

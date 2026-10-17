@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   Sliders,
-  DollarSign,
+  IndianRupee,
   ShieldAlert,
   Save,
   RotateCcw,
@@ -247,7 +247,7 @@ export default function AdminSettingsPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs space-y-5">
             <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                <DollarSign className="h-4 w-4" />
+                <IndianRupee className="h-4 w-4" />
               </span>
               <div>
                 <h2 className="text-sm font-bold text-slate-900">

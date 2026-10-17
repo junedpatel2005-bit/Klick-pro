@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import { MessageSquareText, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+import { capitalizeWords } from "@/lib/utils";
 
 type FaqItem = {
   id?: number;
@@ -34,6 +36,21 @@ export default function AdminSupportPage() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
+
+  const [faqPage, setFaqPage] = useState(1);
+  const FAQ_PAGE_SIZE = 10;
+  const [contactPage, setContactPage] = useState(1);
+  const CONTACT_PAGE_SIZE = 10;
+
+  const paginatedFaqs = useMemo(() => {
+    const start = (faqPage - 1) * FAQ_PAGE_SIZE;
+    return faqs.slice(start, start + FAQ_PAGE_SIZE);
+  }, [faqs, faqPage]);
+
+  const paginatedContactRequests = useMemo(() => {
+    const start = (contactPage - 1) * CONTACT_PAGE_SIZE;
+    return contactRequests.slice(start, start + CONTACT_PAGE_SIZE);
+  }, [contactRequests, contactPage]);
 
   const load = () => {
     setLoading(true);
@@ -225,7 +242,7 @@ export default function AdminSupportPage() {
             ) : faqs.length === 0 ? (
               <p className="py-8 text-center text-sm text-slate-400">No FAQ entries yet.</p>
             ) : (
-              faqs.map((faq) => (
+              paginatedFaqs.map((faq) => (
                 <article
                   key={faq.id ?? `${faq.question}-${faq.displayOrder}`}
                   className={`rounded-xl border p-4 transition ${
@@ -265,6 +282,15 @@ export default function AdminSupportPage() {
               ))
             )}
           </div>
+          {!loading && faqs.length > 0 && (
+            <AdminPagination
+              currentPage={faqPage}
+              totalItems={faqs.length}
+              pageSize={FAQ_PAGE_SIZE}
+              onPageChange={setFaqPage}
+              className="mt-4"
+            />
+          )}
         </section>
       </div>
 
@@ -289,14 +315,14 @@ export default function AdminSupportPage() {
           ) : contactRequests.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">No contact messages yet.</p>
           ) : (
-            contactRequests.map((item) => (
+            paginatedContactRequests.map((item) => (
               <article
                 key={item.id}
                 className="rounded-xl border border-slate-200 bg-slate-50/60 p-4"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-slate-900">{item.name}</p>
+                    <p className="font-semibold text-slate-900">{capitalizeWords(item.name)}</p>
                     <p className="text-xs text-slate-500">{item.email}</p>
                   </div>
                   <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
@@ -312,6 +338,15 @@ export default function AdminSupportPage() {
             ))
           )}
         </div>
+        {!loading && contactRequests.length > 0 && (
+          <AdminPagination
+            currentPage={contactPage}
+            totalItems={contactRequests.length}
+            pageSize={CONTACT_PAGE_SIZE}
+            onPageChange={setContactPage}
+            className="mt-4"
+          />
+        )}
       </section>
     </div>
   );

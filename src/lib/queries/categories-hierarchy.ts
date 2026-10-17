@@ -7,7 +7,14 @@ export type HierarchyParent = {
   slug: string;
   description: string;
   iconName: string;
-  segment: "RESIDENTIAL" | "COMMERCIAL" | "INDUSTRIAL" | string;
+  segment:
+    | "RESIDENTIAL"
+    | "COMMERCIAL"
+    | "INDUSTRIAL"
+    | "HEALTH_CARE"
+    | "PERSONAL_CARE"
+    | "EDUCATION"
+    | string;
   categoryCount: number;
   subcategoryCount: number;
   previewCategories: Array<{

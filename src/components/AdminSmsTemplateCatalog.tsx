@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { HydratedSmsTemplate } from "@/lib/sms/types";
 import { calculateSmsCredits, interpolateVariables } from "@/lib/sms/format";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 
 type AudienceFilter = "ALL" | "CLIENT" | "PROFESSIONAL" | "SYSTEM";
 
@@ -94,6 +95,18 @@ export function AdminSmsTemplateCatalog() {
       return matchesAudience && matchesCategory && matchesSearch;
     });
   }, [templates, audienceFilter, categoryFilter, searchQuery]);
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [audienceFilter, categoryFilter, searchQuery]);
+
+  const paginatedTemplates = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredTemplates.slice(start, start + PAGE_SIZE);
+  }, [filteredTemplates, page]);
 
   if (loading) {
     return (
@@ -283,7 +296,7 @@ export function AdminSmsTemplateCatalog() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {filteredTemplates.map((tpl) => {
+            {paginatedTemplates.map((tpl) => {
               const sampleText = interpolateVariables(tpl.bodyText, tpl.sampleData);
               const credits = calculateSmsCredits(sampleText);
 
@@ -387,6 +400,15 @@ export function AdminSmsTemplateCatalog() {
               );
             })}
           </div>
+        )}
+        {!loading && filteredTemplates.length > 0 && (
+          <AdminPagination
+            currentPage={page}
+            totalItems={filteredTemplates.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            className="mt-6"
+          />
         )}
       </div>
     </div>

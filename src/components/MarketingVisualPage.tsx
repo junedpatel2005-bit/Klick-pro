@@ -465,7 +465,14 @@ function ServicesJobsSection({ cmsMode }: { cmsMode: boolean }) {
                         className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
                       >
                         <option value="">All service types</option>
-                        {["Residential", "Commercial", "Industrial"].map((item) => (
+                        {[
+                          "Residential",
+                          "Commercial",
+                          "Industrial",
+                          "Health Care",
+                          "Personal Care & Home Services",
+                          "Education",
+                        ].map((item) => (
                           <option key={item} value={item}>
                             {item}
                           </option>

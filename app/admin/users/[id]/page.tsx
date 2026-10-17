@@ -11,7 +11,7 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
-  DollarSign,
+  IndianRupee,
   ExternalLink,
   Globe,
   Mail,
@@ -435,7 +435,7 @@ export default function AdminUserDetailPage() {
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">
               {isClient ? "Total Paid" : "Total Earnings"}
             </span>
-            <DollarSign className="h-5 w-5 text-emerald-600" />
+            <IndianRupee className="h-5 w-5 text-emerald-600" />
           </div>
           <p className="mt-3 font-display text-2xl font-bold text-slate-900">
             ₹{(stats?.money ?? 0).toLocaleString()}

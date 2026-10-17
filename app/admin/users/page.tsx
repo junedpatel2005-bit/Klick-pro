@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { ENABLE_ADMIN_EXTRA_SECTION } from "@/config/extra-features";
 import { Button } from "@/components/ui/button";
+import { AdminPagination } from "@/components/admin/AdminPagination";
+import { capitalizeWords } from "@/lib/utils";
 
 type User = {
   id: number;
@@ -61,6 +63,17 @@ function UserGroup({
 }) {
   const router = useRouter();
   const Icon = kind === "professional" ? ShieldCheck : UsersRound;
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [users.length]);
+
+  const paginatedUsers = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return users.slice(start, start + PAGE_SIZE);
+  }, [users, page]);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
@@ -100,7 +113,7 @@ function UserGroup({
             ))}
           </div>
         ) : (
-          users.map((user) => (
+          paginatedUsers.map((user) => (
             <article
               key={user.id}
               onClick={() => router.push(`/admin/users/${user.id}`)}
@@ -121,10 +134,10 @@ function UserGroup({
               <div className="min-w-64 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-bold text-slate-900 text-sm group-hover:text-indigo-600 transition">
-                    {user.firstName} {user.lastName}
+                    {capitalizeWords(`${user.firstName} ${user.lastName}`)}
                   </p>
                   {user.companyName && (
-                    <span className="text-xs text-slate-500 font-medium">({user.companyName})</span>
+                    <span className="text-xs text-slate-500 font-medium">({capitalizeWords(user.companyName)})</span>
                   )}
                   {user.isVerified && (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -288,6 +301,15 @@ function UserGroup({
           </p>
         )}
       </div>
+
+      {!loading && users.length > 0 && (
+        <AdminPagination
+          currentPage={page}
+          totalItems={users.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
+      )}
     </section>
   );
 }

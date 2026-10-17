@@ -20,6 +20,8 @@ import {
   Trash2,
   Wrench,
   Zap,
+  HeartPulse,
+  GraduationCap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -34,7 +36,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
-type Segment = "RESIDENTIAL" | "COMMERCIAL" | "INDUSTRIAL";
+type Segment =
+  | "RESIDENTIAL"
+  | "COMMERCIAL"
+  | "INDUSTRIAL"
+  | "HEALTH_CARE"
+  | "PERSONAL_CARE"
+  | "EDUCATION";
 
 type Service = {
   id: number;
@@ -94,6 +102,30 @@ const domainConfigs: Record<
     activeBorder: "border-amber-600 ring-2 ring-amber-100",
     activeBg: "bg-amber-50/50",
     text: "text-amber-600",
+  },
+  HEALTH_CARE: {
+    label: "Health Care",
+    icon: HeartPulse,
+    badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    activeBorder: "border-emerald-600 ring-2 ring-emerald-100",
+    activeBg: "bg-emerald-50/50",
+    text: "text-emerald-600",
+  },
+  PERSONAL_CARE: {
+    label: "Personal Care & Home Services",
+    icon: Sparkles,
+    badge: "bg-rose-50 text-rose-700 border-rose-200",
+    activeBorder: "border-rose-600 ring-2 ring-rose-100",
+    activeBg: "bg-rose-50/50",
+    text: "text-rose-600",
+  },
+  EDUCATION: {
+    label: "Education",
+    icon: GraduationCap,
+    badge: "bg-violet-50 text-violet-700 border-violet-200",
+    activeBorder: "border-violet-600 ring-2 ring-violet-100",
+    activeBg: "bg-violet-50/50",
+    text: "text-violet-600",
   },
 };
 

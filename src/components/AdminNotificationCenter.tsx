@@ -35,6 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { capitalizeFirst } from "@/lib/utils";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 
 export type Notification = {
   id: number;
@@ -424,6 +425,26 @@ export function AdminNotificationCenter() {
   );
   const otherUnreadCount = useMemo(() => otherItems.filter((i) => !i.readAt).length, [otherItems]);
 
+  const [projectPage, setProjectPage] = useState(1);
+  const PROJECT_PAGE_SIZE = 10;
+  const [otherPage, setOtherPage] = useState(1);
+  const OTHER_PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setProjectPage(1);
+    setOtherPage(1);
+  }, [query, unreadOnly, activeTab]);
+
+  const paginatedProjectGroups = useMemo(() => {
+    const start = (projectPage - 1) * PROJECT_PAGE_SIZE;
+    return projectGroups.slice(start, start + PROJECT_PAGE_SIZE);
+  }, [projectGroups, projectPage]);
+
+  const paginatedOtherItems = useMemo(() => {
+    const start = (otherPage - 1) * OTHER_PAGE_SIZE;
+    return filteredOtherItems.slice(start, start + OTHER_PAGE_SIZE);
+  }, [filteredOtherItems, otherPage]);
+
   // Actions
   async function markRead(ids: number[], unread = false) {
     if (!ids.length) return;
@@ -684,7 +705,7 @@ export function AdminNotificationCenter() {
               </p>
             </div>
           ) : (
-            projectGroups.map((group) => {
+            paginatedProjectGroups.map((group) => {
               const unreadCount = group.notifications.filter((n) => !n.readAt).length;
               return (
                 <div
@@ -865,6 +886,15 @@ export function AdminNotificationCenter() {
               );
             })
           )}
+          {!loading && projectGroups.length > 0 && (
+            <AdminPagination
+              currentPage={projectPage}
+              totalItems={projectGroups.length}
+              pageSize={PROJECT_PAGE_SIZE}
+              onPageChange={setProjectPage}
+              className="mt-4"
+            />
+          )}
         </div>
       )}
 
@@ -882,7 +912,7 @@ export function AdminNotificationCenter() {
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {filteredOtherItems.map((item) => {
+              {paginatedOtherItems.map((item) => {
                 const { Icon, color } = getCategoryIcon(item.type);
                 return (
                   <div
@@ -967,6 +997,14 @@ export function AdminNotificationCenter() {
                 );
               })}
             </div>
+          )}
+          {!loading && filteredOtherItems.length > 0 && (
+            <AdminPagination
+              currentPage={otherPage}
+              totalItems={filteredOtherItems.length}
+              pageSize={OTHER_PAGE_SIZE}
+              onPageChange={setOtherPage}
+            />
           )}
         </div>
       )}

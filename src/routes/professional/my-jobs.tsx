@@ -37,6 +37,7 @@ import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import type { MarketplaceCategory } from "@/lib/types/marketplace";
 import { getAllStates, getDistrictsByState } from "@/lib/india-locations";
 import { getCityCoordinates } from "@/lib/city-coordinates";
+import { capitalizeWords, capitalizeFirst, formatReadableLabel } from "@/lib/utils";
 
 const ProfessionalJobsMap = dynamic(() => import("@/components/ProfessionalJobsMap"), {
   ssr: false,
@@ -84,6 +85,9 @@ const segmentOptions: [string, string][] = [
   ["RESIDENTIAL", "Residential"],
   ["COMMERCIAL", "Commercial"],
   ["INDUSTRIAL", "Industrial"],
+  ["HEALTH_CARE", "Health Care"],
+  ["PERSONAL_CARE", "Personal Care & Home Services"],
+  ["EDUCATION", "Education"],
 ];
 
 type JobListItem = {
@@ -752,8 +756,8 @@ function ProfessionalJobsContent() {
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {view === "proposals"
-                            ? `Submitted to ${item.clientName}`
-                            : `Direct Hire from ${item.clientName}`}
+                            ? `Submitted to ${capitalizeWords(item.clientName)}`
+                            : `Direct Hire from ${capitalizeWords(item.clientName)}`}
                         </p>
                       </div>
 
@@ -1088,7 +1092,7 @@ function ProfessionalJobsContent() {
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      Select Residential, Commercial, or Industrial to see categories.
+                      Select a service type to see categories.
                     </p>
                   )}
                   {subCategories.length > 0 && (
@@ -1393,10 +1397,10 @@ function ProfessionalJobsContent() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="text-[10px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
-                                {job.category ?? "General"}
+                                {capitalizeWords(job.category ?? "General")}
                               </p>
                               <h3 className="mt-2 text-[17px] font-semibold leading-tight text-foreground">
-                                {job.title}
+                                {capitalizeWords(job.title)}
                               </h3>
                               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                                 <span>{job.locationAddress ?? "Remote"}</span>
@@ -1408,7 +1412,7 @@ function ProfessionalJobsContent() {
                                       : `${job.distanceKm.toFixed(1)} km away`}
                                   </span>
                                 )}
-                                {job.clientName ? <span>{job.clientName}</span> : null}
+                                {job.clientName ? <span>{capitalizeWords(job.clientName)}</span> : null}
                                 <span className="inline-flex items-center gap-1">
                                   <Star className="h-3.5 w-3.5 fill-current text-amber-500" />
                                   {job.clientRating.toFixed(1)}
@@ -1423,7 +1427,7 @@ function ProfessionalJobsContent() {
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
                               <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                                {job.status}
+                                {formatReadableLabel(job.status)}
                               </span>
                               <button
                                 type="button"

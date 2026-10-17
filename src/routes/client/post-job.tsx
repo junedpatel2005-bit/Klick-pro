@@ -8,7 +8,7 @@ import {
   Check,
   CheckCircle2,
   Clock,
-  DollarSign,
+  IndianRupee,
   FileText,
   Info,
   Lightbulb,
@@ -95,7 +95,7 @@ const postingInstructions = [
     stepIndex: 1,
     title: "Fair Budget & Schedule",
     subtitle: "Budget & Timing",
-    icon: DollarSign,
+    icon: IndianRupee,
     summary: "Set competitive rates and realistic timelines.",
     detail:
       "Define an appropriate fixed budget range or hourly rate aligned with Indian market rates. Include a realistic start date and completion deadline.",
@@ -133,6 +133,9 @@ const segmentOptions: [string, string][] = [
   ["RESIDENTIAL", "Residential"],
   ["COMMERCIAL", "Commercial"],
   ["INDUSTRIAL", "Industrial"],
+  ["HEALTH_CARE", "Health Care"],
+  ["PERSONAL_CARE", "Personal Care & Home Services"],
+  ["EDUCATION", "Education"],
 ];
 const asDate = (value: string | Date | null) =>
   value ? new Date(value).toISOString().slice(0, 10) : "";
@@ -1070,7 +1073,7 @@ export default function PostJob() {
                 placeholder="What do you need done?"
               />
             </Field>
-            <Field label="Category" error={errors.category}>
+            <Field label="Service Type" error={errors.category}>
               <div className="flex flex-wrap gap-2">
                 {segmentOptions.map(([value, label]) => (
                   <Choice
@@ -1086,7 +1089,7 @@ export default function PostJob() {
               </div>
             </Field>
             {segment && (
-              <Field label="Which category?" error={errors.category}>
+              <Field label="Category" error={errors.category}>
                 <select
                   value={activeTopCategory?.id ?? ""}
                   onChange={(e) => {

@@ -107,6 +107,7 @@ export type MarketplaceJobMilestone = {
   percentage: number;
   amount: number | null;
   sortOrder: number;
+  validityDays?: number | null;
 };
 
 export type MarketplaceJob = {

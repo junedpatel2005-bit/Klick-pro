@@ -19,6 +19,7 @@ export type CsvExportOptions = {
   metadata?: CsvMetadataEntry[];
   headers: string[];
   rows: (string | number | boolean | null | undefined)[][];
+  includeMetadataBanner?: boolean;
 };
 
 function sanitizeCell(value: unknown): string {
@@ -35,25 +36,35 @@ function sanitizeCell(value: unknown): string {
   return `"${escaped}"`;
 }
 
-export function generateCsvContent(options: CsvExportOptions): string {
+export function generateCsvContent(options: CsvExportOptions & { includeMetadataBanner?: boolean }): string {
   const lines: string[] = [];
 
-  if (options.title) {
-    lines.push(`"KLICK-PRO · ${options.title.toUpperCase()}"`);
-    lines.push(
-      `"Generated At","${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST"`,
-    );
-  }
+  // When metadata banner is explicitly enabled, pad each row to match total column count
+  if (options.includeMetadataBanner) {
+    if (options.title) {
+      const titleLine = [sanitizeCell(`KLICK-PRO · ${options.title.toUpperCase()}`)];
+      while (titleLine.length < options.headers.length) titleLine.push('""');
+      lines.push(titleLine.join(","));
 
-  if (options.metadata && options.metadata.length > 0) {
-    for (const entry of options.metadata) {
-      lines.push(`${sanitizeCell(entry.label)},${sanitizeCell(entry.value)}`);
+      const generatedLine = [
+        sanitizeCell("Generated At"),
+        sanitizeCell(`${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST`),
+      ];
+      while (generatedLine.length < options.headers.length) generatedLine.push('""');
+      lines.push(generatedLine.join(","));
     }
-    // Blank line separating metadata block from tabular data
-    lines.push("");
+
+    if (options.metadata && options.metadata.length > 0) {
+      for (const entry of options.metadata) {
+        const metaLine = [sanitizeCell(entry.label), sanitizeCell(entry.value)];
+        while (metaLine.length < options.headers.length) metaLine.push('""');
+        lines.push(metaLine.join(","));
+      }
+      lines.push(new Array(options.headers.length).fill('""').join(","));
+    }
   }
 
-  // Column headers
+  // Column headers always line up cleanly
   lines.push(options.headers.map(sanitizeCell).join(","));
 
   // Data rows

@@ -16,7 +16,16 @@ const input = z.object({
   name: z.string().trim().min(2).max(80),
   description: z.string().trim().max(300).default(""),
   iconName: z.string().trim().max(80).default("FolderTree"),
-  segment: z.enum(["RESIDENTIAL", "COMMERCIAL", "INDUSTRIAL"]).default("RESIDENTIAL"),
+  segment: z
+    .enum([
+      "RESIDENTIAL",
+      "COMMERCIAL",
+      "INDUSTRIAL",
+      "HEALTH_CARE",
+      "PERSONAL_CARE",
+      "EDUCATION",
+    ])
+    .default("RESIDENTIAL"),
   parentId: z.coerce.number().int().positive().nullable().default(null),
 });
 const slugify = (value: string) =>

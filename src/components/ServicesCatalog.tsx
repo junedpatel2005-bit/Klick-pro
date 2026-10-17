@@ -25,6 +25,8 @@ import {
   Compass,
   ArrowUpRight,
   Users,
+  HeartPulse,
+  GraduationCap,
 } from "lucide-react";
 import type {
   CompleteCategoryHierarchy,
@@ -35,7 +37,14 @@ import type {
 import { Button } from "@/components/ui/button";
 
 type TabType = "parent" | "category" | "subcategory";
-type SegmentFilter = "ALL" | "RESIDENTIAL" | "COMMERCIAL" | "INDUSTRIAL";
+type SegmentFilter =
+  | "ALL"
+  | "RESIDENTIAL"
+  | "COMMERCIAL"
+  | "INDUSTRIAL"
+  | "HEALTH_CARE"
+  | "PERSONAL_CARE"
+  | "EDUCATION";
 
 // Segment styling configurations
 const SEGMENT_CONFIG = {
@@ -68,6 +77,36 @@ const SEGMENT_CONFIG = {
     borderHover: "hover:border-amber-400 hover:shadow-amber-500/10",
     pillBg: "bg-amber-500",
     iconBox: "bg-amber-50 text-amber-700 border-amber-100",
+  },
+  HEALTH_CARE: {
+    label: "Health Care",
+    icon: HeartPulse,
+    badge: "bg-emerald-50 text-emerald-700 border-emerald-200/80",
+    gradient: "from-emerald-500/10 via-teal-500/5 to-transparent",
+    accent: "text-emerald-600",
+    borderHover: "hover:border-emerald-400 hover:shadow-emerald-500/10",
+    pillBg: "bg-emerald-500",
+    iconBox: "bg-emerald-50 text-emerald-600 border-emerald-100",
+  },
+  PERSONAL_CARE: {
+    label: "Personal Care & Home Services",
+    icon: Sparkles,
+    badge: "bg-rose-50 text-rose-700 border-rose-200/80",
+    gradient: "from-rose-500/10 via-pink-500/5 to-transparent",
+    accent: "text-rose-600",
+    borderHover: "hover:border-rose-400 hover:shadow-rose-500/10",
+    pillBg: "bg-rose-500",
+    iconBox: "bg-rose-50 text-rose-600 border-rose-100",
+  },
+  EDUCATION: {
+    label: "Education",
+    icon: GraduationCap,
+    badge: "bg-violet-50 text-violet-700 border-violet-200/80",
+    gradient: "from-violet-500/10 via-purple-500/5 to-transparent",
+    accent: "text-violet-600",
+    borderHover: "hover:border-violet-400 hover:shadow-violet-500/10",
+    pillBg: "bg-violet-500",
+    iconBox: "bg-violet-50 text-violet-600 border-violet-100",
   },
 } as const;
 

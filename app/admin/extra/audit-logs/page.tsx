@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   History,
   Search,
@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 
 type AuditEntry = {
   id: number;
@@ -50,6 +51,18 @@ export default function AdminAuditLogsPage() {
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("ALL");
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [actionFilter, search]);
+
+  const paginatedLogs = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return logs.slice(start, start + PAGE_SIZE);
+  }, [logs, page]);
 
   async function fetchLogs() {
     setLoading(true);
@@ -241,7 +254,7 @@ export default function AdminAuditLogsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {logs.map((log) => {
+                {paginatedLogs.map((log) => {
                   const isExpanded = expandedLogId === log.id;
                   return (
                     <tr key={log.id} className="hover:bg-slate-50/80 transition">
@@ -308,6 +321,14 @@ export default function AdminAuditLogsPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {!loading && logs.length > 0 && (
+          <AdminPagination
+            currentPage={page}
+            totalItems={logs.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
         )}
       </div>
 

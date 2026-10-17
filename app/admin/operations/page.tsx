@@ -40,6 +40,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 
 export type AdminTimelineItem = {
   id: string;
@@ -735,6 +736,36 @@ function OperationsContent() {
   );
   const openDisputes =
     data?.disputes.filter((item) => item.status !== "RESOLVED" && item.status !== "CLOSED").length ?? 0;
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [view, filter, query]);
+
+  const paginatedJobs = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return jobs.slice(start, start + PAGE_SIZE);
+  }, [jobs, page]);
+
+  const paginatedRunningJobs = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return runningJobsList.slice(start, start + PAGE_SIZE);
+  }, [runningJobsList, page]);
+
+  const paginatedDisputes = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return disputes.slice(start, start + PAGE_SIZE);
+  }, [disputes, page]);
+
+  const currentTotalItems =
+    view === "running_jobs"
+      ? runningJobsList.length
+      : view === "jobs"
+        ? jobs.length
+        : disputes.length;
+
   const options =
     view === "jobs"
       ? ["ALL", "OPEN", "RUNNING", "COMPLETED", "DRAFT", "CLOSED"]
@@ -1144,15 +1175,15 @@ function OperationsContent() {
             </div>
             {view === "running_jobs" ? (
               runningJobsList.length > 0 ? (
-                <RunningJobsTable runningJobs={runningJobsList} onOpenJob={openJob} />
+                <RunningJobsTable runningJobs={paginatedRunningJobs} onOpenJob={openJob} />
               ) : (
                 <Empty key="empty-running_jobs" view="running_jobs" />
               )
             ) : (
               <div className="divide-y divide-slate-100">
                 {view === "jobs"
-                  ? jobs.map((job) => <JobRow key={`job-${job.id}`} job={job} onOpen={openJob} />)
-                  : disputes.map((dispute) => (
+                  ? paginatedJobs.map((job) => <JobRow key={`job-${job.id}`} job={job} onOpen={openJob} />)
+                  : paginatedDisputes.map((dispute) => (
                       <DisputeRow
                         key={`dispute-${dispute.id}`}
                         dispute={dispute}
@@ -1163,6 +1194,14 @@ function OperationsContent() {
                   <Empty key={`empty-${view}`} view={view} />
                 )}
               </div>
+            )}
+            {currentTotalItems > 0 && (
+              <AdminPagination
+                currentPage={page}
+                totalItems={currentTotalItems}
+                pageSize={PAGE_SIZE}
+                onPageChange={setPage}
+              />
             )}
           </section>
         </>

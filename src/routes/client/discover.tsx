@@ -26,6 +26,9 @@ const segmentOptions: [string, string][] = [
   ["RESIDENTIAL", "Residential"],
   ["COMMERCIAL", "Commercial"],
   ["INDUSTRIAL", "Industrial"],
+  ["HEALTH_CARE", "Health Care"],
+  ["PERSONAL_CARE", "Personal Care & Home Services"],
+  ["EDUCATION", "Education"],
 ];
 
 function toMarketplaceProfessional(
@@ -500,7 +503,7 @@ function DiscoverContent() {
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Select Residential, Commercial, or Industrial to see categories.
+                Select a service type to see categories.
               </p>
             )}
             {subCategories.length > 0 && (

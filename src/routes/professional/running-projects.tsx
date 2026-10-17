@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CardListSkeleton } from "@/components/LoadingSkeleton";
+import { capitalizeWords, capitalizeFirst } from "@/lib/utils";
 
 type RunningProject = {
   id: number;
@@ -56,6 +57,22 @@ type ClosedProject = {
   closedAt: string;
 };
 
+type AppliedJob = {
+  id: number;
+  jobId: number;
+  jobTitle: string;
+  clientName: string;
+  bidAmount: number | null;
+  hourlyRate: number | null;
+  totalJobHours: number | null;
+  duration: string | null;
+  coverLetter: string | null;
+  status: string;
+  lastActorRole: string | null;
+  projectId: number | null;
+  createdAt: string;
+};
+
 function displayStatus(status: string) {
   return status
     .replaceAll("_", " ")
@@ -63,7 +80,7 @@ function displayStatus(status: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-type FilterTab = "all_active" | "in_progress" | "needs_action" | "completed" | "closed";
+type FilterTab = "all_active" | "in_progress" | "needs_action" | "applied" | "completed" | "closed";
 
 function money(project: RunningProject) {
   if (project.budget == null) return "Amount pending";
@@ -77,6 +94,7 @@ export default function RunningProjectsPage() {
   const [projects, setProjects] = useState<RunningProject[]>([]);
   const [completedProjects, setCompletedProjects] = useState<CompletedProject[]>([]);
   const [closedProjects, setClosedProjects] = useState<ClosedProject[]>([]);
+  const [appliedJobs, setAppliedJobs] = useState<AppliedJob[]>([]);
   const [savedJobsCount, setSavedJobsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -102,11 +120,17 @@ export default function RunningProjectsPage() {
         completedProjects?: CompletedProject[];
         closedProjects?: ClosedProject[];
         savedJobs?: { id: number }[];
+        proposals?: AppliedJob[];
       };
       setProjects(data.activeProjects ?? []);
       setCompletedProjects(data.completedProjects ?? []);
       setClosedProjects(data.closedProjects ?? []);
       setSavedJobsCount(data.savedJobs?.length ?? 0);
+      // Only show proposals for jobs that haven't been awarded yet (exclude accepted projects)
+      const pendingProposals = (data.proposals ?? []).filter(
+        (proposal) => proposal.status !== "ACCEPTED" && !proposal.projectId,
+      );
+      setAppliedJobs(pendingProposals);
       lastLoadedRef.current = Date.now();
       setError("");
     } catch {
@@ -175,6 +199,19 @@ export default function RunningProjectsPage() {
         ),
     );
   }, [closedProjects, search]);
+
+  const visibleAppliedJobs = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return appliedJobs
+      .filter((item) => item.status !== "ACCEPTED" && !item.projectId)
+      .filter(
+        (item) =>
+          !term ||
+          [item.jobTitle, item.clientName, item.status, item.coverLetter].some((value) =>
+            value?.toLowerCase().includes(term),
+          ),
+      );
+  }, [appliedJobs, search]);
   const totalValue = projects.reduce(
     (sum, project) => sum + (project.timingType === "HOURLY" ? 0 : (project.budget ?? 0)),
     0,
@@ -221,12 +258,13 @@ export default function RunningProjectsPage() {
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Metric
           icon={BriefcaseBusiness}
           label="Active projects"
           value={projects.length}
           tint="bg-primary/10 text-primary"
+          onClick={() => setFilterTab("all_active")}
           loading={loading}
         />
         <Metric
@@ -234,6 +272,7 @@ export default function RunningProjectsPage() {
           label="In progress"
           value={inProgress}
           tint="bg-amber-500/10 text-amber-600"
+          onClick={() => setFilterTab("in_progress")}
           loading={loading}
         />
         <Metric
@@ -241,6 +280,14 @@ export default function RunningProjectsPage() {
           label="Active value"
           value={`₹${totalValue.toLocaleString()}`}
           tint="bg-emerald-500/10 text-emerald-600"
+          loading={loading}
+        />
+        <Metric
+          icon={FileText}
+          label="Applied jobs"
+          value={appliedJobs.length}
+          tint="bg-indigo-500/10 text-indigo-600"
+          onClick={() => setFilterTab("applied")}
           loading={loading}
         />
         <Metric
@@ -297,6 +344,26 @@ export default function RunningProjectsPage() {
                 }`}
               >
                 {needsActionCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterTab("applied")}
+              className={`inline-flex whitespace-nowrap items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all sm:text-sm ${
+                filterTab === "applied"
+                  ? "bg-card text-indigo-600 dark:text-indigo-400 shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span>Applied Jobs</span>
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                  appliedJobs.length > 0
+                    ? "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {appliedJobs.length}
               </span>
             </button>
             <button
@@ -359,7 +426,7 @@ export default function RunningProjectsPage() {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="truncate text-lg font-semibold">
-                            {project.jobTitle ?? `Project #${project.id}`}
+                            {capitalizeWords(project.jobTitle ?? `Project #${project.id}`)}
                           </h3>
                           <span
                             className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.13em] ${
@@ -372,12 +439,12 @@ export default function RunningProjectsPage() {
                           </span>
                         </div>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          {project.currentStage ?? "Project setup and planning"}
+                          {capitalizeFirst(project.currentStage ?? "Project setup and planning")}
                         </p>
                         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
                           <span className="inline-flex items-center gap-1.5">
                             <MapPin className="h-3.5 w-3.5" />
-                            {project.clientName ?? "Client"}
+                            {capitalizeWords(project.clientName ?? "Client")}
                           </span>
                           <span className="inline-flex items-center gap-1.5">
                             <CalendarDays className="h-3.5 w-3.5" />
@@ -521,6 +588,86 @@ export default function RunningProjectsPage() {
                 </div>
               </article>
             ))
+          ) : filterTab === "applied" ? (
+            visibleAppliedJobs.map((proposal) => {
+              const isRejected = proposal.status === "REJECTED";
+              const isRevision = proposal.status === "REVISION_REQUESTED";
+
+              return (
+                <article
+                  key={proposal.id}
+                  onClick={() => router.push(`/professional/job/${proposal.jobId}`)}
+                  className="group cursor-pointer overflow-hidden rounded-2xl border border-border bg-card shadow-soft transition-all hover:border-primary/40 hover:shadow-card"
+                >
+                  <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                    <div className="flex min-w-0 gap-4">
+                      <div
+                        className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${
+                          isRejected
+                            ? "bg-rose-500/10 text-rose-600"
+                            : isRevision
+                              ? "bg-amber-500/10 text-amber-600"
+                              : "bg-indigo-500/10 text-indigo-600"
+                        }`}
+                      >
+                        <FileText className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="truncate text-lg font-semibold group-hover:text-primary transition-colors">
+                            {capitalizeWords(proposal.jobTitle)}
+                          </h3>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.13em] border ${
+                              isRejected
+                                ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20"
+                                : isRevision
+                                  ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20"
+                                  : "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/20"
+                            }`}
+                          >
+                            {isRejected
+                              ? "Declined"
+                              : isRevision
+                                ? "Revision Requested"
+                                : "Application Submitted"}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Client: <span className="font-medium text-foreground">{capitalizeWords(proposal.clientName)}</span> · Applied on{" "}
+                          {new Date(proposal.createdAt).toLocaleDateString()}
+                        </p>
+                        {proposal.coverLetter && (
+                          <p className="mt-2 text-xs text-muted-foreground line-clamp-2 max-w-2xl bg-muted/40 p-2 rounded-lg">
+                            "{capitalizeFirst(proposal.coverLetter)}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:items-end gap-2 shrink-0">
+                      <div className="text-sm sm:text-right">
+                        <span className="text-xs text-muted-foreground block">Proposed Bid</span>
+                        <span className="text-base font-bold text-foreground">
+                          {proposal.bidAmount != null
+                            ? `₹${proposal.bidAmount.toLocaleString("en-IN")}`
+                            : proposal.hourlyRate != null
+                              ? `₹${proposal.hourlyRate.toLocaleString("en-IN")}/hr`
+                              : "Custom Proposal"}
+                        </span>
+                      </div>
+                      <Button variant="outline" size="sm" asChild>
+                        <Link
+                          href={`/professional/job/${proposal.jobId}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          View Job Details <ArrowRight className="ml-1.5 h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })
           ) : filterTab === "completed" ? (
             visibleCompletedProjects.map((project) => (
               <article
@@ -536,14 +683,14 @@ export default function RunningProjectsPage() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="truncate text-lg font-semibold">
-                          {project.jobTitle ?? `Project #${project.id}`}
+                          {capitalizeWords(project.jobTitle ?? `Project #${project.id}`)}
                         </h3>
                         <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.13em] text-emerald-700">
                           Completed
                         </span>
                       </div>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {project.clientName ?? "Client"} · Completed{" "}
+                        {capitalizeWords(project.clientName ?? "Client")} · Completed{" "}
                         {new Date(project.completedAt).toLocaleDateString()}
                       </p>
                     </div>
@@ -586,14 +733,14 @@ export default function RunningProjectsPage() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="truncate text-lg font-semibold text-muted-foreground">
-                          {project.jobTitle ?? `Project #${project.id}`}
+                          {capitalizeWords(project.jobTitle ?? `Project #${project.id}`)}
                         </h3>
                         <span className="rounded-full bg-slate-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.13em] text-slate-600 dark:text-slate-400">
                           Closed
                         </span>
                       </div>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {project.clientName ?? "Client"} · Closed{" "}
+                        {capitalizeWords(project.clientName ?? "Client")} · Closed{" "}
                         {new Date(project.closedAt).toLocaleDateString()}
                       </p>
                     </div>
@@ -616,39 +763,58 @@ export default function RunningProjectsPage() {
             ? !visibleCompletedProjects.length
             : filterTab === "closed"
               ? !visibleClosedProjects.length
-              : !visibleProjects.length) ? (
+              : filterTab === "applied"
+                ? !visibleAppliedJobs.length
+                : !visibleProjects.length) ? (
             <div className="rounded-2xl border border-dashed border-primary/25 bg-primary/[0.025] px-6 py-14 text-center">
               <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
-                <BriefcaseBusiness className="h-6 w-6" />
+                {filterTab === "applied" ? (
+                  <FileText className="h-6 w-6" />
+                ) : (
+                  <BriefcaseBusiness className="h-6 w-6" />
+                )}
               </div>
               <h3 className="mt-4 text-lg font-semibold">
                 {filterTab === "completed"
                   ? "No completed projects yet"
                   : filterTab === "closed"
                     ? "No closed projects yet"
-                    : filterTab === "in_progress"
+                    : filterTab === "applied"
                       ? search
-                        ? "No in-progress projects match your search"
-                        : "No projects currently in progress"
-                      : filterTab === "needs_action"
+                        ? "No applied jobs match your search"
+                        : "You haven't applied to any jobs yet"
+                      : filterTab === "in_progress"
                         ? search
-                          ? "No action-pending projects match your search"
-                          : "No projects requiring action right now"
-                        : search
-                          ? "No matching projects"
-                          : "No active projects yet"}
+                          ? "No in-progress projects match your search"
+                          : "No projects currently in progress"
+                        : filterTab === "needs_action"
+                          ? search
+                            ? "No action-pending projects match your search"
+                            : "No projects requiring action right now"
+                          : search
+                            ? "No matching projects"
+                            : "No active projects yet"}
               </h3>
               <p className="mt-2 text-sm text-muted-foreground">
                 {filterTab === "completed"
                   ? "Completed projects will appear here after a project is confirmed."
                   : filterTab === "closed"
                     ? "Closed or cancelled projects will appear here."
-                    : filterTab === "needs_action"
-                      ? "Projects awaiting your review, client response, or revisions will appear here."
-                      : search
-                        ? "Try another project or client name."
-                        : "Accepted client work will appear here when it starts."}
+                    : filterTab === "applied"
+                      ? "Jobs you apply to will appear here so you can track your submitted proposals before they are accepted."
+                      : filterTab === "needs_action"
+                        ? "Projects awaiting your review, client response, or revisions will appear here."
+                        : search
+                          ? "Try another project or client name."
+                          : "Accepted client work will appear here when it starts."}
               </p>
+              {filterTab === "applied" && (
+                <div className="mt-5">
+                  <Button asChild>
+                    <Link href="/professional/my-jobs">Browse Open Jobs</Link>
+                  </Button>
+                </div>
+              )}
               {!search && filterTab === "all_active" && (
                 <Button asChild className="mt-6">
                   <Link href="/professional/my-jobs">Browse open jobs</Link>
@@ -669,6 +835,7 @@ function Metric({
   tint,
   href,
   loading,
+  onClick,
 }: {
   icon: typeof BriefcaseBusiness;
   label: string;
@@ -676,6 +843,7 @@ function Metric({
   tint: string;
   href?: string;
   loading?: boolean;
+  onClick?: () => void;
 }) {
   const content = (
     <>
@@ -700,6 +868,16 @@ function Metric({
       >
         {content}
       </Link>
+    );
+  if (onClick)
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="block text-left w-full rounded-2xl border border-border bg-card p-4 shadow-soft transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card cursor-pointer"
+      >
+        {content}
+      </button>
     );
   return <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">{content}</div>;
 }

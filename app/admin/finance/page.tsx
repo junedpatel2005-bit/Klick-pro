@@ -6,6 +6,7 @@ import { formatReadableLabel, capitalizeWords } from "@/lib/utils";
 import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageActionLoading } from "@/components/PageActionLoading";
+import { AdminPagination } from "@/components/admin/AdminPagination";
 import {
   AlertCircle,
   ArrowDownLeft,
@@ -585,6 +586,18 @@ export default function AdminFinancePage() {
     return list;
   }, [allActivities, activeTab, statusFilter, searchQuery]);
 
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab, statusFilter, searchQuery]);
+
+  const paginatedItems = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredItems.slice(start, start + PAGE_SIZE);
+  }, [filteredItems, page]);
+
   // --- Actions ---
 
   function handleApprovePayout(paymentId: number) {
@@ -1066,7 +1079,7 @@ export default function AdminFinancePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredItems.map((item) => {
+              {paginatedItems.map((item) => {
                 const isPayment = item.kind === "PAYMENT";
                 const pRaw = item.paymentRaw;
                 const isInValidity =
@@ -1331,6 +1344,14 @@ export default function AdminFinancePage() {
             </tbody>
           </table>
         </div>
+        {!loading && filteredItems.length > 0 && (
+          <AdminPagination
+            currentPage={page}
+            totalItems={filteredItems.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
+        )}
       </div>
 
       {/* Transaction Deep-Dive Slide-Over Drawer */}
