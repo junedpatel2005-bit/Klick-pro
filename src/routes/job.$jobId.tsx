@@ -1190,7 +1190,7 @@ export default function JobDetails({
               </dt>
               <dd className="mt-1 font-semibold flex items-center justify-between">
                 <span>{job.client.rating.toFixed(1)} / 5</span>
-                {job.client.id ? (
+                {job.client?.id && Number(job.client.id) > 0 ? (
                   <Link
                     href={`/client/${job.client.id}`}
                     className="text-xs font-normal text-primary hover:underline inline-flex items-center gap-1"
@@ -1339,7 +1339,7 @@ export default function JobDetails({
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl font-bold">About the Client</h2>
-                  {job.client.id ? (
+                  {job.client?.id && Number(job.client.id) > 0 ? (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -2376,7 +2376,7 @@ export default function JobDetails({
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Posted by</p>
-                  {job.client.id ? (
+                  {job.client?.id && Number(job.client.id) > 0 ? (
                     <Link
                       href={`/client/${job.client.id}`}
                       className="group inline-flex items-center gap-1.5 font-semibold text-foreground hover:text-primary transition-colors"
@@ -2391,7 +2391,7 @@ export default function JobDetails({
                   )}
                 </div>
               </div>
-              {job.client.id ? (
+              {job.client?.id && Number(job.client.id) > 0 ? (
                 <Button variant="outline" size="sm" asChild>
                   <Link
                     href={`/client/${job.client.id}`}

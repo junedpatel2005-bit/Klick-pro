@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { verifyBankAccountViaPennyDrop } from "@/lib/razorpayx";
-import { lookupIfscCode, findIfscByBankAndLocation } from "@/lib/indian-banks";
+import { lookupIfscCode, findIfscByBankAndLocation, type CommonBranch } from "@/lib/indian-banks";
 import { rateLimit } from "@/lib/rate-limit";
 
 async function sessionFrom(request: NextRequest) {
@@ -99,8 +99,100 @@ export async function GET(request: NextRequest) {
     const location = request.nextUrl.searchParams.get("location");
 
     if (bank !== null || location !== null) {
-      const results = findIfscByBankAndLocation(bank || "", location || "");
-      return NextResponse.json({ valid: true, results });
+      const bankQuery = (bank || "").trim();
+      const locQuery = (location || "").trim();
+
+      // Check if user entered an exact 11-char IFSC code in either field
+      const possibleIfsc = (locQuery || bankQuery).toUpperCase().replace(/\s+/g, "");
+      if (/^[A-Z]{4}0[A-Z0-9]{6}$/.test(possibleIfsc)) {
+        const directLookup = await lookupIfscCode(possibleIfsc);
+        if (directLookup.valid && directLookup.bank) {
+          return NextResponse.json({
+            valid: true,
+            results: [
+              {
+                bankCode: possibleIfsc.slice(0, 4),
+                bankName: directLookup.bank,
+                branch: directLookup.branch || "Main Branch",
+                city: directLookup.city || "",
+                state: directLookup.state || "",
+                ifsc: possibleIfsc,
+                address: directLookup.address || "",
+              },
+            ],
+          });
+        }
+      }
+
+      // Step 1: Local curated directory matches (instant)
+      const localMatches = findIfscByBankAndLocation(bankQuery, locQuery);
+
+      // Step 2: Determine bankCode from bank name or code if possible
+      let bankCode = "";
+      if (bankQuery) {
+        const bUpper = bankQuery.toUpperCase();
+        if (bUpper === "SBI" || bUpper.includes("STATE BANK")) bankCode = "SBIN";
+        else if (bUpper === "HDFC" || bUpper.includes("HDFC")) bankCode = "HDFC";
+        else if (bUpper === "ICICI" || bUpper.includes("ICICI")) bankCode = "ICIC";
+        else if (bUpper === "BOB" || bUpper.includes("BARODA")) bankCode = "BARB";
+        else if (bUpper === "AXIS" || bUpper.includes("AXIS")) bankCode = "UTIB";
+        else if (bUpper === "KOTAK" || bUpper.includes("KOTAK")) bankCode = "KKBK";
+        else if (bUpper === "PNB" || bUpper.includes("PUNJAB NATIONAL")) bankCode = "PUNB";
+        else if (bUpper === "CANARA" || bUpper.includes("CANARA")) bankCode = "CNRB";
+        else if (bUpper === "UNION" || bUpper.includes("UNION BANK")) bankCode = "UBIN";
+        else if (bUpper.length === 4 && /^[A-Z]{4}$/.test(bUpper)) bankCode = bUpper;
+      }
+
+      // Step 3: Query live national Razorpay IFSC directory across all 185,000+ branches
+      const onlineResults: CommonBranch[] = [];
+
+      if (locQuery) {
+        // Normalize city / district query
+        const targetCity = locQuery.replace(/[^a-zA-Z\s]/g, "").trim().toUpperCase();
+        if (targetCity) {
+          try {
+            const searchParams = new URLSearchParams();
+            searchParams.set("city", targetCity);
+            if (bankCode) searchParams.set("bankcode", bankCode);
+            searchParams.set("limit", "50");
+
+            const res = await fetch(`https://ifsc.razorpay.com/search?${searchParams.toString()}`, {
+              cache: "force-cache",
+              signal: AbortSignal.timeout(3500),
+            });
+
+            if (res.ok) {
+              const data = await res.json().catch(() => null);
+              const items = data?.data || [];
+              for (const item of items) {
+                if (item?.IFSC) {
+                  onlineResults.push({
+                    bankCode: item.BANKCODE || item.IFSC.slice(0, 4),
+                    bankName: item.BANK || bankQuery || "Bank",
+                    branch: item.BRANCH || "",
+                    city: item.CITY || item.DISTRICT || item.CENTRE || "",
+                    state: item.STATE || "",
+                    ifsc: item.IFSC,
+                    address: item.ADDRESS || "",
+                  });
+                }
+              }
+            }
+          } catch {
+            // Ignore API timeout/network failure
+          }
+        }
+      }
+
+      // Step 4: Merge results, prioritizing local matches, then online results
+      const merged: CommonBranch[] = [...localMatches];
+      for (const item of onlineResults) {
+        if (!merged.some((m) => m.ifsc === item.ifsc)) {
+          merged.push(item);
+        }
+      }
+
+      return NextResponse.json({ valid: true, results: merged });
     }
 
     if (!ifsc) {

@@ -1920,11 +1920,103 @@ export default function ClientEarnings() {
               </div>
             </section>
           </div>
-          <div className="grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
-            <section
-              id="payment-history-section"
-              className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft scroll-mt-6"
-            >
+          {/* How Payment Works 4-Step Process Banner */}
+          <div className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-soft space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/70 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="font-display text-base sm:text-lg font-semibold text-foreground">
+                    How Payment &amp; Escrow Works
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    End-to-end milestone protection, inspection review &amp; automated settlement
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground">
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 text-emerald-700 dark:text-emerald-400">
+                  <CheckCircle2 className="h-3 w-3" /> Escrow Protected
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2.5 py-1 text-primary">
+                  <LockKeyhole className="h-3 w-3" /> 256-bit Security
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {/* Step 1 */}
+              <div className="rounded-xl border border-border/80 bg-background/60 p-4 space-y-2 relative group hover:border-primary/40 transition">
+                <div className="flex items-center justify-between">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+                    1
+                  </span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                    Deliverable
+                  </span>
+                </div>
+                <h3 className="font-semibold text-xs sm:text-sm text-foreground">Milestone Submission</h3>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Professional uploads completed deliverables and work files for your inspection review.
+                </p>
+              </div>
+
+              {/* Step 2 */}
+              <div className="rounded-xl border border-border/80 bg-background/60 p-4 space-y-2 relative group hover:border-primary/40 transition">
+                <div className="flex items-center justify-between">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+                    2
+                  </span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                    Inspection
+                  </span>
+                </div>
+                <h3 className="font-semibold text-xs sm:text-sm text-foreground">Review &amp; Approve</h3>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  You inspect the submitted work. If revisions are needed, request them directly in project tracking.
+                </p>
+              </div>
+
+              {/* Step 3 */}
+              <div className="rounded-xl border border-border/80 bg-background/60 p-4 space-y-2 relative group hover:border-primary/40 transition">
+                <div className="flex items-center justify-between">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+                    3
+                  </span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                    Escrow Hold
+                  </span>
+                </div>
+                <h3 className="font-semibold text-xs sm:text-sm text-foreground">Inspection Period</h3>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Funds remain safely secured in platform escrow during the milestone inspection validity period.
+                </p>
+              </div>
+
+              {/* Step 4 */}
+              <div className="rounded-xl border border-border/80 bg-background/60 p-4 space-y-2 relative group hover:border-primary/40 transition">
+                <div className="flex items-center justify-between">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-[11px] font-bold text-white">
+                    4
+                  </span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-600">
+                    Settled
+                  </span>
+                </div>
+                <h3 className="font-semibold text-xs sm:text-sm text-foreground">Payout Release</h3>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Funds automatically release to the professional’s wallet or bank account seamlessly.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <section
+            id="payment-history-section"
+            className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft scroll-mt-6"
+          >
               <div className="flex items-center justify-between border-b border-border p-5">
                 <div>
                   <h2 className="font-display text-xl font-semibold">Payment history</h2>
@@ -2328,32 +2420,6 @@ export default function ClientEarnings() {
                 </p>
               )}
             </section>
-            <aside className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-              <ShieldCheck className="h-6 w-6 text-primary" />
-              <h2 className="mt-5 font-display text-xl font-semibold">How payment works</h2>
-              <ol className="mt-4 space-y-4 text-sm text-muted-foreground">
-                <li>
-                  <span className="mr-2 font-semibold text-primary">1.</span>A professional submits
-                  their milestone work.
-                </li>
-                <li>
-                  <span className="mr-2 font-semibold text-primary">2.</span>You review and approve
-                  the milestone.
-                </li>
-                <li>
-                  <span className="mr-2 font-semibold text-primary">3.</span>The milestone payment
-                  moves to the secure platform wallet for admin review.
-                </li>
-                <li>
-                  <span className="mr-2 font-semibold text-primary">4.</span>After admin approval,
-                  the professional payout is credited to their wallet.
-                </li>
-              </ol>
-              <p className="mt-6 rounded-xl bg-primary/5 p-4 text-sm text-muted-foreground">
-                Need to review a payment? Open the related project from your Projects page.
-              </p>
-            </aside>
-          </div>
         </>
       )}
       {selectedTransaction ? (

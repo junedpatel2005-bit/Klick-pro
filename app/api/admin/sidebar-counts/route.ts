@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     });
     const adminIds = allAdmins.map((a) => a.id);
 
-    const [newUsers, verification, jobs, notifications, messages] = await Promise.all([
+    const [newUsers, verification, jobs, notifications, messages, payouts] = await Promise.all([
       db.userNotification.count({
         where: { userId: session.userId, type: "NEW_ACCOUNT", readAt: null },
       }),
@@ -61,8 +61,9 @@ export async function GET(request: NextRequest) {
         },
       }),
       db.socketMessage.count({ where: { receiverId: { in: adminIds }, readAt: null } }),
+      db.projectWithdrawal.count({ where: { status: "PENDING" } }),
     ]);
-    return NextResponse.json({ newUsers, verification, jobs, notifications, messages });
+    return NextResponse.json({ newUsers, verification, jobs, notifications, messages, payouts });
   } catch {
     return NextResponse.json({ error: "Unable to load sidebar counts." }, { status: 500 });
   }

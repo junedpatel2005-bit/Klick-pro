@@ -33,20 +33,22 @@ export function IfscFinderDialog({
   const [searching, setSearching] = useState(false);
   const [copiedIfsc, setCopiedIfsc] = useState<string | null>(null);
 
+  const [searchError, setSearchError] = useState<string | null>(null);
+
   // Sync bankQuery when defaultBank changes
   if (defaultBank && !bankQuery) {
     setBankQuery(defaultBank);
   }
 
-  const handleSearch = async (e?: React.FormEvent, overrideBank?: string, overrideLoc?: string) => {
-    if (e) e.preventDefault();
+  const handleSearch = async (overrideBank?: string, overrideLoc?: string) => {
     const activeBank = overrideBank !== undefined ? overrideBank : bankQuery;
     const activeLoc = overrideLoc !== undefined ? overrideLoc : locationQuery;
 
     if (!activeBank.trim() && !activeLoc.trim()) {
-      toast.error("Please enter a Bank Name or Branch/Location.");
+      setSearchError("Please enter a Bank Name or Branch/Location to search.");
       return;
     }
+    setSearchError(null);
 
     setSearching(true);
     setHasSearched(true);
@@ -106,28 +108,36 @@ export function IfscFinderDialog({
             Find Bank IFSC Code
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Enter your Bank Name and Branch or City (e.g. Ikhar, Bharuch, Surat) to find the official 11-character IFSC code.
+            Search any city, branch, district, or bank across all 185,000+ branches in India (e.g. Palej, Bharuch, Surat, Vadodara, Mumbai, Delhi, Jaipur, or direct IFSC code).
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={(e) => void handleSearch(e)} className="space-y-3 pt-1">
+        <div className="space-y-3 pt-1">
           {/* Quick pick chips */}
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[11px] font-medium text-muted-foreground">Quick pick:</span>
             {[
+              { label: "Palej", loc: "Palej" },
               { label: "Ikhar (Bank of Baroda)", bank: "Bank of Baroda", loc: "Ikhar" },
               { label: "Bharuch", loc: "Bharuch" },
               { label: "Surat", loc: "Surat" },
+              { label: "Vadodara", loc: "Vadodara" },
               { label: "Ahmedabad", loc: "Ahmedabad" },
               { label: "Mumbai", loc: "Mumbai" },
+              { label: "Delhi", loc: "Delhi" },
+              { label: "Jaipur", loc: "Jaipur" },
+              { label: "Bengaluru", loc: "Bengaluru" },
             ].map((chip) => (
               <button
                 key={chip.label}
                 type="button"
-                onClick={() => {
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   if (chip.bank) setBankQuery(chip.bank);
                   setLocationQuery(chip.loc);
-                  void handleSearch(undefined, chip.bank || bankQuery, chip.loc);
+                  setSearchError(null);
+                  void handleSearch(chip.bank || bankQuery, chip.loc);
                 }}
                 className="rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-[11px] font-medium text-foreground hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition cursor-pointer"
               >
@@ -140,13 +150,23 @@ export function IfscFinderDialog({
           <div className="space-y-1">
             <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
               <Landmark className="h-3.5 w-3.5 text-muted-foreground" />
-              Bank Name
+              Bank Name (Optional)
             </label>
             <input
               type="text"
               value={bankQuery}
-              onChange={(e) => setBankQuery(e.target.value)}
-              placeholder="e.g. Bank of Baroda, State Bank of India, HDFC Bank"
+              onChange={(e) => {
+                setBankQuery(e.target.value);
+                setSearchError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void handleSearch();
+                }
+              }}
+              placeholder="e.g. State Bank of India, HDFC Bank, Bank of Baroda (or leave blank for all banks)"
               className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
             />
           </div>
@@ -155,26 +175,47 @@ export function IfscFinderDialog({
           <div className="space-y-1">
             <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
               <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-              Branch / Location
+              City / Branch / Location / IFSC Code
             </label>
             <input
               type="text"
               value={locationQuery}
-              onChange={(e) => setLocationQuery(e.target.value)}
-              placeholder="e.g. Ikhar, Amod, Bharuch, Surat, Andheri"
+              onChange={(e) => {
+                setLocationQuery(e.target.value);
+                setSearchError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  void handleSearch();
+                }
+              }}
+              placeholder="e.g. Palej, Bharuch, Surat, Vadodara, Mumbai, Jaipur, Lucknow, or IFSC"
               className="h-10 w-full rounded-xl border border-input bg-background px-3 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
             />
           </div>
 
+          {searchError && (
+            <p className="text-xs font-medium text-rose-600 dark:text-rose-400">
+              {searchError}
+            </p>
+          )}
+
           <div className="flex items-center justify-end pt-1">
             <Button
-              type="submit"
+              type="button"
               disabled={searching}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void handleSearch();
+              }}
               className="w-full sm:w-auto h-9 px-4 text-xs font-semibold gap-1.5 cursor-pointer"
             >
               {searching ? (
                 <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching…
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching Nationwide…
                 </>
               ) : (
                 <>
@@ -183,7 +224,7 @@ export function IfscFinderDialog({
               )}
             </Button>
           </div>
-        </form>
+        </div>
 
         {/* Results Section */}
         {hasSearched && (
@@ -195,7 +236,7 @@ export function IfscFinderDialog({
             </p>
 
             {results.length > 0 ? (
-              <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+              <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
                 {results.map((item) => {
                   const isCopied = copiedIfsc === item.ifsc;
                   return (
@@ -215,6 +256,11 @@ export function IfscFinderDialog({
                         <p className="text-[11px] text-muted-foreground truncate mt-0.5">
                           Branch: {item.branch} · {item.city}, {item.state}
                         </p>
+                        {item.address && (
+                          <p className="text-[10px] text-muted-foreground/80 line-clamp-1 mt-0.5" title={item.address}>
+                            📍 {item.address}
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -259,7 +305,7 @@ export function IfscFinderDialog({
             ) : (
               <div className="rounded-xl border border-dashed border-border p-4 text-center">
                 <p className="text-xs text-muted-foreground">
-                  No branch found matching your search. Please check the spelling or try searching by city name.
+                  No branch found matching your search. Please check the spelling or search by district/city name (e.g. Bharuch, Surat, Vadodara, Jaipur).
                 </p>
               </div>
             )}

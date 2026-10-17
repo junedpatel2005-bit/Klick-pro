@@ -58,6 +58,12 @@ export const DEFAULT_PLATFORM_SETTINGS: Record<
       "When ON, milestone auto-payments are allowed even if the client wallet has insufficient funds, deducting the full milestone amount and setting the client wallet balance into negative (e.g. -₹200) until repaid. When OFF, payments require full wallet balance.",
     category: "FINANCE",
   },
+  auto_withdrawal_enabled: {
+    value: "false",
+    description:
+      "When ON, user withdrawal requests (bank / UPI) are settled and paid automatically without requiring manual admin approval. When OFF, withdrawal requests remain pending for admin review and manual payout approval.",
+    category: "FINANCE",
+  },
   treasury_admin_user_id: {
     value: "",
     description:
@@ -105,6 +111,89 @@ export async function getMinWithdrawalAmount(): Promise<number> {
     return isNaN(parsed) || parsed <= 0 ? 500 : parsed;
   } catch {
     return 500;
+  }
+}
+
+export async function isAutoWithdrawalEnabled(): Promise<boolean> {
+  try {
+    const raw = await getPlatformSetting("auto_withdrawal_enabled", "false");
+    return raw === "true" || raw === "1" || raw === "on";
+  } catch {
+    return false;
+  }
+}
+
+export async function autoSettlePendingWithdrawals(): Promise<number> {
+  try {
+    const { emitRealtimeNotification, emitAdminOverviewUpdate } = await import("@/lib/realtime");
+    const pending = await db.projectWithdrawal.findMany({
+      where: { status: "PENDING" },
+    });
+    if (!pending.length) return 0;
+
+    for (const pw of pending) {
+      const autoUtr = `KP${Date.now()}${Math.floor(1000 + Math.random() * 9000)}`;
+      const wallet = await db.wallet.findUnique({ where: { userId: pw.professionalId } });
+      if (!wallet) continue;
+
+      await db.$transaction(async (tx) => {
+        await tx.wallet.updateMany({
+          where: { id: wallet.id, pendingBalance: { gte: pw.amount } },
+          data: {
+            balance: { decrement: pw.amount },
+            pendingBalance: { decrement: pw.amount },
+          },
+        });
+
+        await tx.projectWithdrawal.update({
+          where: { id: pw.id },
+          data: {
+            status: "COMPLETED",
+            processedAt: new Date(),
+            utr: autoUtr,
+          },
+        });
+
+        await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            amount: -pw.amount,
+            type: "WITHDRAWAL",
+            status: "COMPLETED",
+            description: `Withdrawal of ₹${pw.amount.toLocaleString("en-IN")} transferred via Auto-Pay`,
+            idempotencyKey: `auto-payout-${pw.id}`,
+            metadataJson: JSON.stringify({ withdrawalId: pw.id, utr: autoUtr, autoPay: true }),
+          },
+        });
+
+        await tx.userNotification.create({
+          data: {
+            userId: pw.professionalId,
+            type: "PAYOUT_COMPLETED",
+            title: "Withdrawal Successful",
+            description: `Your withdrawal of ₹${pw.amount.toLocaleString(
+              "en-IN",
+            )} has been processed and paid automatically. UTR: ${autoUtr}. Money is in your account!`,
+            href: "/earnings",
+          },
+        });
+      });
+
+      emitRealtimeNotification([pw.professionalId], {
+        type: "PAYOUT_COMPLETED",
+        title: "Withdrawal Successful",
+        description: `Your withdrawal of ₹${pw.amount.toLocaleString(
+          "en-IN",
+        )} has been processed and paid automatically. UTR: ${autoUtr}. Money is in your account!`,
+        href: "/earnings",
+      });
+    }
+
+    emitAdminOverviewUpdate();
+    return pending.length;
+  } catch (error) {
+    console.error("platform-settings.autoSettle.failed", error);
+    return 0;
   }
 }
 

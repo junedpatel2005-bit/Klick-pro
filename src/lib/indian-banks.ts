@@ -79,21 +79,36 @@ export type CommonBranch = {
   city: string;
   state: string;
   ifsc: string;
+  address?: string;
 };
 
 export const COMMON_INDIAN_BRANCHES: CommonBranch[] = [
   // State Bank of India
+  { bankCode: "SBIN", bankName: "State Bank of India", branch: "Palej", city: "Palej, Bharuch", state: "Gujarat", ifsc: "SBIN0011014" },
+  { bankCode: "SBIN", bankName: "State Bank of India", branch: "Bharuch Main", city: "Bharuch", state: "Gujarat", ifsc: "SBIN0000339" },
+  { bankCode: "SBIN", bankName: "State Bank of India", branch: "Station Road Bharuch", city: "Bharuch", state: "Gujarat", ifsc: "SBIN0060190" },
+  { bankCode: "SBIN", bankName: "State Bank of India", branch: "Ankleshwar", city: "Bharuch", state: "Gujarat", ifsc: "SBIN0000315" },
+  { bankCode: "SBIN", bankName: "State Bank of India", branch: "Ankleshwar GIDC", city: "Bharuch", state: "Gujarat", ifsc: "SBIN0005590" },
+  { bankCode: "SBIN", bankName: "State Bank of India", branch: "Jambusar", city: "Bharuch", state: "Gujarat", ifsc: "SBIN0000394" },
+  { bankCode: "SBIN", bankName: "State Bank of India", branch: "Amod", city: "Bharuch", state: "Gujarat", ifsc: "SBIN0010942" },
+  { bankCode: "SBIN", bankName: "State Bank of India", branch: "Dahej", city: "Bharuch", state: "Gujarat", ifsc: "SBIN0011011" },
   { bankCode: "SBIN", bankName: "State Bank of India", branch: "Surat Main", city: "Surat", state: "Gujarat", ifsc: "SBIN0000488" },
   { bankCode: "SBIN", bankName: "State Bank of India", branch: "Ring Road Surat", city: "Surat", state: "Gujarat", ifsc: "SBIN0060012" },
+  { bankCode: "SBIN", bankName: "State Bank of India", branch: "Vadodara Main", city: "Vadodara", state: "Gujarat", ifsc: "SBIN0000500" },
+  { bankCode: "SBIN", bankName: "State Bank of India", branch: "Alkapuri Vadodara", city: "Vadodara", state: "Gujarat", ifsc: "SBIN0003321" },
+  { bankCode: "SBIN", bankName: "State Bank of India", branch: "Ahmedabad Main", city: "Ahmedabad", state: "Gujarat", ifsc: "SBIN0000301" },
   { bankCode: "SBIN", bankName: "State Bank of India", branch: "Nariman Point", city: "Mumbai", state: "Maharashtra", ifsc: "SBIN0000300" },
   { bankCode: "SBIN", bankName: "State Bank of India", branch: "Fort Mumbai", city: "Mumbai", state: "Maharashtra", ifsc: "SBIN0000001" },
   { bankCode: "SBIN", bankName: "State Bank of India", branch: "Connaught Place", city: "New Delhi", state: "Delhi", ifsc: "SBIN0000691" },
-  { bankCode: "SBIN", bankName: "State Bank of India", branch: "Ahmedabad Main", city: "Ahmedabad", state: "Gujarat", ifsc: "SBIN0000301" },
   { bankCode: "SBIN", bankName: "State Bank of India", branch: "MG Road Bengaluru", city: "Bengaluru", state: "Karnataka", ifsc: "SBIN0000813" },
   { bankCode: "SBIN", bankName: "State Bank of India", branch: "Banjara Hills", city: "Hyderabad", state: "Telangana", ifsc: "SBIN0004128" },
   { bankCode: "SBIN", bankName: "State Bank of India", branch: "FC Road Pune", city: "Pune", state: "Maharashtra", ifsc: "SBIN0001110" },
 
   // HDFC Bank
+  { bankCode: "HDFC", bankName: "HDFC Bank", branch: "Palej", city: "Palej, Bharuch", state: "Gujarat", ifsc: "HDFC0003047" },
+  { bankCode: "HDFC", bankName: "HDFC Bank", branch: "Bharuch", city: "Bharuch", state: "Gujarat", ifsc: "HDFC0000251" },
+  { bankCode: "HDFC", bankName: "HDFC Bank", branch: "Ankleshwar", city: "Bharuch", state: "Gujarat", ifsc: "HDFC0000293" },
+  { bankCode: "HDFC", bankName: "HDFC Bank", branch: "Jambusar", city: "Bharuch", state: "Gujarat", ifsc: "HDFC0003046" },
   { bankCode: "HDFC", bankName: "HDFC Bank", branch: "Surat Ring Road", city: "Surat", state: "Gujarat", ifsc: "HDFC0000067" },
   { bankCode: "HDFC", bankName: "HDFC Bank", branch: "Adajan Surat", city: "Surat", state: "Gujarat", ifsc: "HDFC0000252" },
   { bankCode: "HDFC", bankName: "HDFC Bank", branch: "Fort Mumbai", city: "Mumbai", state: "Maharashtra", ifsc: "HDFC0000060" },
@@ -104,6 +119,8 @@ export const COMMON_INDIAN_BRANCHES: CommonBranch[] = [
   { bankCode: "HDFC", bankName: "HDFC Bank", branch: "Jubilee Hills", city: "Hyderabad", state: "Telangana", ifsc: "HDFC0000045" },
 
   // ICICI Bank
+  { bankCode: "ICIC", bankName: "ICICI Bank", branch: "Bharuch Panch Batti", city: "Bharuch", state: "Gujarat", ifsc: "ICIC0000178" },
+  { bankCode: "ICIC", bankName: "ICICI Bank", branch: "Ankleshwar", city: "Bharuch", state: "Gujarat", ifsc: "ICIC0000292" },
   { bankCode: "ICIC", bankName: "ICICI Bank", branch: "Surat Athwa Lines", city: "Surat", state: "Gujarat", ifsc: "ICIC0000068" },
   { bankCode: "ICIC", bankName: "ICICI Bank", branch: "Bandra Kurla Complex", city: "Mumbai", state: "Maharashtra", ifsc: "ICIC0000544" },
   { bankCode: "ICIC", bankName: "ICICI Bank", branch: "Nariman Point", city: "Mumbai", state: "Maharashtra", ifsc: "ICIC0000004" },
@@ -111,28 +128,38 @@ export const COMMON_INDIAN_BRANCHES: CommonBranch[] = [
   { bankCode: "ICIC", bankName: "ICICI Bank", branch: "Jayanagar", city: "Bengaluru", state: "Karnataka", ifsc: "ICIC0000002" },
 
   // Kotak Mahindra Bank
+  { bankCode: "KKBK", bankName: "Kotak Mahindra Bank", branch: "Bharuch", city: "Bharuch", state: "Gujarat", ifsc: "KKBK0000844" },
+  { bankCode: "KKBK", bankName: "Kotak Mahindra Bank", branch: "Ankleshwar", city: "Bharuch", state: "Gujarat", ifsc: "KKBK0000845" },
   { bankCode: "KKBK", bankName: "Kotak Mahindra Bank", branch: "Surat Ghod Dod Road", city: "Surat", state: "Gujarat", ifsc: "KKBK0000843" },
   { bankCode: "KKBK", bankName: "Kotak Mahindra Bank", branch: "Nariman Point", city: "Mumbai", state: "Maharashtra", ifsc: "KKBK0000958" },
   { bankCode: "KKBK", bankName: "Kotak Mahindra Bank", branch: "Connaught Place", city: "New Delhi", state: "Delhi", ifsc: "KKBK0000172" },
 
   // Axis Bank
+  { bankCode: "UTIB", bankName: "Axis Bank", branch: "Rahadpor (Palej)", city: "Palej, Bharuch", state: "Gujarat", ifsc: "UTIB0002353" },
+  { bankCode: "UTIB", bankName: "Axis Bank", branch: "Bharuch Main", city: "Bharuch", state: "Gujarat", ifsc: "UTIB0000350" },
+  { bankCode: "UTIB", bankName: "Axis Bank", branch: "Ankleshwar", city: "Bharuch", state: "Gujarat", ifsc: "UTIB0000353" },
   { bankCode: "UTIB", bankName: "Axis Bank", branch: "Surat Main", city: "Surat", state: "Gujarat", ifsc: "UTIB0000047" },
   { bankCode: "UTIB", bankName: "Axis Bank", branch: "Fort Mumbai", city: "Mumbai", state: "Maharashtra", ifsc: "UTIB0000004" },
   { bankCode: "UTIB", bankName: "Axis Bank", branch: "Statesman House", city: "New Delhi", state: "Delhi", ifsc: "UTIB0000007" },
 
   // Bank of Baroda
+  { bankCode: "BARB", bankName: "Bank of Baroda", branch: "Palej", city: "Palej, Bharuch", state: "Gujarat", ifsc: "BARB0PALEJX" },
   { bankCode: "BARB", bankName: "Bank of Baroda", branch: "Ikhar", city: "Bharuch", state: "Gujarat", ifsc: "BARB0IKHARX" },
   { bankCode: "BARB", bankName: "Bank of Baroda", branch: "Amod", city: "Bharuch", state: "Gujarat", ifsc: "BARB0AMODXX" },
   { bankCode: "BARB", bankName: "Bank of Baroda", branch: "Jambusar", city: "Bharuch", state: "Gujarat", ifsc: "BARB0JAMBUS" },
   { bankCode: "BARB", bankName: "Bank of Baroda", branch: "Bharuch Main", city: "Bharuch", state: "Gujarat", ifsc: "BARB0BHARUC" },
   { bankCode: "BARB", bankName: "Bank of Baroda", branch: "Station Road Bharuch", city: "Bharuch", state: "Gujarat", ifsc: "BARB0STABHA" },
-  { bankCode: "BARB", bankName: "Bank of Baroda", branch: "Palej", city: "Bharuch", state: "Gujarat", ifsc: "BARB0PALEJX" },
   { bankCode: "BARB", bankName: "Bank of Baroda", branch: "Ankleshwar GIDC", city: "Bharuch", state: "Gujarat", ifsc: "BARB0GIDCXX" },
   { bankCode: "BARB", bankName: "Bank of Baroda", branch: "Surat Main", city: "Surat", state: "Gujarat", ifsc: "BARB0SURATM" },
   { bankCode: "BARB", bankName: "Bank of Baroda", branch: "Mandvi Vadodara", city: "Vadodara", state: "Gujarat", ifsc: "BARB0MANBAR" },
   { bankCode: "BARB", bankName: "Bank of Baroda", branch: "Fort Mumbai", city: "Mumbai", state: "Maharashtra", ifsc: "BARB0FORTXX" },
 
+  // Bank of India
+  { bankCode: "BKID", bankName: "Bank of India", branch: "Palej", city: "Palej, Bharuch", state: "Gujarat", ifsc: "BKID0002014" },
+  { bankCode: "BKID", bankName: "Bank of India", branch: "Bharuch Main", city: "Bharuch", state: "Gujarat", ifsc: "BKID0002008" },
+
   // Punjab National Bank
+  { bankCode: "PUNB", bankName: "Punjab National Bank", branch: "Bharuch", city: "Bharuch", state: "Gujarat", ifsc: "PUNB0108300" },
   { bankCode: "PUNB", bankName: "Punjab National Bank", branch: "Surat Main", city: "Surat", state: "Gujarat", ifsc: "PUNB0042400" },
   { bankCode: "PUNB", bankName: "Punjab National Bank", branch: "Connaught Circus", city: "New Delhi", state: "Delhi", ifsc: "PUNB0015300" },
 ];

@@ -148,7 +148,12 @@ function getCategoryIcon(type: string) {
     return { Icon: AlertTriangle, color: "text-amber-700 bg-amber-50 border-amber-200" };
   if (type.includes("SECURITY") || type.includes("VERIFICATION") || type.includes("KYC"))
     return { Icon: ShieldCheck, color: "text-rose-700 bg-rose-50 border-rose-200" };
-  if (type.includes("PAYMENT") || type.includes("PAYOUT") || type.includes("ESCROW"))
+  if (
+    type.includes("PAYMENT") ||
+    type.includes("PAYOUT") ||
+    type.includes("ESCROW") ||
+    type.includes("WITHDRAWAL")
+  )
     return { Icon: CircleDollarSign, color: "text-emerald-700 bg-emerald-50 border-emerald-200" };
   if (type.includes("MILESTONE"))
     return { Icon: Activity, color: "text-cyan-700 bg-cyan-50 border-cyan-200" };
@@ -193,9 +198,7 @@ function isEngagementType(type?: string | null): boolean {
     t.startsWith("HIRE_") ||
     t.startsWith("NEW_HIRE") ||
     t === "JOB_POSTED" ||
-    t === "NEW_JOB" ||
-    t.includes("PAYOUT") ||
-    t.includes("ESCROW")
+    t === "NEW_JOB"
   );
 }
 

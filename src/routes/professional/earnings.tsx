@@ -641,50 +641,11 @@ export default function Earnings() {
               value={`₹${wallet.reserved.toLocaleString()}`}
             />
           </div>
-          <section className="rounded-2xl border border-border bg-card p-5 shadow-soft">
-            <div className="mb-5 flex items-center justify-between gap-4">
-              <div>
-                <h2 className="font-display text-xl font-semibold">Completed jobs</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Finished projects and the earnings recorded against each one.
-                </p>
-              </div>
-              <CheckCircle2 className="h-5 w-5 text-success" />
-            </div>
-            <div className="divide-y divide-border">
-              {completedJobs.map((job) => (
-                <div
-                  key={job.id}
-                  className="flex flex-col gap-3 py-4 first:pt-0 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <BriefcaseBusiness className="h-4 w-4 shrink-0 text-success" />
-                    <div className="min-w-0">
-                      <Link
-                        href={`/project/${job.id}/tracking`}
-                        className="truncate font-semibold hover:text-primary"
-                      >
-                        {job.jobTitle}
-                      </Link>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {job.clientName} · Completed{" "}
-                        {new Date(job.completedAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="shrink-0 font-bold text-success">
-                    +₹{job.amount.toLocaleString("en-IN")}{" "}
-                    <span className="text-xs">{job.currency}</span>
-                  </p>
-                </div>
-              ))}
-              {!completedJobs.length && (
-                <p className="py-4 text-sm text-muted-foreground">
-                  Completed jobs will appear here after a project is marked complete.
-                </p>
-              )}
-            </div>
-          </section>
+          {/* Linked Payout & Settlement Accounts Card */}
+          <LinkedAccountsCard
+            title="Link Payout & Settlement Accounts"
+            description="Manage saved bank accounts & UPI IDs for fast withdrawal settlements."
+          />
           <div className="grid gap-6 xl:grid-cols-[1.25fr_.75fr]">
             <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
               <div className="flex items-center justify-between border-b border-border p-5">
@@ -919,11 +880,6 @@ export default function Earnings() {
                 )}
               </section>
 
-              {/* Saved Bank & UPI Accounts Card */}
-              <LinkedAccountsCard
-                title="Payout Bank & UPI Accounts"
-                description="Manage saved bank accounts & UPI IDs for fast withdrawal settlements."
-              />
 
               {/* Optional Advanced Razorpay Account Accordion */}
               <div className="rounded-2xl border border-border/70 bg-card/60 p-4">
@@ -1289,17 +1245,17 @@ export default function Earnings() {
                     </span>
                   </div>
                   <input
-                    className={`h-10 w-full rounded-xl border bg-background px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 ${
+                    className={`h-10 w-full rounded-xl border bg-background px-3 text-xs font-mono focus:outline-none focus:ring-2 ${
                       accountNumber && !bankAccValidation.valid
-                        ? "border-amber-500 focus:border-amber-500"
-                        : "border-input"
+                        ? "border-rose-500 text-rose-600 focus:border-rose-500 focus:ring-rose-500/20"
+                        : "border-input focus:ring-primary/20"
                     }`}
                     placeholder="e.g. 102938475612"
                     value={accountNumber}
                     onChange={(e) => setAccountNumber(e.target.value.replace(/\s+/g, ""))}
                   />
                   {accountNumber && !bankAccValidation.valid && (
-                    <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                    <p className="mt-1 text-[11px] font-medium text-rose-600 dark:text-rose-400">
                       {bankAccValidation.message}
                     </p>
                   )}

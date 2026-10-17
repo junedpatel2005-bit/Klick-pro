@@ -232,12 +232,7 @@ export async function POST(request: Request) {
               where: { idempotencyKey: `payout-${withdrawal.id}` },
               data: { status: "FAILED" },
             });
-            const targetUser = await tx.user.findUnique({
-              where: { id: withdrawal.professionalId },
-              select: { role: true },
-            });
-            const earningsHref =
-              targetUser?.role === "CLIENT" ? "/client/earnings" : "/professional/earnings";
+            const earningsHref = "/earnings";
 
             await tx.userNotification.create({
               data: {
@@ -289,12 +284,7 @@ export async function POST(request: Request) {
               },
             });
 
-            const targetUser = await tx.user.findUnique({
-              where: { id: withdrawal.professionalId },
-              select: { role: true },
-            });
-            const earningsHref =
-              targetUser?.role === "CLIENT" ? "/client/earnings" : "/professional/earnings";
+            const earningsHref = "/earnings";
 
             await tx.userNotification.create({
               data: {

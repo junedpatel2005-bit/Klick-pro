@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
+import { emitRealtimeNotification, emitAdminOverviewUpdate } from "@/lib/realtime";
 
 async function isAdmin(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -36,15 +37,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     );
   try {
     const updated = await db.$transaction(async (tx) => {
+      let notificationToEmit: {
+        userId: number;
+        type: string;
+        title: string;
+        description: string;
+        href: string;
+        id?: number;
+      } | null = null;
+
       const wallet = await tx.wallet.findUnique({ where: { userId: withdrawal.professionalId } });
       if (!wallet) throw new Error("Professional wallet not found.");
 
-      const targetUser = await tx.user.findUnique({
-        where: { id: withdrawal.professionalId },
-        select: { role: true },
-      });
-      const earningsHref =
-        targetUser?.role === "CLIENT" ? "/client/earnings" : "/professional/earnings";
+      const earningsHref = "/earnings";
 
       if (parsed.data.status === "COMPLETED") {
         const settled = await tx.wallet.updateMany({
@@ -82,30 +87,50 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         });
 
         // Notify user
-        await tx.userNotification.create({
+        const notif = await tx.userNotification.create({
           data: {
             userId: withdrawal.professionalId,
             type: "PAYOUT_COMPLETED",
-            title: "Withdrawal Approved & Paid",
-            description: `Your withdrawal request of ₹${withdrawal.amount.toLocaleString(
+            title: "Withdrawal Successful",
+            description: `Your withdrawal of ₹${withdrawal.amount.toLocaleString(
               "en-IN",
-            )} has been approved and paid by Admin. Money is in your bank account!`,
+            )} has been approved and paid by Admin. Money is in your account!${
+              parsed.data.utr ? ` UTR: ${parsed.data.utr}` : ""
+            }`,
             href: earningsHref,
           },
         });
+
+        notificationToEmit = {
+          userId: withdrawal.professionalId,
+          type: notif.type,
+          title: notif.title,
+          description: notif.description ?? "",
+          href: earningsHref,
+          id: notif.id,
+        };
       } else if (parsed.data.status === "PROCESSING") {
         // Payout approved and dispatched to bank
-        await tx.userNotification.create({
+        const notif = await tx.userNotification.create({
           data: {
             userId: withdrawal.professionalId,
             type: "PAYOUT_PROCESSING",
             title: "Withdrawal Approved by Admin",
             description: `Your withdrawal request of ₹${withdrawal.amount.toLocaleString(
               "en-IN",
-            )} was approved by Admin. Payout transfer is in progress — please wait for money in your bank.`,
+            )} was approved by Admin. Payout transfer is in progress — please wait for money in your account.`,
             href: earningsHref,
           },
         });
+
+        notificationToEmit = {
+          userId: withdrawal.professionalId,
+          type: notif.type,
+          title: notif.title,
+          description: notif.description ?? "",
+          href: earningsHref,
+          id: notif.id,
+        };
       } else {
         // FAILED: unreserve pending balance
         await tx.wallet.updateMany({
@@ -114,7 +139,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         });
 
         // Notify user about rejection
-        await tx.userNotification.create({
+        const notif = await tx.userNotification.create({
           data: {
             userId: withdrawal.professionalId,
             type: "PAYOUT_FAILED",
@@ -127,9 +152,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             href: earningsHref,
           },
         });
+
+        notificationToEmit = {
+          userId: withdrawal.professionalId,
+          type: notif.type,
+          title: notif.title,
+          description: notif.description ?? "",
+          href: earningsHref,
+          id: notif.id,
+        };
       }
 
-      return tx.projectWithdrawal.update({
+      const updatedWithdrawal = await tx.projectWithdrawal.update({
         where: { id },
         data: {
           status: parsed.data.status,
@@ -141,8 +175,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           utr: parsed.data.utr ?? undefined,
         },
       });
+
+      return { withdrawal: updatedWithdrawal, notificationToEmit };
     });
-    return NextResponse.json({ withdrawal: updated });
+
+    if (updated.notificationToEmit) {
+      emitRealtimeNotification([updated.notificationToEmit.userId], {
+        id: updated.notificationToEmit.id,
+        type: updated.notificationToEmit.type,
+        title: updated.notificationToEmit.title,
+        description: updated.notificationToEmit.description,
+        href: updated.notificationToEmit.href,
+      });
+    }
+    emitAdminOverviewUpdate();
+
+    return NextResponse.json({ withdrawal: updated.withdrawal });
   } catch (error) {
     if (
       error instanceof Error &&

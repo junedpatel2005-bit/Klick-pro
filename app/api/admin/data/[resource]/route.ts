@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureWallet } from "@/lib/wallet-ledger";
 import { sessionCookie, verifySession } from "@/lib/auth";
+import { isAutoWithdrawalEnabled } from "@/lib/platform-settings";
 
 export async function GET(
   request: NextRequest,
@@ -577,7 +578,7 @@ export async function GET(
   }
   if (resource === "finance") {
     try {
-      const [transactions, withdrawals, payments, walletTransactions, adminUsers] =
+      const [transactions, withdrawals, payments, walletTransactions, adminUsers, autoWithdrawalEnabled] =
         await Promise.all([
           db.projectTransaction.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
           db.projectWithdrawal.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
@@ -625,6 +626,9 @@ export async function GET(
                   dueDate: true,
                   submittedAt: true,
                   approvedAt: true,
+                  validityDays: true,
+                  releaseAt: true,
+                  autoReleaseStatus: true,
                 },
               },
               projectTracking: {
@@ -652,6 +656,9 @@ export async function GET(
                       dueDate: true,
                       submittedAt: true,
                       approvedAt: true,
+                      validityDays: true,
+                      releaseAt: true,
+                      autoReleaseStatus: true,
                     },
                     orderBy: { createdAt: "asc" },
                   },
@@ -670,6 +677,7 @@ export async function GET(
             orderBy: { id: "asc" },
             select: { id: true, firstName: true, lastName: true },
           }),
+          isAutoWithdrawalEnabled(),
         ]);
       // Milestone settlements credit whichever ADMIN row `findFirst` happens to resolve first
       // (src/lib/wallet-ledger.ts has no deterministic tie-breaker), so with multiple admin
@@ -911,6 +919,9 @@ export async function GET(
           projectRemainingAmount,
           remainingMilestonesCount,
           milestonesList: allMilestones,
+          milestoneValidityDays: p.milestone?.validityDays ?? 0,
+          milestoneReleaseAt: p.milestone?.releaseAt ? p.milestone.releaseAt.toISOString() : null,
+          milestoneAutoReleaseStatus: p.milestone?.autoReleaseStatus ?? null,
           financials: {
             grossClientAmount: p.amount,
             baseAmount: p.baseAmount,
@@ -938,6 +949,7 @@ export async function GET(
         platformWalletTransactions,
         names,
         usersById,
+        autoWithdrawalEnabled,
       });
     } catch (err) {
       console.error("Failed to load admin finance data:", err);

@@ -158,7 +158,12 @@ function getCategoryIcon(type: string) {
       Icon: ShieldCheck,
       color: "text-rose-600 bg-rose-500/10 border-rose-200 dark:border-rose-800",
     };
-  if (type.includes("PAYMENT") || type.includes("PAYOUT") || type.includes("ESCROW"))
+  if (
+    type.includes("PAYMENT") ||
+    type.includes("PAYOUT") ||
+    type.includes("ESCROW") ||
+    type.includes("WITHDRAWAL")
+  )
     return {
       Icon: CircleDollarSign,
       color: "text-emerald-600 bg-emerald-500/10 border-emerald-200 dark:border-emerald-800",
@@ -284,9 +289,7 @@ function isEngagementType(type?: string | null): boolean {
     t.startsWith("HIRE_") ||
     t.startsWith("NEW_HIRE") ||
     t === "JOB_POSTED" ||
-    t === "NEW_JOB" ||
-    t.includes("PAYOUT") ||
-    t.includes("ESCROW")
+    t === "NEW_JOB"
   );
 }
 
@@ -692,7 +695,7 @@ export function NotificationInbox({ admin: _isAdmin = false }: { admin?: boolean
               }`}
             >
               <Bell className="h-3.5 w-3.5" />
-              <span>Other Notifications</span>
+              <span>General &amp; Wallet</span>
               {otherItems.length > 0 && (
                 <span
                   className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${

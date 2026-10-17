@@ -19,6 +19,8 @@ import {
   CheckCircle2,
   Clock,
   CreditCard,
+  Eye,
+  EyeOff,
   Landmark,
   Loader2,
   Pencil,
@@ -38,6 +40,7 @@ import {
   getBankNameFromIfsc,
   validateBankSpecificAccountNumber,
   getExpectedAccountLengthHint,
+  getBankValidationRule,
 } from "@/lib/indian-banks";
 import { BankCombobox } from "@/components/BankCombobox";
 import { IfscFinderDialog } from "@/components/IfscFinderDialog";
@@ -88,6 +91,17 @@ export function LinkedAccountsCard({
   const [cardBank, setCardBank] = useState("");
   const [razorpayAccountId, setRazorpayAccountId] = useState("");
   const [isDefault, setIsDefault] = useState(false);
+
+  // Field-Level Inline Error States (Zero unwanted toast errors)
+  const [bankNameError, setBankNameError] = useState<string | null>(null);
+  const [accountNumberError, setAccountNumberError] = useState<string | null>(null);
+  const [confirmAccountNumberError, setConfirmAccountNumberError] = useState<string | null>(null);
+  const [accountHolderError, setAccountHolderError] = useState<string | null>(null);
+  const [ifscErrorInline, setIfscErrorInline] = useState<string | null>(null);
+  const [upiIdError, setUpiIdError] = useState<string | null>(null);
+  const [upiHolderError, setUpiHolderError] = useState<string | null>(null);
+  const [razorpayError, setRazorpayError] = useState<string | null>(null);
+  const [showAccountNumber, setShowAccountNumber] = useState(false);
 
   // NPCI VPA Verification State
   const [vpaVerifying, setVpaVerifying] = useState(false);
@@ -146,6 +160,90 @@ export function LinkedAccountsCard({
     setOfficialBankName(null);
     setCustomBankInput(false);
     setBankSearchTerm("");
+
+    // Reset inline errors
+    setBankNameError(null);
+    setAccountNumberError(null);
+    setConfirmAccountNumberError(null);
+    setAccountHolderError(null);
+    setIfscErrorInline(null);
+    setUpiIdError(null);
+    setUpiHolderError(null);
+    setRazorpayError(null);
+    setShowAccountNumber(false);
+  };
+
+  const validateAccountNumberLive = (val: string, bName: string, ifsc: string) => {
+    if (!val) {
+      setAccountNumberError(null);
+      return;
+    }
+    if (!/^\d+$/.test(val)) {
+      setAccountNumberError("Account number must contain only numbers.");
+      return;
+    }
+    const rule = getBankValidationRule(bName, ifsc);
+    if (rule) {
+      const maxLen = Math.max(...rule.expectedLengths);
+      if (val.length > maxLen) {
+        setAccountNumberError(
+          `${rule.bankName} account number must be ${rule.description} (you entered ${val.length} digits).`,
+        );
+        return;
+      }
+    } else {
+      if (val.length > 18) {
+        setAccountNumberError(
+          `Bank account number cannot exceed 18 digits (you entered ${val.length} digits).`,
+        );
+        return;
+      }
+    }
+    setAccountNumberError(null);
+  };
+
+  const handleAccountNumberBlur = () => {
+    if (!accountNumber) return;
+    const res = validateBankSpecificAccountNumber(accountNumber, bankName, ifscCode);
+    if (!res.valid) {
+      setAccountNumberError(res.message || "Invalid account number.");
+    } else {
+      setAccountNumberError(null);
+    }
+  };
+
+  const handleConfirmChange = (val: string) => {
+    const clean = val.replace(/\s+/g, "");
+    setConfirmAccountNumber(clean);
+    if (confirmAccountNumberError) setConfirmAccountNumberError(null);
+    if (clean && accountNumber && clean !== accountNumber) {
+      if (clean.length >= accountNumber.length) {
+        setConfirmAccountNumberError("Account numbers do not match.");
+      }
+    } else if (clean === accountNumber) {
+      setConfirmAccountNumberError(null);
+    }
+  };
+
+  const handleConfirmBlur = () => {
+    if (!confirmAccountNumber) return;
+    if (confirmAccountNumber !== accountNumber) {
+      setConfirmAccountNumberError("Account numbers do not match.");
+    } else {
+      setConfirmAccountNumberError(null);
+    }
+  };
+
+  const handleBankSelect = (selectedBank: { name: string; code: string }) => {
+    setBankName(selectedBank.name);
+    setBankNameError(null);
+    const newIfsc = ifscCode || `${selectedBank.code.toUpperCase()}0`;
+    if (!ifscCode && selectedBank.code) {
+      setIfscCode(newIfsc);
+    }
+    if (accountNumber) {
+      validateAccountNumberLive(accountNumber, selectedBank.name, newIfsc);
+    }
   };
 
   const handleEdit = (acc: LinkedAccount) => {
@@ -173,6 +271,18 @@ export function LinkedAccountsCard({
         : false,
     );
     setBankSearchTerm("");
+
+    // Clear inline errors
+    setBankNameError(null);
+    setAccountNumberError(null);
+    setConfirmAccountNumberError(null);
+    setAccountHolderError(null);
+    setIfscErrorInline(null);
+    setUpiIdError(null);
+    setUpiHolderError(null);
+    setRazorpayError(null);
+    setShowAccountNumber(false);
+
     if (acc.ifscCode && acc.ifscCode.length === 11) {
       void handleLookupIfsc(acc.ifscCode, true);
     }
@@ -183,6 +293,7 @@ export function LinkedAccountsCard({
     const clean = normalizeIfsc(code);
     setIfscCode(clean);
     setIfscError(null);
+    setIfscErrorInline(null);
     setIfscBranch(null);
     if (clean.length === 11) {
       setIfscVerifying(true);
@@ -191,17 +302,21 @@ export function LinkedAccountsCard({
         if (res.valid && res.bank) {
           setIfscBranch(`${res.bank} · ${res.branch} (${res.city})`);
           setBankName(res.bank);
+          setBankNameError(null);
+          if (accountNumber) {
+            validateAccountNumberLive(accountNumber, res.bank, clean);
+          }
           if (!silent) {
             toast.success(`IFSC Verified: ${res.bank} (${res.branch})`);
           }
         } else {
-          setIfscError(res.error || "Invalid IFSC code.");
+          setIfscErrorInline(res.error || "Invalid IFSC code.");
           if (!silent) {
-            toast.error(res.error || "Invalid IFSC code.");
+            setIfscError(res.error || "Invalid IFSC code.");
           }
         }
       } catch {
-        setIfscError("Unable to verify IFSC code.");
+        setIfscErrorInline("Unable to verify IFSC code.");
       } finally {
         setIfscVerifying(false);
       }
@@ -210,16 +325,19 @@ export function LinkedAccountsCard({
 
   const handleNameChange = (newName: string) => {
     setAccountHolder(newName);
+    if (accountHolderError) setAccountHolderError(null);
+    if (upiHolderError) setUpiHolderError(null);
   };
 
   const handleVerifyVpa = async () => {
     const toCheck = upiId.trim().toLowerCase();
     if (!toCheck || !toCheck.includes("@")) {
-      toast.error("Please enter a valid UPI ID (e.g. rahul@upi)");
+      setUpiIdError("Please enter a valid UPI ID (e.g. rahul@upi)");
       return;
     }
     setVpaVerifying(true);
     setVpaError(null);
+    setUpiIdError(null);
     try {
       const res = await fetch("/api/v1/wallet/verify-vpa", {
         method: "POST",
@@ -234,12 +352,12 @@ export function LinkedAccountsCard({
         setVpaVerified(false);
         setVpaCustomerName(null);
         setVpaError(data?.error || "UPI ID could not be verified on NPCI.");
-        toast.error(data?.error || "UPI ID could not be verified on NPCI.");
+        setUpiIdError(data?.error || "UPI ID could not be verified on NPCI.");
       }
     } catch {
       setVpaVerified(false);
       setVpaError("Failed to reach NPCI verification service.");
-      toast.error("Failed to reach NPCI verification service.");
+      setUpiIdError("Failed to reach NPCI verification service.");
     } finally {
       setVpaVerifying(false);
     }
@@ -254,38 +372,70 @@ export function LinkedAccountsCard({
   const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    let hasErrors = false;
+
+    // Reset inline errors prior to check
+    setBankNameError(null);
+    setAccountNumberError(null);
+    setConfirmAccountNumberError(null);
+    setIfscErrorInline(null);
+    setAccountHolderError(null);
+    setUpiIdError(null);
+    setUpiHolderError(null);
+    setRazorpayError(null);
+
     if (accountType === "BANK") {
-      const accValidation = validateBankSpecificAccountNumber(accountNumber, bankName, ifscCode);
-      if (!accValidation.valid) {
-        toast.error(accValidation.message || "Please enter a valid bank account number.");
-        return;
+      if (!bankName.trim()) {
+        setBankNameError("Please select or enter your bank name.");
+        hasErrors = true;
       }
-      if (accountNumber !== confirmAccountNumber) {
-        toast.error("Account numbers do not match.");
-        return;
+
+      if (!ifscCode || ifscCode.trim().length !== 11) {
+        setIfscErrorInline("IFSC Code must be exactly 11 characters (e.g. SBIN0000488).");
+        hasErrors = true;
       }
-      if (!ifscCode || ifscCode.length !== 11) {
-        toast.error("IFSC Code must be exactly 11 characters.");
-        return;
+
+      if (!accountNumber) {
+        setAccountNumberError("Account number is required.");
+        hasErrors = true;
+      } else {
+        const accValidation = validateBankSpecificAccountNumber(accountNumber, bankName, ifscCode);
+        if (!accValidation.valid) {
+          setAccountNumberError(accValidation.message || "Please enter a valid bank account number.");
+          hasErrors = true;
+        }
       }
+
+      if (!confirmAccountNumber) {
+        setConfirmAccountNumberError("Please confirm your account number.");
+        hasErrors = true;
+      } else if (accountNumber !== confirmAccountNumber) {
+        setConfirmAccountNumberError("Account numbers do not match.");
+        hasErrors = true;
+      }
+
       if (!accountHolder.trim() || accountHolder.trim().length < 2) {
-        toast.error("Please enter the account holder name as per bank records.");
-        return;
+        setAccountHolderError("Please enter the account holder name as per bank records.");
+        hasErrors = true;
       }
     } else if (accountType === "UPI") {
-      if (!upiId || !upiId.includes("@")) {
-        toast.error("Please enter a valid UPI ID (e.g. yourname@oksbi).");
-        return;
+      if (!upiId || !upiId.includes("@") || upiId.length < 4) {
+        setUpiIdError("Please enter a valid UPI ID (e.g. yourname@oksbi).");
+        hasErrors = true;
       }
       if (!accountHolder.trim() || accountHolder.trim().length < 2) {
-        toast.error("Please enter the name registered with your UPI account.");
-        return;
+        setUpiHolderError("Please enter the name registered with your UPI account.");
+        hasErrors = true;
       }
     } else if (accountType === "RAZORPAY") {
       if (!razorpayAccountId || razorpayAccountId.length < 5) {
-        toast.error("Please enter a valid Razorpay Account ID.");
-        return;
+        setRazorpayError("Please enter a valid Razorpay Account ID.");
+        hasErrors = true;
       }
+    }
+
+    if (hasErrors) {
+      return;
     }
 
     setSaving(true);
@@ -618,7 +768,7 @@ export function LinkedAccountsCard({
             </button>
           </div>
 
-          <form onSubmit={handleSaveAccount} className="space-y-3.5 pt-2">
+          <form onSubmit={handleSaveAccount} noValidate className="space-y-3.5 pt-2">
             {/* BANK FORM */}
             {accountType === "BANK" && (
               <>
@@ -630,15 +780,19 @@ export function LinkedAccountsCard({
                   <BankCombobox
                     id="bankName"
                     value={bankName}
-                    onChange={(val) => setBankName(val)}
-                    onSelectBank={(bank) => {
-                      if (!ifscCode) {
-                        setIfscCode(`${bank.code}0`);
-                      }
+                    onChange={(val) => {
+                      setBankName(val);
+                      if (bankNameError) setBankNameError(null);
                     }}
+                    onSelectBank={(bank) => handleBankSelect(bank)}
                     placeholder="Search or type bank name (e.g. HDFC, SBI, ICICI)…"
-                    required
                   />
+                  {bankNameError && (
+                    <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-start gap-1">
+                      <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                      <span>{bankNameError}</span>
+                    </p>
+                  )}
                 </div>
 
                 {/* IFSC Code with Live Verification & Find IFSC Tool */}
@@ -655,7 +809,11 @@ export function LinkedAccountsCard({
                       )}
                       <button
                         type="button"
-                        onClick={() => setIfscFinderOpen(true)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIfscFinderOpen(true);
+                        }}
                         className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
                         title="Find IFSC Code by Bank & Location"
                       >
@@ -668,10 +826,17 @@ export function LinkedAccountsCard({
                     id="ifscCode"
                     maxLength={11}
                     value={ifscCode}
-                    onChange={(e) => void handleLookupIfsc(normalizeIfsc(e.target.value))}
+                    onChange={(e) => {
+                      const clean = normalizeIfsc(e.target.value);
+                      if (ifscErrorInline) setIfscErrorInline(null);
+                      void handleLookupIfsc(clean);
+                    }}
                     placeholder="e.g. HDFC0001234 or BARB0IKHARX"
-                    className="font-mono uppercase text-xs"
-                    required
+                    className={`font-mono uppercase text-xs ${
+                      ifscErrorInline || ifscError
+                        ? "border-rose-500 focus-visible:ring-rose-500/20 text-rose-600"
+                        : ""
+                    }`}
                   />
                   {ifscBranch && (
                     <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
@@ -681,41 +846,69 @@ export function LinkedAccountsCard({
                       </span>
                     </div>
                   )}
-                  {ifscError && (
-                    <p className="text-[11px] text-rose-600 dark:text-rose-400">
-                      {ifscError}
+                  {(ifscErrorInline || ifscError) && (
+                    <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-start gap-1">
+                      <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                      <span>{ifscErrorInline || ifscError}</span>
                     </p>
                   )}
                 </div>
 
-                <IfscFinderDialog
-                  open={ifscFinderOpen}
-                  onOpenChange={setIfscFinderOpen}
-                  defaultBank={bankName}
-                  onSelectIfsc={(code, bName, bBranch) => {
-                    setIfscCode(code);
-                    if (bName) setBankName(bName);
-                    if (bBranch) setIfscBranch(bBranch);
-                    void handleLookupIfsc(code);
-                  }}
-                />
-
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <Label htmlFor="accountNumber" className="text-xs font-semibold">
-                      Account Number
-                    </Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="accountNumber" className="text-xs font-semibold">
+                        Account Number
+                      </Label>
+                      <button
+                        type="button"
+                        onClick={() => setShowAccountNumber(!showAccountNumber)}
+                        className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
+                        tabIndex={-1}
+                      >
+                        {showAccountNumber ? (
+                          <>
+                            <EyeOff className="h-3 w-3" />
+                            <span>Hide</span>
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="h-3 w-3" />
+                            <span>Show</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                     <Input
                       id="accountNumber"
-                      type="password"
+                      type={showAccountNumber ? "text" : "password"}
                       value={accountNumber}
-                      onChange={(e) => setAccountNumber(e.target.value.replace(/\s+/g, ""))}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\s+/g, "");
+                        setAccountNumber(val);
+                        validateAccountNumberLive(val, bankName, ifscCode);
+                        if (confirmAccountNumber) {
+                          if (confirmAccountNumberError) setConfirmAccountNumberError(null);
+                        }
+                      }}
+                      onBlur={handleAccountNumberBlur}
                       placeholder="e.g. 102938475612"
-                      required
+                      className={`text-xs font-mono transition-colors ${
+                        accountNumberError
+                          ? "border-rose-500 focus-visible:ring-rose-500/20 text-rose-600"
+                          : ""
+                      }`}
                     />
-                    <p className="text-[11px] text-muted-foreground">
-                      {getExpectedAccountLengthHint(bankName, ifscCode)}
-                    </p>
+                    {accountNumberError ? (
+                      <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-start gap-1">
+                        <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                        <span>{accountNumberError}</span>
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">
+                        {getExpectedAccountLengthHint(bankName, ifscCode)}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="confirmAccountNumber" className="text-xs font-semibold">
@@ -723,11 +916,28 @@ export function LinkedAccountsCard({
                     </Label>
                     <Input
                       id="confirmAccountNumber"
+                      type={showAccountNumber ? "text" : "password"}
                       value={confirmAccountNumber}
-                      onChange={(e) => setConfirmAccountNumber(e.target.value.replace(/\s+/g, ""))}
+                      onChange={(e) => handleConfirmChange(e.target.value)}
+                      onBlur={handleConfirmBlur}
                       placeholder="Re-enter number"
-                      required
+                      className={`text-xs font-mono transition-colors ${
+                        confirmAccountNumberError
+                          ? "border-rose-500 focus-visible:ring-rose-500/20 text-rose-600"
+                          : ""
+                      }`}
                     />
+                    {confirmAccountNumberError ? (
+                      <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-start gap-1">
+                        <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                        <span>{confirmAccountNumberError}</span>
+                      </p>
+                    ) : confirmAccountNumber && confirmAccountNumber === accountNumber ? (
+                      <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3 shrink-0" />
+                        <span>Account numbers match</span>
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 
@@ -738,14 +948,27 @@ export function LinkedAccountsCard({
                   <Input
                     id="accountHolder"
                     value={accountHolder}
-                    onChange={(e) => handleNameChange(e.target.value)}
+                    onChange={(e) => {
+                      handleNameChange(e.target.value);
+                      if (accountHolderError) setAccountHolderError(null);
+                    }}
                     placeholder="Enter full name as per bank records"
-                    className="text-xs"
-                    required
+                    className={`text-xs ${
+                      accountHolderError
+                        ? "border-rose-500 focus-visible:ring-rose-500/20 text-rose-600"
+                        : ""
+                    }`}
                   />
-                  <p className="text-[10px] text-muted-foreground">
-                    Please ensure this matches the beneficiary name on your bank passbook or statement.
-                  </p>
+                  {accountHolderError ? (
+                    <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-start gap-1">
+                      <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                      <span>{accountHolderError}</span>
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground">
+                      Please ensure this matches the beneficiary name on your bank passbook or statement.
+                    </p>
+                  )}
                 </div>
 
                 <div className="rounded-xl bg-cyan-500/10 p-2.5 border border-cyan-500/20 text-[11px] text-cyan-800 dark:text-cyan-300">
@@ -767,6 +990,7 @@ export function LinkedAccountsCard({
                       value={upiId}
                       onChange={(e) => {
                         setUpiId(e.target.value.toLowerCase());
+                        if (upiIdError) setUpiIdError(null);
                         setVpaVerified(null);
                         setVpaCustomerName(null);
                         setVpaError(null);
@@ -777,7 +1001,7 @@ export function LinkedAccountsCard({
                         }
                       }}
                       placeholder="e.g. rahul@upi, yourname@oksbi"
-                      required
+                      className={upiIdError ? "border-rose-500 focus-visible:ring-rose-500/20 text-rose-600" : ""}
                     />
                     <Button
                       type="button"
@@ -800,6 +1024,12 @@ export function LinkedAccountsCard({
                       )}
                     </Button>
                   </div>
+                  {upiIdError && (
+                    <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-start gap-1">
+                      <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                      <span>{upiIdError}</span>
+                    </p>
+                  )}
                 </div>
 
                 {vpaVerified === true && (
@@ -832,15 +1062,23 @@ export function LinkedAccountsCard({
                   <Input
                     id="upiHolder"
                     value={accountHolder}
-                    onChange={(e) => setAccountHolder(e.target.value)}
+                    onChange={(e) => {
+                      setAccountHolder(e.target.value);
+                      if (upiHolderError) setUpiHolderError(null);
+                    }}
                     placeholder="Name linked with UPI"
-                    required
+                    className={upiHolderError ? "border-rose-500 focus-visible:ring-rose-500/20 text-rose-600" : ""}
                   />
-                  {vpaCustomerName && (
+                  {upiHolderError ? (
+                    <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-start gap-1">
+                      <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                      <span>{upiHolderError}</span>
+                    </p>
+                  ) : vpaCustomerName ? (
                     <p className="text-[10px] text-muted-foreground">
                       Auto-detected from bank record via NPCI.
                     </p>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="rounded-xl bg-emerald-500/10 p-2.5 border border-emerald-500/20 text-[11px] text-emerald-800 dark:text-emerald-300">
@@ -848,8 +1086,6 @@ export function LinkedAccountsCard({
                 </div>
               </>
             )}
-
-
 
             {/* RAZORPAY FORM */}
             {accountType === "RAZORPAY" && (
@@ -861,10 +1097,19 @@ export function LinkedAccountsCard({
                   <Input
                     id="razorpayAccountId"
                     value={razorpayAccountId}
-                    onChange={(e) => setRazorpayAccountId(e.target.value)}
+                    onChange={(e) => {
+                      setRazorpayAccountId(e.target.value);
+                      if (razorpayError) setRazorpayError(null);
+                    }}
                     placeholder="e.g. acc_xxxxxxxxxxxxxx"
-                    required
+                    className={razorpayError ? "border-rose-500 focus-visible:ring-rose-500/20 text-rose-600" : ""}
                   />
+                  {razorpayError && (
+                    <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400 mt-1 flex items-start gap-1">
+                      <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                      <span>{razorpayError}</span>
+                    </p>
+                  )}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   Your automated Razorpay Route partner account identifier for instant settlement.
@@ -908,6 +1153,26 @@ export function LinkedAccountsCard({
               </Button>
             </div>
           </form>
+
+          {/* IfscFinderDialog rendered outside form to prevent event bubbling */}
+          <IfscFinderDialog
+            open={ifscFinderOpen}
+            onOpenChange={setIfscFinderOpen}
+            defaultBank={bankName}
+            onSelectIfsc={(code, bName, bBranch) => {
+              setIfscCode(code);
+              if (bName) {
+                setBankName(bName);
+                setBankNameError(null);
+              }
+              if (bBranch) setIfscBranch(bBranch);
+              setIfscErrorInline(null);
+              if (accountNumber) {
+                validateAccountNumberLive(accountNumber, bName || bankName, code);
+              }
+              void handleLookupIfsc(code);
+            }}
+          />
         </DialogContent>
       </Dialog>
     </Card>

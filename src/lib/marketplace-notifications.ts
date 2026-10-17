@@ -721,25 +721,6 @@ export async function notifyMilestonePayoutApproved(input: {
       { label: "Platform commission", value: `₹${input.platformEarnings.toLocaleString("en-IN")}` },
     ],
   });
-  await notifyRole("ADMIN", {
-    type: "MILESTONE_PAYOUT_APPROVED",
-    title: `${jobTitle} · Milestone payout completed`,
-    description: `${payout} was released for ${input.milestoneTitle}. Platform earnings: ₹${input.platformEarnings.toLocaleString("en-IN")}.`,
-    href: `/admin/finance?project=${input.projectId}`,
-    templateVariables: {
-      milestone_title: input.milestoneTitle,
-      payout_amount: payout,
-      amount: payout,
-      project_title: jobTitle,
-      platform_fee: `₹${input.platformEarnings.toLocaleString("en-IN")}`,
-    },
-    emailDetails: [
-      { label: "Project", value: jobTitle },
-      { label: "Milestone", value: input.milestoneTitle },
-      { label: "Payout released", value: payout },
-      { label: "Platform commission", value: `₹${input.platformEarnings.toLocaleString("en-IN")}` },
-    ],
-  });
 }
 
 export async function notifyJobPosted(job: {
@@ -971,12 +952,6 @@ export async function notifyVerificationSubmitted(input: {
   const name = user ? `${user.firstName} ${user.lastName}`.trim() : `User #${input.userId}`;
   const roleLabel = user?.role === "PROFESSIONAL" ? "Professional" : "Client";
 
-  await notifyUsers([input.userId], {
-    type: "VERIFICATION_SUBMITTED",
-    title: "Verification Submitted",
-    description: `Your ${input.provider} documents were submitted successfully and are under review.`,
-    href: "/verification",
-  });
 
   await notifyRole("ADMIN", {
     type: "VERIFICATION_SUBMITTED",

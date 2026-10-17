@@ -52,7 +52,12 @@ const linkGroups = [
     group: "CATALOG & FINANCE",
     items: [
       { href: "/admin/services", label: "Services catalog", icon: Wrench },
-      { href: "/admin/finance", label: "Finance & payouts", icon: CircleDollarSign },
+      {
+        href: "/admin/finance",
+        label: "Finance & payouts",
+        icon: CircleDollarSign,
+        badge: "payouts",
+      },
       { href: "/admin/reports", label: "Reports & exports", icon: FileBarChart },
     ],
   },
@@ -248,17 +253,28 @@ export function AdminSidebar() {
                       </div>
                       {!collapsed && <span>{link.label}</span>}
                       {badgeCount > 0 &&
-                        !active &&
                         (collapsed ? (
-                          <span className="absolute -top-1 -right-1 grid h-4.5 min-w-4.5 place-items-center rounded-full bg-indigo-600 px-1 text-[9px] font-bold text-white shadow-xs">
+                          <span
+                            className={`absolute -top-1 -right-1 grid h-4.5 min-w-4.5 place-items-center rounded-full px-1 text-[9px] font-bold text-white shadow-xs ${
+                              link.badge === "payouts" ? "bg-amber-500" : "bg-indigo-600"
+                            }`}
+                          >
                             {badgeCount > 99 ? "99+" : badgeCount}
                           </span>
                         ) : (
-                          <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-indigo-100 px-1.5 text-[10px] font-bold text-indigo-700">
+                          <span
+                            className={`ml-auto grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[10px] font-bold ${
+                              link.badge === "payouts"
+                                ? "bg-amber-500 text-white shadow-xs"
+                                : active
+                                  ? "bg-indigo-600 text-white shadow-2xs"
+                                  : "bg-indigo-100 text-indigo-700"
+                            }`}
+                          >
                             {badgeCount > 99 ? "99+" : badgeCount}
                           </span>
                         ))}
-                      {active && !collapsed && (
+                      {active && !collapsed && badgeCount === 0 && (
                         <ChevronRight className="ml-auto h-4 w-4 text-indigo-500" />
                       )}
                     </Link>

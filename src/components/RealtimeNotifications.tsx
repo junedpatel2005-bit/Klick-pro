@@ -56,7 +56,9 @@ function getNotificationVisual(type = "", title = "") {
     upper.includes("PAYMENT") ||
     upper.includes("WALLET") ||
     upper.includes("EARNING") ||
-    upper.includes("FUNDED")
+    upper.includes("FUNDED") ||
+    upper.includes("PAYOUT") ||
+    upper.includes("WITHDRAWAL")
   ) {
     return {
       Icon: Wallet,
@@ -204,13 +206,9 @@ export function RealtimeNotifications() {
       reconnectionDelayMax: 10000,
     });
 
-    const SAFETY_POLL_MS = 5 * 60 * 1000;
+    const SAFETY_POLL_MS = 15 * 1000;
     const poll = window.setInterval(() => {
-      if (
-        document.visibilityState === "visible" &&
-        notificationsInitialized.current &&
-        !socket.connected
-      ) {
+      if (document.visibilityState === "visible" && notificationsInitialized.current) {
         void loadMissed(true);
       }
     }, SAFETY_POLL_MS);
@@ -218,10 +216,12 @@ export function RealtimeNotifications() {
     let lastActiveCheck = 0;
     const onActiveChange = () => {
       const now = Date.now();
-      if (document.visibilityState === "visible" && !socket.connected) {
-        if (now - lastActiveCheck > 30000) {
+      if (document.visibilityState === "visible") {
+        if (now - lastActiveCheck > 3000) {
           lastActiveCheck = now;
-          void loadMissed(false);
+          if (notificationsInitialized.current) {
+            void loadMissed(true);
+          }
         }
       }
     };
@@ -256,7 +256,11 @@ export function RealtimeNotifications() {
       window.dispatchEvent(new CustomEvent("servio:notification"));
     };
 
-    const onReconnect = () => void loadMissed(false);
+    const onReconnect = () => {
+      if (notificationsInitialized.current) {
+        void loadMissed(true);
+      }
+    };
     socket.io.on("reconnect", onReconnect);
     socket.on("notification:new", onNotification);
     socket.on("message:new", onMessage);
@@ -299,6 +303,8 @@ export function RealtimeNotifications() {
         else if (notification.type.includes("PROPOSAL")) actionLabel = "Review Proposal";
         else if (notification.type.includes("DISPUTE")) actionLabel = "Check Dispute";
         else if (notification.type.includes("VERIFICATION")) actionLabel = "Inspect Status";
+        else if (notification.href?.includes("/earnings")) actionLabel = "View Wallet & Payout";
+        else if (notification.href?.includes("/admin/finance")) actionLabel = "Review Payout";
 
         const visual = getNotificationVisual(notification.type, notification.title);
         const VisualIcon = visual.Icon;

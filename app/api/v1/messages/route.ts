@@ -652,7 +652,10 @@ export async function POST(request: NextRequest) {
   };
 
   if (recipient.role === "ADMIN") {
-    await notifyUsers(adminIds, notification);
+    const targetAdminIds = adminIds.filter((id) => id !== session.userId);
+    if (targetAdminIds.length > 0) {
+      await notifyUsers(targetAdminIds, notification);
+    }
     emitRealtimeMessage([session.userId, ...adminIds], {
       ...message,
       conversationId: conversation.id,

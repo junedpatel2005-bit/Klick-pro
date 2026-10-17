@@ -108,6 +108,10 @@ export default function AdminSettingsPage() {
     formValues["commission_enabled"] === "true" ||
     formValues["commission_enabled"] === "1" ||
     formValues["commission_enabled"] === "on";
+  const isAutoWithdrawalEnabled =
+    formValues["auto_withdrawal_enabled"] === "true" ||
+    formValues["auto_withdrawal_enabled"] === "1" ||
+    formValues["auto_withdrawal_enabled"] === "on";
   const commissionRate = formValues["commission_rate"] || "10";
   const minWithdrawal = formValues["min_withdrawal_amount"] || "500";
 
@@ -208,6 +212,35 @@ export default function AdminSettingsPage() {
               </p>
               <p className="text-[10px] text-emerald-600 mt-0.5">Professional payout minimum</p>
             </div>
+            <div
+              className={`rounded-xl border p-3.5 ${
+                isAutoWithdrawalEnabled
+                  ? "border-emerald-200/80 bg-emerald-50/50"
+                  : "border-slate-200/80 bg-slate-50/50"
+              }`}
+            >
+              <p
+                className={`text-[11px] font-bold uppercase tracking-wider ${
+                  isAutoWithdrawalEnabled ? "text-emerald-700" : "text-slate-600"
+                }`}
+              >
+                Auto-Withdrawal
+              </p>
+              <p
+                className={`mt-1 text-2xl font-black ${
+                  isAutoWithdrawalEnabled ? "text-emerald-900" : "text-slate-700"
+                }`}
+              >
+                {isAutoWithdrawalEnabled ? "AUTO ON" : "OFF"}
+              </p>
+              <p
+                className={`text-[10px] mt-0.5 ${
+                  isAutoWithdrawalEnabled ? "text-emerald-600" : "text-slate-500"
+                }`}
+              >
+                {isAutoWithdrawalEnabled ? "Instant user cashout" : "Admin approval needed"}
+              </p>
+            </div>
           </div>
 
           {/* 1. FINANCIAL & COMMISSION SETTINGS */}
@@ -227,6 +260,50 @@ export default function AdminSettingsPage() {
             </div>
 
             <div className="grid md:grid-cols-2 gap-6">
+              {/* Auto Withdrawal ON/OFF Toggle */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 md:col-span-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="auto_withdrawal_enabled" className="text-xs font-bold text-slate-900 block">
+                      Automatic User Withdrawal Payouts (Auto-Pay)
+                    </Label>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        isAutoWithdrawalEnabled
+                          ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                          : "bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {isAutoWithdrawalEnabled ? "INSTANT PAYOUT" : "MANUAL REVIEW"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1 max-w-2xl leading-relaxed">
+                    When turned <strong>ON</strong>, user withdrawal requests (Bank IMPS / UPI) are settled and transferred automatically without requiring manual Admin approval. When turned <strong>OFF</strong>, withdrawals remain in PENDING status until an Admin reviews and approves them in the Finance portal.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`text-xs font-bold ${isAutoWithdrawalEnabled ? "text-emerald-600" : "text-slate-500"}`}>
+                    {isAutoWithdrawalEnabled ? "AUTO PAY ON" : "AUTO PAY OFF"}
+                  </span>
+                  <button
+                    id="auto_withdrawal_enabled"
+                    type="button"
+                    onClick={() =>
+                      handleValueChange("auto_withdrawal_enabled", isAutoWithdrawalEnabled ? "false" : "true")
+                    }
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2 ${
+                      isAutoWithdrawalEnabled ? "bg-emerald-600" : "bg-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        isAutoWithdrawalEnabled ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
               {/* Commission ON/OFF Toggle */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4 md:col-span-2">
                 <div>

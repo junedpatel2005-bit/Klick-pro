@@ -31,22 +31,29 @@ export async function GET(request: Request, { params }: { params: Promise<{ reso
         : NextResponse.json({ error: "Professional not found." }, { status: 404 });
     }
     if (resource === "professional-detail") {
-      const id = idSchema.safeParse(new URL(request.url).searchParams.get("id"));
-      if (!id.success)
-        return NextResponse.json(
-          { error: "A valid professional id is required." },
-          { status: 400 },
-        );
-      const professional = await getPublicProfessionalProfile(id.data);
+      const rawId = new URL(request.url).searchParams.get("id")?.trim();
+      if (!rawId || rawId === "undefined" || rawId === "null") {
+        return NextResponse.json({ error: "Professional not found." }, { status: 404 });
+      }
+      const numId = Number(rawId);
+      if (!Number.isSafeInteger(numId) || numId <= 0) {
+        return NextResponse.json({ error: "Professional not found." }, { status: 404 });
+      }
+      const professional = await getPublicProfessionalProfile(numId);
       return professional
         ? NextResponse.json(professional)
         : NextResponse.json({ error: "Professional not found." }, { status: 404 });
     }
     if (resource === "client-detail" || resource === "client") {
-      const id = idSchema.safeParse(new URL(request.url).searchParams.get("id"));
-      if (!id.success)
-        return NextResponse.json({ error: "A valid client id is required." }, { status: 400 });
-      const client = await getPublicClientProfile(id.data);
+      const rawId = new URL(request.url).searchParams.get("id")?.trim();
+      if (!rawId || rawId === "undefined" || rawId === "null") {
+        return NextResponse.json({ error: "Client not found." }, { status: 404 });
+      }
+      const numId = Number(rawId);
+      if (!Number.isSafeInteger(numId) || numId <= 0) {
+        return NextResponse.json({ error: "Client not found." }, { status: 404 });
+      }
+      const client = await getPublicClientProfile(numId);
       return client
         ? NextResponse.json(client)
         : NextResponse.json({ error: "Client not found." }, { status: 404 });

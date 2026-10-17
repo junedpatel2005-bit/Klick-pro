@@ -4,8 +4,13 @@ import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { ensureWallet, creditWalletFromVerifiedProvider } from "@/lib/wallet-ledger";
 import { fetchRazorpayOrderPayments, isRazorpayConfigured } from "@/lib/razorpay";
-import { getMinWithdrawalAmount } from "@/lib/platform-settings";
+import { getMinWithdrawalAmount, isAutoWithdrawalEnabled } from "@/lib/platform-settings";
 import { Prisma } from "@generated/prisma/client";
+import {
+  emitRealtimeNotification,
+  emitAdminNotification,
+  emitAdminOverviewUpdate,
+} from "@/lib/realtime";
 
 async function sessionFrom(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -389,28 +394,104 @@ export async function POST(request: NextRequest) {
         },
   );
 
-  // Phase 1: Atomically verify available balance and reserve funds (status: PENDING for Admin Review)
+  const autoWithdrawal = await isAutoWithdrawalEnabled();
+
+  // Phase 1: Atomically verify available balance and process withdrawal (COMPLETED if Auto-Pay ON, PENDING if OFF)
+  let userNotificationPayload: {
+    id: number;
+    type: string;
+    title: string;
+    description: string;
+    href: string;
+  } | null = null;
   let withdrawal;
   try {
     withdrawal = await db.$transaction(async (tx) => {
-      const reserved = await tx.$executeRaw(
-        Prisma.sql`UPDATE "Wallet"
-          SET "pendingBalance" = "pendingBalance" + ${parsed.data.amount}
-          WHERE "id" = ${wallet.id}
-            AND "balance" - "pendingBalance" >= ${parsed.data.amount}`,
-      );
-      if (reserved !== 1) throw new Error("Withdrawal amount exceeds your available balance.");
+      let created;
+      if (autoWithdrawal) {
+        // Auto-Pay is ON: directly deduct balance and mark COMPLETED immediately without manual admin approval
+        const deducted = await tx.$executeRaw(
+          Prisma.sql`UPDATE "Wallet"
+            SET "balance" = "balance" - ${parsed.data.amount}
+            WHERE "id" = ${wallet.id}
+              AND "balance" - "pendingBalance" >= ${parsed.data.amount}`,
+        );
+        if (deducted !== 1) throw new Error("Withdrawal amount exceeds your available balance.");
 
-      const created = await tx.projectWithdrawal.create({
-        data: {
-          professionalId: session.userId,
-          amount: parsed.data.amount,
-          destinationType: destinationType,
-          destinationLabel: structuredDestination,
-          status: "PENDING",
-          payoutMode: destinationType === "UPI" ? "UPI" : "IMPS",
-        },
-      });
+        const autoUtr = `KP${Date.now()}${Math.floor(1000 + Math.random() * 9000)}`;
+
+        created = await tx.projectWithdrawal.create({
+          data: {
+            professionalId: session.userId,
+            amount: parsed.data.amount,
+            destinationType: destinationType,
+            destinationLabel: structuredDestination,
+            status: "COMPLETED",
+            payoutMode: destinationType === "UPI" ? "UPI" : "IMPS",
+            utr: autoUtr,
+          },
+        });
+
+        // Record completed transaction ledger row
+        await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            amount: -parsed.data.amount,
+            type: "WITHDRAWAL",
+            status: "COMPLETED",
+            description: `Withdrawal of ₹${parsed.data.amount.toLocaleString(
+              "en-IN",
+            )} transferred via Instant ${destinationType === "UPI" ? "UPI" : "IMPS"} (Auto-Pay)`,
+            idempotencyKey: `auto-payout-${created.id}`,
+            metadataJson: JSON.stringify({
+              withdrawalId: created.id,
+              destinationType: destinationType,
+              destinationLabel: structuredDestination,
+              utr: autoUtr,
+            }),
+          },
+        });
+
+        // Record in-app notification for user
+        const notif = await tx.userNotification.create({
+          data: {
+            userId: session.userId,
+            type: "PAYOUT_COMPLETED",
+            title: "Withdrawal Transferred Instantly",
+            description: `Your withdrawal of ₹${parsed.data.amount.toLocaleString(
+              "en-IN",
+            )} has been processed and transferred automatically via Instant ${destinationType === "UPI" ? "UPI" : "IMPS"}. UTR: ${autoUtr}.`,
+            href: session.role === "CLIENT" ? "/client/earnings" : "/professional/earnings",
+          },
+        });
+        userNotificationPayload = {
+          id: notif.id,
+          type: notif.type,
+          title: notif.title,
+          description: notif.description ?? "",
+          href: notif.href ?? "",
+        };
+      } else {
+        // Auto-Pay is OFF: reserve funds and set status to PENDING for admin review
+        const reserved = await tx.$executeRaw(
+          Prisma.sql`UPDATE "Wallet"
+            SET "pendingBalance" = "pendingBalance" + ${parsed.data.amount}
+            WHERE "id" = ${wallet.id}
+              AND "balance" - "pendingBalance" >= ${parsed.data.amount}`,
+        );
+        if (reserved !== 1) throw new Error("Withdrawal amount exceeds your available balance.");
+
+        created = await tx.projectWithdrawal.create({
+          data: {
+            professionalId: session.userId,
+            amount: parsed.data.amount,
+            destinationType: destinationType,
+            destinationLabel: structuredDestination,
+            status: "PENDING",
+            payoutMode: destinationType === "UPI" ? "UPI" : "IMPS",
+          },
+        });
+      }
 
       // Optional: Save to linked accounts for future 1-click requests
       if (parsed.data.saveDetails) {
@@ -468,21 +549,42 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Record in-app notification for user
-      await tx.userNotification.create({
-        data: {
-          userId: session.userId,
-          type: "PAYOUT_REQUESTED",
-          title: "Withdrawal Request Received",
-          description: `Your withdrawal request of ₹${parsed.data.amount.toLocaleString(
-            "en-IN",
-          )} has been submitted. It is pending review & approval by Admin in the Finance portal.`,
-          href: session.role === "CLIENT" ? "/client/earnings" : "/professional/earnings",
-        },
-      });
-
       return created;
     });
+
+    if (userNotificationPayload) {
+      emitRealtimeNotification([session.userId], userNotificationPayload);
+    }
+
+    if (!autoWithdrawal) {
+      // Notify all active admins that a withdrawal request is pending their approval
+      const admins = await db.user.findMany({
+        where: { role: "ADMIN", isActive: true },
+        select: { id: true },
+      });
+      if (admins.length > 0) {
+        const userRow = await db.user.findUnique({
+          where: { id: session.userId },
+          select: { firstName: true, lastName: true },
+        });
+        const senderName =
+          `${userRow?.firstName ?? ""} ${userRow?.lastName ?? ""}`.trim() ||
+          `User #${session.userId}`;
+        const adminNotif = {
+          type: "WITHDRAWAL_REQUESTED",
+          title: "New Withdrawal Request",
+          description: `${senderName} requested a withdrawal of ₹${parsed.data.amount.toLocaleString(
+            "en-IN",
+          )} (${destinationType === "UPI" ? `UPI: ${upiId}` : `Bank: ${bankName || "Bank"}`}).`,
+          href: "/admin/finance",
+        };
+        await db.userNotification.createMany({
+          data: admins.map((a) => ({ userId: a.id, ...adminNotif })),
+        });
+        emitAdminNotification(adminNotif);
+      }
+    }
+    emitAdminOverviewUpdate();
   } catch (error) {
     if (
       error instanceof Error &&
@@ -497,12 +599,18 @@ export async function POST(request: NextRequest) {
       ? `UPI ID (${upiId})`
       : `Bank Account (${bankName || "Bank"}, ending in ${accountNumber.slice(-4)})`;
 
+  const responseMessage = autoWithdrawal
+    ? `Withdrawal of ₹${parsed.data.amount.toLocaleString(
+        "en-IN",
+      )} transferred automatically to your ${destinationText}! UTR: ${withdrawal.utr}`
+    : `Withdrawal request of ₹${parsed.data.amount.toLocaleString(
+        "en-IN",
+      )} to ${destinationText} submitted successfully! Your request has been forwarded to Admin for approval in the Finance portal.`;
+
   return NextResponse.json(
     {
       withdrawal,
-      message: `Withdrawal request of ₹${parsed.data.amount.toLocaleString(
-        "en-IN",
-      )} to ${destinationText} submitted successfully! Your request has been forwarded to Admin for approval in the Finance portal.`,
+      message: responseMessage,
     },
     { status: 201 },
   );

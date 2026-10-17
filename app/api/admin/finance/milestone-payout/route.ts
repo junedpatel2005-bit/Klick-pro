@@ -56,6 +56,23 @@ export async function POST(request: NextRequest) {
       { status: 409 },
     );
 
+  const inValidity =
+    Number(milestone.validityDays) > 0 &&
+    milestone.autoReleaseStatus !== "RELEASED" &&
+    (!milestone.releaseAt || new Date(milestone.releaseAt).getTime() > Date.now());
+
+  if (inValidity) {
+    const formattedDate = milestone.releaseAt
+      ? new Date(milestone.releaseAt).toLocaleString("en-IN")
+      : `${milestone.validityDays} days`;
+    return NextResponse.json(
+      {
+        error: `Cannot release payout: This milestone is locked in a ${milestone.validityDays}-day validity review period until ${formattedDate}. Payout cannot be released before validity expires.`,
+      },
+      { status: 400 },
+    );
+  }
+
   try {
     const result = await db.$transaction(
       async (tx) => {

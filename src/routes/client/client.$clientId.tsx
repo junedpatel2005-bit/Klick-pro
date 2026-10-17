@@ -25,6 +25,7 @@ import {
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
+import { capitalizeWords, capitalizeFirst } from "@/lib/utils";
 import type {
   PublicClientProfile,
   PublicClientJobItem,
@@ -65,25 +66,49 @@ export default function ClientProfilePage() {
   const [avatarError, setAvatarError] = useState(false);
 
   useEffect(() => {
-    if (!clientId) return;
+    const rawId = Array.isArray(clientId) ? clientId[0] : clientId;
+    if (!rawId || rawId === "undefined" || rawId === "null") {
+      setStatus("missing");
+      return;
+    }
+
+    const numericId = Number(rawId);
+    if (!Number.isSafeInteger(numericId) || numericId <= 0) {
+      setStatus("missing");
+      return;
+    }
+
+    let isMounted = true;
     setStatus("loading");
-    void fetch(`/api/v1/marketplace/client-detail?id=${encodeURIComponent(clientId)}`)
+
+    void fetch(`/api/v1/marketplace/client-detail?id=${encodeURIComponent(numericId)}`)
       .then(async (res) => {
-        if (res.status === 404) {
+        if (!isMounted) return;
+        if (res.status === 404 || res.status === 400) {
           setStatus("missing");
           return;
         }
         if (!res.ok) {
-          throw new Error("Failed to load client profile");
+          setStatus("error");
+          return;
         }
-        const data = (await res.json()) as PublicClientProfile;
+        const data = (await res.json().catch(() => null)) as PublicClientProfile | null;
+        if (!data || !isMounted) {
+          setStatus("error");
+          return;
+        }
         setClient(data);
         setStatus("ready");
       })
-      .catch((err) => {
-        console.error("client.profile.error", err);
-        setStatus("error");
+      .catch(() => {
+        if (isMounted) {
+          setStatus("error");
+        }
       });
+
+    return () => {
+      isMounted = false;
+    };
   }, [clientId]);
 
   const handleShare = async () => {
@@ -215,7 +240,7 @@ export default function ClientProfilePage() {
                 {client.avatar && !avatarError ? (
                   <img
                     src={client.avatar}
-                    alt={client.name}
+                    alt={capitalizeWords(client.name)}
                     className="h-full w-full rounded-[22px] object-cover"
                     onError={() => setAvatarError(true)}
                   />
@@ -264,7 +289,7 @@ export default function ClientProfilePage() {
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
                 <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-                  {client.name}
+                  {capitalizeWords(client.name)}
                 </h1>
                 {client.verified && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary border border-primary/20">
@@ -275,12 +300,12 @@ export default function ClientProfilePage() {
                 {client.companyName && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground border border-border">
                     <Building2 className="h-3 w-3" />
-                    {client.companyName}
+                    {capitalizeWords(client.companyName)}
                   </span>
                 )}
                 {client.industry && (
                   <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground border border-border">
-                    {client.industry}
+                    {capitalizeWords(client.industry)}
                   </span>
                 )}
               </div>
@@ -304,7 +329,7 @@ export default function ClientProfilePage() {
               {client.location && (
                 <div className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-muted/50 px-3 py-1.5 text-xs font-medium text-foreground">
                   <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>{client.location}</span>
+                  <span>{capitalizeWords(client.location)}</span>
                 </div>
               )}
 
@@ -332,7 +357,7 @@ export default function ClientProfilePage() {
             <div>
               <h2 className="text-lg font-semibold flex items-center gap-2">About the Client</h2>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                {client.companyDescription ||
+                {capitalizeFirst(client.companyDescription) ||
                   "This client has not added a detailed company description yet. They actively hire qualified professionals on Klick-Pro."}
               </p>
             </div>
@@ -342,13 +367,13 @@ export default function ClientProfilePage() {
                 {client.companyName && (
                   <div>
                     <p className="font-medium text-foreground">Company</p>
-                    <p>{client.companyName}</p>
+                    <p>{capitalizeWords(client.companyName)}</p>
                   </div>
                 )}
                 {client.industry && (
                   <div>
                     <p className="font-medium text-foreground">Industry</p>
-                    <p>{client.industry}</p>
+                    <p>{capitalizeWords(client.industry)}</p>
                   </div>
                 )}
                 {client.teamSize && (
@@ -378,7 +403,7 @@ export default function ClientProfilePage() {
                 )}
                 <div>
                   <p className="font-medium text-foreground">Location</p>
-                  <p>{client.location || "Location not disclosed"}</p>
+                  <p>{capitalizeWords(client.location) || "Location not disclosed"}</p>
                 </div>
               </div>
             </div>
@@ -429,7 +454,7 @@ export default function ClientProfilePage() {
                     <div className="space-y-2 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-md bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                          {job.category}
+                          {capitalizeWords(job.category)}
                         </span>
                         <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground capitalize">
                           {job.workMode.replace("_", " ").toLowerCase()}
@@ -447,7 +472,7 @@ export default function ClientProfilePage() {
                         href={`/job/${job.id}`}
                         className="text-base font-bold text-foreground transition-colors group-hover:text-primary line-clamp-1"
                       >
-                        {job.title}
+                        {capitalizeWords(job.title)}
                       </Link>
                       <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                         <span className="font-semibold text-foreground">
@@ -462,7 +487,7 @@ export default function ClientProfilePage() {
                         {job.location && (
                           <span className="inline-flex items-center gap-1">
                             <MapPin className="h-3 w-3" />
-                            {job.location}
+                            {capitalizeWords(job.location)}
                           </span>
                         )}
                       </div>
@@ -527,7 +552,7 @@ export default function ClientProfilePage() {
                           {review.reviewerAvatar ? (
                             <img
                               src={review.reviewerAvatar}
-                              alt={review.reviewerName}
+                              alt={capitalizeWords(review.reviewerName)}
                               className="h-full w-full rounded-full object-cover"
                             />
                           ) : (
@@ -536,15 +561,15 @@ export default function ClientProfilePage() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-foreground">
-                            {review.reviewerName}
+                            {capitalizeWords(review.reviewerName)}
                           </p>
                           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            {review.reviewerCategory && <span>{review.reviewerCategory}</span>}
+                            {review.reviewerCategory && <span>{capitalizeWords(review.reviewerCategory)}</span>}
                             {review.projectTitle && (
                               <>
                                 <span>•</span>
                                 <span className="font-medium text-foreground">
-                                  {review.projectTitle}
+                                  {capitalizeWords(review.projectTitle)}
                                 </span>
                               </>
                             )}
@@ -571,7 +596,7 @@ export default function ClientProfilePage() {
 
                     {review.comment ? (
                       <p className="mt-3 text-sm leading-relaxed text-foreground/90 pl-13">
-                        &ldquo;{review.comment}&rdquo;
+                        &ldquo;{capitalizeFirst(review.comment)}&rdquo;
                       </p>
                     ) : (
                       <p className="mt-2 text-xs italic text-muted-foreground pl-13">

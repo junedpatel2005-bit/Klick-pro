@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { formatReadableLabel } from "@/lib/utils";
+import { formatReadableLabel, capitalizeWords } from "@/lib/utils";
 import { useRealtimeRefresh } from "@/lib/use-realtime-refresh";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageActionLoading } from "@/components/PageActionLoading";
@@ -34,6 +34,7 @@ import {
   WalletCards,
   X,
   XCircle,
+  Zap,
 } from "lucide-react";
 
 // --- Types ---
@@ -54,9 +55,9 @@ type UserProfile = {
 
 function getUserDisplayName(user?: UserProfile | null, fallback = ""): string {
   if (!user) return fallback;
-  if (user.name) return user.name;
+  if (user.name) return capitalizeWords(user.name);
   const combined = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim();
-  return combined || fallback;
+  return combined ? capitalizeWords(combined) : fallback;
 }
 
 type MilestoneItem = {
@@ -67,6 +68,9 @@ type MilestoneItem = {
   dueDate?: string | null;
   submittedAt?: string | null;
   approvedAt?: string | null;
+  validityDays?: number | null;
+  releaseAt?: string | null;
+  autoReleaseStatus?: string | null;
 };
 
 type PaymentFinancials = {
@@ -111,6 +115,9 @@ type EnrichedPayment = {
   projectRemainingAmount?: number;
   remainingMilestonesCount?: number;
   milestonesList?: MilestoneItem[];
+  milestoneValidityDays?: number;
+  milestoneReleaseAt?: string | null;
+  milestoneAutoReleaseStatus?: string | null;
   financials?: PaymentFinancials;
 };
 
@@ -165,6 +172,7 @@ type FinanceData = {
   platformWalletTransactions: PlatformLedgerItem[];
   names: Record<string, string>;
   usersById?: Record<string, UserProfile>;
+  autoWithdrawalEnabled?: boolean;
 };
 
 type TabView = "all" | "payments" | "escrow" | "topups" | "withdrawals" | "ledger";
@@ -447,8 +455,9 @@ export default function AdminFinancePage() {
     // 3. Pro Withdrawals
     for (const w of data.withdrawals) {
       const user = data.usersById?.[w.professionalId];
-      const proName =
+      const rawProName =
         user?.name || data.names[w.professionalId] || `Professional #${w.professionalId}`;
+      const proName = capitalizeWords(rawProName);
 
       let destSummary = formatReadableLabel(w.destinationType) || "Bank Transfer";
       if (w.destinationLabel) {
@@ -457,7 +466,8 @@ export default function AdminFinancePage() {
           if (parsed && typeof parsed === "object") {
             if (parsed.type === "BANK") {
               const last4 = parsed.accountNumber ? `•••• ${String(parsed.accountNumber).slice(-4)}` : "";
-              destSummary = [parsed.bankName || "Bank Transfer", last4].filter(Boolean).join(" · ");
+              const bankLabel = capitalizeWords(parsed.bankName || "Bank Transfer");
+              destSummary = [bankLabel, last4].filter(Boolean).join(" · ");
             } else if (parsed.type === "UPI") {
               destSummary = `UPI · ${parsed.upiId || ""}`;
             } else {
@@ -570,6 +580,19 @@ export default function AdminFinancePage() {
   // --- Actions ---
 
   function handleApprovePayout(paymentId: number) {
+    const payment = data?.payments.find((p) => p.id === paymentId);
+    if (
+      payment?.milestoneValidityDays &&
+      payment.milestoneValidityDays > 0 &&
+      payment.milestoneAutoReleaseStatus !== "RELEASED" &&
+      (!payment.milestoneReleaseAt || new Date(payment.milestoneReleaseAt).getTime() > Date.now())
+    ) {
+      toast.error(
+        `Cannot release payout: This milestone is locked in a ${payment.milestoneValidityDays}-day validity review period.`
+      );
+      return;
+    }
+
     setConfirmAction({
       title: "Release Milestone Payout?",
       description: `Are you sure you want to release the milestone payout for transaction #${paymentId}? This will credit the professional's wallet.`,
@@ -728,6 +751,32 @@ export default function AdminFinancePage() {
     }
   }
 
+  const [togglingAutoWithdraw, setTogglingAutoWithdraw] = useState(false);
+
+  async function handleToggleAutoWithdraw() {
+    const current = Boolean(data?.autoWithdrawalEnabled);
+    const nextVal = !current;
+    setTogglingAutoWithdraw(true);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: { auto_withdrawal_enabled: nextVal ? "true" : "false" } }),
+      });
+      if (!res.ok) throw new Error("Failed to update auto-withdrawal setting.");
+      toast.success(
+        nextVal
+          ? "Auto-Withdrawal turned ON. New withdrawal requests will be paid automatically. Existing pending requests still require manual Admin approval."
+          : "Auto-Withdrawal turned OFF. Withdrawals will now require manual Admin approval."
+      );
+      await fetchFinance();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to toggle auto-withdrawal.");
+    } finally {
+      setTogglingAutoWithdraw(false);
+    }
+  }
+
   return (
     <div className="space-y-6 pb-16">
       {/* Top Header */}
@@ -742,6 +791,35 @@ export default function AdminFinancePage() {
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
+          {/* Quick Auto-Withdrawal Mode Toggle */}
+          <button
+            type="button"
+            onClick={() => void handleToggleAutoWithdraw()}
+            disabled={togglingAutoWithdraw || loading}
+            title={
+              data?.autoWithdrawalEnabled
+                ? "Auto-Withdrawal is ON: User withdrawals complete automatically without admin approval. Click to switch to manual approval."
+                : "Auto-Withdrawal is OFF: User withdrawals require manual admin approval. Click to turn ON auto-settlement."
+            }
+            className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs sm:text-sm font-semibold shadow-2xs transition active:scale-95 disabled:opacity-50 ${
+              data?.autoWithdrawalEnabled
+                ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                : "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+            }`}
+          >
+            <Zap
+              className={`h-4 w-4 ${
+                data?.autoWithdrawalEnabled ? "text-emerald-600 fill-emerald-600" : "text-amber-500"
+              } ${togglingAutoWithdraw ? "animate-spin" : ""}`}
+            />
+            <span>
+              Auto-Withdrawal:{" "}
+              <span className="font-bold underline underline-offset-2">
+                {data?.autoWithdrawalEnabled ? "ON (Auto-Pay)" : "OFF (Manual Approve)"}
+              </span>
+            </span>
+          </button>
+
           <button
             type="button"
             onClick={() => void fetchFinance()}
@@ -988,8 +1066,15 @@ export default function AdminFinancePage() {
             <tbody className="divide-y divide-slate-100">
               {filteredItems.map((item) => {
                 const isPayment = item.kind === "PAYMENT";
+                const pRaw = item.paymentRaw;
+                const isInValidity =
+                  isPayment &&
+                  Boolean(pRaw?.milestoneValidityDays && pRaw.milestoneValidityDays > 0) &&
+                  pRaw?.milestoneAutoReleaseStatus !== "RELEASED" &&
+                  (!pRaw?.milestoneReleaseAt || new Date(pRaw.milestoneReleaseAt).getTime() > Date.now());
                 const isFundedPayment =
                   isPayment &&
+                  !isInValidity &&
                   (item.status === "FUNDED" || item.status === "AWAITING_ADMIN_APPROVAL");
                 const isPendingWithdrawal = item.kind === "WITHDRAWAL" && item.status === "PENDING";
 
@@ -1132,7 +1217,11 @@ export default function AdminFinancePage() {
 
                     {/* Status */}
                     <td className="py-3 px-2 text-center whitespace-nowrap">
-                      <StatusBadge status={item.status} />
+                      <StatusBadge
+                        status={item.status}
+                        inValidity={isInValidity}
+                        validityDays={pRaw?.milestoneValidityDays ?? undefined}
+                      />
                     </td>
 
                     {/* Actions */}
@@ -1141,6 +1230,16 @@ export default function AdminFinancePage() {
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="flex items-center justify-end gap-1.5">
+                        {isInValidity && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 shadow-2xs"
+                            title={`Milestone is locked in validity (${pRaw?.milestoneValidityDays} days). Payout cannot be released until ${pRaw?.milestoneReleaseAt ? new Date(pRaw.milestoneReleaseAt).toLocaleString("en-IN") : "validity expires"}.`}
+                          >
+                            <Clock className="h-3 w-3 text-amber-600" />
+                            In Validity ({pRaw?.milestoneValidityDays}d)
+                          </span>
+                        )}
+
                         {isFundedPayment && (
                           <button
                             type="button"
@@ -1159,6 +1258,14 @@ export default function AdminFinancePage() {
 
                         {isPendingWithdrawal && item.withdrawalRaw && (
                           <>
+                            {data?.autoWithdrawalEnabled && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
+                                title="Created while Auto-Pay was OFF. Requires Admin approval."
+                              >
+                                Manual Review
+                              </span>
+                            )}
                             <button
                               type="button"
                               disabled={busyId === item.refId}
@@ -1249,6 +1356,7 @@ export default function AdminFinancePage() {
           isBusy={busyId === selectedWithdrawal.id}
           onCopy={copyToClipboard}
           copySuccess={copySuccess}
+          autoWithdrawalEnabled={Boolean(data?.autoWithdrawalEnabled)}
         />
       )}
 
@@ -1444,7 +1552,23 @@ function KindBadge({ kind, provider }: { kind: string; provider: string }) {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({
+  status,
+  inValidity,
+  validityDays,
+}: {
+  status: string;
+  inValidity?: boolean;
+  validityDays?: number | null;
+}) {
+  if (inValidity) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700 border border-amber-200">
+        <Clock className="h-3 w-3" />
+        Validity Lock{validityDays ? ` (${validityDays}d)` : ""}
+      </span>
+    );
+  }
   if (status === "COMPLETED") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
@@ -1499,6 +1623,7 @@ function WithdrawalDrawer({
   isBusy,
   onCopy,
   copySuccess,
+  autoWithdrawalEnabled,
 }: {
   withdrawal: Withdrawal;
   user?: UserProfile | null;
@@ -1509,6 +1634,7 @@ function WithdrawalDrawer({
   isBusy: boolean;
   onCopy: (text: string, label: string) => void;
   copySuccess: string | null;
+  autoWithdrawalEnabled?: boolean;
 }) {
   let parsedDest: {
     type?: string;
@@ -1695,13 +1821,13 @@ function WithdrawalDrawer({
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-slate-500">Bank Name</span>
                     <span className="font-bold text-slate-900 text-sm">
-                      {parsedDest?.bankName || "Bank Transfer"}
+                      {capitalizeWords(parsedDest?.bankName || "Bank Transfer")}
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-slate-500">Account Holder</span>
                     <span className="font-semibold text-slate-800">
-                      {parsedDest?.accountHolder || proName}
+                      {capitalizeWords(parsedDest?.accountHolder || proName)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
@@ -1752,7 +1878,7 @@ function WithdrawalDrawer({
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-slate-500">Registered Name</span>
                     <span className="font-semibold text-slate-800">
-                      {parsedDest?.upiHolder || proName}
+                      {capitalizeWords(parsedDest?.upiHolder || proName)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
@@ -1860,34 +1986,44 @@ function WithdrawalDrawer({
         {/* Drawer Footer Actions */}
         <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
           {isPending || withdrawal.status === "PROCESSING" ? (
-            <div className="flex flex-col sm:flex-row items-center gap-2.5">
-              <button
-                type="button"
-                disabled={isBusy}
-                onClick={() => onApprove(withdrawal.id)}
-                className="w-full sm:flex-1 rounded-xl bg-emerald-600 py-2.5 px-4 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 transition disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Approve & Mark as Paid
-              </button>
-              <button
-                type="button"
-                disabled={isBusy}
-                onClick={() => onReject(withdrawal)}
-                className="w-full sm:w-auto rounded-xl border border-rose-200 bg-rose-50 py-2.5 px-4 text-xs font-bold text-rose-700 hover:bg-rose-100 transition disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                <XCircle className="h-4 w-4" />
-                Reject Payout
-              </button>
-              <button
-                type="button"
-                disabled={isBusy}
-                onClick={() => onPayRazorpay(withdrawal)}
-                title="Send money automatically via linked Razorpay Route"
-                className="w-full sm:w-auto rounded-xl border border-indigo-200 bg-indigo-50 py-2.5 px-3 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition disabled:opacity-50"
-              >
-                Razorpay
-              </button>
+            <div className="space-y-3">
+              {autoWithdrawalEnabled && (
+                <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-800">
+                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span>
+                    Pending from manual approval mode. Please approve or reject this payout.
+                  </span>
+                </div>
+              )}
+              <div className="flex flex-col sm:flex-row items-center gap-2.5">
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => onApprove(withdrawal.id)}
+                  className="w-full sm:flex-1 rounded-xl bg-emerald-600 py-2.5 px-4 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Approve & Mark as Paid
+                </button>
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => onReject(withdrawal)}
+                  className="w-full sm:w-auto rounded-xl border border-rose-200 bg-rose-50 py-2.5 px-4 text-xs font-bold text-rose-700 hover:bg-rose-100 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Reject Payout
+                </button>
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => onPayRazorpay(withdrawal)}
+                  title="Send money automatically via linked Razorpay Route"
+                  className="w-full sm:w-auto rounded-xl border border-indigo-200 bg-indigo-50 py-2.5 px-3 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition disabled:opacity-50"
+                >
+                  Razorpay
+                </button>
+              </div>
             </div>
           ) : isCompleted ? (
             <div className="flex items-center justify-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs font-bold text-emerald-700">
@@ -1944,6 +2080,13 @@ function TransactionDrawer({
   const proPayout = payment.professionalPayoutAmount || Math.max(0, baseAmount - proComm);
   const adminNet = payment.adminNetAmount || clientFee + proComm;
 
+  const isMilestoneInValidity = Boolean(
+    payment.milestoneValidityDays &&
+    payment.milestoneValidityDays > 0 &&
+    payment.milestoneAutoReleaseStatus !== "RELEASED" &&
+    (!payment.milestoneReleaseAt || new Date(payment.milestoneReleaseAt).getTime() > Date.now())
+  );
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs transition-opacity">
       <div
@@ -1957,7 +2100,11 @@ function TransactionDrawer({
               <span className="font-mono text-xs font-bold text-slate-900 bg-white border border-slate-200 px-2 py-0.5 rounded-lg shadow-2xs">
                 Transaction #{payment.id}
               </span>
-              <StatusBadge status={payment.status} />
+              <StatusBadge
+                status={payment.status}
+                inValidity={isMilestoneInValidity}
+                validityDays={payment.milestoneValidityDays}
+              />
             </div>
             <p className="mt-1 text-[11px] text-slate-400">
               Created: {formatDate(payment.createdAt)}
@@ -2178,6 +2325,23 @@ function TransactionDrawer({
                   <p className="mt-0.5 text-xs">{payment.failureReason}</p>
                 </div>
               )}
+
+              {isMilestoneInValidity && (
+                <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-amber-800 text-xs">
+                  <p className="font-bold flex items-center gap-1.5 text-amber-900">
+                    <Clock className="h-4 w-4 text-amber-600" />
+                    Milestone Validity Review Active ({payment.milestoneValidityDays} Days)
+                  </p>
+                  <p className="mt-1 text-amber-700 leading-relaxed">
+                    This milestone payout is locked during its client review period. Admin approval is disabled to protect client guarantee rights until the validity period expires.
+                    {payment.milestoneReleaseAt && (
+                      <span className="block mt-1 font-semibold text-amber-900">
+                        Scheduled auto-release: {new Date(payment.milestoneReleaseAt).toLocaleString("en-IN")}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2193,19 +2357,26 @@ function TransactionDrawer({
           </button>
 
           {(payment.status === "FUNDED" || payment.status === "AWAITING_ADMIN_APPROVAL") && (
-            <button
-              type="button"
-              disabled={isBusy}
-              onClick={() => onApprovePayout(payment.id)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-500 shadow-2xs transition disabled:opacity-50"
-            >
-              {isBusy ? (
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <ShieldCheck className="h-3.5 w-3.5" />
-              )}
-              Approve Milestone Payout
-            </button>
+            isMilestoneInValidity ? (
+              <div className="inline-flex items-center gap-1.5 rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2 text-xs font-semibold text-amber-800">
+                <Clock className="h-3.5 w-3.5 text-amber-600" />
+                <span>Locked in Validity ({payment.milestoneValidityDays}d)</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => onApprovePayout(payment.id)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-500 shadow-2xs transition disabled:opacity-50"
+              >
+                {isBusy ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                )}
+                Approve Milestone Payout
+              </button>
+            )
           )}
         </div>
       </div>
