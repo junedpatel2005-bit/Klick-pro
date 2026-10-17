@@ -1329,7 +1329,7 @@ export default function ClientEarnings() {
                 {wallet?.withdrawals?.length ? (
                   <div className="mt-4 flex-1 flex flex-col justify-between space-y-3">
                     <div className="space-y-3">
-                      {wallet.withdrawals.slice(0, showAllWithdrawals ? undefined : 3).map((withdrawal) => {
+                      {wallet.withdrawals.slice(0, showAllWithdrawals ? undefined : 4).map((withdrawal) => {
                         const dest = parseDestinationSummary(
                           withdrawal.destinationLabel,
                           withdrawal.destinationType,
@@ -1436,8 +1436,8 @@ export default function ClientEarnings() {
                         );
                       })}
 
-                      {/* Informational settlement SLA card when history has 1-2 items so the card remains balanced */}
-                      {wallet.withdrawals.length < 3 && (
+                      {/* Informational settlement SLA card when history has 1-3 items so the card remains balanced */}
+                      {wallet.withdrawals.length < 4 && (
                         <div className="rounded-xl border border-dashed border-border/80 bg-muted/15 p-3.5 text-xs text-muted-foreground space-y-1">
                           <p className="font-semibold text-foreground flex items-center gap-1.5">
                             <ShieldCheck className="h-3.5 w-3.5 text-primary" /> Settlement Guarantee
@@ -1449,7 +1449,7 @@ export default function ClientEarnings() {
                       )}
                     </div>
 
-                    {wallet.withdrawals.length > 3 && (
+                    {wallet.withdrawals.length > 4 && (
                       <div className="pt-2 text-center mt-auto">
                         <button
                           type="button"
@@ -1466,7 +1466,7 @@ export default function ClientEarnings() {
                               <ChevronDown className="h-4 w-4 text-muted-foreground" />
                               <span>View more transactions</span>
                               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-                                +{wallet.withdrawals.length - 3} more
+                                +{wallet.withdrawals.length - 4} more
                               </span>
                             </>
                           )}
