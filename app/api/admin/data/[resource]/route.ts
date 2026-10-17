@@ -938,14 +938,31 @@ export async function GET(
         if (!w.destinationLabel) return w;
         try {
           const parsed = JSON.parse(w.destinationLabel);
-          if (parsed.type === "BANK" && parsed.accountNumber && parsed.accountNumber.startsWith("enc:v1:")) {
-            return {
-              ...w,
-              destinationLabel: JSON.stringify({
-                ...parsed,
-                accountNumber: decryptAccountNumber(parsed.accountNumber),
-              }),
-            };
+          if (parsed && typeof parsed === "object") {
+            let modified = false;
+            const updatedParsed = { ...parsed };
+            if (
+              updatedParsed.accountNumber &&
+              typeof updatedParsed.accountNumber === "string" &&
+              updatedParsed.accountNumber.startsWith("enc:v1:")
+            ) {
+              updatedParsed.accountNumber = decryptAccountNumber(updatedParsed.accountNumber);
+              modified = true;
+            }
+            if (
+              updatedParsed.cardNumber &&
+              typeof updatedParsed.cardNumber === "string" &&
+              updatedParsed.cardNumber.startsWith("enc:v1:")
+            ) {
+              updatedParsed.cardNumber = decryptAccountNumber(updatedParsed.cardNumber);
+              modified = true;
+            }
+            if (modified) {
+              return {
+                ...w,
+                destinationLabel: JSON.stringify(updatedParsed),
+              };
+            }
           }
         } catch {
           // ignore

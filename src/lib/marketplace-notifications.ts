@@ -163,29 +163,44 @@ async function projectEmailDetails(projectId: number): Promise<{
   });
   if (!project) return { details: [], variables: {} };
   const [job, request, latestMilestone] = await Promise.all([
-    db.clientJob.findUnique({
-      where: { id: project.jobId },
-      select: {
-        title: true,
-        deadline: true,
-        jobDate: true,
-        category: true,
-        budgetMin: true,
-        budgetMax: true,
-      },
-    }),
-    db.projectRequest.findUnique({
-      where: { id: project.requestId },
-      select: { bidAmount: true, duration: true },
-    }),
-    db.projectMilestone.findFirst({
-      where: { trackingId: projectId },
-      orderBy: { updatedAt: "desc" },
-      select: { id: true, title: true, amount: true, status: true },
-    }),
+    db.clientJob
+      .findUnique({
+        where: { id: project.jobId },
+        select: {
+          title: true,
+          deadline: true,
+          jobDate: true,
+          category: true,
+          budgetMin: true,
+          budgetMax: true,
+        },
+      })
+      .catch(() => null),
+    project.requestId
+      ? db.projectRequest
+          .findUnique({
+            where: { id: project.requestId },
+            select: { bidAmount: true, duration: true },
+          })
+          .catch(() => null)
+      : Promise.resolve(null),
+    db.projectMilestone
+      .findFirst({
+        where: { trackingId: projectId },
+        orderBy: { updatedAt: "desc" },
+        select: { id: true, title: true, amount: true, status: true },
+      })
+      .catch(() => null),
   ]);
-  const date = (value: Date | null | undefined) =>
-    value?.toLocaleDateString("en-IN") ?? "Not specified";
+  const safeDate = (value: unknown) => {
+    if (!value) return "Not specified";
+    try {
+      const d = value instanceof Date ? value : new Date(String(value));
+      return isNaN(d.getTime()) ? "Not specified" : d.toLocaleDateString("en-IN");
+    } catch {
+      return "Not specified";
+    }
+  };
   const clientName =
     [project.client?.firstName, project.client?.lastName].filter(Boolean).join(" ").trim() ||
     "Client";
@@ -209,10 +224,10 @@ async function projectEmailDetails(projectId: number): Promise<{
     { label: "Status", value: formatReadableLabel(project.status) },
     { label: "Progress", value: `${project.progress}%` },
     { label: "Current stage", value: project.currentStage?.trim() || "Not specified" },
-    { label: "Preferred job date", value: date(job?.jobDate) },
-    { label: "Deadline", value: date(job?.deadline) },
-    { label: "Started", value: date(project.startedAt) },
-    { label: "Completed", value: date(project.completedAt) },
+    { label: "Preferred job date", value: safeDate(job?.jobDate) },
+    { label: "Deadline", value: safeDate(job?.deadline) },
+    { label: "Started", value: safeDate(project.startedAt) },
+    { label: "Completed", value: safeDate(project.completedAt) },
   ];
 
   if (latestMilestone?.title) {
@@ -430,36 +445,33 @@ export function notifyAdminsOfNewAccount(user: {
 }
 
 export async function notifyUsers(userIds: number[], notification: BroadcastNotification) {
-  const ids = [...new Set(userIds)];
+  const ids = [...new Set(userIds)].filter(
+    (id): id is number => typeof id === "number" && !Number.isNaN(id) && id > 0,
+  );
   if (!ids.length) return;
+
+  const storedNotification = {
+    type: notification.type,
+    title: notification.title,
+    description: notification.description,
+    href: notification.href,
+  };
+
+  // Step 1: Create in-app notifications in DB FIRST and emit real-time Socket.IO events.
+  // This is completely isolated so that email or context formatting can NEVER drop notifications.
+  let recipients: Array<{
+    id: number;
+    firstName: string | null;
+    lastName: string | null;
+    role: string | null;
+    email: string;
+    phone: string | null;
+    emailNotificationsEnabled: boolean;
+  }> = [];
+
   try {
-    const projectIdMatch =
-      notification.href.match(/\/project\/(\d+)/)?.[1] ||
-      notification.href.match(/project=(\d+)/)?.[1];
-    const jobIdMatch = !projectIdMatch
-      ? notification.href.match(/\/jobs?\/(\d+)/)?.[1] || notification.href.match(/job=(\d+)/)?.[1]
-      : null;
-
-    const contextualInfo = projectIdMatch
-      ? await projectEmailDetails(Number(projectIdMatch))
-      : jobIdMatch
-        ? await jobEmailDetails(Number(jobIdMatch))
-        : { details: [], variables: {} };
-
-    const emailDetails = [...contextualInfo.details, ...(notification.emailDetails ?? [])];
-    const templateVariables = {
-      ...contextualInfo.variables,
-      ...(notification.templateVariables ?? {}),
-    };
-
-    const storedNotification = {
-      type: notification.type,
-      title: notification.title,
-      description: notification.description,
-      href: notification.href,
-    };
-    const recipients = await db.user.findMany({
-      where: { id: { in: ids }, isActive: true },
+    recipients = await db.user.findMany({
+      where: { id: { in: ids } },
       select: {
         id: true,
         firstName: true,
@@ -470,21 +482,76 @@ export async function notifyUsers(userIds: number[], notification: BroadcastNoti
         emailNotificationsEnabled: true,
       },
     });
-    if (!recipients.length) return;
 
-    const created = await db.userNotification.createManyAndReturn({
-      data: recipients.map((recipient) => ({ userId: recipient.id, ...storedNotification })),
+    if (recipients.length > 0) {
+      const createdItems = await Promise.all(
+        recipients.map(async (recipient) => {
+          try {
+            return await db.userNotification.create({
+              data: {
+                userId: recipient.id,
+                type: storedNotification.type,
+                title: storedNotification.title,
+                description: storedNotification.description,
+                href: storedNotification.href,
+              },
+            });
+          } catch (err) {
+            logServerError("marketplace.notification.create.failed", err, {
+              userId: recipient.id,
+              type: notification.type,
+            });
+            return null;
+          }
+        }),
+      );
+
+      for (const item of createdItems) {
+        if (item) {
+          emitRealtimeNotification([item.userId], {
+            type: item.type,
+            title: item.title,
+            description: item.description ?? "",
+            href: item.href ?? "",
+            id: item.id,
+            createdAt: item.createdAt.toISOString(),
+          });
+        }
+      }
+    }
+  } catch (dbError) {
+    logServerError("marketplace.notification.direct.db.failed", dbError, {
+      userIds: ids.join(","),
+      type: notification.type,
     });
-    created.forEach((item) =>
-      emitRealtimeNotification([item.userId], {
-        type: item.type,
-        title: item.title,
-        description: item.description ?? "",
-        href: item.href ?? "",
-        id: item.id,
-        createdAt: item.createdAt.toISOString(),
-      }),
-    );
+  }
+
+  if (!recipients.length) return;
+
+  // Step 2: Background email & SMS delivery in try/catch (isolated from DB notifications)
+  try {
+    const projectIdMatch =
+      notification.href.match(/\/project\/(\d+)/)?.[1] ||
+      notification.href.match(/project=(\d+)/)?.[1];
+    const jobIdMatch = !projectIdMatch
+      ? notification.href.match(/\/jobs?\/(\d+)/)?.[1] || notification.href.match(/job=(\d+)/)?.[1]
+      : null;
+
+    const contextualInfo = projectIdMatch
+      ? await projectEmailDetails(Number(projectIdMatch)).catch(() => ({
+          details: [],
+          variables: {},
+        }))
+      : jobIdMatch
+        ? await jobEmailDetails(Number(jobIdMatch)).catch(() => ({ details: [], variables: {} }))
+        : { details: [], variables: {} };
+
+    const emailDetails = [...contextualInfo.details, ...(notification.emailDetails ?? [])];
+    const templateVariables = {
+      ...contextualInfo.variables,
+      ...(notification.templateVariables ?? {}),
+    };
+
     enqueueBackgroundJob(
       "notification.email.direct",
       () => sendEmails(recipients, { ...storedNotification, emailDetails, templateVariables }),
@@ -501,7 +568,7 @@ export async function notifyUsers(userIds: number[], notification: BroadcastNoti
       { type: notification.type },
     );
   } catch (error) {
-    logServerError("marketplace.notification.direct.failed", error, {
+    logServerError("marketplace.notification.direct.background.failed", error, {
       userIds: ids.join(","),
       type: notification.type,
     });

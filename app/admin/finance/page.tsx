@@ -19,6 +19,7 @@ import {
   CreditCard,
   ExternalLink,
   Eye,
+  EyeOff,
   FileCheck2,
   Landmark,
   Layers,
@@ -36,6 +37,11 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
+import {
+  maskAccountNumber,
+  formatAccountNumberInput,
+  maskDestinationString,
+} from "@/lib/account-formatting";
 
 // --- Types ---
 
@@ -464,20 +470,23 @@ export default function AdminFinancePage() {
         try {
           const parsed = JSON.parse(w.destinationLabel);
           if (parsed && typeof parsed === "object") {
-            if (parsed.type === "BANK") {
+            if (parsed.type === "BANK" || parsed.accountNumber) {
               const last4 = parsed.accountNumber ? `•••• ${String(parsed.accountNumber).slice(-4)}` : "";
               const bankLabel = capitalizeWords(parsed.bankName || "Bank Transfer");
               destSummary = [bankLabel, last4].filter(Boolean).join(" · ");
-            } else if (parsed.type === "UPI") {
+            } else if (parsed.type === "UPI" || parsed.upiId) {
               destSummary = `UPI · ${parsed.upiId || ""}`;
+            } else if (parsed.type === "CARD" || parsed.cardNumber) {
+              const last4 = parsed.cardNumber ? `•••• ${String(parsed.cardNumber).slice(-4)}` : "";
+              destSummary = `Card · ${last4}`;
             } else {
-              destSummary = `${formatReadableLabel(w.destinationType)} (${w.destinationLabel})`;
+              destSummary = maskDestinationString(w.destinationLabel, w.destinationType);
             }
           } else {
-            destSummary = `${formatReadableLabel(w.destinationType)} (${w.destinationLabel})`;
+            destSummary = maskDestinationString(w.destinationLabel, w.destinationType);
           }
         } catch {
-          destSummary = `${formatReadableLabel(w.destinationType)} (${w.destinationLabel})`;
+          destSummary = maskDestinationString(w.destinationLabel, w.destinationType);
         }
       }
 
@@ -1660,6 +1669,11 @@ function WithdrawalDrawer({
   const isCompleted = withdrawal.status === "COMPLETED";
 
   const proName = user?.name || `Professional #${withdrawal.professionalId}`;
+  const [showAccountNumber, setShowAccountNumber] = useState(false);
+
+  useEffect(() => {
+    setShowAccountNumber(false);
+  }, [withdrawal.id]);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs transition-opacity">
@@ -1827,21 +1841,45 @@ function WithdrawalDrawer({
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-slate-500">Account Number</span>
                     <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900 text-sm bg-white px-2 py-1 rounded border border-slate-200">
-                      <span>{parsedDest?.accountNumber || withdrawal.destinationLabel || "—"}</span>
+                      <span>
+                        {parsedDest?.accountNumber
+                          ? showAccountNumber
+                            ? formatAccountNumberInput(parsedDest.accountNumber)
+                            : maskAccountNumber(parsedDest.accountNumber)
+                          : withdrawal.destinationLabel
+                            ? showAccountNumber
+                              ? withdrawal.destinationLabel
+                              : maskDestinationString(withdrawal.destinationLabel)
+                            : "—"}
+                      </span>
                       {(parsedDest?.accountNumber || withdrawal.destinationLabel) && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onCopy(
-                              parsedDest?.accountNumber || withdrawal.destinationLabel || "",
-                              "Account Number",
-                            )
-                          }
-                          className="text-slate-400 hover:text-indigo-600 p-0.5 transition"
-                          title="Copy Account Number"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowAccountNumber((prev) => !prev)}
+                            className="text-slate-400 hover:text-indigo-600 p-0.5 transition cursor-pointer"
+                            title={showAccountNumber ? "Mask account number" : "Reveal full account number"}
+                          >
+                            {showAccountNumber ? (
+                              <EyeOff className="h-3.5 w-3.5 text-indigo-600" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onCopy(
+                                parsedDest?.accountNumber || withdrawal.destinationLabel || "",
+                                "Account Number",
+                              )
+                            }
+                            className="text-slate-400 hover:text-indigo-600 p-0.5 transition cursor-pointer"
+                            title="Copy Account Number"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1916,21 +1954,39 @@ function WithdrawalDrawer({
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-slate-500">Card Number</span>
                     <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900 bg-white px-2 py-1 rounded border border-slate-200 text-sm">
-                      <span>{parsedDest?.cardNumber || withdrawal.destinationLabel || "—"}</span>
+                      <span>
+                        {showAccountNumber
+                          ? (parsedDest?.cardNumber || withdrawal.destinationLabel || "—")
+                          : maskAccountNumber(parsedDest?.cardNumber || withdrawal.destinationLabel || "—")}
+                      </span>
                       {(parsedDest?.cardNumber || withdrawal.destinationLabel) && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onCopy(
-                              parsedDest?.cardNumber || withdrawal.destinationLabel || "",
-                              "Card Number",
-                            )
-                          }
-                          className="text-slate-400 hover:text-indigo-600 p-0.5 transition"
-                          title="Copy Card Number"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowAccountNumber((prev) => !prev)}
+                            className="text-slate-400 hover:text-slate-700 p-0.5 transition"
+                            title={showAccountNumber ? "Mask card number" : "Reveal full card number"}
+                          >
+                            {showAccountNumber ? (
+                              <EyeOff className="h-3.5 w-3.5" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onCopy(
+                                parsedDest?.cardNumber || withdrawal.destinationLabel || "",
+                                "Card Number",
+                              )
+                            }
+                            className="text-slate-400 hover:text-indigo-600 p-0.5 transition"
+                            title="Copy Card Number"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1943,16 +1999,34 @@ function WithdrawalDrawer({
               <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200/80 space-y-2">
                 <span className="text-xs text-slate-500">Destination Details</span>
                 <div className="flex items-center justify-between font-mono text-xs font-semibold text-slate-800 bg-white p-2.5 rounded border border-slate-200">
-                  <span>{withdrawal.destinationLabel || "—"}</span>
+                  <span>
+                    {showAccountNumber
+                      ? (withdrawal.destinationLabel || "—")
+                      : maskDestinationString(withdrawal.destinationLabel)}
+                  </span>
                   {withdrawal.destinationLabel && (
-                    <button
-                      type="button"
-                      onClick={() => onCopy(withdrawal.destinationLabel!, "Destination")}
-                      className="text-slate-400 hover:text-indigo-600 p-0.5 transition"
-                      title="Copy destination"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowAccountNumber((prev) => !prev)}
+                        className="text-slate-400 hover:text-slate-700 p-0.5 transition"
+                        title={showAccountNumber ? "Mask destination" : "Reveal destination"}
+                      >
+                        {showAccountNumber ? (
+                          <EyeOff className="h-3.5 w-3.5" />
+                        ) : (
+                          <Eye className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onCopy(withdrawal.destinationLabel!, "Destination")}
+                        className="text-slate-400 hover:text-indigo-600 p-0.5 transition"
+                        title="Copy destination"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

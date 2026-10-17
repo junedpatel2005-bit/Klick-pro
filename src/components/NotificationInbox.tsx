@@ -168,7 +168,11 @@ function getCategoryIcon(type: string) {
       Icon: CircleDollarSign,
       color: "text-emerald-600 bg-emerald-500/10 border-emerald-200 dark:border-emerald-800",
     };
-  if (type.includes("MILESTONE"))
+  if (
+    type.includes("MILESTONE") ||
+    type.includes("DELIVERABLE") ||
+    type.includes("WORK_SUBMITTED")
+  )
     return {
       Icon: Activity,
       color: "text-cyan-600 bg-cyan-500/10 border-cyan-200 dark:border-cyan-800",

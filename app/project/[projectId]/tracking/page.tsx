@@ -525,7 +525,20 @@ export default function SharedProjectTrackingPage() {
     socket.on("notification:new", () => void refresh().catch(() => undefined));
     socket.on("proposal:new", () => void refresh().catch(() => undefined));
 
-    const onCustomNotification = () => void refresh().catch(() => undefined);
+    const onCustomNotification = (rawEvent?: globalThis.Event) => {
+      const customEvent = rawEvent as unknown as CustomEvent<{ type?: string; title?: string }> | undefined;
+      const detail = customEvent?.detail;
+      if (
+        detail?.type?.includes("MILESTONE") ||
+        detail?.type?.includes("DELIVERABLE") ||
+        detail?.type?.includes("WORK_SUBMITTED") ||
+        detail?.title?.toLowerCase().includes("milestone") ||
+        detail?.title?.toLowerCase().includes("deliverable")
+      ) {
+        toast.info("A milestone deliverable was submitted for review.");
+      }
+      void refresh().catch(() => undefined);
+    };
     window.addEventListener("servio:notification", onCustomNotification);
     window.addEventListener("servio:project-update", onCustomNotification);
 

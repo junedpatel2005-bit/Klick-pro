@@ -104,7 +104,11 @@ export async function GET(
         return match ? [Number(match[1])] : [];
       });
       const needsMilestones = notifications.some(
-        (n) => n.type.includes("MILESTONE") || n.type.includes("PAYOUT"),
+        (n) =>
+          n.type.includes("MILESTONE") ||
+          n.type.includes("PAYOUT") ||
+          n.type.includes("DELIVERABLE") ||
+          n.type.includes("WORK"),
       );
       const [disputes, milestones] = await Promise.all([
         legacyDisputeIds.length > 0
@@ -132,7 +136,12 @@ export async function GET(
         if (disputeId && disputeProjectMap.has(Number(disputeId))) {
           return disputeProjectMap.get(Number(disputeId)) ?? null;
         }
-        if (notification.type.includes("MILESTONE") || notification.type.includes("PAYOUT")) {
+        if (
+          notification.type.includes("MILESTONE") ||
+          notification.type.includes("PAYOUT") ||
+          notification.type.includes("DELIVERABLE") ||
+          notification.type.includes("WORK")
+        ) {
           const text = `${notification.title} ${notification.description ?? ""}`;
           return milestones.find((milestone) => text.includes(milestone.title))?.trackingId ?? null;
         }

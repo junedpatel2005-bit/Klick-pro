@@ -26,3 +26,16 @@ export function formatAccountNumberInput(value: string): string {
   const digitsOnly = value.replace(/\D/g, "");
   return digitsOnly.replace(/(\d{4})(?=\d)/g, "$1 ").trim();
 }
+
+/**
+ * Safely masks any raw destination label string (e.g. "918273645100" -> "•••• •••• •••• 5100")
+ */
+export function maskDestinationString(label: string | null | undefined, type?: string): string {
+  if (!label) return type ? type.replace(/_/g, " ") : "Direct Transfer";
+  const cleaned = label.trim();
+  if (cleaned.startsWith("enc:v1:")) return "•••• •••• •••• ••••";
+  if (/^\d{6,}$/.test(cleaned)) {
+    return `•••• •••• •••• ${cleaned.slice(-4)}`;
+  }
+  return cleaned.replace(/\b\d{6,}\b/g, (match) => `•••• ${match.slice(-4)}`);
+}

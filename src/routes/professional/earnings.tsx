@@ -53,6 +53,7 @@ import { BankCombobox } from "@/components/BankCombobox";
 import { IfscFinderDialog } from "@/components/IfscFinderDialog";
 import { RecheckWithdrawalModal } from "@/components/RecheckWithdrawalModal";
 import { WithdrawalDetailModal } from "@/components/WithdrawalDetailModal";
+import { maskDestinationString } from "@/lib/account-formatting";
 import {
   validateBankSpecificAccountNumber,
   getExpectedAccountLengthHint,
@@ -144,7 +145,7 @@ function parseDestinationSummary(destinationLabel: string | null, destinationTyp
     // Plain text fallback
   }
   return {
-    label: destinationLabel,
+    label: maskDestinationString(destinationLabel, destinationType),
     icon:
       destinationType === "UPI" ? Smartphone : destinationType === "CARD" ? CreditCard : Building2,
   };

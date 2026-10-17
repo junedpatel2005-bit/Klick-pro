@@ -67,12 +67,17 @@ function getNotificationVisual(type = "", title = "") {
       categoryLabel: "Wallet & Payment",
     };
   }
-  if (upper.includes("MILESTONE")) {
+  if (
+    upper.includes("MILESTONE") ||
+    upper.includes("DELIVERABLE") ||
+    upper.includes("WORK_SUBMITTED") ||
+    upper.includes("WORK_UPLOADED")
+  ) {
     return {
       Icon: Flag,
       iconClass: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/20",
       accentGradient: "bg-gradient-to-r from-purple-500/50 via-purple-500 to-purple-500/50",
-      categoryLabel: "Milestone Alert",
+      categoryLabel: "Milestone Deliverable",
     };
   }
   if (upper.includes("PROPOSAL") || upper.includes("JOB")) {
@@ -235,7 +240,8 @@ export function RealtimeNotifications() {
       seenNotifications.current.add(key);
       enqueueNotification(notification);
       invalidateNotificationsCache();
-      window.dispatchEvent(new CustomEvent("servio:notification"));
+      window.dispatchEvent(new CustomEvent("servio:notification", { detail: notification }));
+      window.dispatchEvent(new CustomEvent("servio:bell-ring"));
     };
 
     const onMessage = (message: { receiverId?: number }) => {
@@ -298,13 +304,29 @@ export function RealtimeNotifications() {
     >
       {visibleItems.map(({ key, notification }) => {
         let actionLabel = "View";
-        if (notification.href?.includes("/project/")) actionLabel = "View Project";
-        else if (notification.href?.includes("/job/")) actionLabel = "Review Job";
-        else if (notification.type.includes("PROPOSAL")) actionLabel = "Review Proposal";
-        else if (notification.type.includes("DISPUTE")) actionLabel = "Check Dispute";
-        else if (notification.type.includes("VERIFICATION")) actionLabel = "Inspect Status";
-        else if (notification.href?.includes("/earnings")) actionLabel = "View Wallet & Payout";
-        else if (notification.href?.includes("/admin/finance")) actionLabel = "Review Payout";
+        if (
+          notification.type.includes("MILESTONE") ||
+          notification.type.includes("DELIVERABLE") ||
+          notification.type.includes("WORK_SUBMITTED") ||
+          notification.title.toLowerCase().includes("deliverable") ||
+          notification.title.toLowerCase().includes("milestone")
+        ) {
+          actionLabel = "Review Milestone";
+        } else if (notification.href?.includes("/project/")) {
+          actionLabel = "View Project";
+        } else if (notification.href?.includes("/job/")) {
+          actionLabel = "Review Job";
+        } else if (notification.type.includes("PROPOSAL")) {
+          actionLabel = "Review Proposal";
+        } else if (notification.type.includes("DISPUTE")) {
+          actionLabel = "Check Dispute";
+        } else if (notification.type.includes("VERIFICATION")) {
+          actionLabel = "Inspect Status";
+        } else if (notification.href?.includes("/earnings")) {
+          actionLabel = "View Wallet & Payout";
+        } else if (notification.href?.includes("/admin/finance")) {
+          actionLabel = "Review Payout";
+        }
 
         const visual = getNotificationVisual(notification.type, notification.title);
         const VisualIcon = visual.Icon;

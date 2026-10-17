@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatReadableLabel, capitalizeWords } from "@/lib/utils";
-import { maskAccountNumber } from "@/lib/account-formatting";
+import { maskAccountNumber, maskDestinationString } from "@/lib/account-formatting";
 
 export type WithdrawalRecord = {
   id: number;
@@ -470,7 +470,7 @@ export function WithdrawalDetailModal({
               </div>
             ) : (
               <div className="text-xs text-muted-foreground">
-                Destination: {withdrawal.destinationLabel || "Standard Payout"}
+                Destination: {maskDestinationString(withdrawal.destinationLabel) || "Standard Payout"}
               </div>
             )}
           </div>

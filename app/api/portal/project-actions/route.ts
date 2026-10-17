@@ -298,26 +298,34 @@ export async function POST(request: NextRequest) {
         "DISPUTE_RAISED",
       ]);
       if (!dedicatedNotificationTypes.has(type)) {
+        const milestoneDetailValue = fields.milestoneId
+          ? await db.projectMilestone
+              .findUnique({
+                where: { id: fields.milestoneId },
+                select: { title: true, amount: true, dueDate: true },
+              })
+              .then((milestone) => {
+                if (!milestone) return `Milestone #${fields.milestoneId}`;
+                let dueStr = "";
+                if (milestone.dueDate) {
+                  try {
+                    const d = new Date(milestone.dueDate);
+                    if (!Number.isNaN(d.getTime())) {
+                      dueStr = ` · due ${d.toLocaleDateString("en-IN")}`;
+                    }
+                  } catch {
+                    dueStr = "";
+                  }
+                }
+                return `${milestone.title} · ₹${milestone.amount.toLocaleString("en-IN")}${dueStr}`;
+              })
+              .catch(() => `Milestone #${fields.milestoneId}`)
+          : null;
+
         const activityDetails = [
           { label: "Activity", value: title },
           ...(description ? [{ label: "Activity details", value: description }] : []),
-          ...(fields.milestoneId
-            ? [
-                {
-                  label: "Milestone",
-                  value: await db.projectMilestone
-                    .findUnique({
-                      where: { id: fields.milestoneId },
-                      select: { title: true, amount: true, dueDate: true },
-                    })
-                    .then((milestone) =>
-                      milestone
-                        ? `${milestone.title} · ₹${milestone.amount.toLocaleString("en-IN")}${milestone.dueDate ? ` · due ${milestone.dueDate.toLocaleDateString("en-IN")}` : ""}`
-                        : `Milestone #${fields.milestoneId}`,
-                    ),
-                },
-              ]
-            : []),
+          ...(milestoneDetailValue ? [{ label: "Milestone", value: milestoneDetailValue }] : []),
         ];
         const partnerRecipients =
           session.role === "ADMIN"
@@ -329,11 +337,13 @@ export async function POST(request: NextRequest) {
           ? `/project/${project.id}/tracking?tab=milestones&milestoneId=${fields.milestoneId}`
           : `/project/${project.id}/tracking`;
         await notifyUsers(partnerRecipients, {
-          type: `PROJECT_ACTIVITY_${type}`,
+          type: type.startsWith("PROJECT_") ? type : `PROJECT_ACTIVITY_${type}`,
           title: notificationTitle,
           description: description ?? title,
           href,
           emailDetails: activityDetails,
+        }).catch((err) => {
+          console.warn("[project-actions] notifyUsers dispatch failed:", err);
         });
       }
       emitRealtimeProjectUpdate([project.clientId, project.professionalId], {
@@ -831,8 +841,10 @@ export async function POST(request: NextRequest) {
         },
       });
       await event(
-        isResubmission ? "REVISED_WORK_SUBMITTED" : "MILESTONE_SUBMITTED",
-        isResubmission ? `Revised work submitted (Round ${roundNumber})` : "Milestone submitted",
+        isResubmission ? "MILESTONE_REVISION_SUBMITTED" : "MILESTONE_SUBMITTED",
+        isResubmission
+          ? `Revised deliverable submitted (Round ${roundNumber})`
+          : "Milestone deliverable submitted for review",
         input.note,
         {
           milestoneId: milestone.id,

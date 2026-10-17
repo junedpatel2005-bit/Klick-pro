@@ -27,6 +27,7 @@ let inflight: Promise<PortalNotification[]> | null = null;
 export function invalidateNotificationsCache() {
   cached = null;
   cachedAt = 0;
+  inflight = null;
 }
 
 export function fetchPortalNotifications(options?: {
@@ -35,6 +36,7 @@ export function fetchPortalNotifications(options?: {
   if (options?.force) {
     cached = null;
     cachedAt = 0;
+    inflight = null;
   }
   if (cached && Date.now() - cachedAt < TTL_MS) return Promise.resolve(cached);
   if (inflight) return inflight;
