@@ -19,7 +19,6 @@ import {
   CreditCard,
   ExternalLink,
   Eye,
-  EyeOff,
   FileCheck2,
   Landmark,
   Layers,
@@ -1669,11 +1668,6 @@ function WithdrawalDrawer({
   const isCompleted = withdrawal.status === "COMPLETED";
 
   const proName = user?.name || `Professional #${withdrawal.professionalId}`;
-  const [showAccountNumber, setShowAccountNumber] = useState(false);
-
-  useEffect(() => {
-    setShowAccountNumber(false);
-  }, [withdrawal.id]);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs transition-opacity">
@@ -1843,34 +1837,20 @@ function WithdrawalDrawer({
                     <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900 text-sm bg-white px-2 py-1 rounded border border-slate-200">
                       <span>
                         {parsedDest?.accountNumber
-                          ? showAccountNumber
-                            ? formatAccountNumberInput(parsedDest.accountNumber)
-                            : maskAccountNumber(parsedDest.accountNumber)
+                          ? maskAccountNumber(parsedDest.accountNumber)
                           : withdrawal.destinationLabel
-                            ? showAccountNumber
-                              ? withdrawal.destinationLabel
-                              : maskDestinationString(withdrawal.destinationLabel)
+                            ? maskDestinationString(withdrawal.destinationLabel)
                             : "—"}
                       </span>
                       {(parsedDest?.accountNumber || withdrawal.destinationLabel) && (
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
-                            onClick={() => setShowAccountNumber((prev) => !prev)}
-                            className="text-slate-400 hover:text-indigo-600 p-0.5 transition cursor-pointer"
-                            title={showAccountNumber ? "Mask account number" : "Reveal full account number"}
-                          >
-                            {showAccountNumber ? (
-                              <EyeOff className="h-3.5 w-3.5 text-indigo-600" />
-                            ) : (
-                              <Eye className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                          <button
-                            type="button"
                             onClick={() =>
                               onCopy(
-                                parsedDest?.accountNumber || withdrawal.destinationLabel || "",
+                                parsedDest?.accountNumber
+                                  ? maskAccountNumber(parsedDest.accountNumber)
+                                  : maskDestinationString(withdrawal.destinationLabel),
                                 "Account Number",
                               )
                             }
@@ -1955,29 +1935,15 @@ function WithdrawalDrawer({
                     <span className="text-slate-500">Card Number</span>
                     <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900 bg-white px-2 py-1 rounded border border-slate-200 text-sm">
                       <span>
-                        {showAccountNumber
-                          ? (parsedDest?.cardNumber || withdrawal.destinationLabel || "—")
-                          : maskAccountNumber(parsedDest?.cardNumber || withdrawal.destinationLabel || "—")}
+                        {maskAccountNumber(parsedDest?.cardNumber || withdrawal.destinationLabel || "—")}
                       </span>
                       {(parsedDest?.cardNumber || withdrawal.destinationLabel) && (
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
-                            onClick={() => setShowAccountNumber((prev) => !prev)}
-                            className="text-slate-400 hover:text-slate-700 p-0.5 transition"
-                            title={showAccountNumber ? "Mask card number" : "Reveal full card number"}
-                          >
-                            {showAccountNumber ? (
-                              <EyeOff className="h-3.5 w-3.5" />
-                            ) : (
-                              <Eye className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                          <button
-                            type="button"
                             onClick={() =>
                               onCopy(
-                                parsedDest?.cardNumber || withdrawal.destinationLabel || "",
+                                maskAccountNumber(parsedDest?.cardNumber || withdrawal.destinationLabel || "—"),
                                 "Card Number",
                               )
                             }
@@ -2000,27 +1966,13 @@ function WithdrawalDrawer({
                 <span className="text-xs text-slate-500">Destination Details</span>
                 <div className="flex items-center justify-between font-mono text-xs font-semibold text-slate-800 bg-white p-2.5 rounded border border-slate-200">
                   <span>
-                    {showAccountNumber
-                      ? (withdrawal.destinationLabel || "—")
-                      : maskDestinationString(withdrawal.destinationLabel)}
+                    {maskDestinationString(withdrawal.destinationLabel)}
                   </span>
                   {withdrawal.destinationLabel && (
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => setShowAccountNumber((prev) => !prev)}
-                        className="text-slate-400 hover:text-slate-700 p-0.5 transition"
-                        title={showAccountNumber ? "Mask destination" : "Reveal destination"}
-                      >
-                        {showAccountNumber ? (
-                          <EyeOff className="h-3.5 w-3.5" />
-                        ) : (
-                          <Eye className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onCopy(withdrawal.destinationLabel!, "Destination")}
+                        onClick={() => onCopy(maskDestinationString(withdrawal.destinationLabel), "Destination")}
                         className="text-slate-400 hover:text-indigo-600 p-0.5 transition"
                         title="Copy destination"
                       >

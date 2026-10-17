@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { getBankValidationRule } from "@/lib/indian-banks";
 import { capitalizeWords } from "@/lib/utils";
+import { maskAccountNumber } from "@/lib/account-formatting";
 
 export type RecheckWithdrawalModalProps = {
   open: boolean;
@@ -345,10 +346,10 @@ export function RecheckWithdrawalModal({
                   ) : (
                     <div className="flex items-center gap-1.5">
                       <div className="flex items-center gap-1.5 font-mono font-bold text-foreground bg-muted/60 px-2 py-0.5 rounded border border-border/60">
-                        <span>{currentAccNo || "—"}</span>
+                        <span>{maskAccountNumber(currentAccNo)}</span>
                         <button
                           type="button"
-                          onClick={() => handleCopy(currentAccNo, "Account Number")}
+                          onClick={() => handleCopy(maskAccountNumber(currentAccNo), "Account Number")}
                           className="text-muted-foreground hover:text-foreground p-0.5 transition cursor-pointer"
                           title="Copy account number"
                         >

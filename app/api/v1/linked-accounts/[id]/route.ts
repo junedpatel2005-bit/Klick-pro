@@ -105,7 +105,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       data: { isDefault: true },
     });
 
-    return NextResponse.json({ account: updated, success: true });
+    return NextResponse.json({
+      account: {
+        ...updated,
+        accountHolder: updated.accountHolder ? capitalizeWords(updated.accountHolder) : null,
+        bankName: updated.bankName ? capitalizeWords(updated.bankName) : null,
+        accountNumber: maskAccountNumber(updated.last4 || updated.accountNumber),
+      },
+      success: true,
+    });
   } catch (error) {
     console.error("PATCH /api/v1/linked-accounts/[id] error:", error);
     return NextResponse.json(

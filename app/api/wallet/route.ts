@@ -6,7 +6,8 @@ import { ensureWallet, creditWalletFromVerifiedProvider } from "@/lib/wallet-led
 import { fetchRazorpayOrderPayments, isRazorpayConfigured } from "@/lib/razorpay";
 import { getMinWithdrawalAmount, isAutoWithdrawalEnabled } from "@/lib/platform-settings";
 import { Prisma } from "@generated/prisma/client";
-import { encryptAccountNumber, maskAccountNumber } from "@/lib/encryption";
+import { encryptAccountNumber, decryptAccountNumber, maskAccountNumber } from "@/lib/encryption";
+import { maskDestinationString } from "@/lib/account-formatting";
 import { capitalizeWords } from "@/lib/utils";
 import {
   emitRealtimeNotification,
@@ -113,19 +114,29 @@ export async function GET(request: NextRequest) {
     if (!w.destinationLabel) return w;
     try {
       const parsed = JSON.parse(w.destinationLabel);
-      if (parsed.type === "BANK") {
+      if (parsed && typeof parsed === "object") {
+        const maskedParsed = { ...parsed };
+        if (maskedParsed.accountNumber) {
+          maskedParsed.accountNumber = maskAccountNumber(maskedParsed.last4 || maskedParsed.accountNumber);
+        }
+        if (maskedParsed.cardNumber) {
+          maskedParsed.cardNumber = maskAccountNumber(maskedParsed.last4 || maskedParsed.cardNumber);
+        }
         return {
           ...w,
-          destinationLabel: JSON.stringify({
-            ...parsed,
-            accountNumber: maskAccountNumber(parsed.last4 || parsed.accountNumber),
-          }),
+          destinationLabel: JSON.stringify(maskedParsed),
         };
       }
     } catch {
-      // fallback
+      return {
+        ...w,
+        destinationLabel: maskDestinationString(w.destinationLabel),
+      };
     }
-    return w;
+    return {
+      ...w,
+      destinationLabel: maskDestinationString(w.destinationLabel),
+    };
   });
   const available = canWithdraw ? Math.max(0, wallet.balance - withdrawals) : wallet.balance;
   const minWithdrawalAmount = await getMinWithdrawalAmount();
@@ -338,6 +349,21 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // If bank account is masked or already encrypted from saved details, resolve from user's linked accounts
+  if (destinationType === "BANK" && (accountNumber.includes("•") || !accountNumber || accountNumber.startsWith("enc:v1:"))) {
+    const linked = await db.userLinkedAccount.findFirst({
+      where: {
+        userId: session.userId,
+        accountType: "BANK",
+        ...(ifsc ? { ifscCode: ifsc } : {}),
+      },
+      orderBy: { isDefault: "desc" },
+    });
+    if (linked && linked.accountNumber) {
+      accountNumber = decryptAccountNumber(linked.accountNumber);
+    }
+  }
+
   const wallet = await ensureWallet(session.userId);
   const user = await db.user.findUnique({
     where: { id: session.userId },
@@ -407,7 +433,7 @@ export async function POST(request: NextRequest) {
           type: "BANK",
           bankName: bankName ? capitalizeWords(bankName) : "Bank Transfer",
           accountHolder: accountHolder ? capitalizeWords(accountHolder) : "",
-          accountNumber: encAccForDest ? encAccForDest.encrypted : cleanAccForDest,
+          accountNumber: encAccForDest ? encAccForDest.encrypted : "",
           last4: encAccForDest ? encAccForDest.last4 : cleanAccForDest.slice(-4),
           ifsc: ifsc.trim().toUpperCase(),
         }

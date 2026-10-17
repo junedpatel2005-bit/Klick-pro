@@ -371,10 +371,6 @@ export default function Earnings() {
         if (parsed.payoutMethod) setPayoutMethod(parsed.payoutMethod);
         if (parsed.bankName) setBankName(parsed.bankName);
         if (parsed.accountHolder) setAccountHolder(parsed.accountHolder);
-        if (parsed.accountNumber) {
-          setAccountNumber(parsed.accountNumber);
-          setConfirmAccountNumber(parsed.accountNumber);
-        }
         if (parsed.ifscCode) setIfscCode(parsed.ifscCode);
         if (parsed.upiId) setUpiId(parsed.upiId);
         if (parsed.upiHolder) setUpiHolder(parsed.upiHolder);
@@ -569,7 +565,6 @@ export default function Earnings() {
               payoutMethod,
               bankName: finalBankName,
               accountHolder: finalAccountHolder,
-              accountNumber: finalAccountNumber,
               ifscCode: finalIfscCode,
               upiId: finalUpiId,
               upiHolder: finalUpiHolder,

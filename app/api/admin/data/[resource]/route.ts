@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { ensureWallet } from "@/lib/wallet-ledger";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { isAutoWithdrawalEnabled } from "@/lib/platform-settings";
-import { decryptAccountNumber } from "@/lib/encryption";
+import { maskAccountNumber, maskDestinationString } from "@/lib/account-formatting";
 
 export async function GET(
   request: NextRequest,
@@ -934,45 +934,38 @@ export async function GET(
         };
       });
 
-      const decryptedWithdrawals = withdrawals.map((w) => {
+      const maskedWithdrawals = withdrawals.map((w) => {
         if (!w.destinationLabel) return w;
         try {
           const parsed = JSON.parse(w.destinationLabel);
           if (parsed && typeof parsed === "object") {
-            let modified = false;
             const updatedParsed = { ...parsed };
-            if (
-              updatedParsed.accountNumber &&
-              typeof updatedParsed.accountNumber === "string" &&
-              updatedParsed.accountNumber.startsWith("enc:v1:")
-            ) {
-              updatedParsed.accountNumber = decryptAccountNumber(updatedParsed.accountNumber);
-              modified = true;
+            if (updatedParsed.accountNumber) {
+              updatedParsed.accountNumber = maskAccountNumber(updatedParsed.last4 || updatedParsed.accountNumber);
             }
-            if (
-              updatedParsed.cardNumber &&
-              typeof updatedParsed.cardNumber === "string" &&
-              updatedParsed.cardNumber.startsWith("enc:v1:")
-            ) {
-              updatedParsed.cardNumber = decryptAccountNumber(updatedParsed.cardNumber);
-              modified = true;
+            if (updatedParsed.cardNumber) {
+              updatedParsed.cardNumber = maskAccountNumber(updatedParsed.last4 || updatedParsed.cardNumber);
             }
-            if (modified) {
-              return {
-                ...w,
-                destinationLabel: JSON.stringify(updatedParsed),
-              };
-            }
+            return {
+              ...w,
+              destinationLabel: JSON.stringify(updatedParsed),
+            };
           }
         } catch {
-          // ignore
+          return {
+            ...w,
+            destinationLabel: maskDestinationString(w.destinationLabel),
+          };
         }
-        return w;
+        return {
+          ...w,
+          destinationLabel: maskDestinationString(w.destinationLabel),
+        };
       });
 
       return NextResponse.json({
         transactions,
-        withdrawals: decryptedWithdrawals,
+        withdrawals: maskedWithdrawals,
         payments: enrichedPayments,
         walletTransactions,
         platformWallet: platformWallet

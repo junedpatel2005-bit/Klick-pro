@@ -23,6 +23,18 @@ export function encryptAccountNumber(plaintext: string): {
   masked: string;
 } {
   const clean = String(plaintext).replace(/\s+/g, "").trim();
+
+  // If already encrypted, avoid double encryption and compute real last4 from decrypted value
+  if (clean.startsWith("enc:v1:")) {
+    const decrypted = decryptAccountNumber(clean);
+    const last4 = decrypted ? decrypted.slice(-4) : "";
+    return {
+      encrypted: clean,
+      last4,
+      masked: maskAccountNumber(last4),
+    };
+  }
+
   const last4 = clean.slice(-4) || clean;
   const masked = maskAccountNumber(clean);
 

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
+import { maskAccountNumber } from "@/lib/account-formatting";
+import { capitalizeWords } from "@/lib/utils";
 
 async function sessionFrom(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -90,5 +92,12 @@ export async function PATCH(
     },
   });
 
-  return NextResponse.json({ account: updated });
+  return NextResponse.json({
+    account: {
+      ...updated,
+      accountHolder: updated.accountHolder ? capitalizeWords(updated.accountHolder) : null,
+      bankName: updated.bankName ? capitalizeWords(updated.bankName) : null,
+      accountNumber: maskAccountNumber(updated.last4 || updated.accountNumber),
+    },
+  });
 }
