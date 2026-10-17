@@ -2,13 +2,29 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, Clock, Info, MapPin, Plus, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  Briefcase,
+  Check,
+  CheckCircle2,
+  Clock,
+  DollarSign,
+  FileText,
+  Info,
+  Lightbulb,
+  MapPin,
+  Plus,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { AddressMapPicker } from "@/components/AddressMapPicker";
 import { PageActionLoading } from "@/components/PageActionLoading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { MarketplaceCategory } from "@/lib/types/marketplace";
 import { getAllStates, inferLocationFromAddress, matchIndiaLocation } from "@/lib/india-locations";
+import { capitalizeFirst, capitalizeWords } from "@/lib/utils";
 
 export type JobFormMilestone = {
   id?: number;
@@ -65,6 +81,53 @@ const empty: Form = {
   milestones: [],
 };
 const steps = ["Details", "Budget & schedule", "Milestones", "Job type", "Location", "Review"];
+const postingInstructions = [
+  {
+    stepIndex: 0,
+    title: "Clear Title & Scope",
+    subtitle: "Job Details",
+    icon: FileText,
+    summary: "Write a specific job title and detailed project description.",
+    detail:
+      "Clearly describe the exact task, required deliverables, skill level, and any materials or tools needed. Clear posts receive higher quality proposals.",
+  },
+  {
+    stepIndex: 1,
+    title: "Fair Budget & Schedule",
+    subtitle: "Budget & Timing",
+    icon: DollarSign,
+    summary: "Set competitive rates and realistic timelines.",
+    detail:
+      "Define an appropriate fixed budget range or hourly rate aligned with Indian market rates. Include a realistic start date and completion deadline.",
+  },
+  {
+    stepIndex: 2,
+    title: "Milestone Payments",
+    subtitle: "Escrow Milestones",
+    icon: ShieldCheck,
+    summary: "Break projects into safe, verifiable checkpoints.",
+    detail:
+      "Divide your work into clear phases. Your funds stay protected in platform escrow and are only released after you inspect and approve each milestone.",
+  },
+  {
+    stepIndex: 3,
+    title: "Work Mode & Type",
+    subtitle: "Work Environment",
+    icon: Briefcase,
+    summary: "Specify on-site, remote, or hybrid work expectations.",
+    detail:
+      "Let professionals know whether in-person presence is mandatory and specify any site access conditions, tools, or safety equipment required.",
+  },
+  {
+    stepIndex: 4,
+    title: "Precise Location",
+    subtitle: "Job Address",
+    icon: MapPin,
+    summary: "Pinpoint your exact address on the interactive map.",
+    detail:
+      "Set your complete address and landmark accurately so nearby verified professionals can calculate travel distance and respond swiftly.",
+  },
+];
 const postJobDraftKey = "klick-pro:post-job-draft";
 const segmentOptions: [string, string][] = [
   ["RESIDENTIAL", "Residential"],
@@ -937,7 +1000,7 @@ export default function PostJob() {
     }
   }
   return (
-    <div className="max-w-3xl">
+    <div className="w-full">
       <PageActionLoading
         active={saving}
         title={savingMode === "publish" ? "Posting your job…" : "Saving your draft…"}
@@ -964,7 +1027,10 @@ export default function PostJob() {
           </Button>
         )}
       </div>
-      <ol className="mt-7 grid grid-cols-6 gap-1" aria-label="Job posting steps">
+
+      <div className="mt-7 grid grid-cols-1 items-start gap-6 md:grid-cols-12 lg:gap-8">
+        <div className="min-w-0 md:col-span-7 lg:col-span-8">
+          <ol className="grid grid-cols-6 gap-1" aria-label="Job posting steps">
         {steps.map((label, index) => {
           const reachable = index <= maxStep;
           const stepLabel = (
@@ -1737,11 +1803,11 @@ export default function PostJob() {
         {step === 5 && (
           <div className="space-y-5">
             <h2 className="text-xl font-semibold">Review your job</h2>
-            <Review label="Title" value={form.title || "Not set"} onEdit={() => setStep(0)} />
+            <Review label="Title" value={capitalizeWords(form.title) || "Not set"} onEdit={() => setStep(0)} />
             <Review label="Category" value={form.category || "Not set"} onEdit={() => setStep(0)} />
             <Review
               label="Description"
-              value={form.description || "Not set"}
+              value={capitalizeFirst(form.description) || "Not set"}
               onEdit={() => setStep(0)}
             />
             <Review
@@ -1789,7 +1855,7 @@ export default function PostJob() {
                       .map((m, idx) => {
                         const milestonePercent = Number(m.percentage) || 0;
                         const validityLabel = m.validityDays ? ` • ${m.validityDays}d validity` : " • Instant";
-                        return `${idx + 1}. ${m.title} (${m.percentage}%${
+                        return `${idx + 1}. ${capitalizeWords(m.title)} (${m.percentage}%${
                           (
                             form.timingType === "HOURLY"
                               ? hourlyProjectTotal
@@ -1797,7 +1863,7 @@ export default function PostJob() {
                           )
                             ? ` • ₹${Math.round(((form.timingType === "HOURLY" ? hourlyProjectTotal : Number(form.budgetMax))! * milestonePercent) / 100).toLocaleString("en-IN")}`
                             : ""
-                        }${validityLabel})${m.description ? `\n   ${m.description}` : ""}`;
+                        }${validityLabel})${m.description ? `\n   ${capitalizeFirst(m.description)}` : ""}`;
                       })
                       .join("\n")
                   : "Default: 100% on Project Completion"
@@ -1812,7 +1878,7 @@ export default function PostJob() {
             {form.workMode !== "REMOTE" && (
               <Review
                 label="Location"
-                value={form.locationAddress || "Not set"}
+                value={capitalizeWords(form.locationAddress) || "Not set"}
                 onEdit={() => setStep(4)}
               />
             )}
@@ -1862,7 +1928,109 @@ export default function PostJob() {
             )}
           </div>
         </div>
-      </section>
+          </section>
+        </div>
+
+        {/* Right Column: Persistent Instructions Card Across All Steps */}
+        <aside className="space-y-4 min-w-0 md:sticky md:top-6 md:col-span-5 lg:col-span-4">
+          <div className="rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+            <div className="flex items-center gap-3 border-b pb-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Lightbulb className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">Posting instructions</h3>
+                <p className="text-xs text-muted-foreground">5 topics for faster, better proposals</p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {postingInstructions.map((item) => {
+                const isCurrent = step === item.stepIndex;
+                const isCompleted = step > item.stepIndex;
+                const reachable = item.stepIndex <= maxStep;
+
+                return (
+                  <div
+                    key={item.title}
+                    className={`rounded-xl border p-3.5 transition-all ${
+                      isCurrent
+                        ? "border-primary/50 bg-primary/5 ring-1 ring-primary/20 shadow-xs"
+                        : isCompleted
+                          ? "border-muted bg-muted/20"
+                          : "border-border/60 bg-background/50 hover:border-border"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                            isCurrent
+                              ? "bg-primary text-primary-foreground"
+                              : isCompleted
+                                ? "bg-emerald-600 text-white dark:bg-emerald-500"
+                                : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {isCompleted ? <Check className="h-3.5 w-3.5" /> : item.stepIndex + 1}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-xs font-semibold ${
+                              isCurrent ? "text-primary" : "text-foreground"
+                            }`}
+                          >
+                            {item.title}
+                          </span>
+                          {reachable && !isCurrent && (
+                            <button
+                              type="button"
+                              onClick={() => setStep(item.stepIndex)}
+                              className="text-[10px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                            >
+                              {isCompleted ? "Edit" : "Go"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {isCurrent && (
+                        <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                          Current step
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-2 pl-[34px] text-xs leading-relaxed text-muted-foreground">
+                      {item.detail}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {step === 5 && (
+              <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5 font-semibold text-primary">
+                  <Sparkles className="size-4" />
+                  Final verification
+                </div>
+                <p className="mt-1 leading-relaxed">
+                  Review all job parameters carefully before publishing. Once posted, qualified professionals in your area can inspect the scope and submit quotes.
+                </p>
+              </div>
+            )}
+
+            <div className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 dark:text-emerald-400">
+                <ShieldCheck className="h-4 w-4 shrink-0" />
+                <span>100% Escrow protected</span>
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed text-emerald-950/70 dark:text-emerald-400/80">
+                Funds for milestones are held safely in escrow and are released only when you inspect and approve the completed work.
+              </p>
+            </div>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }

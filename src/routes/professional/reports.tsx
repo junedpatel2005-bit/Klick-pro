@@ -643,29 +643,78 @@ function ProjectsReport() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredProjects.map((project) => {
-                  const trackingHref = `/project/${project.id}/tracking`;
-                  return (
-                    <article
-                      key={project.id}
-                      className="group relative flex flex-col justify-between rounded-2xl border border-border bg-card p-5 shadow-xs transition hover:border-primary/40 hover:shadow-soft"
-                    >
-                      <div>
-                        {/* Reference & Status */}
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-xs font-semibold text-muted-foreground bg-muted/70 px-2.5 py-0.5 rounded-md">
-                            #PRJ-{project.id}
-                          </span>
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusBadgeClass(
-                              project.status,
-                            )}`}
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                            {displayStatus(project.status)}
-                          </span>
-                        </div>
+              <div className="space-y-3">
+                {/* Multi-select bar for Box View */}
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/80 bg-muted/40 px-3.5 py-2 text-xs">
+                  <label className="flex items-center gap-2 font-medium text-foreground cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleAllVisible}
+                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
+                    />
+                    <span>Select all ({filteredProjects.length})</span>
+                  </label>
+                  {selectedList.length > 0 && (
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-primary">
+                        {selectedList.length} project{selectedList.length === 1 ? "" : "s"} selected
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          selectedList.forEach((id) => toggle(id));
+                        }}
+                        className="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer"
+                      >
+                        Clear selection
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredProjects.map((project) => {
+                    const trackingHref = `/project/${project.id}/tracking`;
+                    const isSelected = selectedIds.has(project.id);
+                    return (
+                      <article
+                        key={project.id}
+                        className={`group relative flex flex-col justify-between rounded-2xl border p-5 shadow-xs transition ${
+                          isSelected
+                            ? "border-primary bg-primary/[0.03] ring-1 ring-primary/40 shadow-soft"
+                            : "border-border bg-card hover:border-primary/40 hover:shadow-soft"
+                        }`}
+                      >
+                        <div>
+                          {/* Selection Checkbox, Reference & Status */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <label
+                                className="relative flex items-center justify-center cursor-pointer select-none p-0.5 rounded hover:bg-muted"
+                                title={isSelected ? "Deselect project" : "Select project"}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggle(project.id)}
+                                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
+                                  aria-label={`Select project #${project.id}`}
+                                />
+                              </label>
+                              <span className="font-mono text-xs font-semibold text-muted-foreground bg-muted/70 px-2.5 py-0.5 rounded-md">
+                                #PRJ-{project.id}
+                              </span>
+                            </div>
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusBadgeClass(
+                                project.status,
+                              )}`}
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                              {displayStatus(project.status)}
+                            </span>
+                          </div>
 
                         {/* Job Scope Title */}
                         <h3 className="mt-3 text-base font-semibold leading-snug text-foreground">
@@ -740,8 +789,9 @@ function ProjectsReport() {
                   );
                 })}
               </div>
-            )
-          ) : (
+            </div>
+          )
+        ) : (
             /* View Mode 2: Structured Statement Table */
             <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
               <SelectableReportTable
