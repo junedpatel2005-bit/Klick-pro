@@ -24,7 +24,7 @@ import {
   type DatePreset,
   isWithinCustomDateRange,
 } from "@/components/reports/DateRangeFilter";
-import { formatReadableLabel } from "@/lib/utils";
+import { formatReadableLabel, capitalizeWords } from "@/lib/utils";
 
 type UserRow = {
   id: number;
@@ -56,7 +56,9 @@ type JobRow = {
 };
 
 type FinanceRow = {
-  id: number;
+  id: string;
+  rawId: number;
+  referenceNumber: string;
   kind: "Payment" | "Payout";
   type: string;
   amount: number;
@@ -967,26 +969,46 @@ function FinanceReport() {
         };
 
         const combined: FinanceRow[] = [
-          ...transactions.map((item: ApiTransaction) => ({
-            id: item.id,
-            kind: "Payment" as const,
-            type: item.type ?? "PAYMENT",
-            amount: Number(item.amount) || 0,
-            currency: item.currency || "INR",
-            status: item.status ?? "PENDING",
-            party: `Client: ${(item.clientId && names[item.clientId]) ?? `#${item.clientId}`} · Pro: ${(item.professionalId && names[item.professionalId]) ?? `#${item.professionalId}`}`,
-            createdAt: item.createdAt || new Date().toISOString(),
-          })),
-          ...withdrawals.map((item: ApiWithdrawal) => ({
-            id: item.id,
-            kind: "Payout" as const,
-            type: "Withdrawal",
-            amount: Number(item.amount) || 0,
-            currency: item.currency || "INR",
-            status: item.status ?? "PENDING",
-            party: `Professional: ${(item.professionalId && names[item.professionalId]) ?? `#${item.professionalId}`}`,
-            createdAt: item.createdAt || new Date().toISOString(),
-          })),
+          ...transactions.map((item: ApiTransaction) => {
+            const clientName =
+              item.clientId && names[item.clientId]
+                ? capitalizeWords(names[item.clientId])
+                : `#${item.clientId}`;
+            const proName =
+              item.professionalId && names[item.professionalId]
+                ? capitalizeWords(names[item.professionalId])
+                : `#${item.professionalId}`;
+            return {
+              id: `tx-${item.id}`,
+              rawId: item.id,
+              referenceNumber: `TXN-${item.id}`,
+              kind: "Payment" as const,
+              type: item.type ?? "PAYMENT",
+              amount: Number(item.amount) || 0,
+              currency: item.currency || "INR",
+              status: item.status ?? "PENDING",
+              party: `Client: ${clientName} · Pro: ${proName}`,
+              createdAt: item.createdAt || new Date().toISOString(),
+            };
+          }),
+          ...withdrawals.map((item: ApiWithdrawal) => {
+            const proName =
+              item.professionalId && names[item.professionalId]
+                ? capitalizeWords(names[item.professionalId])
+                : `#${item.professionalId}`;
+            return {
+              id: `wdr-${item.id}`,
+              rawId: item.id,
+              referenceNumber: `WDR-${item.id}`,
+              kind: "Payout" as const,
+              type: "Withdrawal",
+              amount: Number(item.amount) || 0,
+              currency: item.currency || "INR",
+              status: item.status ?? "PENDING",
+              party: `Professional: ${proName}`,
+              createdAt: item.createdAt || new Date().toISOString(),
+            };
+          }),
         ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setRows(combined);
       })
@@ -1003,7 +1025,9 @@ function FinanceReport() {
         search.trim() === "" ||
         row.party.toLowerCase().includes(search.toLowerCase()) ||
         row.type.toLowerCase().includes(search.toLowerCase()) ||
-        String(row.id).includes(search);
+        String(row.rawId).includes(search) ||
+        row.referenceNumber.toLowerCase().includes(search.toLowerCase()) ||
+        row.id.toLowerCase().includes(search.toLowerCase());
       const matchesKind =
         kindFilter === "ALL" || row.kind.toUpperCase() === kindFilter.toUpperCase();
       const matchesDate = isWithinCustomDateRange(row.createdAt, datePreset, startDate, endDate);
@@ -1032,10 +1056,10 @@ function FinanceReport() {
     if (isSelected && rowsToExport.length === 1 && rowsToExport[0]) {
       const r = rowsToExport[0];
       downloadCsvFile({
-        filename: `klick-pro-admin-voucher-${r.id}`,
-        title: `Admin Oversight · Settlement Voucher #${r.id}`,
+        filename: `klick-pro-admin-voucher-${r.referenceNumber.toLowerCase()}`,
+        title: `Admin Oversight · Settlement Voucher #${r.referenceNumber}`,
         metadata: [
-          { label: "Transaction ID", value: `#TXN-${r.id}` },
+          { label: "Transaction ID", value: `#${r.referenceNumber}` },
           { label: "Transfer Kind", value: r.kind },
           { label: "Transaction Type", value: formatReadableLabel(r.type) },
           { label: "Gross Amount", value: `INR ${r.amount.toLocaleString("en-IN")}` },
@@ -1054,7 +1078,7 @@ function FinanceReport() {
         ],
         headers: ["Audit Entry", "Value", "Settlement Status"],
         rows: [
-          ["Platform Transaction Reference", `#TXN-${r.id}`, formatReadableLabel(r.status)],
+          ["Platform Transaction Reference", `#${r.referenceNumber}`, formatReadableLabel(r.status)],
           ["Flow Category & Type", `${r.kind} (${formatReadableLabel(r.type)})`, "Verified"],
           ["Disbursed Amount", `INR ${r.amount.toLocaleString("en-IN")}`, formatReadableLabel(r.status)],
           ["Associated Platform Parties", r.party, "Audited"],
@@ -1089,7 +1113,7 @@ function FinanceReport() {
         "Timestamp Recorded",
       ],
       rows: rowsToExport.map((r) => [
-        `#TXN-${r.id}`,
+        `#${r.referenceNumber}`,
         r.kind,
         formatReadableLabel(r.type),
         r.amount,
@@ -1241,14 +1265,14 @@ function FinanceReport() {
           onToggle={toggle}
           allSelected={allVisibleSelected}
           onToggleAll={toggleAllVisible}
-          rowLabel={(row) => `${row.kind} #${row.id}`}
+          rowLabel={(row) => `${row.kind} #${row.referenceNumber}`}
           columns={[
             {
               key: "id",
               header: "Reference",
               render: (row) => (
                 <span className="font-mono text-xs font-semibold text-slate-400">
-                  #TXN-{row.id}
+                  #{row.referenceNumber}
                 </span>
               ),
             },

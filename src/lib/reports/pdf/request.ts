@@ -3,7 +3,7 @@ import type { ReportRequest } from "./types";
 
 const reportRequestSchema = z.object({
   scope: z.enum(["all", "selected"]),
-  ids: z.array(z.number().int().positive()).optional(),
+  ids: z.array(z.union([z.number().int(), z.string().min(1)])).optional(),
   pageSize: z.enum(["A4", "LETTER"]).optional(),
   orientation: z.enum(["portrait", "landscape"]).optional(),
 });

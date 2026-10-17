@@ -153,9 +153,11 @@ function parseDestinationSummary(destinationLabel: string | null, destinationTyp
     if (data.type === "BANK" || destinationType === "BANK") {
       const rawBank = data.bankName || getBankNameFromIfsc(data.ifsc);
       const bank = rawBank ? `${capitalizeWords(rawBank)} · ` : "";
-      const last4 = data.accountNumber
-        ? `A/C •••• ${data.accountNumber.slice(-4)}`
-        : "Bank Account";
+      const last4 = data.last4
+        ? `A/C •••• ${data.last4}`
+        : data.accountNumber && !data.accountNumber.startsWith("enc:")
+          ? `A/C •••• ${data.accountNumber.slice(-4)}`
+          : "Bank Account";
       return {
         label: `${bank}${last4}`,
         sub: data.accountHolder

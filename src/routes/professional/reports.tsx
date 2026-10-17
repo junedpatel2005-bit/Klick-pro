@@ -980,10 +980,14 @@ function EarningsReport() {
             label: "Gross Service Value",
             value: `INR ${(item.baseAmount ?? item.amount).toLocaleString("en-IN")}`,
           },
-          {
-            label: "Platform Commission (10%)",
-            value: `INR ${(item.feeAmount ?? Math.round(item.amount * 0.1)).toLocaleString("en-IN")}`,
-          },
+          ...(item.feeAmount && item.feeAmount > 0
+            ? [
+                {
+                  label: "Platform Commission",
+                  value: `INR ${item.feeAmount.toLocaleString("en-IN")}`,
+                },
+              ]
+            : []),
           {
             label: "Net Earnings Credited",
             value: `INR ${(item.netAmount ?? item.amount).toLocaleString("en-IN")}`,

@@ -82,11 +82,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid export request." }, { status: 400 });
 
   try {
-    const isSingleSelected =
-      reportRequest.scope === "selected" && reportRequest.ids && reportRequest.ids.length === 1;
+    const numericIds = (reportRequest.ids ?? [])
+      .map((id) => Number(id))
+      .filter((id) => !Number.isNaN(id));
 
-    if (isSingleSelected && reportRequest.ids?.[0]) {
-      const selectedId = reportRequest.ids[0];
+    const isSingleSelected = reportRequest.scope === "selected" && numericIds.length === 1;
+
+    if (isSingleSelected && typeof numericIds[0] === "number") {
+      const selectedId = numericIds[0];
       const receiptData = await fetchPaymentReceiptData(selectedId, {
         userId: user.id,
         role: "CLIENT",
@@ -109,7 +112,7 @@ export async function POST(request: NextRequest) {
     const transactions = await db.projectTransaction.findMany({
       where: {
         clientId: user.id,
-        ...(reportRequest.scope === "selected" ? { id: { in: reportRequest.ids ?? [] } } : {}),
+        ...(reportRequest.scope === "selected" ? { id: { in: numericIds } } : {}),
       },
       orderBy: { createdAt: "desc" },
       take: reportRequest.scope === "selected" ? undefined : 500,

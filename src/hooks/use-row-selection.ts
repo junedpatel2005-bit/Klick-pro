@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from "react";
 
-export function useRowSelection<T extends { id: number }>(visibleRows: T[]) {
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+export function useRowSelection<T extends { id: number | string }>(visibleRows: T[]) {
+  const [selectedIds, setSelectedIds] = useState<Set<T["id"]>>(new Set());
 
-  function toggle(id: number) {
+  function toggle(id: T["id"]) {
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);

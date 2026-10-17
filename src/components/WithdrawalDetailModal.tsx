@@ -24,7 +24,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { formatReadableLabel } from "@/lib/utils";
+import { formatReadableLabel, capitalizeWords } from "@/lib/utils";
+import { maskAccountNumber } from "@/lib/account-formatting";
 
 export type WithdrawalRecord = {
   id: number;
@@ -71,6 +72,7 @@ export function WithdrawalDetailModal({
     bankName?: string;
     accountHolder?: string;
     accountNumber?: string;
+    last4?: string;
     ifsc?: string;
     upiId?: string;
     upiHolder?: string;
@@ -367,13 +369,19 @@ export function WithdrawalDetailModal({
                 <div className="flex justify-between items-center py-1.5">
                   <span className="text-muted-foreground">Account Number</span>
                   <div className="flex items-center gap-1.5 font-mono font-bold text-foreground bg-muted/60 px-2 py-0.5 rounded border border-border/60">
-                    <span>{parsedDest?.accountNumber || withdrawal.destinationLabel || "—"}</span>
-                    {(parsedDest?.accountNumber || withdrawal.destinationLabel) && (
+                    <span>
+                      {parsedDest?.last4
+                        ? `•••• •••• •••• ${parsedDest.last4}`
+                        : maskAccountNumber(parsedDest?.accountNumber)}
+                    </span>
+                    {(parsedDest?.last4 || parsedDest?.accountNumber) && (
                       <button
                         type="button"
                         onClick={() =>
                           handleCopy(
-                            parsedDest?.accountNumber || withdrawal.destinationLabel || "",
+                            parsedDest?.last4
+                              ? `•••• •••• •••• ${parsedDest.last4}`
+                              : maskAccountNumber(parsedDest?.accountNumber),
                             "Account Number",
                           )
                         }

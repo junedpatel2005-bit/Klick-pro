@@ -6,6 +6,8 @@ import { ensureWallet, creditWalletFromVerifiedProvider } from "@/lib/wallet-led
 import { fetchRazorpayOrderPayments, isRazorpayConfigured } from "@/lib/razorpay";
 import { getMinWithdrawalAmount, isAutoWithdrawalEnabled } from "@/lib/platform-settings";
 import { Prisma } from "@generated/prisma/client";
+import { encryptAccountNumber, maskAccountNumber } from "@/lib/encryption";
+import { capitalizeWords } from "@/lib/utils";
 import {
   emitRealtimeNotification,
   emitAdminNotification,
@@ -100,13 +102,31 @@ export async function GET(request: NextRequest) {
   const grossTotal = isGrossEarned ? rawEarned : totalEarned + totalCommission;
 
   const withdrawals = canWithdraw ? wallet.pendingBalance : 0;
-  const withdrawalHistory = canWithdraw
+  const rawWithdrawals = canWithdraw
     ? await db.projectWithdrawal.findMany({
         where: { professionalId: session.userId },
         orderBy: { createdAt: "desc" },
         take: 10,
       })
     : [];
+  const withdrawalHistory = rawWithdrawals.map((w) => {
+    if (!w.destinationLabel) return w;
+    try {
+      const parsed = JSON.parse(w.destinationLabel);
+      if (parsed.type === "BANK") {
+        return {
+          ...w,
+          destinationLabel: JSON.stringify({
+            ...parsed,
+            accountNumber: maskAccountNumber(parsed.last4 || parsed.accountNumber),
+          }),
+        };
+      }
+    } catch {
+      // fallback
+    }
+    return w;
+  });
   const available = canWithdraw ? Math.max(0, wallet.balance - withdrawals) : wallet.balance;
   const minWithdrawalAmount = await getMinWithdrawalAmount();
 
@@ -377,20 +397,24 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Format structured destination details for clean admin verification
+  // Format structured destination details with AES-256-GCM encryption for bank accounts
+  const cleanAccForDest = accountNumber.replace(/\s+/g, "");
+  const encAccForDest = destinationType === "BANK" && cleanAccForDest ? encryptAccountNumber(cleanAccForDest) : null;
+
   const structuredDestination = JSON.stringify(
     destinationType === "BANK"
       ? {
           type: "BANK",
-          bankName: bankName || "Bank Transfer",
-          accountHolder: accountHolder.trim(),
-          accountNumber: accountNumber.trim(),
+          bankName: bankName ? capitalizeWords(bankName) : "Bank Transfer",
+          accountHolder: accountHolder ? capitalizeWords(accountHolder) : "",
+          accountNumber: encAccForDest ? encAccForDest.encrypted : cleanAccForDest,
+          last4: encAccForDest ? encAccForDest.last4 : cleanAccForDest.slice(-4),
           ifsc: ifsc.trim().toUpperCase(),
         }
       : {
           type: "UPI",
           upiId: upiId.trim().toLowerCase(),
-          upiHolder: upiHolder.trim(),
+          upiHolder: upiHolder ? capitalizeWords(upiHolder) : "",
         },
   );
 
@@ -496,15 +520,22 @@ export async function POST(request: NextRequest) {
       // Optional: Save to linked accounts for future 1-click requests
       if (parsed.data.saveDetails) {
         if (destinationType === "BANK" && accountNumber) {
+          const cleanAcc = accountNumber.replace(/\s+/g, "");
+          const enc = encryptAccountNumber(cleanAcc);
           const existingAcc = await tx.userLinkedAccount.findFirst({
-            where: { userId: session.userId, accountNumber },
+            where: {
+              userId: session.userId,
+              accountType: "BANK",
+              last4: enc.last4,
+            },
           });
           if (existingAcc) {
             await tx.userLinkedAccount.update({
               where: { id: existingAcc.id },
               data: {
-                bankName: bankName || existingAcc.bankName,
-                accountHolder: accountHolder.trim(),
+                bankName: bankName ? capitalizeWords(bankName) : existingAcc.bankName,
+                accountHolder: accountHolder ? capitalizeWords(accountHolder) : existingAcc.accountHolder,
+                accountNumber: enc.encrypted,
                 ifscCode: ifsc,
               },
             });
@@ -513,34 +544,35 @@ export async function POST(request: NextRequest) {
               data: {
                 userId: session.userId,
                 accountType: "BANK",
-                accountHolder: accountHolder.trim(),
-                accountNumber,
-                last4: accountNumber.slice(-4),
+                accountHolder: accountHolder ? capitalizeWords(accountHolder) : null,
+                accountNumber: enc.encrypted,
+                last4: enc.last4,
                 ifscCode: ifsc,
-                bankName: bankName || null,
+                bankName: bankName ? capitalizeWords(bankName) : null,
                 isDefault: false,
               },
             });
           }
         } else if (destinationType === "UPI" && upiId) {
+          const cleanUpi = upiId.trim().toLowerCase();
           const existingAcc = await tx.userLinkedAccount.findFirst({
-            where: { userId: session.userId, upiId },
+            where: { userId: session.userId, upiId: cleanUpi },
           });
           if (existingAcc) {
             await tx.userLinkedAccount.update({
               where: { id: existingAcc.id },
               data: {
-                accountHolder: upiHolder.trim(),
+                accountHolder: upiHolder ? capitalizeWords(upiHolder) : existingAcc.accountHolder,
               },
             });
           } else {
-            const parts = upiId.split("@");
+            const parts = cleanUpi.split("@");
             await tx.userLinkedAccount.create({
               data: {
                 userId: session.userId,
                 accountType: "UPI",
-                accountHolder: upiHolder.trim(),
-                upiId,
+                accountHolder: upiHolder ? capitalizeWords(upiHolder) : null,
+                upiId: cleanUpi,
                 last4: parts[0]?.slice(-4) ?? null,
                 isDefault: false,
               },

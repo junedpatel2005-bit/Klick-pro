@@ -10,6 +10,8 @@ import {
   validateIfsc,
   validateAccountNumber,
 } from "@/lib/razorpayx";
+import { encryptAccountNumber, maskAccountNumber } from "@/lib/encryption";
+import { capitalizeWords } from "@/lib/utils";
 
 async function sessionFrom(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -39,10 +41,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Sign-in required." }, { status: 401 });
   }
 
-  const accounts = await db.userLinkedAccount.findMany({
+  const rawAccounts = await db.userLinkedAccount.findMany({
     where: { userId: session.userId },
     orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
   });
+
+  const accounts = rawAccounts.map((acc) => ({
+    ...acc,
+    accountHolder: acc.accountHolder ? capitalizeWords(acc.accountHolder) : null,
+    bankName: acc.bankName ? capitalizeWords(acc.bankName) : null,
+    accountNumber: acc.accountNumber
+      ? maskAccountNumber(acc.last4 || acc.accountNumber)
+      : null,
+  }));
 
   return NextResponse.json({ accounts });
 }
@@ -77,7 +88,8 @@ export async function POST(request: NextRequest) {
     if (!data.accountNumber) {
       return NextResponse.json({ error: "Bank account number is required." }, { status: 400 });
     }
-    const accValidation = validateAccountNumber(data.accountNumber, data.bankName, data.ifscCode);
+    const cleanAcc = data.accountNumber.replace(/\s+/g, "");
+    const accValidation = validateAccountNumber(cleanAcc, data.bankName, data.ifscCode);
     if (!accValidation.valid) {
       return NextResponse.json({ error: accValidation.message }, { status: 400 });
     }
@@ -101,7 +113,7 @@ export async function POST(request: NextRequest) {
       razorpayFundAccountId = await createBankFundAccount({
         contactId,
         accountHolder: finalAccountHolder,
-        accountNumber: data.accountNumber,
+        accountNumber: cleanAcc,
         ifsc: data.ifscCode.toUpperCase(),
       });
     } catch (error) {
@@ -154,29 +166,46 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const last4 =
-    data.accountType === "BANK" && data.accountNumber
-      ? data.accountNumber.slice(-4)
-      : data.accountType === "UPI" && data.upiId
-        ? (data.upiId.split("@")[0]?.slice(-4) ?? null)
-        : null;
+  let last4: string | null = null;
+  let storedAccountNumber: string | null = null;
+
+  if (data.accountType === "BANK" && data.accountNumber) {
+    const clean = data.accountNumber.replace(/\s+/g, "");
+    const enc = encryptAccountNumber(clean);
+    storedAccountNumber = enc.encrypted;
+    last4 = enc.last4;
+  } else if (data.accountType === "CARD" && data.accountNumber) {
+    const clean = data.accountNumber.replace(/\s+/g, "");
+    const enc = encryptAccountNumber(clean);
+    storedAccountNumber = enc.encrypted;
+    last4 = enc.last4;
+  } else if (data.accountType === "UPI" && data.upiId) {
+    last4 = data.upiId.split("@")[0]?.slice(-4) ?? null;
+  }
 
   const account = await db.userLinkedAccount.create({
     data: {
       userId: session.userId,
       accountType: data.accountType,
-      accountHolder: finalAccountHolder,
-      accountNumber: data.accountNumber || null,
+      accountHolder: finalAccountHolder ? capitalizeWords(finalAccountHolder) : null,
+      accountNumber: storedAccountNumber,
       last4,
       ifscCode: data.ifscCode ? data.ifscCode.toUpperCase() : null,
-      bankName: data.bankName || null,
+      bankName: data.bankName ? capitalizeWords(data.bankName) : null,
       upiId: data.upiId ? data.upiId.toLowerCase() : null,
-      cardBank: data.cardBank || null,
+      cardBank: data.cardBank ? capitalizeWords(data.cardBank) : null,
       razorpayAccountId: data.razorpayAccountId || null,
       razorpayFundAccountId,
       isDefault: Boolean(data.isDefault),
     },
   });
 
-  return NextResponse.json({ account }, { status: 201 });
+  return NextResponse.json({
+    account: {
+      ...account,
+      accountHolder: account.accountHolder ? capitalizeWords(account.accountHolder) : null,
+      bankName: account.bankName ? capitalizeWords(account.bankName) : null,
+      accountNumber: maskAccountNumber(last4),
+    },
+  }, { status: 201 });
 }

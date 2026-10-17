@@ -4,6 +4,8 @@ import { Calendar, X } from "lucide-react";
 
 export type DatePreset =
   | "all"
+  | "today"
+  | "last_10_days"
   | "this_month"
   | "last_month"
   | "last_30_days"
@@ -37,6 +39,17 @@ export function isWithinCustomDateRange(
   }
 
   const now = new Date();
+  if (preset === "today") {
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    return date >= todayStart && date <= todayEnd;
+  }
+  if (preset === "last_10_days") {
+    const d = new Date();
+    d.setDate(now.getDate() - 10);
+    d.setHours(0, 0, 0, 0);
+    return date >= d;
+  }
   if (preset === "this_month") {
     return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
   }
@@ -102,6 +115,8 @@ export function DateRangeFilter({
           className="h-10 rounded-xl border border-border bg-background pl-9 pr-8 text-xs sm:text-sm font-medium text-foreground focus:border-primary focus:outline-none"
         >
           <option value="all">All Time</option>
+          <option value="today">Today</option>
+          <option value="last_10_days">Last 10 Days</option>
           <option value="this_month">This Month</option>
           <option value="last_month">Last Month</option>
           <option value="last_30_days">Last 30 Days</option>

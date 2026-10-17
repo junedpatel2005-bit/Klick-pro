@@ -208,10 +208,6 @@ export function RecheckWithdrawalModal({
               <span>Withdrawal Amount</span>
               <span className="font-semibold text-foreground">₹{amount.toLocaleString("en-IN")}</span>
             </div>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Platform Transfer Fee</span>
-              <span className="font-semibold text-emerald-600 dark:text-emerald-400">₹0 (Free)</span>
-            </div>
             <div className="pt-2 border-t border-primary/10 flex items-baseline justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-foreground">
                 Net Payout to You

@@ -104,13 +104,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid export request." }, { status: 400 });
 
   try {
-    const isSingleSelected =
-      reportRequest.scope === "selected" && reportRequest.ids && reportRequest.ids.length === 1;
+    const numericIds = (reportRequest.ids ?? [])
+      .map((id) => Number(id))
+      .filter((id) => !Number.isNaN(id));
+
+    const isSingleSelected = reportRequest.scope === "selected" && numericIds.length === 1;
 
     const tracking = await db.projectTracking.findMany({
       where: {
         professionalId: user.id,
-        ...(reportRequest.scope === "selected" ? { id: { in: reportRequest.ids ?? [] } } : {}),
+        ...(reportRequest.scope === "selected" ? { id: { in: numericIds } } : {}),
       },
       include: {
         milestones: true,

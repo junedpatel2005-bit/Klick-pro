@@ -210,38 +210,51 @@ export async function POST(
     const { resource } = await params;
     const selectedOnly = reportRequest.scope === "selected";
     const ids = reportRequest.ids ?? [];
+    const numericIds = ids.map(Number).filter((n) => !isNaN(n) && n > 0);
 
     // Single Job Dossier PDF for Admin
     if (resource === "jobs" && selectedOnly && ids.length === 1 && ids[0] !== undefined) {
-      const jobId = ids[0];
-      const dossierData = await fetchJobDossierData(jobId, {
-        userId: session.userId,
-        role: "ADMIN",
-      });
-      if (dossierData) {
-        const buffer = await renderReportPdf(
-          createElement(JobDossierDocument, { data: dossierData }) as unknown as Parameters<
-            typeof renderReportPdf
-          >[0],
-        );
-        return pdfResponse(buffer, `admin-job-${jobId}-full-dossier.pdf`);
+      const jobId = Number(ids[0]);
+      if (!isNaN(jobId) && jobId > 0) {
+        const dossierData = await fetchJobDossierData(jobId, {
+          userId: session.userId,
+          role: "ADMIN",
+        });
+        if (dossierData) {
+          const buffer = await renderReportPdf(
+            createElement(JobDossierDocument, { data: dossierData }) as unknown as Parameters<
+              typeof renderReportPdf
+            >[0],
+          );
+          return pdfResponse(buffer, `admin-job-${jobId}-full-dossier.pdf`);
+        }
       }
     }
 
     // Single Finance Voucher PDF for Admin
     if (resource === "finance" && selectedOnly && ids.length === 1 && ids[0] !== undefined) {
-      const paymentId = ids[0];
-      const receiptData = await fetchPaymentReceiptData(paymentId, {
-        userId: session.userId,
-        role: "ADMIN",
-      });
-      if (receiptData) {
-        const buffer = await renderReportPdf(
-          createElement(InvoiceDocument, receiptData) as unknown as Parameters<
-            typeof renderReportPdf
-          >[0],
-        );
-        return pdfResponse(buffer, `admin-voucher-${receiptData.invoiceNumber}.pdf`);
+      const rawId = ids[0];
+      const isPayout =
+        typeof rawId === "string" && (rawId.startsWith("wdr-") || rawId.startsWith("payout-"));
+      if (!isPayout) {
+        const paymentId =
+          typeof rawId === "number"
+            ? rawId
+            : parseInt(String(rawId).replace(/^(tx-|payment-)/, ""), 10);
+        if (!isNaN(paymentId) && paymentId > 0) {
+          const receiptData = await fetchPaymentReceiptData(paymentId, {
+            userId: session.userId,
+            role: "ADMIN",
+          });
+          if (receiptData) {
+            const buffer = await renderReportPdf(
+              createElement(InvoiceDocument, receiptData) as unknown as Parameters<
+                typeof renderReportPdf
+              >[0],
+            );
+            return pdfResponse(buffer, `admin-voucher-${receiptData.invoiceNumber}.pdf`);
+          }
+        }
       }
     }
 
@@ -252,7 +265,7 @@ export async function POST(
 
     if (resource === "users") {
       const rawUsers = await db.user.findMany({
-        where: selectedOnly ? { id: { in: ids } } : {},
+        where: selectedOnly ? { id: { in: numericIds } } : {},
         select: {
           id: true,
           username: true,
@@ -478,7 +491,7 @@ export async function POST(
       }
     } else if (resource === "jobs") {
       const jobs = await db.clientJob.findMany({
-        where: selectedOnly ? { id: { in: ids } } : {},
+        where: selectedOnly ? { id: { in: numericIds } } : {},
         include: { user: { select: { firstName: true, lastName: true } } },
         orderBy: { createdAt: "desc" },
         take: selectedOnly ? undefined : 500,
@@ -525,14 +538,37 @@ export async function POST(
       subtitle = "Admin Oversight — Active Listings & Operational Engagements";
       document = buildDocument(title, subtitle, jobColumns, rows, reportRequest, selectedOnly);
     } else if (resource === "finance") {
+      const txIds: number[] = [];
+      const wdrIds: number[] = [];
+      for (const id of ids) {
+        if (typeof id === "number") {
+          txIds.push(id);
+          wdrIds.push(id);
+        } else if (typeof id === "string") {
+          if (id.startsWith("tx-") || id.startsWith("payment-")) {
+            const num = parseInt(id.replace(/^(tx-|payment-)/, ""), 10);
+            if (!isNaN(num)) txIds.push(num);
+          } else if (id.startsWith("wdr-") || id.startsWith("payout-")) {
+            const num = parseInt(id.replace(/^(wdr-|payout-)/, ""), 10);
+            if (!isNaN(num)) wdrIds.push(num);
+          } else {
+            const num = parseInt(id, 10);
+            if (!isNaN(num)) {
+              txIds.push(num);
+              wdrIds.push(num);
+            }
+          }
+        }
+      }
+
       const [transactions, withdrawals] = await Promise.all([
         db.projectTransaction.findMany({
-          where: selectedOnly ? { id: { in: ids } } : {},
+          where: selectedOnly ? { id: { in: txIds } } : {},
           orderBy: { createdAt: "desc" },
           take: selectedOnly ? undefined : 500,
         }),
         db.projectWithdrawal.findMany({
-          where: selectedOnly ? { id: { in: ids } } : {},
+          where: selectedOnly ? { id: { in: wdrIds } } : {},
           orderBy: { createdAt: "desc" },
           take: selectedOnly ? undefined : 500,
         }),

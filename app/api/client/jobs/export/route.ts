@@ -88,12 +88,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid export request." }, { status: 400 });
 
   try {
-    const isSingleSelected =
-      reportRequest.scope === "selected" && reportRequest.ids && reportRequest.ids.length === 1;
+    const numericIds = (reportRequest.ids ?? [])
+      .map((id) => Number(id))
+      .filter((id) => !Number.isNaN(id));
+
+    const isSingleSelected = reportRequest.scope === "selected" && numericIds.length === 1;
 
     // If single project selected, return the full comprehensive Job Dossier PDF!
-    if (isSingleSelected && reportRequest.ids?.[0]) {
-      const jobId = reportRequest.ids[0];
+    if (isSingleSelected && typeof numericIds[0] === "number") {
+      const jobId = numericIds[0];
       const dossierData = await fetchJobDossierData(jobId, {
         userId: user.id,
         role: "CLIENT",
@@ -116,7 +119,7 @@ export async function POST(request: NextRequest) {
     const jobs = await db.clientJob.findMany({
       where: {
         userId: user.id,
-        ...(reportRequest.scope === "selected" ? { id: { in: reportRequest.ids ?? [] } } : {}),
+        ...(reportRequest.scope === "selected" ? { id: { in: numericIds } } : {}),
       },
       include: {
         milestones: true,

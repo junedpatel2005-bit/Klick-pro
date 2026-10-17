@@ -9,7 +9,7 @@ import type { ReportOrientation, ReportPageSize } from "@/lib/reports/pdf/types"
 
 export interface ExportMenuProps {
   endpoint: string;
-  selectedIds: number[];
+  selectedIds: (number | string)[];
   fileBaseName: string;
   className?: string;
   triggerClassName?: string;

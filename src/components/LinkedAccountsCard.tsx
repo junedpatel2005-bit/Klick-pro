@@ -45,6 +45,7 @@ import {
 import { BankCombobox } from "@/components/BankCombobox";
 import { IfscFinderDialog } from "@/components/IfscFinderDialog";
 import { capitalizeWords } from "@/lib/utils";
+import { formatAccountNumberInput } from "@/lib/account-formatting";
 
 
 export type LinkedAccount = {
@@ -137,6 +138,20 @@ export function LinkedAccountsCard({
 
   useEffect(() => {
     void fetchAccounts();
+
+    const handleOpenEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ type?: "BANK" | "UPI" | "RAZORPAY" }>;
+      resetForm();
+      if (customEvent.detail?.type) {
+        setAccountType(customEvent.detail.type);
+      }
+      setDialogOpen(true);
+    };
+
+    window.addEventListener("klickpro:open-link-account", handleOpenEvent);
+    return () => {
+      window.removeEventListener("klickpro:open-link-account", handleOpenEvent);
+    };
   }, []);
 
   const resetForm = () => {
@@ -251,8 +266,8 @@ export function LinkedAccountsCard({
     const targetType = acc.accountType === "CARD" ? "BANK" : acc.accountType;
     setAccountType(targetType);
     setAccountHolder(acc.accountHolder || "");
-    setAccountNumber(acc.accountNumber || "");
-    setConfirmAccountNumber(acc.accountNumber || "");
+    setAccountNumber("");
+    setConfirmAccountNumber("");
     setIfscCode(acc.ifscCode || "");
     setBankName(acc.bankName || "");
     setUpiId(acc.upiId || "");
@@ -395,10 +410,10 @@ export function LinkedAccountsCard({
         hasErrors = true;
       }
 
-      if (!accountNumber) {
+      if (!editingId && !accountNumber) {
         setAccountNumberError("Account number is required.");
         hasErrors = true;
-      } else {
+      } else if (accountNumber) {
         const accValidation = validateBankSpecificAccountNumber(accountNumber, bankName, ifscCode);
         if (!accValidation.valid) {
           setAccountNumberError(accValidation.message || "Please enter a valid bank account number.");
@@ -406,10 +421,10 @@ export function LinkedAccountsCard({
         }
       }
 
-      if (!confirmAccountNumber) {
+      if (!editingId && !confirmAccountNumber) {
         setConfirmAccountNumberError("Please confirm your account number.");
         hasErrors = true;
-      } else if (accountNumber !== confirmAccountNumber) {
+      } else if (accountNumber && accountNumber !== confirmAccountNumber) {
         setConfirmAccountNumberError("Account numbers do not match.");
         hasErrors = true;
       }
@@ -882,9 +897,9 @@ export function LinkedAccountsCard({
                     <Input
                       id="accountNumber"
                       type={showAccountNumber ? "text" : "password"}
-                      value={accountNumber}
+                      value={formatAccountNumberInput(accountNumber)}
                       onChange={(e) => {
-                        const val = e.target.value.replace(/\s+/g, "");
+                        const val = e.target.value.replace(/\D/g, "");
                         setAccountNumber(val);
                         validateAccountNumberLive(val, bankName, ifscCode);
                         if (confirmAccountNumber) {
@@ -892,7 +907,7 @@ export function LinkedAccountsCard({
                         }
                       }}
                       onBlur={handleAccountNumberBlur}
-                      placeholder="e.g. 102938475612"
+                      placeholder={editingId ? "Leave empty to keep existing, or enter new" : "e.g. 1029 3847 5612"}
                       className={`text-xs font-mono transition-colors ${
                         accountNumberError
                           ? "border-rose-500 focus-visible:ring-rose-500/20 text-rose-600"
@@ -917,10 +932,13 @@ export function LinkedAccountsCard({
                     <Input
                       id="confirmAccountNumber"
                       type={showAccountNumber ? "text" : "password"}
-                      value={confirmAccountNumber}
-                      onChange={(e) => handleConfirmChange(e.target.value)}
+                      value={formatAccountNumberInput(confirmAccountNumber)}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "");
+                        handleConfirmChange(val);
+                      }}
                       onBlur={handleConfirmBlur}
-                      placeholder="Re-enter number"
+                      placeholder={editingId ? "Leave empty or re-enter new" : "Re-enter number"}
                       className={`text-xs font-mono transition-colors ${
                         confirmAccountNumberError
                           ? "border-rose-500 focus-visible:ring-rose-500/20 text-rose-600"

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { ensureWallet } from "@/lib/wallet-ledger";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { isAutoWithdrawalEnabled } from "@/lib/platform-settings";
+import { decryptAccountNumber } from "@/lib/encryption";
 
 export async function GET(
   request: NextRequest,
@@ -933,9 +934,28 @@ export async function GET(
         };
       });
 
+      const decryptedWithdrawals = withdrawals.map((w) => {
+        if (!w.destinationLabel) return w;
+        try {
+          const parsed = JSON.parse(w.destinationLabel);
+          if (parsed.type === "BANK" && parsed.accountNumber && parsed.accountNumber.startsWith("enc:v1:")) {
+            return {
+              ...w,
+              destinationLabel: JSON.stringify({
+                ...parsed,
+                accountNumber: decryptAccountNumber(parsed.accountNumber),
+              }),
+            };
+          }
+        } catch {
+          // ignore
+        }
+        return w;
+      });
+
       return NextResponse.json({
         transactions,
-        withdrawals,
+        withdrawals: decryptedWithdrawals,
         payments: enrichedPayments,
         walletTransactions,
         platformWallet: platformWallet

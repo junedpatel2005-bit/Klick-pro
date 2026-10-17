@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CardListSkeleton } from "@/components/LoadingSkeleton";
+import { cn } from "@/lib/utils";
 
 export type ReportTableColumn<T> = {
   key: string;
@@ -19,7 +20,7 @@ export type ReportTableColumn<T> = {
   render: (row: T) => ReactNode;
 };
 
-export function SelectableReportTable<T extends { id: number }>({
+export function SelectableReportTable<T extends { id: number | string }>({
   columns,
   rows,
   loading,
@@ -29,16 +30,18 @@ export function SelectableReportTable<T extends { id: number }>({
   allSelected,
   onToggleAll,
   rowLabel,
+  getRowKey,
 }: {
   columns: ReportTableColumn<T>[];
   rows: T[];
   loading: boolean;
   emptyMessage: string;
-  selectedIds: Set<number>;
-  onToggle: (id: number) => void;
+  selectedIds: Set<T["id"]>;
+  onToggle: (id: T["id"]) => void;
   allSelected: boolean;
   onToggleAll: () => void;
   rowLabel: (row: T) => string;
+  getRowKey?: (row: T, index: number) => string | number;
 }) {
   if (loading) {
     return (
@@ -60,10 +63,14 @@ export function SelectableReportTable<T extends { id: number }>({
               aria-label="Select all rows"
             />
           </TableHead>
-          {columns.map((column) => (
+          {columns.map((column, colIdx) => (
             <TableHead
               key={column.key}
-              className={column.align === "right" ? "text-right" : undefined}
+              className={cn(
+                "whitespace-nowrap px-3 sm:px-4 text-xs font-semibold tracking-wide",
+                column.align === "right" && "text-right",
+                colIdx === columns.length - 1 && "pr-5 sm:pr-6"
+              )}
             >
               {column.header}
             </TableHead>
@@ -71,10 +78,15 @@ export function SelectableReportTable<T extends { id: number }>({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row) => (
-          <TableRow
-            key={row.id}
-            data-state={selectedIds.has(row.id) ? "selected" : undefined}
+        {rows.map((row, index) => {
+          const rowKey =
+            (getRowKey ? getRowKey(row, index) : null) ??
+            (row as { key?: string | number }).key ??
+            row.id;
+          return (
+            <TableRow
+              key={rowKey}
+              data-state={selectedIds.has(row.id) ? "selected" : undefined}
             onClick={(e) => {
               const target = e.target as HTMLElement | null;
               if (
@@ -96,16 +108,21 @@ export function SelectableReportTable<T extends { id: number }>({
                 aria-label={`Select ${rowLabel(row)}`}
               />
             </TableCell>
-            {columns.map((column) => (
+            {columns.map((column, colIdx) => (
               <TableCell
                 key={column.key}
-                className={column.align === "right" ? "text-right" : undefined}
+                className={cn(
+                  "px-3 sm:px-4",
+                  column.align === "right" && "text-right",
+                  colIdx === columns.length - 1 && "pr-5 sm:pr-6"
+                )}
               >
                 {column.render(row)}
               </TableCell>
             ))}
           </TableRow>
-        ))}
+          );
+        })}
         {!rows.length && (
           <TableRow>
             <TableCell

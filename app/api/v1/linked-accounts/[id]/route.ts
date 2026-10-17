@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
+import { encryptAccountNumber, maskAccountNumber } from "@/lib/encryption";
+import { capitalizeWords } from "@/lib/utils";
 
 async function sessionFrom(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -153,23 +155,28 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     } = parsed.data;
 
     let last4: string | null = existing.last4;
+    let storedAccountNumber: string | null = existing.accountNumber;
 
     if (accountType === "BANK") {
-      const accNum = accountNumber || existing.accountNumber;
-      const ifsc = ifscCode || existing.ifscCode;
-      if (!accNum || accNum.length < 6) {
-        return NextResponse.json(
-          { error: "Please enter a valid bank account number." },
-          { status: 400 },
-        );
+      if (accountNumber && accountNumber.trim()) {
+        const cleanAcc = accountNumber.replace(/\s+/g, "");
+        if (cleanAcc.length < 6) {
+          return NextResponse.json(
+            { error: "Please enter a valid bank account number." },
+            { status: 400 },
+          );
+        }
+        const enc = encryptAccountNumber(cleanAcc);
+        storedAccountNumber = enc.encrypted;
+        last4 = enc.last4;
       }
+      const ifsc = ifscCode || existing.ifscCode;
       if (!ifsc || ifsc.length !== 11) {
         return NextResponse.json(
           { error: "Please enter a valid 11-character IFSC code." },
           { status: 400 },
         );
       }
-      last4 = accNum.slice(-4);
     } else if (accountType === "UPI") {
       const vpa = upiId || existing.upiId;
       if (!vpa || !vpa.includes("@")) {
@@ -189,14 +196,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       const parts = vpa.split("@");
       last4 = parts[0]?.slice(-4) ?? null;
     } else if (accountType === "CARD") {
-      const cleanCard = (accountNumber || existing.accountNumber || "").replace(/\s/g, "");
-      if (cleanCard.length < 15) {
-        return NextResponse.json(
-          { error: "Please enter a valid 16-digit debit card number." },
-          { status: 400 },
-        );
+      if (accountNumber && accountNumber.trim()) {
+        const cleanCard = accountNumber.replace(/\s/g, "");
+        if (cleanCard.length < 15) {
+          return NextResponse.json(
+            { error: "Please enter a valid 16-digit debit card number." },
+            { status: 400 },
+          );
+        }
+        const enc = encryptAccountNumber(cleanCard);
+        storedAccountNumber = enc.encrypted;
+        last4 = enc.last4;
       }
-      last4 = cleanCard.slice(-4);
     } else if (accountType === "RAZORPAY") {
       const rzpId = razorpayAccountId || existing.razorpayAccountId;
       if (!rzpId || rzpId.length < 5) {
@@ -237,7 +248,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         });
 
         if (accountType === "BANK") {
-          const finalAcc = accountNumber || existing.accountNumber;
+          const finalAcc = accountNumber ? accountNumber.replace(/\s+/g, "") : null;
           const finalIfsc = ifscCode || existing.ifscCode;
           if (finalAcc && finalIfsc) {
             razorpayFundAccountId = await createBankFundAccount({
@@ -265,20 +276,28 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       where: { id: accountId },
       data: {
         accountType,
-        accountHolder: accountHolder !== undefined ? accountHolder : existing.accountHolder,
-        accountNumber: accountNumber !== undefined ? accountNumber : existing.accountNumber,
+        accountHolder: accountHolder !== undefined ? (accountHolder ? capitalizeWords(accountHolder) : null) : existing.accountHolder,
+        accountNumber: storedAccountNumber,
         last4,
         ifscCode: ifscCode !== undefined ? ifscCode : existing.ifscCode,
-        bankName: bankName !== undefined ? bankName : existing.bankName,
+        bankName: bankName !== undefined ? (bankName ? capitalizeWords(bankName) : null) : existing.bankName,
         upiId: upiId !== undefined ? upiId : existing.upiId,
-        cardBank: cardBank !== undefined ? cardBank : existing.cardBank,
+        cardBank: cardBank !== undefined ? (cardBank ? capitalizeWords(cardBank) : null) : existing.cardBank,
         razorpayAccountId: razorpayAccountId !== undefined ? razorpayAccountId : existing.razorpayAccountId,
         razorpayFundAccountId,
         isDefault: isDefault !== undefined ? isDefault : existing.isDefault,
       },
     });
 
-    return NextResponse.json({ account: updated, success: true });
+    return NextResponse.json({
+      account: {
+        ...updated,
+        accountHolder: updated.accountHolder ? capitalizeWords(updated.accountHolder) : null,
+        bankName: updated.bankName ? capitalizeWords(updated.bankName) : null,
+        accountNumber: maskAccountNumber(last4),
+      },
+      success: true,
+    });
   } catch (error) {
     console.error("PUT /api/v1/linked-accounts/[id] error:", error);
     return NextResponse.json(

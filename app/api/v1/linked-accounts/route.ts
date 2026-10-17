@@ -3,6 +3,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { validateBankSpecificAccountNumber } from "@/lib/indian-banks";
+import { encryptAccountNumber, maskAccountNumber } from "@/lib/encryption";
+import { capitalizeWords } from "@/lib/utils";
 
 async function sessionFrom(request: NextRequest) {
   const token = request.cookies.get(sessionCookie)?.value;
@@ -31,10 +33,19 @@ export async function GET(request: NextRequest) {
     const session = await sessionFrom(request);
     if (!session) return NextResponse.json({ error: "Sign-in required." }, { status: 401 });
 
-    const accounts = await db.userLinkedAccount.findMany({
+    const rawAccounts = await db.userLinkedAccount.findMany({
       where: { userId: session.userId },
       orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
     });
+
+    const accounts = rawAccounts.map((acc) => ({
+      ...acc,
+      accountHolder: acc.accountHolder ? capitalizeWords(acc.accountHolder) : null,
+      bankName: acc.bankName ? capitalizeWords(acc.bankName) : null,
+      accountNumber: acc.accountNumber
+        ? maskAccountNumber(acc.last4 || acc.accountNumber)
+        : null,
+    }));
 
     return NextResponse.json({ accounts });
   } catch (error) {
@@ -73,6 +84,7 @@ export async function POST(request: NextRequest) {
     } = parsed.data;
 
     let last4: string | null = null;
+    let storedAccountNumber: string | null = null;
 
     if (accountType === "BANK") {
       if (!accountNumber) {
@@ -81,7 +93,8 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
-      const accValidation = validateBankSpecificAccountNumber(accountNumber, bankName, ifscCode);
+      const cleanAcc = accountNumber.replace(/\s+/g, "");
+      const accValidation = validateBankSpecificAccountNumber(cleanAcc, bankName, ifscCode);
       if (!accValidation.valid) {
         return NextResponse.json(
           { error: accValidation.message ?? "Please enter a valid bank account number." },
@@ -94,7 +107,9 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
-      last4 = accountNumber.slice(-4);
+      const encryptedData = encryptAccountNumber(cleanAcc);
+      storedAccountNumber = encryptedData.encrypted;
+      last4 = encryptedData.last4;
     } else if (accountType === "UPI") {
       if (!upiId || !upiId.includes("@")) {
         return NextResponse.json(
@@ -120,7 +135,9 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         );
       }
-      last4 = cleanCard.slice(-4);
+      const encryptedCard = encryptAccountNumber(cleanCard);
+      storedAccountNumber = encryptedCard.encrypted;
+      last4 = encryptedCard.last4;
     } else if (accountType === "RAZORPAY") {
       if (!razorpayAccountId || razorpayAccountId.length < 5) {
         return NextResponse.json(
@@ -164,10 +181,11 @@ export async function POST(request: NextRequest) {
         });
 
         if (accountType === "BANK" && accountNumber && ifscCode) {
+          const cleanAcc = accountNumber.replace(/\s+/g, "");
           razorpayFundAccountId = await createBankFundAccount({
             contactId,
             accountHolder: accountHolder || userName || "Account Holder",
-            accountNumber,
+            accountNumber: cleanAcc,
             ifsc: ifscCode,
           });
         } else if (accountType === "UPI" && upiId) {
@@ -185,20 +203,28 @@ export async function POST(request: NextRequest) {
       data: {
         userId: session.userId,
         accountType,
-        accountHolder: accountHolder || null,
-        accountNumber: accountNumber || null,
+        accountHolder: accountHolder ? capitalizeWords(accountHolder) : null,
+        accountNumber: storedAccountNumber,
         last4,
         ifscCode: ifscCode || null,
-        bankName: bankName || null,
+        bankName: bankName ? capitalizeWords(bankName) : null,
         upiId: upiId || null,
-        cardBank: cardBank || null,
+        cardBank: cardBank ? capitalizeWords(cardBank) : null,
         razorpayAccountId: razorpayAccountId || null,
         razorpayFundAccountId,
         isDefault: shouldBeDefault,
       },
     });
 
-    return NextResponse.json({ account, success: true }, { status: 201 });
+    return NextResponse.json({
+      account: {
+        ...account,
+        accountHolder: account.accountHolder ? capitalizeWords(account.accountHolder) : null,
+        bankName: account.bankName ? capitalizeWords(account.bankName) : null,
+        accountNumber: maskAccountNumber(last4),
+      },
+      success: true,
+    }, { status: 201 });
   } catch (error) {
     console.error("POST /api/v1/linked-accounts error:", error);
     return NextResponse.json(

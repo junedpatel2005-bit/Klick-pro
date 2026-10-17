@@ -11,7 +11,7 @@ export type ReportOrientation = "portrait" | "landscape";
 
 export type ReportRequest = {
   scope: "all" | "selected";
-  ids?: number[];
+  ids?: Array<string | number>;
   pageSize?: ReportPageSize;
   orientation?: ReportOrientation;
 };

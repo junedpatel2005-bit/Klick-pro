@@ -732,13 +732,7 @@ export default function AdminFinancePage() {
   }
 
   function promptApproveWithUtr(withdrawalId: number) {
-    const utrInput = window.prompt(
-      `Enter Bank Reference / UTR Number for withdrawal #${withdrawalId} (optional, press OK to continue):`,
-      "",
-    );
-    if (utrInput !== null) {
-      handleWithdrawalStatus(withdrawalId, "COMPLETED", undefined, utrInput.trim() || undefined);
-    }
+    handleWithdrawalStatus(withdrawalId, "COMPLETED");
   }
 
   function promptRejectWithdrawal(w: Withdrawal) {

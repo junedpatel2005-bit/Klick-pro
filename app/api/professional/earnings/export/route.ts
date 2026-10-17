@@ -84,12 +84,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid export request." }, { status: 400 });
 
   try {
-    const isSingleSelected =
-      reportRequest.scope === "selected" && reportRequest.ids && reportRequest.ids.length === 1;
+    const numericIds = (reportRequest.ids ?? [])
+      .map((id) => Number(id))
+      .filter((id) => !Number.isNaN(id));
+
+    const isSingleSelected = reportRequest.scope === "selected" && numericIds.length === 1;
 
     // Single item selected -> Render full InvoiceDocument voucher PDF!
-    if (isSingleSelected && reportRequest.ids?.[0] !== undefined) {
-      const selectedId = reportRequest.ids[0];
+    if (isSingleSelected && typeof numericIds[0] === "number") {
+      const selectedId = numericIds[0];
       const receiptData = await fetchPaymentReceiptData(selectedId, {
         userId: user.id,
         role: "PROFESSIONAL",
@@ -110,13 +113,12 @@ export async function POST(request: NextRequest) {
     }
 
     const selectedOnly = reportRequest.scope === "selected";
-    const ids = reportRequest.ids ?? [];
 
     const [transactions, withdrawals] = await Promise.all([
       db.projectTransaction.findMany({
         where: {
           professionalId: user.id,
-          ...(selectedOnly ? { id: { in: ids } } : {}),
+          ...(selectedOnly ? { id: { in: numericIds } } : {}),
         },
         orderBy: { createdAt: "desc" },
         take: selectedOnly ? undefined : 500,
@@ -124,7 +126,7 @@ export async function POST(request: NextRequest) {
       db.projectWithdrawal.findMany({
         where: {
           professionalId: user.id,
-          ...(selectedOnly ? { id: { in: ids } } : {}),
+          ...(selectedOnly ? { id: { in: numericIds } } : {}),
         },
         orderBy: { createdAt: "desc" },
         take: selectedOnly ? undefined : 500,
