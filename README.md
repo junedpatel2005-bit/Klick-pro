@@ -1,142 +1,189 @@
-# Servio
+# Klick Pro
 
-Servio is a Next.js application with a custom Node.js/Socket.IO server, PostgreSQL, and Prisma.
+**Klick Pro** is a modern, high-performance marketplace platform connecting verified service professionals with clients. Built with **Next.js 16 (App Router)**, **React 19**, a custom **Node.js + Socket.IO** real-time server, **PostgreSQL**, and **Prisma ORM**.
+
+---
+
+## Tech Stack & Architecture
+
+- **Frontend & App Framework**: [Next.js 16](https://nextjs.org/) (App Router & Server Actions) with [React 19](https://react.dev/)
+- **Real-Time Engine**: Custom HTTP & [Socket.IO](https://socket.io/) server (`server.mjs`) for live messaging, instant proposal alerts, and job updates
+- **Database & ORM**: [PostgreSQL 16+](https://www.postgresql.org/) managed via [Prisma ORM 7](https://www.prisma.io/) (`@prisma/client`, `@prisma/adapter-pg`)
+- **Styling & UI**: [Tailwind CSS v4](https://tailwindcss.com/), [Radix UI](https://www.radix-ui.com/), and [Lucide Icons](https://lucide.dev/)
+- **Payments & Escrow**: [Razorpay](https://razorpay.com/), Razorpay Route (Split Payments), and RazorpayX (Automated Payouts via UPI & IMPS)
+- **Identity & Background Verification**: AuthBridge (Aadhaar / PAN verification), SpringVerify (Police & Criminal Record Check), and Persona
+- **Mapping & Geolocation**: Google Maps JavaScript API, Places API, and Server Geocoding API
+- **State Management & Forms**: TanStack React Query, React Hook Form, and Zod validation
+
+---
 
 ## Requirements
 
-- Node.js 22 (pinned in `package.json` `engines` and `.nvmrc`; CI runs 22)
-- npm
-- PostgreSQL 16 or newer, installed natively (see below)
+- **Node.js**: `22.x` (pinned in `package.json` `engines` and `.nvmrc`)
+- **npm**: `10.x` or higher
+- **PostgreSQL**: `16` or newer (installed natively or via Docker)
 
-## Local setup
+---
 
-1. Clone the repository and enter it:
+## Local Setup
 
-   ```bash
-   git clone <repository-url>
-   cd klick-pro
-   ```
-
-2. Install the exact dependency versions from the lockfile:
-
-   ```bash
-   npm ci
-   ```
-
-3. Create the environment file:
-
-   ```bash
-   copy .env.example .env
-   ```
-
-   On macOS/Linux, use `cp .env.example .env` instead.
-
-4. Edit `.env` and set at least these values (see the PostgreSQL section below
-   for how to create the databases):
-
-   ```dotenv
-   DATABASE_URL="postgresql://servio:PASSWORD@localhost:5432/servio_dev"
-   DIRECT_URL="postgresql://servio:PASSWORD@localhost:5432/servio_dev"
-   SHADOW_DATABASE_URL="postgresql://servio:PASSWORD@localhost:5432/servio_shadow"
-   APP_URL="http://localhost:3000"
-   REALTIME_ALLOWED_ORIGIN="http://localhost:3000"
-   AUTH_SECRET="replace-with-a-long-random-secret"
-   FILE_STORAGE_PROVIDER="local"
-   NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="your-browser-maps-key"
-   GOOGLE_MAPS_SERVER_KEY="your-server-geocoding-key"
-   ```
-
-   Keep `.env` private. Do not commit database passwords, API keys, or auth secrets.
-
-5. Generate the Prisma client and apply the database migrations:
-
-   ```bash
-   npx prisma generate
-   npx prisma migrate deploy
-   ```
-
-6. Optionally load development/demo data:
-
-   ```bash
-   npm run db:seed
-   ```
-
-7. Start the application:
-
-   ```bash
-   npm run dev
-   ```
-
-   Open <http://localhost:3000>.
-
-## Local PostgreSQL
-
-PostgreSQL runs natively on the development machine. Install it first:
-
-- **Windows** — the EnterpriseDB installer from postgresql.org. Add its `bin` directory to `PATH` so `psql` and `createdb` are available.
-- **macOS** — `brew install postgresql@16 && brew services start postgresql@16`
-- **Debian/Ubuntu** — `sudo apt install postgresql-16`
-
-### Create the role and three databases
+### 1. Clone the repository and enter the directory
 
 ```bash
-# CREATEDB is required: prisma migrate dev creates and drops a shadow database.
-createuser --pwprompt --createdb servio
-
-createdb --owner=servio servio_dev      # development data
-createdb --owner=servio servio_shadow   # used by prisma migrate dev only
-createdb --owner=servio servio_test     # disposable; wiped by the test suite
+git clone <repository-url>
+cd Klick-pro-main
 ```
 
-`servio_test` must stay separate from `servio_dev`. The test harness refuses to run when
-`TEST_DATABASE_URL` and `DATABASE_URL` point at the same database.
-
-### Before running any Prisma command, check which database you are pointed at
-
-**An exported shell variable overrides `.env`.** This has already caused one incident: an
-inherited `DATABASE_URL` beat the intended configuration and a `prisma db push` plus seed ran
-against a real local database instead of the throwaway one. `npm run build` also runs
-`prisma migrate deploy`, so a build with a stray variable set will migrate whatever it points at.
+### 2. Install dependencies
 
 ```bash
-echo $DATABASE_URL        # bash / Git Bash — expect empty, or your intended dev database
-$env:DATABASE_URL         # PowerShell
+npm ci
 ```
 
-If it is set and you did not mean it, `unset DATABASE_URL` (bash) or
-`Remove-Item Env:DATABASE_URL` (PowerShell) before continuing.
+### 3. Create the environment file
 
-## Useful commands
+On Windows (PowerShell / Command Prompt):
 
 ```bash
-npm run lint
-npm run typecheck
-npm run build
-npm start
+copy .env.example .env
 ```
 
-## Optional integrations
+On macOS / Linux:
 
-Email, Google OAuth, Google Maps, Sentry, Persona, Twilio, Razorpay, and S3-compatible storage are configured through `.env`. Leave them disabled or blank for basic local development. Keep `PHONE_OTP_PROVIDER=development` unless Twilio is configured.
-
-### Google Maps
-
-Enable billing plus the Maps JavaScript API, Places API, and Geocoding API in Google Cloud. Use a browser key for the interactive map and `GOOGLE_MAPS_SERVER_KEY` for `/api/geocode`. Do not commit either key.
-
-### Google login
-
-Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`, then add this exact local redirect URI to the Google OAuth client:
-
-```text
-http://localhost:3000/api/v1/auth/google
+```bash
+cp .env.example .env
 ```
 
-For production, add the matching HTTPS callback URL for the deployed domain.
+### 4. Configure `.env`
 
-To create the first administrator in a new database, set `ADMIN_BOOTSTRAP_USERNAME` and `ADMIN_BOOTSTRAP_PASSWORD` in `.env` before using the admin bootstrap flow.
+Edit `.env` and set the core configuration values:
 
-## Mobile client
+```dotenv
+DATABASE_URL="postgresql://klickpro:YOUR_PASSWORD@localhost:5432/klickpro_dev"
+DIRECT_URL="postgresql://klickpro:YOUR_PASSWORD@localhost:5432/klickpro_dev"
+SHADOW_DATABASE_URL="postgresql://klickpro:YOUR_PASSWORD@localhost:5432/klickpro_shadow"
+APP_URL="http://localhost:3000"
+REALTIME_ALLOWED_ORIGIN="http://localhost:3000"
+AUTH_SECRET="replace-with-a-long-random-secret"
+FILE_STORAGE_PROVIDER="local"
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="your-browser-maps-key"
+GOOGLE_MAPS_SERVER_KEY="your-server-geocoding-key"
+```
 
-There is no mobile client in this repository. The `flutter_app/` directory referenced by earlier
-versions of this README no longer exists. The `/api/v1` namespace remains, so a future client
-has a stable surface to target.
+> Keep `.env` secure and private. Never commit database passwords, API keys, or auth secrets.
+
+### 5. Local PostgreSQL Database Setup
+
+PostgreSQL can be installed locally (EnterpriseDB on Windows, Homebrew on macOS, or APT on Ubuntu).
+
+Create the PostgreSQL user and databases:
+
+```bash
+# Create the database user (requires CREATEDB privilege for Prisma shadow database)
+createuser --pwprompt --createdb klickpro
+
+# Create development, shadow, and test databases
+createdb --owner=klickpro klickpro_dev
+createdb --owner=klickpro klickpro_shadow
+createdb --owner=klickpro klickpro_test
+```
+
+### 6. Generate Prisma Client and Run Migrations
+
+```bash
+npx prisma generate
+npx prisma migrate deploy
+```
+
+### 7. (Optional) Seed Demo & Category Data
+
+```bash
+# Seed initial demo clients, professionals, and jobs
+npm run db:seed
+
+# Seed category and subcategory hierarchy
+npm run db:seed-categories
+```
+
+### 8. Start Development Server
+
+```bash
+npm run dev
+```
+
+The application will be accessible at: **`http://localhost:3000`**
+
+---
+
+## Project Scanning & Quality Verification Commands
+
+To perform a complete scan and audit of the project, run the following commands:
+
+| Scan Type                    | Command                             | Description                                                                                                                                       |
+| :--------------------------- | :---------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Full Type Check**          | `npm run typecheck`                 | Scans all `.ts` and `.tsx` files across the entire project using TypeScript (`tsc --noEmit`) to verify zero type mismatches or broken references. |
+| **ESLint Static Code Scan**  | `npm run lint`                      | Scans all source files for syntax issues, React 19 hook violations, import errors, and code quality rules (`eslint . --cache`).                   |
+| **Single-Command Full Scan** | `npm run typecheck && npm run lint` | **Recommended:** Runs both TypeScript compilation check and ESLint scan sequentially in one command.                                              |
+| **Production Build Scan**    | `npm run build`                     | Applies pending database migrations and executes `next build` to verify page rendering, server bundle generation, and static optimization.        |
+| **Dependency Security Scan** | `npm audit`                         | Scans installed `node_modules` against the npm security advisory database for known vulnerabilities.                                              |
+| **Code Formatting Check**    | `npx prettier --check .`            | Verifies whether all files comply with Prettier formatting rules without modifying them. (Use `npm run format` to auto-fix).                      |
+| **Razorpay Sandbox Check**   | `npm run check:razorpay`            | Validates your Razorpay API credentials and sandbox connectivity.                                                                                 |
+| **Payment Resilience Check** | `npm run test:resilience`           | Executes resilience and error-handling tests for Razorpay payment workflows.                                                                      |
+
+---
+
+## Database & Migration Rules
+
+This project enforces strict database management policies:
+
+1. **Every Database Change Must Have a Migration File**:
+   - Never use `prisma db push` alone in production or shared development.
+   - All schema updates in `prisma/schema.prisma` must be followed by a versioned migration:
+     ```bash
+     npx prisma format
+     npx prisma validate
+     npx prisma migrate deploy
+     npx prisma generate
+     ```
+2. **Safe & Idempotent DDL**:
+   - Use `ALTER TABLE "<TableName>" ADD COLUMN IF NOT EXISTS ...`
+   - Use `CREATE TABLE IF NOT EXISTS ...`
+   - Use `CREATE INDEX IF NOT EXISTS ...`
+
+---
+
+## Integrations & Services
+
+- **Authentication**: Email/Password with JWT sessions (`jose`), Google OAuth callback at `/api/v1/auth/google`.
+- **OTP Verification**: Twilio Verify API for production SMS. In local development, `PHONE_OTP_PROVIDER="development"` uses the default OTP configured in `.env`.
+- **Payments (Razorpay)**: Supports direct payments, escrow hold, transfer via Razorpay Route, and automated payouts via RazorpayX.
+- **Identity Verification**: AuthBridge and SpringVerify integrations for Aadhaar, PAN, and police background checks.
+- **File Storage**: Local file storage (`FILE_STORAGE_PROVIDER="local"`) for local testing, or S3-compatible cloud storage (AWS S3, Cloudflare R2, MinIO) for production.
+- **Admin Portal**: Admin management dashboard with user approval, KYC document review, transaction monitoring, and dispute resolution.
+
+---
+
+## Available NPM Scripts
+
+```bash
+# Development
+npm run dev                  # Start Next.js + Socket.IO development server
+npm run dev:webpack          # Start development server using Webpack instead of Turbopack
+
+# Production
+npm run build                # Deploy migrations and compile production build
+npm start                    # Start production server
+
+# Quality & Scanning
+npm run typecheck            # TypeScript compiler scan
+npm run lint                 # ESLint code quality scan
+npm run format               # Format codebase with Prettier
+
+# Database & Seeding
+npm run db:backup            # Create database backup
+npm run db:restore           # Restore database from backup
+npm run db:seed              # Seed development database
+npm run db:seed-categories   # Seed service categories
+npm run check:razorpay       # Validate Razorpay sandbox integration
+npm run test:resilience      # Test payment resilience
+```
