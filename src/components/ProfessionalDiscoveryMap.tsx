@@ -36,9 +36,10 @@ export default function ProfessionalDiscoveryMap({
   const points = displayedProfessionals
     .map((professional) => professional.displayPoint)
     .filter((point): point is { lat: number; lng: number } => Boolean(point));
-  const initialPoint = selectedPro?.displayPoint ??
+  const initialPoint =
+    selectedPro?.displayPoint ??
     selectedPoint ??
-    points[0] ?? { lat: 37.7749, lng: -122.4194 };
+    (userLocation ?? points[0] ?? { lat: 19.076, lng: 72.8777 });
 
   const mapRef = useRef<google.maps.Map | null>(null);
   const [activeProfessionalId, setActiveProfessionalId] = useState<string | null>(
@@ -57,7 +58,7 @@ export default function ProfessionalDiscoveryMap({
 
   const activeProfessional =
     professionals.find(
-      (professional) => String(professional.id) === String(activeProfessionalId),
+      (professional) => professional.id === activeProfessionalId,
     ) ??
     selectedPro ??
     null;
@@ -95,6 +96,12 @@ export default function ProfessionalDiscoveryMap({
         const bounds = new google.maps.LatLngBounds();
         points.forEach((p) => bounds.extend(p));
         map.fitBounds(bounds);
+        return;
+      }
+
+      if (userLocation) {
+        map.setCenter(userLocation);
+        map.setZoom(12);
       }
     },
     [selectedPro, activeProfessional, selectedPoint, points, userLocation, userRadiusKm],
@@ -182,9 +189,9 @@ export default function ProfessionalDiscoveryMap({
                 radius={userRadiusKm * 1000}
                 options={{
                   fillColor: "#3b82f6",
-                  fillOpacity: 0.12,
-                  strokeColor: "#3b82f6",
-                  strokeOpacity: 0.75,
+                  fillOpacity: 0.15,
+                  strokeColor: "#2563eb",
+                  strokeOpacity: 0.8,
                   strokeWeight: 2,
                   clickable: false,
                   zIndex: 0,

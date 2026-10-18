@@ -13,13 +13,15 @@ import { ProCard } from "@/components/ProCard";
 import Skeleton from "react-loading-skeleton";
 import type { MarketplaceCategory, MarketplaceProfessional } from "@/lib/types/marketplace";
 import type { ProfessionalDiscoveryResponse } from "@/lib/types/professional-discovery";
-import { Home, LocateFixed, Map, SlidersHorizontal, Search, Heart } from "lucide-react";
+import { Home, LocateFixed, Map, SlidersHorizontal, Search, Heart, ChevronDown } from "lucide-react";
+import { ServiceTypeDropdown } from "@/components/ServiceTypeDropdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { getAllStates, getDistrictsByState } from "@/lib/india-locations";
 import { getCityCoordinates } from "@/lib/city-coordinates";
+import { capitalizeWords, cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
 const segmentOptions: [string, string][] = [
@@ -156,28 +158,49 @@ function DiscoverContent() {
   }, [results, showSavedOnly, savedIds]);
 
   function requestMyLocation() {
-    if (!navigator.geolocation) return;
+    setShowMap(true);
+    if (!navigator.geolocation) {
+      toast.error("Location is not supported in this browser.");
+      return;
+    }
+    toast.info("Detecting your location via GPS...");
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setOriginLat(position.coords.latitude);
         setOriginLng(position.coords.longitude);
         setDistanceKm((current) => (current === "" ? 25 : current));
+        setShowMap(true);
         setPage(1);
         userLocationRef.current = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         };
+        toast.success("Location set to your current GPS position");
+        window.requestAnimationFrame(() => {
+          mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
       },
       () => {
-        toast.error(
-          "Unable to retrieve your location. Please enable location access or enter a city.",
-        );
+        const fallback = getCityCoordinates(city) ?? getCityCoordinates("Mumbai") ?? { lat: 19.076, lng: 72.8777 };
+        setOriginLat(fallback.lat);
+        setOriginLng(fallback.lng);
+        setDistanceKm((current) => (current === "" ? 25 : current));
+        setShowMap(true);
+        setPage(1);
+        userLocationRef.current = fallback;
+        toast.info("GPS access not granted; using city coordinates.");
+        window.requestAnimationFrame(() => {
+          mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
       },
+      { enableHighAccuracy: true, timeout: 8000 },
     );
   }
 
   async function requestPrimaryAddress() {
     try {
+      setShowMap(true);
+      toast.info("Looking up your primary address...");
       const profileResponse = await fetch("/api/profile");
       if (!profileResponse.ok) throw new Error("Unable to load your primary address.");
       const profileData = (await profileResponse.json()) as {
@@ -201,7 +224,13 @@ function DiscoverContent() {
       setOriginLat(location.lat);
       setOriginLng(location.lon);
       setDistanceKm((current) => (current === "" ? 25 : current));
+      setShowMap(true);
       setPage(1);
+      userLocationRef.current = { lat: location.lat, lng: location.lon };
+      toast.success("Location set to your primary address");
+      window.requestAnimationFrame(() => {
+        mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to use your primary address.");
     }
@@ -439,107 +468,64 @@ function DiscoverContent() {
           </div>
 
           <FilterSection title="Service type">
-            <div className="mb-3 flex flex-wrap gap-2">
-              {segmentOptions.map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => {
-                    const nextSegment = segment === value ? "" : value;
-                    const parent = parentCategories.find((item) => item.segment === nextSegment);
-                    setSegment(nextSegment);
-                    setParentCategoryId(parent?.id ?? null);
-                    setCategoryId(null);
-                    setSubcategoryId(null);
-                    setPage(1);
-                  }}
-                  className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
-                    segment === value
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="mb-3">
+              <ServiceTypeDropdown
+                allowAll
+                value={segment}
+                onChange={(nextSegment) => {
+                  const parent = parentCategories.find((item) => item.segment === nextSegment);
+                  setSegment(nextSegment);
+                  setParentCategoryId(parent?.id ?? null);
+                  setCategoryId(null);
+                  setSubcategoryId(null);
+                  setPage(1);
+                }}
+              />
             </div>
-            {segment ? (
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="category"
-                    checked={categoryId === null}
-                    onChange={() => {
-                      setCategoryId(null);
+            {segment && topCategories.length > 0 && (
+              <div className="space-y-2 pt-1">
+                <div className="relative">
+                  <select
+                    value={categoryId ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value ? Number(e.target.value) : null;
+                      setCategoryId(val);
                       setSubcategoryId(null);
                       setPage(1);
                     }}
-                    className="h-4 w-4 accent-primary"
-                  />
-                  <span>
-                    All{" "}
-                    {parentCategories.find((item) => item.id === parentCategoryId)?.name ??
-                      "categories"}
-                  </span>
-                </label>
-                {topCategories.map((item) => (
-                  <label key={item.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="category"
-                      checked={categoryId === item.id}
-                      onChange={() => {
-                        setCategoryId(item.id);
-                        setSubcategoryId(null);
+                    className="h-10 w-full appearance-none rounded-xl border border-input bg-background px-3 pr-8 text-xs font-medium text-foreground transition-colors hover:border-foreground/30 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary shadow-xs capitalize"
+                  >
+                    <option value="">All Categories</option>
+                    {topCategories.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {capitalizeWords(item.name)}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                </div>
+
+                {subCategories.length > 0 && (
+                  <div className="relative">
+                    <select
+                      value={subcategoryId ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value ? Number(e.target.value) : null;
+                        setSubcategoryId(val);
                         setPage(1);
                       }}
-                      className="h-4 w-4 accent-primary"
-                    />
-                    <span className="flex-1">{item.name}</span>
-                    <span className="text-xs text-muted-foreground">{item.professionalCount}</span>
-                  </label>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Select a service type to see categories.
-              </p>
-            )}
-            {subCategories.length > 0 && (
-              <div className="mt-3 space-y-2 border-t border-border pt-3">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Subcategory{selectedCategory ? ` · ${selectedCategory.name}` : ""}
-                </p>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="subcategory"
-                    checked={subcategoryId === null}
-                    onChange={() => {
-                      setSubcategoryId(null);
-                      setPage(1);
-                    }}
-                    className="h-4 w-4 accent-primary"
-                  />
-                  <span>All {selectedCategory?.name}</span>
-                </label>
-                {subCategories.map((item) => (
-                  <label key={item.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="subcategory"
-                      checked={subcategoryId === item.id}
-                      onChange={() => {
-                        setSubcategoryId(item.id);
-                        setPage(1);
-                      }}
-                      className="h-4 w-4 accent-primary"
-                    />
-                    <span className="flex-1">{item.name}</span>
-                    <span className="text-xs text-muted-foreground">{item.professionalCount}</span>
-                  </label>
-                ))}
+                      className="h-10 w-full appearance-none rounded-xl border border-input bg-background px-3 pr-8 text-xs font-medium text-foreground transition-colors hover:border-foreground/30 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary shadow-xs capitalize"
+                    >
+                      <option value="">All Subcategories</option>
+                      {subCategories.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {capitalizeWords(item.name)}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  </div>
+                )}
               </div>
             )}
           </FilterSection>
@@ -620,26 +606,26 @@ function DiscoverContent() {
 
           <FilterSection title="Search Radius & Distance">
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="w-full justify-center gap-1.5 text-xs"
+                  className="h-9 w-full justify-center gap-2 rounded-xl text-xs font-medium hover:border-primary/50 hover:bg-primary/5 hover:text-primary transition-all shadow-xs"
                   onClick={requestMyLocation}
                 >
-                  <LocateFixed className="size-3.5 text-primary" />
-                  My GPS
+                  <LocateFixed className="h-3.5 w-3.5 text-primary" />
+                  Current Location
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="w-full justify-center gap-1.5 text-xs"
+                  className="h-9 w-full justify-center gap-2 rounded-xl text-xs font-medium hover:border-primary/50 hover:bg-primary/5 hover:text-primary transition-all shadow-xs"
                   onClick={() => void requestPrimaryAddress()}
                 >
-                  <Home className="size-3.5 text-primary" />
-                  Primary address
+                  <Home className="h-3.5 w-3.5 text-primary" />
+                  Primary Address
                 </Button>
               </div>
 
@@ -657,14 +643,19 @@ function DiscoverContent() {
                 </div>
               </div>
 
-              {/* Radius Chips for all: 5km, 10km, 25km, 50km, 100km */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-medium text-foreground">
-                  <span>Radius: {distanceKm !== "" ? `${distanceKm} km` : "Select radius"}</span>
+              {/* Radius Drag Slider Only */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between text-xs font-medium">
+                  <span className="text-foreground">
+                    Radius:{" "}
+                    <span className="font-semibold text-primary">
+                      {distanceKm !== "" ? `${distanceKm} km` : "Select radius"}
+                    </span>
+                  </span>
                   {distanceKm !== "" && (
                     <button
                       type="button"
-                      className="text-[11px] text-primary hover:underline"
+                      className="text-[11px] font-medium text-primary hover:underline"
                       onClick={() => {
                         setDistanceKm("");
                         setPage(1);
@@ -675,35 +666,6 @@ function DiscoverContent() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-5 gap-1">
-                  {[5, 10, 25, 50, 100].map((km) => (
-                    <button
-                      key={km}
-                      type="button"
-                      onClick={() => {
-                        if (originLat === null || originLng === null) {
-                          const fallback = getCityCoordinates(city) ?? getCityCoordinates("Mumbai");
-                          if (fallback) {
-                            setOriginLat(fallback.lat);
-                            setOriginLng(fallback.lng);
-                            userLocationRef.current = fallback;
-                          }
-                        }
-                        setDistanceKm(km);
-                        setPage(1);
-                      }}
-                      className={`rounded-lg py-1.5 text-center text-xs font-semibold transition ${
-                        distanceKm === km
-                          ? "bg-primary text-primary-foreground shadow-xs"
-                          : "border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                      }`}
-                    >
-                      {km}km
-                    </button>
-                  ))}
-                </div>
-
-                {/* Slider from 1 to 100 km */}
                 <div className="pt-1">
                   <div className="flex items-center gap-2">
                     <input
@@ -713,23 +675,22 @@ function DiscoverContent() {
                       value={distanceKm === "" ? 25 : distanceKm}
                       onChange={(e) => {
                         if (originLat === null || originLng === null) {
-                          const fallback = getCityCoordinates(city) ?? getCityCoordinates("Mumbai");
-                          if (fallback) {
-                            setOriginLat(fallback.lat);
-                            setOriginLng(fallback.lng);
-                            userLocationRef.current = fallback;
-                          }
+                          const fallback = getCityCoordinates(city) ?? getCityCoordinates("Mumbai") ?? { lat: 19.076, lng: 72.8777 };
+                          setOriginLat(fallback.lat);
+                          setOriginLng(fallback.lng);
+                          userLocationRef.current = fallback;
                         }
                         setDistanceKm(Number(e.target.value));
+                        setShowMap(true);
                         setPage(1);
                       }}
-                      className="h-1.5 w-full cursor-pointer accent-primary"
+                      className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-primary"
                     />
-                    <span className="w-12 text-right text-xs font-bold text-primary">
+                    <span className="w-14 text-right text-xs font-bold text-primary">
                       {distanceKm === "" ? "Any" : `${distanceKm} km`}
                     </span>
                   </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                  <div className="flex justify-between text-[10px] text-muted-foreground font-medium">
                     <span>1 km</span>
                     <span>25 km</span>
                     <span>50 km</span>
@@ -963,6 +924,40 @@ function DiscoverContent() {
             </div>
           )}
 
+          {showMap && (
+            <div ref={mapSectionRef} className="mb-6">
+              <Suspense
+                fallback={
+                  <div className="h-[520px] w-full overflow-hidden rounded-2xl border bg-muted animate-pulse" />
+                }
+              >
+                <ProfessionalDiscoveryMap
+                  professionals={results?.professionals ?? []}
+                  selectedProfessionalId={selectedProfessionalId}
+                  selectedPoint={selectedPoint ?? undefined}
+                  userLocation={
+                    originLat !== null && originLng !== null
+                      ? { lat: originLat, lng: originLng }
+                      : null
+                  }
+                  userRadiusKm={distanceKm !== "" ? Number(distanceKm) : null}
+                  onClearSelected={() => {
+                    setSelectedProfessionalId(null);
+                    setSelectedPoint(null);
+                  }}
+                />
+              </Suspense>
+              <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>Approximate location — shown for privacy</span>
+                {distanceKm !== "" && originLat !== null && originLng !== null && (
+                  <span>
+                    Radius: <strong className="text-foreground">{distanceKm} km</strong>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           {status === "loading" && (
             <div className="grid gap-4 sm:grid-cols-2">
               <ResultSkeleton />
@@ -1006,34 +1001,6 @@ function DiscoverContent() {
             ))}
           {status === "ready" && professionals.length > 0 && (
             <>
-              {showMap && ((results?.professionals?.length ?? 0) > 0 || (originLat !== null && originLng !== null)) && (
-                <div ref={mapSectionRef} className="mb-6">
-                  <Suspense
-                    fallback={
-                      <div className="h-[520px] w-full overflow-hidden rounded-2xl border bg-muted animate-pulse" />
-                    }
-                  >
-                    <ProfessionalDiscoveryMap
-                      professionals={results?.professionals ?? []}
-                      selectedProfessionalId={selectedProfessionalId}
-                      selectedPoint={selectedPoint ?? undefined}
-                      userLocation={
-                        originLat !== null && originLng !== null
-                          ? { lat: originLat, lng: originLng }
-                          : null
-                      }
-                      userRadiusKm={distanceKm !== "" ? Number(distanceKm) : null}
-                      onClearSelected={() => {
-                        setSelectedProfessionalId(null);
-                        setSelectedPoint(null);
-                      }}
-                    />
-                  </Suspense>
-                  <p className="mt-1.5 text-[11px] text-muted-foreground">
-                    Approximate location — shown for privacy
-                  </p>
-                </div>
-              )}
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
                 {professionals.map((p) => (
                   <ProCard

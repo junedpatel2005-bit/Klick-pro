@@ -38,6 +38,7 @@ import type { MarketplaceCategory } from "@/lib/types/marketplace";
 import { getAllStates, getDistrictsByState } from "@/lib/india-locations";
 import { getCityCoordinates } from "@/lib/city-coordinates";
 import { capitalizeWords, capitalizeFirst, formatReadableLabel } from "@/lib/utils";
+import { ServiceTypeDropdown } from "@/components/ServiceTypeDropdown";
 
 const ProfessionalJobsMap = dynamic(() => import("@/components/ProfessionalJobsMap"), {
   ssr: false,
@@ -294,37 +295,64 @@ function ProfessionalJobsContent() {
     });
   }, [showMap, selectedJobId]);
 
-  function toggleNearMe(checked: boolean) {
+  function toggleNearMe(checked: boolean = true) {
     setNearMe(checked);
     setLocationError(null);
-    if (!checked || userLocation) return;
+    if (!checked) return;
+
+    setShowMap(true);
+    setLocating(true);
+    toast.info("Detecting your location via GPS...");
+
     if (!navigator.geolocation) {
-      setLocationError("Location isn't available in this browser.");
-      setNearMe(false);
+      const fallback = serviceLocation ?? (getCityCoordinates(city) ? [getCityCoordinates(city)!.lat, getCityCoordinates(city)!.lng] : [19.076, 72.8777]);
+      setUserLocation(fallback as [number, number]);
+      setLocating(false);
+      toast.info("Location is not supported in this browser; using default coordinates.");
+      window.requestAnimationFrame(() => {
+        mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
       return;
     }
-    setLocating(true);
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setUserLocation([position.coords.latitude, position.coords.longitude]);
         setLocating(false);
+        setShowMap(true);
+        toast.success("Location set to your current GPS position");
+        window.requestAnimationFrame(() => {
+          mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
       },
       () => {
-        setLocationError("Location permission was not granted.");
+        const fallback = serviceLocation ?? (getCityCoordinates(city) ? [getCityCoordinates(city)!.lat, getCityCoordinates(city)!.lng] : [19.076, 72.8777]);
+        setUserLocation(fallback as [number, number]);
         setLocating(false);
-        setNearMe(false);
+        setShowMap(true);
+        toast.info("GPS access not granted; using service or city coordinates.");
+        window.requestAnimationFrame(() => {
+          mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
       },
+      { enableHighAccuracy: true, timeout: 8000 },
     );
   }
 
   function useServiceLocation() {
-    if (!serviceLocation) {
-      setLocationError("Please add your service location to your profile first.");
-      return;
-    }
     setLocationError(null);
-    setUserLocation(serviceLocation);
+    const targetLoc: [number, number] = serviceLocation ?? (getCityCoordinates(city) ? [getCityCoordinates(city)!.lat, getCityCoordinates(city)!.lng] : [19.076, 72.8777]);
+    setUserLocation(targetLoc);
     setNearMe(true);
+    setShowMap(true);
+    if (serviceLocation) {
+      toast.success("Location set to your service address");
+    } else {
+      toast.info("Using city coordinates as search center");
+    }
+    window.requestAnimationFrame(() => {
+      mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   const loadJobs = useCallback(async () => {
@@ -630,15 +658,17 @@ function ProfessionalJobsContent() {
   const selectedJob =
     displayedMapJobs.find((job) => job.id === selectedJobId) ?? displayedMapJobs[0] ?? null;
   const cityCoord = getCityCoordinates(city);
-  const mapCenter: [number, number] = selectedJob
-    ? [selectedJob.locationLat, selectedJob.locationLng]
-    : userLocation
-      ? userLocation
-      : cityCoord
-        ? [cityCoord.lat, cityCoord.lng]
-        : mapJobs[0]
-          ? [mapJobs[0].locationLat, mapJobs[0].locationLng]
-          : [21.1702, 72.8311];
+  const mapCenter: [number, number] = userLocation && nearMe
+    ? userLocation
+    : selectedJob
+      ? [selectedJob.locationLat, selectedJob.locationLng]
+      : userLocation
+        ? userLocation
+        : cityCoord
+          ? [cityCoord.lat, cityCoord.lng]
+          : mapJobs[0]
+            ? [mapJobs[0].locationLat, mapJobs[0].locationLng]
+            : [19.076, 72.8777];
   const previewPoints: [number, number][] = mapJobs.map((job) => [
     job.locationLat,
     job.locationLng,
@@ -1041,142 +1071,172 @@ function ProfessionalJobsContent() {
                   <p className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
                     Category
                   </p>
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {segmentOptions.map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => {
-                          setSegment((current) => (current === value ? "" : value));
-                          setCategory("");
-                        }}
-                        className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors duration-200 ${
-                          segment === value
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
+                  <div className="mb-3">
+                    <ServiceTypeDropdown
+                      allowAll
+                      value={segment}
+                      onChange={(nextSegment) => {
+                        setSegment(nextSegment);
+                        setCategory("");
+                      }}
+                    />
                   </div>
-                  {segment ? (
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="radio"
-                          name="category"
-                          checked={category === ""}
-                          onChange={() => setCategory("")}
-                          className="h-4 w-4 accent-primary"
-                        />
-                        <span>All categories</span>
-                      </label>
-                      {topCategories.map((item) => (
-                        <label key={item.id} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="radio"
-                            name="category"
-                            checked={activeTopCategory?.name === item.name}
-                            onChange={() => setCategory(item.name)}
-                            className="h-4 w-4 accent-primary"
-                          />
-                          <span className="flex-1">{item.name}</span>
-                          {jobCountByCategory[item.name] ? (
-                            <span className="text-xs text-muted-foreground">
-                              {jobCountByCategory[item.name]}
-                            </span>
-                          ) : null}
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Select a service type to see categories.
-                    </p>
-                  )}
-                  {subCategories.length > 0 && (
-                    <div className="mt-3 space-y-2 border-t border-border pt-3">
-                      <p className="text-xs font-medium text-muted-foreground">
-                        Sub-categories of {activeTopCategory?.name}
-                      </p>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="radio"
-                          name="subcategory"
-                          checked={category === activeTopCategory?.name}
-                          onChange={() => setCategory(activeTopCategory?.name ?? "")}
-                          className="h-4 w-4 accent-primary"
-                        />
-                        <span>All {activeTopCategory?.name}</span>
-                      </label>
-                      {subCategories.map((item) => (
-                        <label key={item.id} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="radio"
-                            name="subcategory"
-                            checked={category === item.name}
-                            onChange={() => setCategory(item.name)}
-                            className="h-4 w-4 accent-primary"
-                          />
-                          <span className="flex-1">{item.name}</span>
-                          {jobCountByCategory[item.name] ? (
-                            <span className="text-xs text-muted-foreground">
-                              {jobCountByCategory[item.name]}
-                            </span>
-                          ) : null}
-                        </label>
-                      ))}
+                  {segment && topCategories.length > 0 && (
+                    <div className="space-y-2 pt-1">
+                      <div className="relative">
+                        <select
+                          value={activeTopCategory?.name ?? ""}
+                          onChange={(e) => setCategory(e.target.value)}
+                          className="h-10 w-full appearance-none rounded-xl border border-input bg-background px-3 pr-8 text-xs font-medium text-foreground transition-colors hover:border-foreground/30 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary shadow-xs capitalize"
+                        >
+                          <option value="">All Categories</option>
+                          {topCategories.map((item) => (
+                            <option key={item.id} value={item.name}>
+                              {capitalizeWords(item.name)}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      </div>
+
+                      {subCategories.length > 0 && (
+                        <div className="relative">
+                          <select
+                            value={category === activeTopCategory?.name ? "" : category}
+                            onChange={(e) =>
+                              setCategory(e.target.value || (activeTopCategory?.name ?? ""))
+                            }
+                            className="h-10 w-full appearance-none rounded-xl border border-input bg-background px-3 pr-8 text-xs font-medium text-foreground transition-colors hover:border-foreground/30 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary shadow-xs capitalize"
+                          >
+                            <option value="">
+                              All {activeTopCategory?.name ? capitalizeWords(activeTopCategory.name) : "Subcategories"}
+                            </option>
+                            {subCategories.map((item) => (
+                              <option key={item.id} value={item.name}>
+                                {capitalizeWords(item.name)}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
 
                 <div>
                   <p className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                    Location
+                    Search Radius & Distance
                   </p>
-                  <div className="space-y-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start gap-2"
-                      onClick={() => toggleNearMe(true)}
-                    >
-                      <LocateFixed className="size-4" />
-                      Use my current location
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start gap-2"
-                      onClick={useServiceLocation}
-                    >
-                      <Home className="size-4" />
-                      Use my service location
-                    </Button>
-                  </div>
-                  {locating && <p className="mt-1.5 text-xs text-muted-foreground">Locating…</p>}
-                  {locationError && (
-                    <p className="mt-1.5 text-xs text-destructive">{locationError}</p>
-                  )}
-                  {nearMe && (
-                    <div className="mt-3">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Radius</span>
-                        <span className="font-semibold text-foreground">{radiusKm} km</span>
-                      </div>
-                      <input
-                        type="range"
-                        min={MIN_NEAR_ME_RADIUS_KM}
-                        max={MAX_NEAR_ME_RADIUS_KM}
-                        value={radiusKm}
-                        onChange={(event) => setRadiusKm(Number(event.target.value))}
-                        className="mt-1.5 h-1.5 w-full cursor-pointer accent-primary"
-                      />
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 w-full justify-center gap-2 rounded-xl text-xs font-medium hover:border-primary/50 hover:bg-primary/5 hover:text-primary transition-all shadow-xs"
+                        onClick={() => toggleNearMe(true)}
+                      >
+                        <LocateFixed className="h-3.5 w-3.5 text-primary" />
+                        Current Location
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 w-full justify-center gap-2 rounded-xl text-xs font-medium hover:border-primary/50 hover:bg-primary/5 hover:text-primary transition-all shadow-xs"
+                        onClick={useServiceLocation}
+                      >
+                        <Home className="h-3.5 w-3.5 text-primary" />
+                        Service Location
+                      </Button>
                     </div>
-                  )}
+
+                    {locating && <p className="text-xs text-muted-foreground">Locating…</p>}
+                    {locationError && (
+                      <p className="text-xs text-destructive">{locationError}</p>
+                    )}
+
+                    {/* Active Center Indicator */}
+                    <div className="rounded-lg border bg-muted/40 p-2.5 text-xs">
+                      <div className="flex items-center justify-between text-muted-foreground">
+                        <span>Center:</span>
+                        <span className="font-semibold text-foreground truncate max-w-[140px]">
+                          {nearMe && userLocation ? "Location Active" : "Pick Location"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Radius Drag Slider System */}
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center justify-between text-xs font-medium">
+                        <span className="text-foreground">
+                          Radius:{" "}
+                          <span className="font-semibold text-primary">
+                            {nearMe ? `${radiusKm} km` : "Select radius"}
+                          </span>
+                        </span>
+                        {nearMe && (
+                          <button
+                            type="button"
+                            className="text-[11px] font-medium text-primary hover:underline"
+                            onClick={() => {
+                              setNearMe(false);
+                            }}
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="pt-1">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="range"
+                            min={MIN_NEAR_ME_RADIUS_KM}
+                            max={MAX_NEAR_ME_RADIUS_KM}
+                            value={radiusKm}
+                            onChange={(event) => {
+                              const val = Number(event.target.value);
+                              setRadiusKm(val);
+                              setNearMe(true);
+                              setShowMap(true);
+                              if (!userLocation) {
+                                if (serviceLocation) {
+                                  setUserLocation(serviceLocation);
+                                } else {
+                                  const fallback = getCityCoordinates(city) ?? { lat: 19.076, lng: 72.8777 };
+                                  setUserLocation([fallback.lat, fallback.lng]);
+                                }
+                              }
+                            }}
+                            className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-primary"
+                          />
+                          <span className="w-14 text-right text-xs font-bold text-primary">
+                            {nearMe ? `${radiusKm} km` : `${radiusKm} km`}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-muted-foreground font-medium">
+                          <span>1 km</span>
+                          <span>25 km</span>
+                          <span>50 km</span>
+                          <span>100 km</span>
+                        </div>
+                      </div>
+
+                      {nearMe && (
+                        <button
+                          type="button"
+                          className="pt-1 text-xs text-muted-foreground hover:text-destructive hover:underline"
+                          onClick={() => {
+                            setNearMe(false);
+                          }}
+                        >
+                          Clear location filter
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div>
@@ -1350,27 +1410,29 @@ function ProfessionalJobsContent() {
                     )}
                     <div
                       ref={mapSectionRef}
-                      className="relative h-[320px] overflow-hidden rounded-2xl border border-border"
+                      className="relative h-[360px] overflow-hidden rounded-2xl border border-border"
                     >
-                      {displayedMapJobs.length > 0 ? (
-                        <ProfessionalJobsMap
-                          center={mapCenter}
-                          jobs={displayedMapJobs}
-                          radiusKm={nearMe ? radiusKm : null}
-                          userLocation={nearMe && userLocation ? userLocation : null}
-                          onSelectJob={setSelectedJobId}
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.35),transparent_10%),linear-gradient(180deg,#bfe8ef_0%,#b1d7df_100%)] text-sm text-muted-foreground">
-                          None of your matching jobs have a pinned location yet.
+                      <ProfessionalJobsMap
+                        center={mapCenter}
+                        jobs={displayedMapJobs}
+                        radiusKm={nearMe ? radiusKm : null}
+                        userLocation={nearMe && userLocation ? userLocation : null}
+                        onSelectJob={setSelectedJobId}
+                      />
+                      {nearMe && displayedMapJobs.length === 0 && (
+                        <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full bg-card/90 px-4 py-1.5 text-xs font-medium text-muted-foreground shadow-md backdrop-blur border border-border">
+                          No jobs found within {radiusKm} km — drag slider to expand radius
                         </div>
                       )}
                     </div>
-                    {displayedMapJobs.length > 0 && (
-                      <p className="mt-1.5 text-[11px] text-muted-foreground">
-                        Approximate location — shown for privacy
-                      </p>
-                    )}
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>Approximate location — shown for privacy</span>
+                      {nearMe && (
+                        <span>
+                          Radius: <strong className="text-foreground">{radiusKm} km</strong>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
 

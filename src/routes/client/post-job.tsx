@@ -7,6 +7,7 @@ import {
   Briefcase,
   Check,
   CheckCircle2,
+  ChevronDown,
   Clock,
   IndianRupee,
   FileText,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import { AddressMapPicker } from "@/components/AddressMapPicker";
 import { PageActionLoading } from "@/components/PageActionLoading";
+import { ServiceTypeDropdown } from "@/components/ServiceTypeDropdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { MarketplaceCategory } from "@/lib/types/marketplace";
@@ -1074,55 +1076,59 @@ export default function PostJob() {
               />
             </Field>
             <Field label="Service Type" error={errors.category}>
-              <div className="flex flex-wrap gap-2">
-                {segmentOptions.map(([value, label]) => (
-                  <Choice
-                    key={value}
-                    checked={segment === value}
-                    onClick={() => {
-                      setSegment(value);
-                      update("category", "");
-                    }}
-                    label={label}
-                  />
-                ))}
-              </div>
+              <ServiceTypeDropdown
+                value={segment}
+                onChange={(newSegment) => {
+                  setSegment(newSegment);
+                  update("category", "");
+                }}
+                categories={categories}
+                error={errors.category}
+              />
             </Field>
             {segment && (
               <Field label="Category" error={errors.category}>
-                <select
-                  value={activeTopCategory?.id ?? ""}
-                  onChange={(e) => {
-                    const top = topCategories.find((c) => c.id === Number(e.target.value));
-                    update("category", top?.name ?? "");
-                  }}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3"
-                >
-                  <option value="">Select a category</option>
-                  {topCategories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select
+                    value={activeTopCategory?.id ?? ""}
+                    onChange={(e) => {
+                      const top = topCategories.find((c) => c.id === Number(e.target.value));
+                      update("category", top?.name ?? "");
+                    }}
+                    className="h-11 w-full appearance-none rounded-xl border border-input bg-background px-3.5 pr-10 text-sm font-medium transition-colors hover:border-foreground/30 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-xs capitalize"
+                  >
+                    <option value="">Select a Category</option>
+                    {topCategories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {capitalizeWords(c.name)}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
               </Field>
             )}
             {subCategories.length > 0 && (
               <Field label="Sub-category">
-                <select
-                  value={selectedCategory?.parentId != null ? selectedCategory.name : ""}
-                  onChange={(e) =>
-                    update("category", e.target.value || (activeTopCategory?.name ?? ""))
-                  }
-                  className="h-10 w-full rounded-md border border-input bg-background px-3"
-                >
-                  <option value="">General {activeTopCategory?.name}</option>
-                  {subCategories.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.name}
+                <div className="relative">
+                  <select
+                    value={selectedCategory?.parentId != null ? selectedCategory.name : ""}
+                    onChange={(e) =>
+                      update("category", e.target.value || (activeTopCategory?.name ?? ""))
+                    }
+                    className="h-11 w-full appearance-none rounded-xl border border-input bg-background px-3.5 pr-10 text-sm font-medium transition-colors hover:border-foreground/30 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-xs capitalize"
+                  >
+                    <option value="">
+                      General {activeTopCategory?.name ? capitalizeWords(activeTopCategory.name) : "Category"}
                     </option>
-                  ))}
-                </select>
+                    {subCategories.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {capitalizeWords(c.name)}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
               </Field>
             )}
             <Field label="Description" error={errors.description}>
@@ -1807,7 +1813,12 @@ export default function PostJob() {
           <div className="space-y-5">
             <h2 className="text-xl font-semibold">Review your job</h2>
             <Review label="Title" value={capitalizeWords(form.title) || "Not set"} onEdit={() => setStep(0)} />
-            <Review label="Category" value={form.category || "Not set"} onEdit={() => setStep(0)} />
+            <Review
+              label="Service Type"
+              value={segment ? (segmentOptions.find((s) => s[0] === segment)?.[1] || capitalizeWords(segment)) : "Not set"}
+              onEdit={() => setStep(0)}
+            />
+            <Review label="Category" value={form.category ? capitalizeWords(form.category) : "Not set"} onEdit={() => setStep(0)} />
             <Review
               label="Description"
               value={capitalizeFirst(form.description) || "Not set"}

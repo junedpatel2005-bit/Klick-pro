@@ -46,12 +46,9 @@ export default function ProfessionalJobsMap({
   const { isLoaded, isConfigured, hasError } = useGoogleMaps();
   const [centerLat, centerLng] = center;
   const mapCenter = useMemo(() => ({ lat: centerLat, lng: centerLng }), [centerLat, centerLng]);
-  const [activeJobId, setActiveJobId] = useState<number | null>(() =>
-    jobs.length === 1 ? (jobs[0]?.id ?? null) : null,
-  );
+  const [activeJobId, setActiveJobId] = useState<number | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
-  const activeJob =
-    jobs.find((job) => job.id === activeJobId) ?? (jobs.length === 1 ? jobs[0] : null);
+  const activeJob = jobs.find((job) => job.id === activeJobId) ?? null;
 
   const applyView = useCallback(
     (map: google.maps.Map) => {
@@ -84,6 +81,12 @@ export default function ProfessionalJobsMap({
         return;
       }
 
+      if (userLocation) {
+        map.setCenter({ lat: userLocation[0], lng: userLocation[1] });
+        map.setZoom(11);
+        return;
+      }
+
       map.setCenter(mapCenter);
       map.setZoom(10);
     },
@@ -91,10 +94,10 @@ export default function ProfessionalJobsMap({
   );
 
   useEffect(() => {
-    if (jobs.length === 1 && jobs[0]) {
+    if (jobs.length === 1 && jobs[0] && !userLocation) {
       setActiveJobId(jobs[0].id);
     }
-  }, [jobs]);
+  }, [jobs, userLocation]);
 
   useEffect(() => {
     if (mapRef.current) {
@@ -156,9 +159,9 @@ export default function ProfessionalJobsMap({
                 radius={radiusKm * 1000}
                 options={{
                   fillColor: "#3b82f6",
-                  fillOpacity: 0.12,
-                  strokeColor: "#3b82f6",
-                  strokeOpacity: 0.75,
+                  fillOpacity: 0.15,
+                  strokeColor: "#2563eb",
+                  strokeOpacity: 0.8,
                   strokeWeight: 2,
                   clickable: false,
                   zIndex: 0,
