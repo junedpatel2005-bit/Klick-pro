@@ -355,14 +355,14 @@ export function WithdrawalDetailModal({
                 <div className="flex justify-between items-center py-1">
                   <span className="text-muted-foreground">Bank Name</span>
                   <span className="font-semibold text-foreground">
-                    {parsedDest?.bankName || "Bank Transfer"}
+                    {capitalizeWords(parsedDest?.bankName) || "Bank Transfer"}
                   </span>
                 </div>
 
                 <div className="flex justify-between items-center py-1.5">
                   <span className="text-muted-foreground">Account Holder</span>
                   <span className="font-semibold text-foreground">
-                    {parsedDest?.accountHolder || "—"}
+                    {capitalizeWords(parsedDest?.accountHolder) || "—"}
                   </span>
                 </div>
 
@@ -433,7 +433,7 @@ export function WithdrawalDetailModal({
                 <div className="flex justify-between items-center py-1">
                   <span className="text-muted-foreground">Registered Name</span>
                   <span className="font-semibold text-foreground">
-                    {parsedDest?.upiHolder || "—"}
+                    {capitalizeWords(parsedDest?.upiHolder) || "—"}
                   </span>
                 </div>
 

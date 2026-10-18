@@ -412,7 +412,7 @@ export default function AdminVerificationsPage() {
                   Professional verification
                 </p>
                 <h2 className="mt-1 font-display text-2xl font-bold text-slate-900">
-                  {selected.user.firstName} {selected.user.lastName}
+                  {capitalizeWords(`${selected.user.firstName} ${selected.user.lastName}`)}
                 </h2>
                 <p className="mt-0.5 text-sm text-slate-500">{selected.user.email}</p>
               </div>
@@ -447,7 +447,7 @@ export default function AdminVerificationsPage() {
                             setDocument({
                               label: item.label,
                               value: item.value!,
-                              owner: `${selected.user.firstName} ${selected.user.lastName}`,
+                              owner: capitalizeWords(`${selected.user.firstName} ${selected.user.lastName}`),
                             })
                           }
                           className="border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
@@ -525,8 +525,8 @@ export default function AdminVerificationsPage() {
             </h2>
             <p className="mt-2 text-sm text-slate-600 leading-relaxed">
               {confirmDoc.status === "APPROVED"
-                ? `Mark "${confirmDoc.label}" as approved for ${selected?.user.firstName} ${selected?.user.lastName}.`
-                : `Mark "${confirmDoc.label}" as rejected for ${selected?.user.firstName} ${selected?.user.lastName}.`}
+                ? `Mark "${confirmDoc.label}" as approved for ${capitalizeWords(`${selected?.user.firstName} ${selected?.user.lastName}`)}.`
+                : `Mark "${confirmDoc.label}" as rejected for ${capitalizeWords(`${selected?.user.firstName} ${selected?.user.lastName}`)}.`}
             </p>
             <div className="mt-6 flex justify-end gap-3">
               <Button
@@ -563,8 +563,8 @@ export default function AdminVerificationsPage() {
             </h2>
             <p className="mt-2 text-sm text-slate-600 leading-relaxed">
               {confirmOverall === "APPROVED"
-                ? `${selected.user.firstName} ${selected.user.lastName} will be marked as a verified professional.`
-                : `${selected.user.firstName} ${selected.user.lastName}'s verification request will be rejected.`}
+                ? `${capitalizeWords(`${selected.user.firstName} ${selected.user.lastName}`)} will be marked as a verified professional.`
+                : `${capitalizeWords(`${selected.user.firstName} ${selected.user.lastName}`)}'s verification request will be rejected.`}
             </p>
             <div className="mt-6 flex justify-end gap-3">
               <Button

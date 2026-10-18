@@ -321,19 +321,16 @@ export default function AdminFinancePage() {
     const grossVolume = completedOrFunded.reduce((sum, p) => sum + p.amount, 0);
 
     const platformCommission = completedOrFunded.reduce((sum, p) => {
-      const net =
-        p.adminNetAmount ||
-        (p.clientFeeAmount || Math.ceil(p.baseAmount * 0.1)) +
-          (p.commissionAmount || Math.ceil(p.baseAmount * 0.1));
-      return sum + net;
+      const comm = p.commissionAmount ?? (p.adminNetAmount ?? 0);
+      return sum + comm;
     }, 0);
 
     const proDisbursements = data.payments
       .filter((p) => p.status === "COMPLETED")
       .reduce((sum, p) => {
         const payout =
-          p.professionalPayoutAmount ||
-          Math.max(0, p.baseAmount - (p.commissionAmount || Math.ceil(p.baseAmount * 0.1)));
+          p.professionalPayoutAmount ??
+          Math.max(0, p.baseAmount - (p.commissionAmount ?? 0));
         return sum + payout;
       }, 0);
 
@@ -368,10 +365,8 @@ export default function AdminFinancePage() {
         p.professional,
         data.names[p.professionalId] || `Professional #${p.professionalId}`,
       );
-      const clientFee = p.clientFeeAmount || Math.ceil(p.baseAmount * 0.1);
-      const proComm = p.commissionAmount || Math.ceil(p.baseAmount * 0.1);
-      const adminNet = p.adminNetAmount || clientFee + proComm;
-      const proPayout = p.professionalPayoutAmount || Math.max(0, p.baseAmount - proComm);
+      const proComm = p.commissionAmount ?? (p.adminNetAmount ?? 0);
+      const proPayout = p.professionalPayoutAmount ?? Math.max(0, p.baseAmount - proComm);
 
       // Entry 1: Milestone Money
       items.push({
@@ -399,26 +394,26 @@ export default function AdminFinancePage() {
         paymentRaw: p,
       });
 
-      // Entry 2: Platform Commission (10%)
-      if (adminNet > 0 || clientFee > 0) {
+      // Entry 2: Platform Commission (only shown when commission is on / deducted)
+      if (proComm > 0) {
         items.push({
           id: `payment-${p.id}-commission`,
           kind: "PAYMENT",
           refId: p.id,
           date: p.createdAt,
           title: `Platform Commission · ${p.jobTitle || "Direct Milestone Project"}`,
-          categoryOrRef: "Platform Commission (10%)",
+          categoryOrRef: "Platform Commission",
           milestoneInfo: p.milestoneTitle
             ? `Commission: ${p.milestoneTitle}`
-            : "Platform Commission (10%)",
+            : "Platform Commission",
           remainingAmount: null,
           clientName,
           clientEmail: p.client?.email,
           proName,
           proEmail: p.professional?.email,
-          clientPaid: clientFee,
+          clientPaid: null,
           baseAmount: null,
-          adminNet,
+          adminNet: proComm,
           proPayout: null,
           status: p.status,
           provider: p.provider,
@@ -2115,11 +2110,9 @@ function TransactionDrawer({
   );
 
   const baseAmount = payment.baseAmount;
-  const clientFee = payment.clientFeeAmount || Math.ceil(baseAmount * 0.1);
-  const proComm = payment.commissionAmount || Math.ceil(baseAmount * 0.1);
-  const totalCharged = payment.amount;
-  const proPayout = payment.professionalPayoutAmount || Math.max(0, baseAmount - proComm);
-  const adminNet = payment.adminNetAmount || clientFee + proComm;
+  const proComm = payment.commissionAmount ?? (payment.adminNetAmount ?? 0);
+  const totalCharged = payment.baseAmount || payment.amount;
+  const proPayout = payment.professionalPayoutAmount ?? Math.max(0, baseAmount - proComm);
 
   const isMilestoneInValidity = Boolean(
     payment.milestoneValidityDays &&
@@ -2180,36 +2173,36 @@ function TransactionDrawer({
                 <span>Milestone Base Agreed:</span>
                 <span className="font-semibold text-slate-900">{formatMoney(baseAmount)}</span>
               </div>
-              <div className="flex justify-between text-emerald-700 font-medium">
-                <span>(+) Client Convenience Fee:</span>
-                <span>+{formatMoney(clientFee)}</span>
-              </div>
               <div className="border-t border-indigo-200/60 pt-2 flex justify-between font-bold text-slate-900">
                 <span>Total Client Paid:</span>
                 <span className="text-sm text-indigo-950">{formatMoney(totalCharged)}</span>
               </div>
-              <div className="flex justify-between text-rose-600 font-medium">
-                <span>(-) Pro Commission Deducted:</span>
-                <span>-{formatMoney(proComm)}</span>
-              </div>
+              {proComm > 0 && (
+                <div className="flex justify-between text-rose-600 font-medium">
+                  <span>(-) Pro Commission Deducted:</span>
+                  <span>-{formatMoney(proComm)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-slate-800 font-semibold">
                 <span>Net Disbursed to Professional:</span>
                 <span>{formatMoney(proPayout)}</span>
               </div>
             </div>
 
-            {/* Admin Net Highlight */}
-            <div className="rounded-xl border border-emerald-300 bg-emerald-100/70 p-3 flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-900">
-                  Platform Net Profit
-                </p>
-                <p className="text-[11px] text-emerald-800 mt-0.5">
-                  Retained platform cash earnings
-                </p>
+            {/* Admin Commission Highlight: only shown when commission is on */}
+            {proComm > 0 && (
+              <div className="rounded-xl border border-emerald-300 bg-emerald-100/70 p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-900">
+                    Platform Commission
+                  </p>
+                  <p className="text-[11px] text-emerald-800 mt-0.5">
+                    Retained marketplace commission
+                  </p>
+                </div>
+                <p className="text-xl font-black text-emerald-800">+{formatMoney(proComm)}</p>
               </div>
-              <p className="text-xl font-black text-emerald-800">+{formatMoney(adminNet)}</p>
-            </div>
+            )}
           </div>
 
           {/* 2. Project & Milestone Context */}

@@ -253,7 +253,7 @@ function UserGroup({
                     }}
                     variant="outline"
                     className="border-amber-200 bg-amber-50/70 text-amber-800 hover:bg-amber-100 hover:text-amber-900 shadow-2xs text-xs font-semibold"
-                    title={`Support View: Inspect portal as ${user.firstName}`}
+                    title={`Support View: Inspect portal as ${capitalizeWords(user.firstName)}`}
                   >
                     <LogIn className="mr-1.5 h-3.5 w-3.5 text-amber-700" />
                     View as User
@@ -651,7 +651,7 @@ export default function AdminUsersPage() {
                 : `${confirmAction.user.isActive ? "Disable" : "Enable"} account?`}
             </h2>
             <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-              {confirmAction.user.firstName} {confirmAction.user.lastName}{" "}
+              {capitalizeWords(`${confirmAction.user.firstName} ${confirmAction.user.lastName}`)}{" "}
               <span
                 className={`rounded-full px-2 py-0.5 text-xs font-semibold border ${
                   confirmAction.user.role === "PROFESSIONAL"

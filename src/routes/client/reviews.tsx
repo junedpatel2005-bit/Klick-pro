@@ -30,6 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { capitalizeWords } from "@/lib/utils";
 
 export type ReviewItem = {
   id: number;
@@ -679,13 +680,13 @@ export default function ClientReviews() {
                       )}
                       <div>
                         <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-foreground">{displayName}</h3>
+                          <h3 className="font-semibold text-foreground">{capitalizeWords(displayName)}</h3>
                           <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                             {activeTab === "received" ? "Verified Professional" : "Reviewed Pro"}
                           </span>
                         </div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                          {category && <span>{category}</span>}
+                          {category && <span>{capitalizeWords(category)}</span>}
                           {category && <span>·</span>}
                           <span className="inline-flex items-center gap-1">
                             <Calendar className="h-3 w-3" />

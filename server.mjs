@@ -20,7 +20,7 @@ if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
 }
 if (!process.env.DATABASE_URL) {
   console.warn(
-    "[servio] DATABASE_URL is not set - realtime connections will skip the session revocation check.",
+    "[klick-pro] DATABASE_URL is not set - realtime connections will skip the session revocation check.",
   );
 }
 

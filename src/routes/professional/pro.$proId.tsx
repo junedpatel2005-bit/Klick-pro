@@ -30,6 +30,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { PublicProfessionalProfile } from "@/lib/types/marketplace";
 import { MAX_HIRE_REQUEST_BUDGET } from "@/lib/constants/hiring";
+import { capitalizeWords, capitalizeFirst } from "@/lib/utils";
 
 type ClientJob = {
   id: number;
@@ -751,10 +752,10 @@ function ProProfileContent() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-foreground">
-                            {review.reviewerName}
+                            {capitalizeWords(review.reviewerName)}
                           </p>
                           {review.projectTitle && (
-                            <p className="text-xs text-muted-foreground">{review.projectTitle}</p>
+                            <p className="text-xs text-muted-foreground">{capitalizeFirst(review.projectTitle)}</p>
                           )}
                         </div>
                       </div>

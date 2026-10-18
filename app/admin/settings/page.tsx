@@ -311,7 +311,7 @@ export default function AdminSettingsPage() {
                     Turn Platform Commission On / Off
                   </Label>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    When turned ON, platform commission is deducted from milestone payouts. When turned OFF, zero commission is cut (100% payout to professional, 0% platform fee to client).
+                    When turned ON, platform commission is deducted from milestone payouts. When turned OFF, zero commission is cut (100% payout to professional).
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

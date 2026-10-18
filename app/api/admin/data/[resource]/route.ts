@@ -765,11 +765,10 @@ export async function GET(
           item.paymentId &&
           relPayment &&
           !commissionPaymentIds.has(item.paymentId) &&
-          (relPayment.clientFeeAmount > 0 || relPayment.commissionAmount > 0)
+          relPayment.commissionAmount > 0
         ) {
-          const base = relPayment.baseAmount || Math.round(item.amount / 1.1);
-          const fee =
-            relPayment.clientFeeAmount || relPayment.commissionAmount || item.amount - base;
+          const base = relPayment.baseAmount || item.amount;
+          const fee = relPayment.commissionAmount;
 
           // Entry 1: Milestone receipt
           platformWalletTransactions.push({
@@ -900,10 +899,8 @@ export async function GET(
           (m) => m.status !== "APPROVED",
         ).length;
 
-        const clientFee = p.clientFeeAmount || Math.ceil(p.baseAmount * 0.1);
-        const proCommission = p.commissionAmount || Math.ceil(p.baseAmount * 0.1);
-        const adminNet = p.adminNetAmount || clientFee + proCommission;
-        const proPayout = p.professionalPayoutAmount || Math.max(0, p.baseAmount - proCommission);
+        const proCommission = p.commissionAmount ?? (p.adminNetAmount ?? 0);
+        const proPayout = p.professionalPayoutAmount ?? Math.max(0, p.baseAmount - proCommission);
 
         return {
           ...p,
@@ -924,12 +921,12 @@ export async function GET(
           milestoneReleaseAt: p.milestone?.releaseAt ? p.milestone.releaseAt.toISOString() : null,
           milestoneAutoReleaseStatus: p.milestone?.autoReleaseStatus ?? null,
           financials: {
-            grossClientAmount: p.amount,
+            grossClientAmount: p.baseAmount || p.amount,
             baseAmount: p.baseAmount,
-            clientFeeAmount: clientFee,
+            clientFeeAmount: 0,
             commissionAmount: proCommission,
             professionalPayoutAmount: proPayout,
-            adminNetAmount: adminNet,
+            adminNetAmount: proCommission,
           },
         };
       });

@@ -486,7 +486,7 @@ function UsersReport() {
               render: (user) => (
                 <div className="flex items-center gap-1.5 whitespace-nowrap text-xs">
                   <span className="font-semibold text-slate-900 dark:text-white">
-                    {user.firstName} {user.lastName}
+                    {capitalizeWords(`${user.firstName} ${user.lastName}`)}
                   </span>
                   {user.username && (
                     <span className="text-[11px] text-indigo-500 font-mono">@{user.username}</span>
@@ -908,7 +908,7 @@ function JobsReport() {
               header: "Posted By",
               render: (job) => (
                 <span className="text-sm text-slate-600 font-medium">
-                  {job.user ? `${job.user.firstName} ${job.user.lastName}` : "Client"}
+                  {job.user ? capitalizeWords(`${job.user.firstName} ${job.user.lastName}`) : "Client"}
                 </span>
               ),
             },

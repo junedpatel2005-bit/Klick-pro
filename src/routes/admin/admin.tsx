@@ -10,6 +10,7 @@ import {
   UserPlus,
   UsersRound,
 } from "lucide-react";
+import { capitalizeWords, capitalizeFirst } from "@/lib/utils";
 
 type Data = {
   clients: number;
@@ -263,11 +264,11 @@ export default function Admin() {
                   </div>
                   <div>
                     <p className="font-semibold text-sm text-slate-900">
-                      {user.firstName} {user.lastName}
+                      {capitalizeWords(`${user.firstName} ${user.lastName}`)}
                     </p>
                     <p className="text-xs text-slate-500">
                       {user.email} ·{" "}
-                      <span className="font-medium text-indigo-600">{user.role}</span>
+                      <span className="font-medium text-indigo-600">{capitalizeWords(user.role)}</span>
                     </p>
                   </div>
                 </div>
@@ -299,10 +300,10 @@ export default function Admin() {
               <div key={job.id} className="flex items-center justify-between gap-3 py-3.5">
                 <div>
                   <p className="font-semibold text-sm text-slate-900">
-                    {job.title ?? `Job #${job.id}`}
+                    {capitalizeFirst(job.title ?? `Job #${job.id}`)}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {job.category ?? "General"} · {job.user.firstName} {job.user.lastName}
+                    {capitalizeWords(job.category ?? "General")} · {capitalizeWords(`${job.user.firstName} ${job.user.lastName}`)}
                   </p>
                 </div>
                 <span className="text-xs font-medium text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-200">

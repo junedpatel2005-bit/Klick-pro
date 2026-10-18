@@ -26,7 +26,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatReadableLabel } from "@/lib/utils";
+import { formatReadableLabel, capitalizeWords } from "@/lib/utils";
 
 type UserDetail = {
   id: number;
@@ -276,7 +276,7 @@ export default function AdminUserDetailPage() {
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
                 <h1 className="font-display text-2xl font-bold text-slate-900">
-                  {user.firstName} {user.lastName}
+                  {capitalizeWords(`${user.firstName} ${user.lastName}`)}
                 </h1>
                 <span
                   className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border ${
@@ -753,7 +753,7 @@ export default function AdminUserDetailPage() {
           <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <h2 className="font-display text-lg font-bold text-slate-900">Delete Account?</h2>
             <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-              Are you sure you want to delete {user.firstName} {user.lastName}? This action cannot
+              Are you sure you want to delete {capitalizeWords(`${user.firstName} ${user.lastName}`)}? This action cannot
               be undone and will remove all their account records.
             </p>
             <div className="mt-6 flex justify-end gap-3">

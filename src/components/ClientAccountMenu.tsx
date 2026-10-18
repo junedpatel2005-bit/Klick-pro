@@ -16,6 +16,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { ChevronDown, LogOut, MapPin, User, Briefcase, LayoutDashboard } from "lucide-react";
+import { capitalizeWords } from "@/lib/utils";
 
 export type AccountUser = {
   id?: string | number;
@@ -114,15 +115,15 @@ export function ClientAccountMenu({ initialUser }: { initialUser?: AccountUser |
             )}
           </Avatar>
           <div className="hidden text-left sm:block">
-            <p className="text-sm font-medium text-foreground">{`${user.firstName} ${user.lastName}`}</p>
-            <p className="text-xs text-muted-foreground">{user.role.toLowerCase()}</p>
+            <p className="text-sm font-medium text-foreground">{capitalizeWords(`${user.firstName} ${user.lastName}`)}</p>
+            <p className="text-xs text-muted-foreground">{capitalizeWords(user.role)}</p>
           </div>
           <ChevronDown className="h-4 w-4 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="bottom" align="end" className="w-64">
         <div className="space-y-1 px-3 py-2">
-          <p className="text-sm font-semibold">{`${user.firstName} ${user.lastName}`}</p>
+          <p className="text-sm font-semibold">{capitalizeWords(`${user.firstName} ${user.lastName}`)}</p>
           <p className="text-xs text-muted-foreground">{user.email}</p>
         </div>
         <DropdownMenuSeparator />

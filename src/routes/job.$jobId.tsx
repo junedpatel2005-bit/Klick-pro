@@ -1404,11 +1404,11 @@ export default function JobDetails({
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-foreground">
-                            {review.reviewerName}
+                            {capitalizeWords(review.reviewerName)}
                           </p>
                           {review.reviewerCategory && (
                             <p className="text-xs text-muted-foreground">
-                              {review.reviewerCategory}
+                              {capitalizeWords(review.reviewerCategory)}
                             </p>
                           )}
                         </div>
