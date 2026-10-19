@@ -767,39 +767,47 @@ export async function POST(request: NextRequest) {
       );
     }
     if (input.action === "submit-milestone") {
-      let milestone = await db.projectMilestone.findFirst({
-        where: {
-          id: input.milestoneId,
-          trackingId: project.id,
-          status: { in: ["IN_PROGRESS", "REVISION_REQUESTED"] },
-        },
+      const existingMilestone = await db.projectMilestone.findFirst({
+        where: { id: input.milestoneId, trackingId: project.id },
       });
-      if (!milestone) {
-        const upcomingCandidate = await db.projectMilestone.findFirst({
+      if (!existingMilestone) {
+        return NextResponse.json({ error: "Milestone not found." }, { status: 404 });
+      }
+      if (existingMilestone.status === "AWAITING_CLIENT_REVIEW") {
+        return NextResponse.json(
+          {
+            error:
+              "This milestone deliverable has already been submitted and is awaiting client review & payment.",
+          },
+          { status: 409 },
+        );
+      }
+      if (existingMilestone.status === "APPROVED" || existingMilestone.status === "COMPLETED") {
+        return NextResponse.json(
+          { error: "This milestone has already been approved." },
+          { status: 409 },
+        );
+      }
+      let milestone: typeof existingMilestone | null = null;
+      if (["IN_PROGRESS", "REVISION_REQUESTED"].includes(existingMilestone.status)) {
+        milestone = existingMilestone;
+      } else {
+        const priorUnapproved = await db.projectMilestone.count({
           where: {
-            id: input.milestoneId,
             trackingId: project.id,
+            id: { lt: existingMilestone.id },
             status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
           },
         });
-        if (upcomingCandidate) {
-          const priorUnapproved = await db.projectMilestone.count({
-            where: {
-              trackingId: project.id,
-              id: { lt: upcomingCandidate.id },
-              status: { notIn: ["APPROVED", "COMPLETED", "CANCELLED"] },
-            },
+        if (priorUnapproved === 0) {
+          milestone = await db.projectMilestone.update({
+            where: { id: existingMilestone.id },
+            data: { status: "IN_PROGRESS" },
           });
-          if (priorUnapproved === 0) {
-            milestone = await db.projectMilestone.update({
-              where: { id: upcomingCandidate.id },
-              data: { status: "IN_PROGRESS" },
-            });
-            await db.projectTracking.update({
-              where: { id: project.id },
-              data: { status: "IN_PROGRESS", currentStage: upcomingCandidate.title },
-            });
-          }
+          await db.projectTracking.update({
+            where: { id: project.id },
+            data: { status: "IN_PROGRESS", currentStage: existingMilestone.title },
+          });
         }
       }
       if (!milestone)

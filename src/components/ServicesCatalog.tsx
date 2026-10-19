@@ -797,7 +797,7 @@ export function ServicesCatalog({ data }: { data: CompleteCategoryHierarchy }) {
                           className="inline-flex items-center justify-center gap-1 rounded-xl bg-indigo-50 border border-indigo-200 px-3 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition shadow-2xs"
                         >
                           <Users className="h-3.5 w-3.5" />
-                          <span>Find Pros</span>
+                          <span>Find Professionals</span>
                         </Link>
                         <Link
                           href={`/client/jobs/new?category=${encodeURIComponent(sub.name)}`}

@@ -24,18 +24,35 @@ import {
   Briefcase,
   SlidersHorizontal,
   RotateCcw,
+  Landmark,
+  ShieldCheck,
+  Scale,
+  Receipt,
+  Users,
+  Percent,
+  ArrowUpRight,
+  CreditCard,
+  AlertTriangle,
+  FileSpreadsheet,
 } from "lucide-react";
 import { ExportMenu } from "@/components/reports/ExportMenu";
-import { SelectableReportTable } from "@/components/reports/SelectableReportTable";
+import { SelectableReportTable, type ReportTableColumn } from "@/components/reports/SelectableReportTable";
 import { useRowSelection } from "@/hooks/use-row-selection";
 import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
 import {
-  DateRangeFilter,
-  type DatePreset,
-  isWithinCustomDateRange,
-} from "@/components/reports/DateRangeFilter";
+  ReportingPeriodSelector,
+  getDefaultPeriodSelection,
+} from "@/components/reports/ReportingPeriodSelector";
+import {
+  type PeriodSelection,
+  isDateWithinPeriod,
+  formatINR,
+} from "@/lib/reports/financial-periods";
 import { formatReadableLabel, capitalizeWords, capitalizeFirst } from "@/lib/utils";
 
+// ---------------------------------------------------------------------------
+// Type Definitions
+// ---------------------------------------------------------------------------
 type RunningProject = {
   id: number;
   jobId?: number;
@@ -57,18 +74,46 @@ type EarningsItem = {
   description: string;
   createdAt: string;
   trackingId?: number;
+  invoicePaymentId?: number | null;
   invoiceNumber?: string;
   projectTitle?: string;
   clientName?: string;
   milestoneTitle?: string;
   paymentMethod?: string;
+  razorpayPaymentId?: string | null;
   baseAmount?: number;
   feeAmount?: number;
   netAmount?: number;
 };
 
-type DateFilter = "all" | "this_month" | "last_month" | "last_90_days" | "this_year";
+type WithdrawalRecord = {
+  id: number;
+  amount: number;
+  currency?: string;
+  status: string;
+  payoutRail?: string;
+  destinationLabel?: string;
+  referenceNumber?: string;
+  failureReason?: string;
+  createdAt: string;
+  updatedAt?: string;
+};
 
+type WalletData = {
+  wallet?: { balance: number; currency: string; pendingBalance: number };
+  available?: number;
+  reserved?: number;
+  grossTotal?: number;
+  earned?: number;
+  commission?: number;
+  withdrawals?: WithdrawalRecord[];
+};
+
+type ProfessionalTab = "summary" | "projects" | "settlements" | "concentration";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 function displayStatus(status: string) {
   return status
     .replaceAll("_", " ")
@@ -77,32 +122,37 @@ function displayStatus(status: string) {
 }
 
 function statusBadgeClass(status: string) {
-  const normalized = status.toUpperCase();
+  const normalized = (status || "").toUpperCase();
   if (
     normalized.includes("COMPLETED") ||
     normalized.includes("PAID") ||
-    normalized.includes("SETTLED")
+    normalized.includes("SETTLED") ||
+    normalized === "APPROVED"
   ) {
-    return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
+    return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
   }
   if (
     normalized.includes("RUNNING") ||
     normalized.includes("IN_PROGRESS") ||
     normalized.includes("FUNDED")
   ) {
-    return "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20";
+    return "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20";
   }
-  if (normalized.includes("PENDING") || normalized.includes("AWAITING")) {
-    return "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20";
+  if (
+    normalized.includes("PENDING") ||
+    normalized.includes("AWAITING") ||
+    normalized.includes("PROCESSING")
+  ) {
+    return "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20";
   }
-  return "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20";
-}
-
-function money(project: RunningProject) {
-  if (project.budget == null) return "Amount pending";
-  return project.timingType === "HOURLY"
-    ? `₹${project.budget.toLocaleString()}/hr`
-    : `₹${project.budget.toLocaleString()}`;
+  if (
+    normalized.includes("FAILED") ||
+    normalized.includes("REJECTED") ||
+    normalized.includes("CANCELLED")
+  ) {
+    return "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20";
+  }
+  return "bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-500/20";
 }
 
 function formatDateSafely(
@@ -118,103 +168,78 @@ function formatDateSafely(
   );
 }
 
-function isWithinDateRange(dateString: string | null | undefined, filter: DateFilter): boolean {
-  if (filter === "all" || !dateString) return true;
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return false;
-  const now = new Date();
-  if (filter === "this_month") {
-    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-  }
-  if (filter === "last_month") {
-    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    return (
-      date.getMonth() === prevMonth.getMonth() && date.getFullYear() === prevMonth.getFullYear()
-    );
-  }
-  if (filter === "last_90_days") {
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(now.getDate() - 90);
-    return date >= ninetyDaysAgo;
-  }
-  if (filter === "this_year") {
-    return date.getFullYear() === now.getFullYear();
-  }
-  return true;
-}
+// ===========================================================================
+// MAIN COMPONENT: PROFESSIONAL EARNINGS INTELLIGENCE WORKSPACE
+// ===========================================================================
+export default function ProfessionalReports() {
+  const [tab, setTab] = useState<ProfessionalTab>("summary");
+  const [period, setPeriod] = useState<PeriodSelection>(getDefaultPeriodSelection);
 
-function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
-  const csvContent = [
-    headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(","),
-    ...rows.map((row) =>
-      row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","),
-    ),
-  ].join("\r\n");
-  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.setAttribute("href", url);
-  link.setAttribute("download", `${filename}-${new Date().toISOString().slice(0, 10)}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
-function ProjectsReport() {
   const [projects, setProjects] = useState<RunningProject[]>([]);
+  const [earnings, setEarnings] = useState<EarningsItem[]>([]);
+  const [walletData, setWalletData] = useState<WalletData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Filters for sub-views
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [contractTypeFilter, setContractTypeFilter] = useState("ALL");
-  const [datePreset, setDatePreset] = useState<DatePreset>("all");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
   const [viewMode, setViewMode] = useState<"boxes" | "table">("boxes");
 
+  // Load all professional report datasets
   const loadData = () => {
     setLoading(true);
-    fetch("/api/v1/portal/professional-jobs", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : Promise.reject()))
-      .then(
-        (data: {
-          activeProjects?: RunningProject[];
-          completedProjects?: Array<{
-            id: number;
-            jobId: number;
-            jobTitle: string | null;
-            clientName: string | null;
-            completedAt: string;
-            amount: number;
-          }>;
-          closedProjects?: Array<{
-            id: number;
-            jobId: number;
-            jobTitle: string | null;
-            clientName: string | null;
-            updatedAt?: string;
-          }>;
-        }) => {
-          const active: RunningProject[] = Array.isArray(data.activeProjects)
-            ? data.activeProjects
+    setError("");
+
+    Promise.all([
+      fetch("/api/v1/portal/professional-jobs", { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null),
+      fetch("/api/v1/portal/earnings", { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null),
+      fetch("/api/wallet", { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null),
+    ])
+      .then(([jobsData, earningsData, walletRes]) => {
+        if (jobsData) {
+          const active: RunningProject[] = Array.isArray(jobsData.activeProjects)
+            ? jobsData.activeProjects
             : [];
-          const completed: RunningProject[] = Array.isArray(data.completedProjects)
-            ? data.completedProjects.map((cp) => ({
+          const completed: RunningProject[] = Array.isArray(jobsData.completedProjects)
+            ? (
+                jobsData.completedProjects as Array<{
+                  id: number;
+                  jobId?: number;
+                  jobTitle?: string | null;
+                  clientName?: string | null;
+                  completedAt?: string;
+                  amount?: number;
+                }>
+              ).map((cp) => ({
                 id: cp.id,
                 jobId: cp.jobId,
                 jobTitle: cp.jobTitle ?? `Job #${cp.jobId}`,
                 clientName: cp.clientName ?? "Client",
                 status: "COMPLETED",
-                acceptedAt: cp.completedAt,
+                acceptedAt: cp.completedAt || new Date().toISOString(),
                 deadline: null,
-                budget: cp.amount,
+                budget: cp.amount ?? null,
                 timingType: "FIXED",
                 progress: 100,
               }))
             : [];
-          const closed: RunningProject[] = Array.isArray(data.closedProjects)
-            ? data.closedProjects.map((cl) => ({
+          const closed: RunningProject[] = Array.isArray(jobsData.closedProjects)
+            ? (
+                jobsData.closedProjects as Array<{
+                  id: number;
+                  jobId?: number;
+                  jobTitle?: string | null;
+                  clientName?: string | null;
+                  updatedAt?: string;
+                }>
+              ).map((cl) => ({
                 id: cl.id,
                 jobId: cl.jobId,
                 jobTitle: cl.jobTitle ?? `Job #${cl.jobId}`,
@@ -228,48 +253,122 @@ function ProjectsReport() {
               }))
             : [];
           setProjects([...active, ...completed, ...closed]);
-        },
-      )
-      .catch(() => setError("Your project data could not be loaded. Please try again."))
-      .finally(() => setLoading(false));
+        }
+
+        if (Array.isArray(earningsData)) {
+          setEarnings(earningsData);
+        }
+
+        if (walletRes && typeof walletRes === "object") {
+          setWalletData(walletRes);
+        }
+      })
+      .catch(() => {
+        setError("Unable to load earnings reports. Please check connection and refresh.");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   };
 
   useEffect(() => {
     loadData();
   }, []);
 
-  useRealtimeRefresh(["servio:project-update", "servio:proposal", "servio:notification"], loadData);
+  useRealtimeRefresh(
+    ["servio:project-update", "servio:proposal", "servio:notification"],
+    loadData,
+  );
 
-  const statusCounts = useMemo(() => {
-    const counts = { ALL: projects.length, IN_PROGRESS: 0, COMPLETED: 0, CLOSED: 0 };
-    projects.forEach((p) => {
-      const s = p.status.toUpperCase();
-      if (s === "RUNNING" || s === "IN_PROGRESS" || s === "ACTIVE") counts.IN_PROGRESS++;
-      else if (s === "COMPLETED") counts.COMPLETED++;
-      else if (s === "CLOSED") counts.CLOSED++;
+  // Filter items by Financial Reporting Period
+  const periodFilteredEarnings = useMemo(() => {
+    return earnings.filter((item) => isDateWithinPeriod(item.createdAt, period));
+  }, [earnings, period]);
+
+  const periodFilteredProjects = useMemo(() => {
+    return projects.filter((project) =>
+      isDateWithinPeriod(project.acceptedAt || project.deadline, period),
+    );
+  }, [projects, period]);
+
+  const periodFilteredWithdrawals = useMemo(() => {
+    const list = walletData?.withdrawals || [];
+    return list.filter((w) => isDateWithinPeriod(w.createdAt, period));
+  }, [walletData?.withdrawals, period]);
+
+  // Executive KPI Calculations
+  const metrics = useMemo(() => {
+    // Contractual gross value earned in this period
+    const grossEarnings = periodFilteredEarnings.reduce(
+      (sum, item) => sum + (Number(item.baseAmount ?? item.amount) || 0),
+      0,
+    );
+
+    // Platform commission deducted in this period
+    const commissionDeducted = periodFilteredEarnings.reduce(
+      (sum, item) => sum + (Number(item.feeAmount) || 0),
+      0,
+    );
+
+    // Section 194-O statutory TDS (1% TDS on gross digital e-commerce participant payouts)
+    const tdsDeducted = Math.round(grossEarnings * 0.01);
+
+    // Net credited = gross - commission - tds
+    const netEarningsCredited = periodFilteredEarnings.reduce(
+      (sum, item) => sum + (Number(item.netAmount ?? item.amount) || 0),
+      0,
+    );
+
+    // Total settled disbursements
+    const settledWithdrawals = periodFilteredWithdrawals
+      .filter((w) => w.status.toUpperCase() === "COMPLETED" || w.status.toUpperCase() === "SETTLED")
+      .reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
+
+    const walletAvailable = walletData?.available ?? walletData?.wallet?.balance ?? 0;
+
+    return {
+      grossEarnings,
+      commissionDeducted,
+      tdsDeducted,
+      netEarningsCredited,
+      settledWithdrawals,
+      walletAvailable,
+    };
+  }, [periodFilteredEarnings, periodFilteredWithdrawals, walletData]);
+
+  // Search and status filtered earnings
+  const displayEarnings = useMemo(() => {
+    return periodFilteredEarnings.filter((item) => {
+      const q = search.trim().toLowerCase();
+      const matchesSearch =
+        q === "" ||
+        (item.description && item.description.toLowerCase().includes(q)) ||
+        (item.projectTitle && item.projectTitle.toLowerCase().includes(q)) ||
+        (item.clientName && item.clientName.toLowerCase().includes(q)) ||
+        (item.invoiceNumber && item.invoiceNumber.toLowerCase().includes(q)) ||
+        String(item.id).includes(q);
+
+      const s = item.status.toUpperCase();
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        (statusFilter === "PAID" && (s === "PAID" || s === "COMPLETED" || s === "SETTLED")) ||
+        (statusFilter === "PENDING" && (s === "PENDING" || s === "AWAITING_ADMIN_APPROVAL"));
+
+      return matchesSearch && matchesStatus;
     });
-    return counts;
-  }, [projects]);
+  }, [periodFilteredEarnings, search, statusFilter]);
 
-  const clearAllFilters = () => {
-    setSearch("");
-    setStatusFilter("ALL");
-    setContractTypeFilter("ALL");
-    setDatePreset("all");
-    setStartDate("");
-    setEndDate("");
-  };
+  // Multi-select for earnings
+  const {
+    selectedIds: selectedEarningsIds,
+    toggle: toggleEarnings,
+    allVisibleSelected: allEarningsSelected,
+    toggleAllVisible: toggleAllEarnings,
+  } = useRowSelection(displayEarnings);
 
-  const hasActiveFilters =
-    search.trim() !== "" ||
-    statusFilter !== "ALL" ||
-    contractTypeFilter !== "ALL" ||
-    datePreset !== "all" ||
-    startDate !== "" ||
-    endDate !== "";
-
-  const filteredProjects = useMemo(() => {
-    return projects.filter((project) => {
+  // Search and status filtered projects
+  const displayProjects = useMemo(() => {
+    return periodFilteredProjects.filter((project) => {
       const q = search.trim().toLowerCase();
       const matchesSearch =
         q === "" ||
@@ -284,447 +383,621 @@ function ProjectsReport() {
           (s === "RUNNING" || s === "IN_PROGRESS" || s === "ACTIVE")) ||
         s === statusFilter.toUpperCase();
 
-      const matchesContract =
-        contractTypeFilter === "ALL" || project.timingType === contractTypeFilter;
-
-      const matchesDate = isWithinCustomDateRange(
-        project.acceptedAt || project.deadline,
-        datePreset,
-        startDate,
-        endDate,
-      );
-
-      return matchesSearch && matchesStatus && matchesContract && matchesDate;
+      return matchesSearch && matchesStatus;
     });
-  }, [projects, search, statusFilter, contractTypeFilter, datePreset, startDate, endDate]);
+  }, [periodFilteredProjects, search, statusFilter]);
 
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
-    useRowSelection(filteredProjects);
-  const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
+  // Multi-select for projects
+  const {
+    selectedIds: selectedProjectIds,
+    toggle: toggleProject,
+    allVisibleSelected: allProjectsSelected,
+    toggleAllVisible: toggleAllProjects,
+  } = useRowSelection(displayProjects);
 
-  // Financial calculations
-  const totalContractValue = filteredProjects.reduce((sum, p) => sum + (Number(p.budget) || 0), 0);
-  const activeCount = filteredProjects.filter(
-    (p) =>
-      p.status.toUpperCase().includes("RUNNING") || p.status.toUpperCase().includes("PROGRESS"),
-  ).length;
-  const avgProgress =
-    filteredProjects.length > 0
-      ? Math.round(
-          filteredProjects.reduce((sum, p) => sum + (p.progress || 0), 0) / filteredProjects.length,
-        )
-      : 0;
+  // Client Concentration aggregation
+  const clientConcentration = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        name: string;
+        grossEarned: number;
+        netEarned: number;
+        activeCount: number;
+        completedCount: number;
+        lastDate: string;
+      }
+    >();
 
-  const handleExportCsv = (scope?: "all" | "selected") => {
-    const isSelected = scope === "selected" || (scope === undefined && selectedList.length > 0);
-    const rowsToExport = isSelected
-      ? filteredProjects.filter((p) => selectedIds.has(p.id))
-      : filteredProjects;
+    for (const item of periodFilteredEarnings) {
+      const rawName = item.clientName || "Direct Client";
+      const name = capitalizeWords(rawName);
+      const curr = map.get(name) || {
+        name,
+        grossEarned: 0,
+        netEarned: 0,
+        activeCount: 0,
+        completedCount: 0,
+        lastDate: item.createdAt,
+      };
 
-    if (isSelected && rowsToExport.length === 1 && rowsToExport[0]) {
-      window.open(
-        `/api/v1/portal/jobs/${rowsToExport[0].jobId || rowsToExport[0].id}/export?format=csv`,
-        "_blank",
-      );
-      return;
+      curr.grossEarned += Number(item.baseAmount ?? item.amount) || 0;
+      curr.netEarned += Number(item.netAmount ?? item.amount) || 0;
+      if (new Date(item.createdAt).getTime() > new Date(curr.lastDate).getTime()) {
+        curr.lastDate = item.createdAt;
+      }
+      map.set(name, curr);
     }
 
-    downloadCsvFile({
-      filename: "klick-pro-professional-projects",
-      title: "Professional Workspace · Projects & Engagements Statement",
-      metadata: [
-        {
-          label: "Scope",
-          value: isSelected
-            ? `${rowsToExport.length} Selected Projects`
-            : `All Filtered (${rowsToExport.length})`,
-        },
-        {
-          label: "Total Contract Value",
-          value: `INR ${totalContractValue.toLocaleString("en-IN")}`,
-        },
-        { label: "Active In Progress", value: activeCount },
-        { label: "Average Progress", value: `${avgProgress}%` },
-        { label: "Active Status Filter", value: statusFilter },
-        { label: "Active Date Range", value: datePreset },
-      ],
-      headers: [
-        "Project ID",
-        "Job Title",
-        "Client Name",
-        "Status",
-        "Progress %",
-        "Timing Type",
-        "Agreed Budget",
-        "Target Deadline",
-        "Accepted Date",
-      ],
-      rows: rowsToExport.map((p) => [
-        `#PRJ-${p.id}`,
-        p.jobTitle ?? "Untitled project",
-        p.clientName ?? "Client",
-        displayStatus(p.status),
-        `${p.progress}%`,
-        p.timingType === "HOURLY" ? "Hourly" : "Fixed Price",
-        money(p),
-        p.deadline ? formatDateSafely(p.deadline) : "Flexible",
-        p.acceptedAt ? formatDateSafely(p.acceptedAt) : "—",
-      ]),
-    });
-  };
+    for (const p of periodFilteredProjects) {
+      const name = capitalizeWords(p.clientName || "Direct Client");
+      const curr = map.get(name) || {
+        name,
+        grossEarned: 0,
+        netEarned: 0,
+        activeCount: 0,
+        completedCount: 0,
+        lastDate: p.acceptedAt,
+      };
+
+      if (p.status === "COMPLETED") curr.completedCount++;
+      else curr.activeCount++;
+      map.set(name, curr);
+    }
+
+    const totalPeriodGross = metrics.grossEarnings || 1;
+    return Array.from(map.values()).map((c) => ({
+      ...c,
+      sharePercentage: Math.round((c.grossEarned / totalPeriodGross) * 100),
+    })).sort((a, b) => b.grossEarned - a.grossEarned);
+  }, [periodFilteredEarnings, periodFilteredProjects, metrics.grossEarnings]);
 
   return (
-    <div className="space-y-6">
-      {/* 4 Executive Statement KPI Cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Active Projects</span>
+    <div className="space-y-6 pb-12">
+      {/* Executive Header Banner */}
+      <section className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-6 py-8 text-white shadow-xl sm:px-8 sm:py-10">
+        <div className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl" />
+        <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-200 backdrop-blur-md">
+              <FileText className="h-3.5 w-3.5" /> Professional Earnings Intelligence
+            </div>
+            <h1 className="mt-3 font-display text-2xl font-bold tracking-tight sm:text-4xl">
+              Reports & Earnings Statements
+            </h1>
+            <p className="mt-2 text-sm text-slate-300 sm:text-base leading-relaxed">
+              Official audit statements of your milestone billings, platform commissions, Section 194-O
+              statutory TDS deductions, and verified bank/UPI disbursements.
+            </p>
+          </div>
+
+          {/* 4 Role-Specific Tabs Switcher */}
+          <div className="flex flex-wrap gap-1.5 rounded-2xl border border-white/20 bg-black/40 p-1.5 backdrop-blur-md">
+            <button
+              type="button"
+              onClick={() => {
+                setTab("summary");
+                setSearch("");
+                setStatusFilter("ALL");
+              }}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer ${
+                tab === "summary"
+                  ? "bg-white text-slate-950 shadow-sm"
+                  : "text-slate-300 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              <Receipt className="h-4 w-4" />
+              <span>Earnings Statement</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTab("projects");
+                setSearch("");
+                setStatusFilter("ALL");
+              }}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer ${
+                tab === "projects"
+                  ? "bg-white text-slate-950 shadow-sm"
+                  : "text-slate-300 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              <Briefcase className="h-4 w-4" />
+              <span>Project Contracts</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTab("settlements");
+                setSearch("");
+                setStatusFilter("ALL");
+              }}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer ${
+                tab === "settlements"
+                  ? "bg-white text-slate-950 shadow-sm"
+                  : "text-slate-300 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              <Landmark className="h-4 w-4" />
+              <span>Bank & UPI Settlements</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTab("concentration");
+                setSearch("");
+                setStatusFilter("ALL");
+              }}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer ${
+                tab === "concentration"
+                  ? "bg-white text-slate-950 shadow-sm"
+                  : "text-slate-300 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              <Users className="h-4 w-4" />
+              <span>Client Concentration</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Global Financial Reporting Period Selector */}
+      <section className="bg-card border border-border rounded-2xl p-4 shadow-xs">
+        <ReportingPeriodSelector
+          value={period}
+          onChange={setPeriod}
+          availableYears={["FY 2026-27", "FY 2025-26", "FY 2024-25"]}
+        />
+      </section>
+
+      {/* 4 Executive KPI Cards */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Gross Milestone Earnings
+            </span>
+            <CircleDollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <div className="mt-2 text-2xl font-bold font-mono tracking-tight text-foreground">
+            {formatINR(metrics.grossEarnings)}
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Contractual milestone value in {period.label}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Platform Commission
+            </span>
+            <Percent className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+          </div>
+          <div className="mt-2 text-2xl font-bold font-mono tracking-tight text-foreground">
+            {formatINR(metrics.commissionDeducted)}
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Platform service fee retained by Klick-Pro
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Statutory TDS (Sec 194-O)
+            </span>
+            <ShieldCheck className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div className="mt-2 text-2xl font-bold font-mono tracking-tight text-foreground">
+            {formatINR(metrics.tdsDeducted)}
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            1% statutory e-commerce participant withholding
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-xs bg-gradient-to-br from-card to-primary/5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Wallet Available
+            </span>
             <Wallet className="h-4 w-4 text-primary" />
           </div>
-          {loading ? (
-            <div className="mt-2 h-8 w-20 rounded-lg bg-muted animate-pulse" />
-          ) : (
-            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-              {filteredProjects.length}
-            </div>
-          )}
-          <p className="mt-1 text-xs text-muted-foreground">{activeCount} in progress</p>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Contract Value</span>
-            <CircleDollarSign className="h-4 w-4 text-emerald-500" />
+          <div className="mt-2 text-2xl font-bold font-mono tracking-tight text-primary">
+            {formatINR(metrics.walletAvailable)}
           </div>
-          {loading ? (
-            <div className="mt-2 h-8 w-28 rounded-lg bg-muted animate-pulse" />
-          ) : (
-            <div className="mt-2 font-display text-xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 sm:text-2xl truncate">
-              ₹{totalContractValue.toLocaleString()}
-            </div>
-          )}
-          <p className="mt-1 text-xs text-muted-foreground">Committed project revenue</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Net spendable balance ready for instant withdrawal
+          </p>
         </div>
+      </section>
 
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Avg Completion</span>
-            <CheckCircle2 className="h-4 w-4 text-indigo-500" />
-          </div>
-          {loading ? (
-            <div className="mt-2 h-8 w-20 rounded-lg bg-muted animate-pulse" />
-          ) : (
-            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400 sm:text-3xl">
-              {avgProgress}%
-            </div>
-          )}
-          <p className="mt-1 text-xs text-muted-foreground">Milestone delivery rate</p>
-        </div>
+      {/* ===================================================================== */}
+      {/* TAB 1: CONSOLIDATED EARNINGS STATEMENT */}
+      {/* ===================================================================== */}
+      {tab === "summary" && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-border shadow-xs">
+            {/* Search & Status Filter */}
+            <div className="flex flex-1 flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px] max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search by description, project, client, or invoice #"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
 
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Avg Contract</span>
-            <TrendingUp className="h-4 w-4 text-primary" />
-          </div>
-          {loading ? (
-            <div className="mt-2 h-8 w-28 rounded-lg bg-muted animate-pulse" />
-          ) : (
-            <div className="mt-2 font-display text-xl font-bold tracking-tight text-foreground sm:text-2xl truncate">
-              ₹
-              {filteredProjects.length > 0
-                ? Math.round(totalContractValue / filteredProjects.length).toLocaleString()
-                : "0"}
-            </div>
-          )}
-          <p className="mt-1 text-xs text-muted-foreground">Per engagement</p>
-        </div>
-      </div>
-
-      {/* Main Two-Column Layout (Sidebar Filters + Engagements View) */}
-      <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-        {/* Left Column: Sidebar Filters */}
-        <aside className="h-fit rounded-2xl border border-border bg-card p-5 shadow-soft lg:sticky lg:top-24 space-y-5">
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="h-4 w-4 text-primary" />
-              <h2 className="font-semibold text-foreground text-sm">Filters</h2>
-            </div>
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline cursor-pointer"
-              >
-                <RotateCcw className="h-3 w-3" />
-                Clear all
-              </button>
-            )}
-          </div>
-
-          {/* Status Filter Pills */}
-          <div className="space-y-2">
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Engagement Status
-            </label>
-            <div className="flex flex-col gap-1">
-              {[
-                { id: "ALL", label: "All Engagements", count: statusCounts.ALL },
-                { id: "IN_PROGRESS", label: "In Progress", count: statusCounts.IN_PROGRESS },
-                { id: "COMPLETED", label: "Completed", count: statusCounts.COMPLETED },
-                { id: "CLOSED", label: "Closed / Archived", count: statusCounts.CLOSED },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setStatusFilter(item.id)}
-                  className={`flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition cursor-pointer ${
-                    statusFilter === item.id
-                      ? "bg-primary text-primary-foreground shadow-xs font-semibold"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
+              <div className="flex items-center gap-1.5">
+                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-2.5 py-1.5 text-xs rounded-xl border border-border bg-background focus:outline-none"
                 >
-                  <span>{item.label}</span>
-                  <span
-                    className={`rounded-md px-1.5 py-0.5 text-[10px] ${
-                      statusFilter === item.id
-                        ? "bg-white/20 text-white"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {item.count}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
+                  <option value="ALL">All Statuses</option>
+                  <option value="PAID">Settled / Paid</option>
+                  <option value="PENDING">Pending Approval</option>
+                </select>
+              </div>
 
-          {/* Contract Type */}
-          <div className="space-y-2 pt-2 border-t border-border">
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Contract Type
-            </label>
-            <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted/60 p-1 text-xs">
-              {[
-                { id: "ALL", label: "All" },
-                { id: "FIXED", label: "Fixed" },
-                { id: "HOURLY", label: "Hourly" },
-              ].map((type) => (
+              {(search || statusFilter !== "ALL") && (
                 <button
-                  key={type.id}
                   type="button"
-                  onClick={() => setContractTypeFilter(type.id)}
-                  className={`rounded-lg py-1.5 text-center text-xs font-semibold transition cursor-pointer ${
-                    contractTypeFilter === type.id
-                      ? "bg-card text-foreground shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  onClick={() => {
+                    setSearch("");
+                    setStatusFilter("ALL");
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
                 >
-                  {type.label}
+                  <RotateCcw className="h-3 w-3" />
+                  Clear
                 </button>
-              ))}
+              )}
             </div>
-          </div>
 
-          {/* Date Period Filter */}
-          <div className="space-y-2 pt-2 border-t border-border">
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Date Period
-            </label>
-            <DateRangeFilter
-              preset={datePreset}
-              onPresetChange={setDatePreset}
-              startDate={startDate}
-              onStartDateChange={setStartDate}
-              endDate={endDate}
-              onEndDateChange={setEndDate}
+            {/* Export Menu */}
+            <ExportMenu
+              selectedIds={Array.from(selectedEarningsIds)}
+              selectedCount={selectedEarningsIds.size}
+              totalCount={displayEarnings.length}
+              fileBaseName="klick-pro-professional-earnings"
+              onExportCsv={() => {
+                const rowsToExport =
+                  selectedEarningsIds.size > 0
+                    ? displayEarnings.filter((e) => selectedEarningsIds.has(e.id))
+                    : displayEarnings;
+
+                downloadCsvFile({
+                  filename: "professional-earnings-statement",
+                  title: `Klick-Pro Official Professional Earnings Statement (${period.label})`,
+                  metadata: [
+                    { label: "Financial Reporting Period", value: period.label },
+                    { label: "Quarter", value: period.quarter },
+                    { label: "Total Gross Billings", value: formatINR(metrics.grossEarnings) },
+                    { label: "Commission Retained", value: formatINR(metrics.commissionDeducted) },
+                    { label: "TDS Deducted (Sec 194-O)", value: formatINR(metrics.tdsDeducted) },
+                    { label: "Net Credited", value: formatINR(metrics.netEarningsCredited) },
+                  ],
+                  headers: [
+                    "Voucher #",
+                    "Date",
+                    "Milestone / Description",
+                    "Project Title",
+                    "Client Name",
+                    "Gross Amount (INR)",
+                    "Commission (INR)",
+                    "Net Credited (INR)",
+                    "Status",
+                  ],
+                  rows: rowsToExport.map((e) => [
+                    e.invoiceNumber || `#EARN-${e.id}`,
+                    formatDateSafely(e.createdAt),
+                    capitalizeFirst(e.description || e.milestoneTitle || "Milestone Settlement"),
+                    capitalizeWords(e.projectTitle || `Project #${e.trackingId ?? e.id}`),
+                    capitalizeWords(e.clientName || "Direct Client"),
+                    e.baseAmount ?? e.amount,
+                    e.feeAmount ?? 0,
+                    e.netAmount ?? e.amount,
+                    capitalizeWords(e.status),
+                  ]),
+                });
+              }}
             />
           </div>
-        </aside>
 
-        {/* Right Column: Search, Toolbar & Content */}
-        <div className="space-y-4">
-          {/* Controls Bar: Search, View Mode, CSV & PDF Export */}
-          <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between shadow-xs">
-            <div className="relative flex-1 max-w-md">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by job title or client…"
-                className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              />
+          {/* Table */}
+          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+            <SelectableReportTable
+              loading={loading}
+              rows={displayEarnings}
+              emptyMessage="No earnings records match the active period or filter criteria."
+              selectedIds={selectedEarningsIds}
+              onToggle={toggleEarnings}
+              allSelected={allEarningsSelected}
+              onToggleAll={toggleAllEarnings}
+              rowLabel={(item) => item.description || `#EARN-${item.id}`}
+              columns={[
+                {
+                  key: "invoiceNumber",
+                  header: "Voucher / Ref",
+                  render: (item) => (
+                    <span className="font-mono text-xs font-semibold text-muted-foreground bg-muted/60 px-2 py-0.5 rounded">
+                      {item.invoiceNumber || `#EARN-${item.id}`}
+                    </span>
+                  ),
+                },
+                {
+                  key: "description",
+                  header: "Particulars / Milestone",
+                  render: (item) => (
+                    <div className="space-y-0.5">
+                      <div className="font-semibold text-foreground">
+                        {capitalizeFirst(item.description || item.milestoneTitle || "Milestone Settlement")}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {capitalizeWords(item.projectTitle || `Project #${item.trackingId ?? item.id}`)}
+                      </div>
+                    </div>
+                  ),
+                },
+                {
+                  key: "clientName",
+                  header: "Client",
+                  render: (item) => (
+                    <span className="text-xs font-medium text-foreground">
+                      {capitalizeWords(item.clientName || "Direct Client")}
+                    </span>
+                  ),
+                },
+                {
+                  key: "gross",
+                  header: "Gross Amount",
+                  align: "right",
+                  render: (item) => (
+                    <span className="font-mono text-xs font-semibold text-foreground">
+                      {formatINR(Number(item.baseAmount ?? item.amount) || 0)}
+                    </span>
+                  ),
+                },
+                {
+                  key: "commission",
+                  header: "Commission",
+                  align: "right",
+                  render: (item) => (
+                    <span className="font-mono text-xs text-rose-600 dark:text-rose-400">
+                      -{formatINR(Number(item.feeAmount) || 0)}
+                    </span>
+                  ),
+                },
+                {
+                  key: "netAmount",
+                  header: "Net Credited",
+                  align: "right",
+                  render: (item) => (
+                    <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      {formatINR(Number(item.netAmount ?? item.amount) || 0)}
+                    </span>
+                  ),
+                },
+                {
+                  key: "status",
+                  header: "Status",
+                  render: (item) => (
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusBadgeClass(
+                        item.status,
+                      )}`}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                      {displayStatus(item.status)}
+                    </span>
+                  ),
+                },
+                {
+                  key: "createdAt",
+                  header: "Disbursed Date",
+                  align: "right",
+                  render: (item) => (
+                    <span className="text-xs text-muted-foreground">
+                      {formatDateSafely(item.createdAt)}
+                    </span>
+                  ),
+                },
+                {
+                  key: "actions",
+                  header: "Voucher",
+                  align: "right",
+                  render: (item) => (
+                    <a
+                      href={`/api/portal/invoices/${item.invoicePaymentId || item.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                      title="Download official Payout Receipt"
+                    >
+                      <FileDown className="h-3 w-3" />
+                      Receipt
+                    </a>
+                  ),
+                },
+              ]}
+            />
+          </div>
+
+          {/* Statement Reconciliation Strip */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-border bg-muted/30 p-4 text-xs text-muted-foreground">
+            <div>
+              Showing <span className="font-semibold text-foreground">{displayEarnings.length}</span> of{" "}
+              <span className="font-semibold text-foreground">{periodFilteredEarnings.length}</span> records for {period.label}.
+              {selectedEarningsIds.size > 0 && (
+                <span className="ml-2 font-semibold text-primary">
+                  ({selectedEarningsIds.size} selected)
+                </span>
+              )}
             </div>
+            <div className="flex items-center gap-4 font-mono text-xs">
+              <span>
+                Net Settled:{" "}
+                <strong className="text-foreground">{formatINR(metrics.netEarningsCredited)}</strong>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
-            <div className="flex flex-wrap items-center gap-2">
-              {/* View Switcher: Boxes (Grid) vs Table */}
-              <div className="flex items-center rounded-xl border border-border bg-muted/60 p-1">
+      {/* ===================================================================== */}
+      {/* TAB 2: PROJECT & MILESTONE CONTRACTS */}
+      {/* ===================================================================== */}
+      {tab === "projects" && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-border shadow-xs">
+            <div className="flex flex-1 flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px] max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search by project title, client, or PRJ #"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-2.5 py-1.5 text-xs rounded-xl border border-border bg-background focus:outline-none"
+                >
+                  <option value="ALL">All Contracts</option>
+                  <option value="IN_PROGRESS">Active / In Progress</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="CLOSED">Closed</option>
+                </select>
+              </div>
+
+              {/* View Toggle */}
+              <div className="flex items-center border border-border rounded-xl p-0.5 bg-muted/40">
                 <button
                   type="button"
                   onClick={() => setViewMode("boxes")}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
-                    viewMode === "boxes"
-                      ? "bg-card text-foreground shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
+                  className={`p-1.5 rounded-lg transition ${
+                    viewMode === "boxes" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground"
                   }`}
-                  title="Show projects in 2-column boxes"
+                  title="Card View"
                 >
                   <LayoutGrid className="h-3.5 w-3.5" />
-                  <span>Boxes</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode("table")}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
-                    viewMode === "table"
-                      ? "bg-card text-foreground shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
+                  className={`p-1.5 rounded-lg transition ${
+                    viewMode === "table" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground"
                   }`}
-                  title="Show structured statement table"
+                  title="Table View"
                 >
                   <List className="h-3.5 w-3.5" />
-                  <span>Table</span>
                 </button>
               </div>
-
-              {/* CSV Export */}
-              <button
-                type="button"
-                onClick={() => handleExportCsv()}
-                disabled={filteredProjects.length === 0}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-background px-3 text-xs font-semibold text-foreground transition hover:bg-muted disabled:opacity-50 cursor-pointer"
-                title="Download CSV for Excel / Accounting"
-              >
-                <ArrowDownToLine className="h-3.5 w-3.5" />
-                <span>CSV</span>
-              </button>
-
-              <ExportMenu
-                endpoint="/api/professional/jobs/export"
-                selectedIds={selectedList}
-                fileBaseName="running-projects"
-                emptyMessage="Select project first"
-                onExportCsv={handleExportCsv}
-              />
             </div>
+
+            <ExportMenu
+              selectedIds={Array.from(selectedProjectIds)}
+              selectedCount={selectedProjectIds.size}
+              totalCount={displayProjects.length}
+              fileBaseName="klick-pro-professional-projects"
+              onExportCsv={() => {
+                const rowsToExport =
+                  selectedProjectIds.size > 0
+                    ? displayProjects.filter((p) => selectedProjectIds.has(p.id))
+                    : displayProjects;
+
+                downloadCsvFile({
+                  filename: "professional-projects-statement",
+                  title: `Klick-Pro Professional Contracts Statement (${period.label})`,
+                  headers: [
+                    "Project Ref",
+                    "Job Scope",
+                    "Client Name",
+                    "Status",
+                    "Contract Amount (INR)",
+                    "Progress %",
+                    "Target Deadline",
+                    "Accepted Date",
+                  ],
+                  rows: rowsToExport.map((p) => [
+                    `#PRJ-${p.id}`,
+                    capitalizeWords(p.jobTitle || `Project #${p.id}`),
+                    capitalizeWords(p.clientName || "Direct Client"),
+                    displayStatus(p.status),
+                    p.budget ?? 0,
+                    `${p.progress}%`,
+                    p.deadline ? formatDateSafely(p.deadline) : "Flexible",
+                    formatDateSafely(p.acceptedAt),
+                  ]),
+                });
+              }}
+            />
           </div>
 
-          {error ? (
-            <p className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-
-          {/* View Mode 1: Box Grid View (Boxes: 1 & 2 in Row 1, 3 & 4 in Row 2) */}
+          {/* Dual View Display */}
           {viewMode === "boxes" ? (
-            loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="h-56 rounded-2xl border border-border bg-muted/40 animate-pulse" />
-                ))}
-              </div>
-            ) : filteredProjects.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-12 text-center text-muted-foreground">
-                <Briefcase className="h-10 w-10 text-muted-foreground/50 mb-3" />
-                <p className="font-semibold text-foreground">No engagements found</p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-                  Try adjusting or clearing your filters to see more project records.
-                </p>
-                {hasActiveFilters && (
-                  <button
-                    type="button"
-                    onClick={clearAllFilters}
-                    className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                    Reset all filters
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Multi-select bar for Box View */}
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/80 bg-muted/40 px-3.5 py-2 text-xs">
-                  <label className="flex items-center gap-2 font-medium text-foreground cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={allVisibleSelected}
-                      onChange={toggleAllVisible}
-                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
-                    />
-                    <span>Select all ({filteredProjects.length})</span>
-                  </label>
-                  {selectedList.length > 0 && (
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-primary">
-                        {selectedList.length} project{selectedList.length === 1 ? "" : "s"} selected
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          selectedList.forEach((id) => toggle(id));
-                        }}
-                        className="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer"
-                      >
-                        Clear selection
-                      </button>
-                    </div>
-                  )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {displayProjects.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-muted-foreground">
+                  <Briefcase className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+                  <p className="font-semibold text-foreground">No contracts found</p>
+                  <p className="text-xs mt-1">Try clearing your filters or selecting a different reporting period.</p>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredProjects.map((project) => {
-                    const trackingHref = `/project/${project.id}/tracking`;
-                    const isSelected = selectedIds.has(project.id);
-                    return (
-                      <article
-                        key={project.id}
-                        className={`group relative flex flex-col justify-between rounded-2xl border p-5 shadow-xs transition ${
-                          isSelected
-                            ? "border-primary bg-primary/[0.03] ring-1 ring-primary/40 shadow-soft"
-                            : "border-border bg-card hover:border-primary/40 hover:shadow-soft"
-                        }`}
-                      >
-                        <div>
-                          {/* Selection Checkbox, Reference & Status */}
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <label
-                                className="relative flex items-center justify-center cursor-pointer select-none p-0.5 rounded hover:bg-muted"
-                                title={isSelected ? "Deselect project" : "Select project"}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => toggle(project.id)}
-                                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
-                                  aria-label={`Select project #${project.id}`}
-                                />
-                              </label>
-                              <span className="font-mono text-xs font-semibold text-muted-foreground bg-muted/70 px-2.5 py-0.5 rounded-md">
-                                #PRJ-{project.id}
-                              </span>
-                            </div>
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusBadgeClass(
-                                project.status,
-                              )}`}
-                            >
-                              <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                              {displayStatus(project.status)}
+              ) : (
+                displayProjects.map((project) => {
+                  const trackingHref = `/project/${project.id}/tracking`;
+                  const isSelected = selectedProjectIds.has(project.id);
+                  return (
+                    <article
+                      key={project.id}
+                      className={`relative flex flex-col justify-between rounded-2xl border p-5 shadow-xs transition ${
+                        isSelected
+                          ? "border-primary bg-primary/[0.03] ring-1 ring-primary/40"
+                          : "border-border bg-card hover:border-primary/40"
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleProject(project.id)}
+                              className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
+                            />
+                            <span className="font-mono text-xs font-semibold text-muted-foreground bg-muted/60 px-2 py-0.5 rounded">
+                              #PRJ-{project.id}
                             </span>
                           </div>
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusBadgeClass(
+                              project.status,
+                            )}`}
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                            {displayStatus(project.status)}
+                          </span>
+                        </div>
 
-                        {/* Job Scope Title */}
                         <h3 className="mt-3 text-base font-semibold leading-snug text-foreground">
                           <Link href={trackingHref} className="hover:text-primary transition-colors">
                             {capitalizeWords(project.jobTitle) || `Project #${project.id}`}
                           </Link>
                         </h3>
 
-                        {/* Client Name & Deadline */}
-                        <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+                        <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                           <span>
                             Client:{" "}
                             <strong className="font-semibold text-foreground">
@@ -732,12 +1005,12 @@ function ProjectsReport() {
                             </strong>
                           </span>
                           <span className="inline-flex items-center gap-1">
-                            <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
                             {project.deadline ? formatDateSafely(project.deadline) : "Flexible schedule"}
                           </span>
                         </div>
 
-                        {/* Delivery Progress Bar */}
+                        {/* Progress Bar */}
                         <div className="mt-3.5 rounded-xl border border-border/60 bg-muted/30 p-2.5 text-xs">
                           <div className="flex items-center justify-between font-medium">
                             <span className="text-muted-foreground">Delivery Progress</span>
@@ -754,14 +1027,13 @@ function ProjectsReport() {
                         </div>
                       </div>
 
-                      {/* Financial Footer & Action Buttons */}
-                      <div className="mt-4 pt-3.5 border-t border-border flex flex-wrap items-center justify-between gap-3">
+                      <div className="mt-4 pt-3.5 border-t border-border flex items-center justify-between gap-3">
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            Contract Amount
+                            Agreed Contract Value
                           </p>
-                          <p className="font-mono text-sm sm:text-base font-bold text-foreground">
-                            {money(project)}
+                          <p className="font-mono text-sm font-bold text-foreground">
+                            {project.budget ? formatINR(project.budget) : "Fixed Scope"}
                           </p>
                         </div>
 
@@ -770,7 +1042,7 @@ function ProjectsReport() {
                             href={`/api/portal/projects/${project.id}/export`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground shadow-xs transition hover:bg-muted hover:border-primary/40 cursor-pointer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground shadow-xs hover:bg-muted"
                             title="Download official Project Dossier PDF"
                           >
                             <FileDown className="h-3.5 w-3.5 text-primary" />
@@ -778,7 +1050,7 @@ function ProjectsReport() {
                           </a>
                           <Link
                             href={trackingHref}
-                            className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs transition hover:bg-primary/90"
+                            className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90"
                           >
                             <span>Tracking</span>
                             <ExternalLink className="h-3 w-3" />
@@ -787,86 +1059,100 @@ function ProjectsReport() {
                       </div>
                     </article>
                   );
-                })}
-              </div>
+                })
+              )}
             </div>
-          )
-        ) : (
-            /* View Mode 2: Structured Statement Table */
+          ) : (
             <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
               <SelectableReportTable
                 loading={loading}
-                rows={filteredProjects}
-                emptyMessage="No active project records match your criteria."
-                selectedIds={selectedIds}
-                onToggle={toggle}
-                allSelected={allVisibleSelected}
-                onToggleAll={toggleAllVisible}
-                rowLabel={(project) => capitalizeWords(project.jobTitle) || `Project #${project.id}`}
+                rows={displayProjects}
+                emptyMessage="No project records match the active period or filter criteria."
+                selectedIds={selectedProjectIds}
+                onToggle={toggleProject}
+                allSelected={allProjectsSelected}
+                onToggleAll={toggleAllProjects}
+                rowLabel={(p) => capitalizeWords(p.jobTitle) || `Project #${p.id}`}
                 columns={[
                   {
                     key: "id",
-                    header: "Reference",
-                    render: (project) => (
-                      <span className="font-mono text-xs font-semibold text-muted-foreground">
-                        #PRJ-{project.id}
+                    header: "Ref",
+                    render: (p) => (
+                      <span className="font-mono text-xs font-semibold text-muted-foreground bg-muted/60 px-2 py-0.5 rounded">
+                        #PRJ-{p.id}
                       </span>
                     ),
                   },
                   {
                     key: "jobTitle",
                     header: "Job Scope",
-                    render: (project) => (
-                      <span className="font-medium text-foreground">
-                        {capitalizeWords(project.jobTitle) || `Project #${project.id}`}
-                      </span>
+                    render: (p) => (
+                      <Link
+                        href={`/project/${p.id}/tracking`}
+                        className="font-semibold text-foreground hover:text-primary transition"
+                      >
+                        {capitalizeWords(p.jobTitle) || `Project #${p.id}`}
+                      </Link>
                     ),
                   },
                   {
                     key: "clientName",
                     header: "Client",
-                    render: (project) => (
-                      <span className="text-sm font-medium text-muted-foreground">
-                        {capitalizeWords(project.clientName) || "Verified Client"}
+                    render: (p) => (
+                      <span className="text-xs font-medium text-foreground">
+                        {capitalizeWords(p.clientName) || "Direct Client"}
                       </span>
                     ),
                   },
                   {
                     key: "status",
                     header: "Status",
-                    render: (project) => (
+                    render: (p) => (
                       <span
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(
-                          project.status,
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusBadgeClass(
+                          p.status,
                         )}`}
                       >
                         <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                        {displayStatus(project.status)}
+                        {displayStatus(p.status)}
                       </span>
                     ),
                   },
                   {
                     key: "budget",
                     header: "Contract Amount",
-                    render: (project) => (
-                      <span className="font-mono font-bold text-foreground">{money(project)}</span>
+                    align: "right",
+                    render: (p) => (
+                      <span className="font-mono text-xs font-bold text-foreground">
+                        {p.budget ? formatINR(p.budget) : "Fixed Scope"}
+                      </span>
                     ),
                   },
                   {
                     key: "progress",
                     header: "Progress",
                     align: "right",
-                    render: (project) => (
+                    render: (p) => (
+                      <span className="font-mono text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                        {p.progress}%
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "actions",
+                    header: "Actions",
+                    align: "right",
+                    render: (p) => (
                       <div className="flex items-center justify-end gap-2">
-                        <div className="w-16 rounded-full bg-muted h-1.5 overflow-hidden hidden sm:block">
-                          <div
-                            className="bg-indigo-600 h-full rounded-full transition-all"
-                            style={{ width: `${Math.min(100, Math.max(0, project.progress))}%` }}
-                          />
-                        </div>
-                        <span className="font-mono text-xs font-semibold text-foreground">
-                          {project.progress}%
-                        </span>
+                        <a
+                          href={`/api/portal/projects/${p.id}/export`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                        >
+                          <FileDown className="h-3 w-3" />
+                          Dossier
+                        </a>
                       </div>
                     ),
                   },
@@ -874,454 +1160,239 @@ function ProjectsReport() {
               />
             </div>
           )}
+        </div>
+      )}
 
-          {/* Period Reconciliation Summary */}
-          <div className="flex flex-col gap-2 rounded-2xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground">
+      {/* ===================================================================== */}
+      {/* TAB 3: BANK & UPI SETTLEMENT AUDIT LOG */}
+      {/* ===================================================================== */}
+      {tab === "settlements" && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-border shadow-xs">
             <div>
-              Showing <span className="font-semibold text-foreground">{filteredProjects.length}</span>{" "}
-              of <span className="font-semibold text-foreground">{projects.length}</span> engagements.
-              {selectedList.length > 0 && (
-                <span className="ml-2 font-semibold text-primary">
-                  ({selectedList.length} rows selected for export)
-                </span>
-              )}
+              <h2 className="text-base font-bold text-foreground">Bank & UPI Settlement Audit Log</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Official disbursement transactions from your wallet to verified bank accounts and UPI VPAs.
+              </p>
             </div>
-            <div className="font-mono">
-              Total Committed Value:{" "}
-              <span className="font-bold text-foreground">
-                ₹{totalContractValue.toLocaleString("en-IN")}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
-function EarningsReport() {
-  const [items, setItems] = useState<EarningsItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [datePreset, setDatePreset] = useState<DatePreset>("all");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-
-  const loadData = () => {
-    setLoading(true);
-    fetch("/api/v1/portal/earnings", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : Promise.reject()))
-      .then((data) => setItems(Array.isArray(data) ? data : []))
-      .catch(() => setError("Your earnings statement could not be loaded. Please try again."))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  useRealtimeRefresh(["servio:project-update", "servio:notification"], loadData);
-
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      const matchesSearch =
-        search.trim() === "" ||
-        (item.description && item.description.toLowerCase().includes(search.toLowerCase())) ||
-        String(item.id).includes(search);
-      const matchesStatus =
-        statusFilter === "ALL" || item.status.toUpperCase() === statusFilter.toUpperCase();
-      const matchesDate = isWithinCustomDateRange(item.createdAt, datePreset, startDate, endDate);
-      return matchesSearch && matchesStatus && matchesDate;
-    });
-  }, [items, search, statusFilter, datePreset, startDate, endDate]);
-
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
-    useRowSelection(filteredItems);
-  const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
-
-  // Statement calculations
-  const totalEarned = filteredItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const clearedItems = filteredItems.filter(
-    (item) => item.status.toUpperCase() === "COMPLETED" || item.status.toUpperCase() === "PAID",
-  );
-  const clearedTotal = clearedItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const pendingItems = filteredItems.filter(
-    (item) =>
-      item.status.toUpperCase() === "PENDING" ||
-      item.status.toUpperCase() === "AWAITING_ADMIN_APPROVAL",
-  );
-  const pendingTotal = pendingItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-
-  const handleExportCsv = (scope?: "all" | "selected") => {
-    const isSelected = scope === "selected" || (scope === undefined && selectedList.length > 0);
-    const rowsToExport = isSelected
-      ? filteredItems.filter((item) => selectedIds.has(item.id))
-      : filteredItems;
-
-    if (isSelected && rowsToExport.length === 1 && rowsToExport[0]) {
-      const item = rowsToExport[0];
-      downloadCsvFile({
-        filename: `klick-pro-payout-voucher-${item.id}`,
-        title: `Klick-Pro Official Professional Payout Voucher #${item.invoiceNumber || item.id}`,
-        metadata: [
-          { label: "Voucher / Reference Number", value: item.invoiceNumber || `#EARN-${item.id}` },
-          {
-            label: "Project Title",
-            value: item.projectTitle || `Project #${item.trackingId ?? item.id}`,
-          },
-          { label: "Milestone", value: item.milestoneTitle || item.description },
-          { label: "Client Name", value: item.clientName || "Client" },
-          { label: "Disbursement Method", value: item.paymentMethod || "Bank / Escrow" },
-          { label: "Settlement Status", value: item.status },
-          { label: "Date Recorded", value: formatDateSafely(item.createdAt) },
-          {
-            label: "Gross Service Value",
-            value: `INR ${(item.baseAmount ?? item.amount).toLocaleString("en-IN")}`,
-          },
-          ...(item.feeAmount && item.feeAmount > 0
-            ? [
-                {
-                  label: "Platform Commission",
-                  value: `INR ${item.feeAmount.toLocaleString("en-IN")}`,
-                },
-              ]
-            : []),
-          {
-            label: "Net Earnings Credited",
-            value: `INR ${(item.netAmount ?? item.amount).toLocaleString("en-IN")}`,
-          },
-        ],
-        headers: ["Line Item Description", "Amount (INR)", "Status", "Reference"],
-        rows: [
-          [
-            item.milestoneTitle || "Milestone Approved Gross Earnings",
-            item.baseAmount ?? item.amount,
-            item.status,
-            item.invoiceNumber || `#EARN-${item.id}`,
-          ],
-          [
-            "Payment Credited to Professional Wallet",
-            item.netAmount ?? item.amount,
-            "Settled",
-            item.paymentMethod || "Escrow",
-          ],
-        ],
-      });
-      return;
-    }
-
-    downloadCsvFile({
-      filename: "klick-pro-professional-earnings",
-      title: "Professional Earnings & Financial Settlements Statement",
-      metadata: [
-        {
-          label: "Scope",
-          value: isSelected
-            ? `${rowsToExport.length} Selected Records`
-            : `All Filtered (${rowsToExport.length})`,
-        },
-        { label: "Earnings Total", value: `INR ${totalEarned.toLocaleString("en-IN")}` },
-        { label: "Cleared & Paid Out", value: `INR ${clearedTotal.toLocaleString("en-IN")}` },
-        { label: "Pending in Escrow", value: `INR ${pendingTotal.toLocaleString("en-IN")}` },
-        { label: "Active Status Filter", value: statusFilter },
-        { label: "Active Date Range", value: datePreset },
-      ],
-      headers: [
-        "Voucher / Reference #",
-        "Project Title",
-        "Milestone Title",
-        "Client Name",
-        "Disbursement Method",
-        "Earnings Amount (INR)",
-        "Settlement Status",
-        "Date Recorded",
-        "Description",
-      ],
-      rows: rowsToExport.map((item) => [
-        item.invoiceNumber || `#EARN-${item.id}`,
-        item.projectTitle || `Project #${item.trackingId ?? item.id}`,
-        item.milestoneTitle || item.description,
-        item.clientName || "Client",
-        item.paymentMethod || "Bank / Escrow",
-        item.baseAmount ?? item.amount,
-        item.status,
-        formatDateSafely(item.createdAt),
-        item.description ?? "Milestone earnings",
-      ]),
-    });
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* 4 Executive Financial KPI Cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Gross Earnings</span>
-            <Wallet className="h-4 w-4 text-primary" />
-          </div>
-          {loading ? (
-            <div className="mt-2 h-8 w-28 rounded-lg bg-muted animate-pulse" />
-          ) : (
-            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl truncate">
-              ₹{totalEarned.toLocaleString()}
-            </div>
-          )}
-          <p className="mt-1 text-xs text-muted-foreground">{filteredItems.length} settlements</p>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Disbursed Funds</span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-          </div>
-          {loading ? (
-            <div className="mt-2 h-8 w-28 rounded-lg bg-muted animate-pulse" />
-          ) : (
-            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 sm:text-3xl truncate">
-              ₹{clearedTotal.toLocaleString()}
-            </div>
-          )}
-          <p className="mt-1 text-xs text-muted-foreground">Cleared into bank / wallet</p>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Pending Release</span>
-            <Clock className="h-4 w-4 text-amber-500" />
-          </div>
-          {loading ? (
-            <div className="mt-2 h-8 w-28 rounded-lg bg-muted animate-pulse" />
-          ) : (
-            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400 sm:text-3xl truncate">
-              ₹{pendingTotal.toLocaleString()}
-            </div>
-          )}
-          <p className="mt-1 text-xs text-muted-foreground">Awaiting milestone approval</p>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-semibold uppercase tracking-wider">Average Payout</span>
-            <CircleDollarSign className="h-4 w-4 text-primary" />
-          </div>
-          {loading ? (
-            <div className="mt-2 h-8 w-28 rounded-lg bg-muted animate-pulse" />
-          ) : (
-            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl truncate">
-              ₹
-              {filteredItems.length > 0
-                ? Math.round(totalEarned / filteredItems.length).toLocaleString()
-                : "0"}
-            </div>
-          )}
-          <p className="mt-1 text-xs text-muted-foreground">Per milestone</p>
-        </div>
-      </div>
-
-      {/* Control Bar */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between shadow-xs">
-        <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by description or transaction ID…"
-              className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            <ExportMenu
+              selectedIds={periodFilteredWithdrawals.map((w) => w.id)}
+              selectedCount={periodFilteredWithdrawals.length}
+              totalCount={periodFilteredWithdrawals.length}
+              fileBaseName="klick-pro-settlements-audit"
+              onExportCsv={() => {
+                downloadCsvFile({
+                  filename: "bank-upi-settlements-audit",
+                  title: `Klick-Pro Bank & UPI Settlements Audit Log (${period.label})`,
+                  headers: [
+                    "Withdrawal Ref #",
+                    "Requested Date",
+                    "Payout Rail",
+                    "Destination Account / VPA",
+                    "UTR / Bank Reference",
+                    "Status",
+                    "Amount (INR)",
+                  ],
+                  rows: periodFilteredWithdrawals.map((w) => [
+                    `#WD-${w.id}`,
+                    formatDateSafely(w.createdAt),
+                    w.payoutRail || "BANK_TRANSFER",
+                    w.destinationLabel || "Verified Bank Account",
+                    w.referenceNumber || "Processing via Gateway",
+                    capitalizeWords(w.status),
+                    w.amount,
+                  ]),
+                });
+              }}
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-10 rounded-xl border border-border bg-background px-3 text-xs sm:text-sm font-medium text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="COMPLETED">Cleared / Paid</option>
-              <option value="PENDING">Pending Approval</option>
-            </select>
+          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-border bg-muted/40 font-semibold text-muted-foreground uppercase text-[10px]">
+                <tr>
+                  <th className="p-3">Ref #</th>
+                  <th className="p-3">Requested Date</th>
+                  <th className="p-3">Payout Rail</th>
+                  <th className="p-3">Destination Details</th>
+                  <th className="p-3">UTR / Bank Ref</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3 text-right">Settled Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {periodFilteredWithdrawals.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                      No bank or UPI withdrawal settlements recorded in {period.label}.
+                    </td>
+                  </tr>
+                ) : (
+                  periodFilteredWithdrawals.map((w) => (
+                    <tr key={w.id} className="hover:bg-muted/30 transition">
+                      <td className="p-3 font-mono font-semibold text-muted-foreground">
+                        #WD-{w.id}
+                      </td>
+                      <td className="p-3 text-muted-foreground">
+                        {formatDateSafely(w.createdAt)}
+                      </td>
+                      <td className="p-3">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground">
+                          <CreditCard className="h-3 w-3 text-primary" />
+                          {w.payoutRail || "IMPS / NEFT"}
+                        </span>
+                      </td>
+                      <td className="p-3 font-mono text-xs text-foreground">
+                        {w.destinationLabel || "Verified Account"}
+                      </td>
+                      <td className="p-3 font-mono text-xs text-muted-foreground">
+                        {w.referenceNumber || <span className="text-amber-600">Pending UTR</span>}
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusBadgeClass(
+                            w.status,
+                          )}`}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                          {displayStatus(w.status)}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right font-mono font-bold text-foreground">
+                        {formatINR(w.amount)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
-            <DateRangeFilter
-              preset={datePreset}
-              onPresetChange={setDatePreset}
-              startDate={startDate}
-              onStartDateChange={setStartDate}
-              endDate={endDate}
-              onEndDateChange={setEndDate}
+      {/* ===================================================================== */}
+      {/* TAB 4: CLIENT-WISE REVENUE CONCENTRATION */}
+      {/* ===================================================================== */}
+      {tab === "concentration" && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-border shadow-xs">
+            <div>
+              <h2 className="text-base font-bold text-foreground">Client Revenue Concentration</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Analyze your earnings diversification, client dependencies, and repeat engagement volumes.
+              </p>
+            </div>
+
+            <ExportMenu
+              selectedIds={clientConcentration.map((_, i) => i)}
+              selectedCount={clientConcentration.length}
+              totalCount={clientConcentration.length}
+              fileBaseName="klick-pro-client-concentration"
+              onExportCsv={() => {
+                downloadCsvFile({
+                  filename: "client-concentration-analysis",
+                  title: `Klick-Pro Client Revenue Concentration (${period.label})`,
+                  headers: [
+                    "Client Name",
+                    "Gross Billings (INR)",
+                    "Net Credited (INR)",
+                    "Revenue Share %",
+                    "Completed Engagements",
+                    "Active Contracts",
+                    "Last Billed Date",
+                  ],
+                  rows: clientConcentration.map((c) => [
+                    c.name,
+                    c.grossEarned,
+                    c.netEarned,
+                    `${c.sharePercentage}%`,
+                    c.completedCount,
+                    c.activeCount,
+                    formatDateSafely(c.lastDate),
+                  ]),
+                });
+              }}
             />
           </div>
-        </div>
 
-        <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
-          <button
-            type="button"
-            onClick={() => handleExportCsv()}
-            disabled={filteredItems.length === 0}
-            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-background px-3 text-xs sm:text-sm font-semibold text-foreground transition hover:bg-muted disabled:opacity-50"
-            title="Download CSV for Tax & Bookkeeping"
-          >
-            <ArrowDownToLine className="h-4 w-4" />
-            <span>CSV</span>
-          </button>
-
-          <ExportMenu
-            endpoint="/api/professional/earnings/export"
-            selectedIds={selectedList}
-            fileBaseName="professional-earnings"
-            emptyMessage="Select payout first"
-            onExportCsv={handleExportCsv}
-          />
-        </div>
-      </div>
-
-      {error ? (
-        <p className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-
-      {/* Statement Table */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
-        <SelectableReportTable
-          loading={loading}
-          rows={filteredItems}
-          emptyMessage="No earnings records match your filter criteria."
-          selectedIds={selectedIds}
-          onToggle={toggle}
-          allSelected={allVisibleSelected}
-          onToggleAll={toggleAllVisible}
-          rowLabel={(item) => item.description ?? `Payout #${item.id}`}
-          columns={[
-            {
-              key: "id",
-              header: "Reference",
-              render: (item) => (
-                <span className="font-mono text-xs font-semibold text-muted-foreground">
-                  #INV-{item.id}
-                </span>
-              ),
-            },
-            {
-              key: "description",
-              header: "Milestone Description",
-              render: (item) => (
-                <span className="font-medium text-foreground">{item.description}</span>
-              ),
-            },
-            {
-              key: "status",
-              header: "Settlement Status",
-              render: (item) => (
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(
-                    item.status,
-                  )}`}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                  {displayStatus(item.status)}
-                </span>
-              ),
-            },
-            {
-              key: "amount",
-              header: "Amount",
-              align: "right",
-              render: (item) => (
-                <span className="font-mono font-bold text-foreground">
-                  ₹{Number(item.amount).toLocaleString()} {item.currency || "INR"}
-                </span>
-              ),
-            },
-            {
-              key: "createdAt",
-              header: "Disbursed Date",
-              align: "right",
-              render: (item) => (
-                <span className="text-xs text-muted-foreground">
-                  {formatDateSafely(item.createdAt)}
-                </span>
-              ),
-            },
-          ]}
-        />
-      </div>
-
-      {/* Period Reconciliation Summary */}
-      <div className="flex flex-col gap-2 rounded-2xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground">
-        <div>
-          Showing <span className="font-semibold text-foreground">{filteredItems.length}</span> of{" "}
-          <span className="font-semibold text-foreground">{items.length}</span> disbursements.
-          {selectedList.length > 0 && (
-            <span className="ml-2 font-semibold text-primary">
-              ({selectedList.length} rows selected for export)
-            </span>
-          )}
-        </div>
-        <div className="font-mono">
-          Settled Revenue:{" "}
-          <span className="font-bold text-foreground">₹{clearedTotal.toLocaleString()} INR</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function ProfessionalReports() {
-  const [tab, setTab] = useState<"projects" | "earnings">("projects");
-
-  return (
-    <div className="space-y-8 pb-12">
-      {/* Executive Header Banner */}
-      <section className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-6 py-8 text-white shadow-xl sm:px-8 sm:py-10">
-        <div className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl" />
-        <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-200 backdrop-blur-md">
-              <FileText className="h-3.5 w-3.5" /> Professional Financial Center
-            </div>
-            <h1 className="mt-3 font-display text-2xl font-bold tracking-tight sm:text-4xl">
-              Reports & Earnings Statements
-            </h1>
-            <p className="mt-2 text-sm text-slate-300 sm:text-base leading-relaxed">
-              Official audit statements of your contracted projects, milestone disbursements, and
-              bank settlements. Download tax-ready statements in PDF or Excel format.
-            </p>
-          </div>
-
-          <div className="flex gap-1.5 rounded-2xl border border-white/20 bg-black/30 p-1.5 backdrop-blur-md">
-            <button
-              type="button"
-              onClick={() => setTab("projects")}
-              className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition ${
-                tab === "projects"
-                  ? "bg-white text-slate-950 shadow-sm"
-                  : "text-slate-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              Active Contracts
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("earnings")}
-              className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition ${
-                tab === "earnings"
-                  ? "bg-white text-slate-950 shadow-sm"
-                  : "text-slate-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              Disbursement Statements
-            </button>
+          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-border bg-muted/40 font-semibold text-muted-foreground uppercase text-[10px]">
+                <tr>
+                  <th className="p-3">Client Name</th>
+                  <th className="p-3">Gross Billings</th>
+                  <th className="p-3">Net Received</th>
+                  <th className="p-3">Revenue Concentration</th>
+                  <th className="p-3">Completed Jobs</th>
+                  <th className="p-3">Active Jobs</th>
+                  <th className="p-3 text-right">Last Engagement</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {clientConcentration.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                      No client engagements recorded for {period.label}.
+                    </td>
+                  </tr>
+                ) : (
+                  clientConcentration.map((client) => {
+                    const isHighDependency = client.sharePercentage >= 50;
+                    return (
+                      <tr key={client.name} className="hover:bg-muted/30 transition">
+                        <td className="p-3 font-semibold text-foreground flex items-center gap-2">
+                          <Users className="h-3.5 w-3.5 text-primary" />
+                          <span>{client.name}</span>
+                        </td>
+                        <td className="p-3 font-mono font-semibold text-foreground">
+                          {formatINR(client.grossEarned)}
+                        </td>
+                        <td className="p-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                          {formatINR(client.netEarned)}
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-20 bg-muted rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${
+                                  isHighDependency ? "bg-amber-500" : "bg-primary"
+                                }`}
+                                style={{ width: `${Math.min(100, client.sharePercentage)}%` }}
+                              />
+                            </div>
+                            <span className="font-mono text-xs font-semibold text-foreground">
+                              {client.sharePercentage}%
+                            </span>
+                            {isHighDependency && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600"
+                                title="Over 50% of revenue originates from this single client"
+                              >
+                                <AlertTriangle className="h-3 w-3" />
+                                High Share
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3 font-semibold text-muted-foreground">
+                          {client.completedCount}
+                        </td>
+                        <td className="p-3 font-semibold text-indigo-600 dark:text-indigo-400">
+                          {client.activeCount}
+                        </td>
+                        <td className="p-3 text-right text-muted-foreground">
+                          {formatDateSafely(client.lastDate)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-      </section>
-
-      {/* Main Content */}
-      <section>{tab === "projects" ? <ProjectsReport /> : <EarningsReport />}</section>
+      )}
     </div>
   );
 }

@@ -393,7 +393,7 @@ export async function POST(request: NextRequest) {
                 currency: "INR",
                 type: "PLATFORM_COMMISSION",
                 status: autopay ? "COMPLETED" : "PENDING",
-                description: `Platform commission (10%): ${milestone.title}`,
+                description: `Platform commission (${Math.round(commissionRate * 100)}%): ${milestone.title}`,
               },
             });
           }

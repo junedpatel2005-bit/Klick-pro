@@ -1464,7 +1464,7 @@ export default function Earnings() {
                         }`}
                       >
                         {i.type === "PLATFORM_COMMISSION"
-                          ? "Commission cut (10%)"
+                          ? "Platform commission"
                           : i.type === "DISPUTE_PAYOUT"
                             ? "Dispute payout"
                             : i.type === "MILESTONE_EARNING"

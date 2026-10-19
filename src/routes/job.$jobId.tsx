@@ -2726,12 +2726,13 @@ export default function JobDetails({
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex items-center gap-2">
                       <h4 className="font-semibold text-foreground truncate">
-                        {pendingAcceptProposal.professional.firstName}{" "}
-                        {pendingAcceptProposal.professional.lastName}
+                        {capitalizeWords(
+                          `${pendingAcceptProposal.professional.firstName ?? ""} ${pendingAcceptProposal.professional.lastName ?? ""}`.trim(),
+                        )}
                       </h4>
                       {pendingAcceptProposal.professional.isVerified && (
                         <span className="rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 px-2 py-0.5 text-[10px] font-bold">
-                          Verified Pro
+                          Verified Professional
                         </span>
                       )}
                     </div>

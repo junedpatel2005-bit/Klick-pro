@@ -2102,7 +2102,7 @@ export default function ClientEarnings() {
                               </span>
                               <span className="text-muted-foreground/40">·</span>
                               <span>
-                                Pro:{" "}
+                                Professional:{" "}
                                 <strong className="text-foreground font-medium">
                                   {capitalizeWords(m.professionalName)}
                                 </strong>
@@ -2192,7 +2192,7 @@ export default function ClientEarnings() {
                           </p>
                           {item.payment.type === "PLATFORM_COMMISSION" ? (
                             <span className="shrink-0 rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                              Commission fee (10%)
+                              Platform fee
                             </span>
                           ) : (
                             <span className="shrink-0 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary">
@@ -2535,11 +2535,15 @@ function PaymentDetails({ detail }: { detail: PaymentDetail }) {
       </div>
       <div className="space-y-3 rounded-2xl border border-border p-5 text-sm">
         <DetailRow label="Milestone value" value={money(detail.baseAmount)} />
-        <DetailRow label="Client service fee" value={money(detail.clientFeeAmount)} />
-        <DetailRow
-          label="Professional milestone amount"
-          value={money(detail.professionalPayoutAmount)}
-        />
+        {detail.clientFeeAmount > 0 && (
+          <DetailRow label="Client service fee" value={money(detail.clientFeeAmount)} />
+        )}
+        {detail.clientFeeAmount > 0 && (
+          <DetailRow
+            label="Professional milestone amount"
+            value={money(detail.professionalPayoutAmount)}
+          />
+        )}
         <DetailRow
           label="Payment method"
           value={detail.provider === "wallet" ? "Wallet balance" : detail.provider}

@@ -351,15 +351,16 @@ export async function GET(
           ? [
               { label: "Charged", value: formatMoney(item.amount, item.currency) },
               { label: "Base amount", value: formatMoney(item.baseAmount, item.currency) },
-              { label: "Client fee", value: formatMoney(item.clientFeeAmount, item.currency) },
+              ...(item.clientFeeAmount > 0
+                ? [{ label: "Client fee", value: formatMoney(item.clientFeeAmount, item.currency) }]
+                : []),
               {
                 label: "Professional payout",
                 value: formatMoney(item.professionalPayoutAmount, item.currency),
               },
-              {
-                label: "Platform amount",
-                value: formatMoney(item.adminNetAmount, item.currency),
-              },
+              ...(item.adminNetAmount > 0
+                ? [{ label: "Platform amount", value: formatMoney(item.adminNetAmount, item.currency) }]
+                : []),
             ]
           : session.userId === project.clientId
             ? [
@@ -368,20 +369,18 @@ export async function GET(
                   label: "Milestone amount",
                   value: formatMoney(item.baseAmount, item.currency),
                 },
-                {
-                  label: "Client service fee",
-                  value: formatMoney(item.clientFeeAmount, item.currency),
-                },
+                ...(item.clientFeeAmount > 0
+                  ? [{ label: "Client service fee", value: formatMoney(item.clientFeeAmount, item.currency) }]
+                  : []),
               ]
             : [
                 {
                   label: "Client milestone payment",
                   value: formatMoney(item.baseAmount, item.currency),
                 },
-                {
-                  label: "Platform commission",
-                  value: formatMoney(item.commissionAmount, item.currency),
-                },
+                ...(item.commissionAmount > 0
+                  ? [{ label: "Platform commission", value: formatMoney(item.commissionAmount, item.currency) }]
+                  : []),
                 {
                   label: "Net earnings",
                   value: formatMoney(item.professionalPayoutAmount, item.currency),

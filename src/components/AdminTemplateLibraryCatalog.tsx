@@ -164,7 +164,7 @@ export function AdminTemplateLibraryCatalog() {
           </div>
           <div className="flex items-center gap-1.5 rounded-xl border border-violet-200/80 bg-violet-50/70 px-3.5 py-1.5 text-violet-700 shadow-2xs">
             <Briefcase className="h-4 w-4" />
-            <span className="text-xs font-semibold">Pro Emails: {profCount}</span>
+            <span className="text-xs font-semibold">Professional Emails: {profCount}</span>
           </div>
           <div className="flex items-center gap-1.5 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-3.5 py-1.5 text-emerald-700 shadow-2xs">
             <CheckCircle2 className="h-4 w-4" />

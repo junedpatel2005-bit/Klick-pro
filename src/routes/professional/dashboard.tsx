@@ -206,7 +206,7 @@ export default function ProfessionalDashboard() {
                 {professional.isVerified && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary border border-primary/20">
                     <BadgeCheck className="h-3.5 w-3.5 text-primary" />
-                    Verified Pro
+                    Verified Professional
                   </span>
                 )}
               </div>

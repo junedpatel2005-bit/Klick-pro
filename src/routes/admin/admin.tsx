@@ -83,7 +83,7 @@ export default function Admin() {
       bgLight: "bg-blue-50 text-blue-600 border-blue-100",
     },
     {
-      label: "Verified Pros",
+      label: "Verified Professionals",
       value: data?.professionals,
       icon: BriefcaseBusiness,
       href: "/admin/users",

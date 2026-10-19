@@ -836,7 +836,7 @@ export function NotificationInbox({ admin: _isAdmin = false }: { admin?: boolean
                           )}
                           {group.professionalName && (
                             <span className="inline-flex items-center gap-1.5">
-                              <UsersRound className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" /> Pro:{" "}
+                              <UsersRound className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" /> Professional:{" "}
                               <strong className="text-slate-800 dark:text-slate-200 font-medium">
                                 {group.professionalName}
                               </strong>

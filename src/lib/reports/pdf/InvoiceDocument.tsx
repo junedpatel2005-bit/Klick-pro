@@ -1,6 +1,7 @@
 import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { reportTheme } from "./theme";
 import { getBrandLogoBase64 } from "./brand-logo";
+import { capitalizeWords } from "@/lib/utils";
 
 const styles = StyleSheet.create({
   page: {
@@ -255,11 +256,38 @@ export function InvoiceDocument({
       <Page size="A4" style={styles.page}>
         <View style={styles.topRow}>
           <View>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 6 }}>
-              {brandLogo ? (
-                <Image src={brandLogo} style={{ width: 28, height: 28, objectFit: "contain" }} />
-              ) : null}
-              <Text style={styles.brandName}>Klick-Pro</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <View
+                style={{
+                  width: 32,
+                  height: 32,
+                  backgroundColor: "#0f172a",
+                  borderRadius: 6,
+                  padding: 3,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                {brandLogo ? (
+                  <Image src={brandLogo} style={{ width: 26, height: 26, objectFit: "contain" }} />
+                ) : (
+                  <Text style={{ fontSize: 9, fontWeight: "bold", color: "#ffffff" }}>KP</Text>
+                )}
+              </View>
+              <View>
+                <Text style={styles.brandName}>Klick-Pro</Text>
+                <Text
+                  style={{
+                    fontSize: 6.8,
+                    color: reportTheme.cta,
+                    fontWeight: "bold",
+                    letterSpacing: 0.8,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Official Milestone Invoice
+                </Text>
+              </View>
             </View>
             {jobTitle ? (
               <Text style={{ fontSize: 9.5, fontWeight: "bold", color: reportTheme.cta, marginTop: 2 }}>
@@ -283,14 +311,14 @@ export function InvoiceDocument({
         <View style={styles.partiesRow}>
           <View style={styles.partyBlock}>
             <Text style={styles.partyLabel}>Billed to</Text>
-            <Text style={styles.partyName}>{billedTo.name}</Text>
+            <Text style={styles.partyName}>{capitalizeWords(billedTo.name)}</Text>
             {billedTo.email ? <Text style={styles.partyLine}>{billedTo.email}</Text> : null}
             {billedTo.phone ? <Text style={styles.partyLine}>{billedTo.phone}</Text> : null}
             {billedTo.address ? <Text style={styles.partyLine}>{billedTo.address}</Text> : null}
           </View>
           <View style={styles.partyBlock}>
             <Text style={styles.partyLabel}>Paid to</Text>
-            <Text style={styles.partyName}>{paidTo.name}</Text>
+            <Text style={styles.partyName}>{capitalizeWords(paidTo.name)}</Text>
             {paidTo.email ? <Text style={styles.partyLine}>{paidTo.email}</Text> : null}
             {paidTo.phone ? <Text style={styles.partyLine}>{paidTo.phone}</Text> : null}
             {paidTo.address ? <Text style={styles.partyLine}>{paidTo.address}</Text> : null}

@@ -2,15 +2,16 @@ import { createElement } from "react";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import { ReportDocument } from "@/lib/reports/pdf/ReportDocument";
+import { ReportDocument, type ReportSummaryStat } from "@/lib/reports/pdf/ReportDocument";
 import { JobDossierDocument } from "@/lib/reports/pdf/JobDossierDocument";
 import { InvoiceDocument } from "@/lib/reports/pdf/InvoiceDocument";
-import { UserDossierDocument, type UserDossierData } from "@/lib/reports/pdf/UserDossierDocument";
 import { fetchJobDossierData } from "@/lib/reports/pdf/job-dossier-builder";
 import { fetchPaymentReceiptData } from "@/lib/reports/pdf/payment-receipt-builder";
 import { renderReportPdf, pdfResponse } from "@/lib/reports/pdf/render";
 import { parseReportRequest } from "@/lib/reports/pdf/request";
 import type { ReportColumn, ReportOrientation, ReportPageSize } from "@/lib/reports/pdf/types";
+import { capitalizeWords, formatReadableLabel } from "@/lib/utils";
+import { maskAccountNumber, maskDestinationString } from "@/lib/account-formatting";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,9 @@ async function requireAdmin(request: NextRequest) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 1. User Accounts Columns & Types
+// ---------------------------------------------------------------------------
 type UserRow = {
   id: number;
   username?: string | null;
@@ -60,9 +64,9 @@ function getUserColumns(isAllClients: boolean, isAllPros: boolean): ReportColumn
           : "User / Identity",
       width: 2.3,
       format: (row) =>
-        `#USR-${row.id} · ${row.firstName} ${row.lastName}${row.username ? ` (@${row.username})` : ""}${row.phone ? ` · ${row.phone}` : ` · ${row.email}`}`,
+        `#USR-${row.id} · ${capitalizeWords(`${row.firstName} ${row.lastName}`)}${row.username ? ` (@${row.username})` : ""}${row.phone ? ` · ${row.phone}` : ` · ${row.email}`}`,
     },
-    { key: "role", header: "Role", width: 1, format: (row) => row.role },
+    { key: "role", header: "Role", width: 1, format: (row) => capitalizeWords(row.role) },
     {
       key: "status",
       header: "Status",
@@ -126,6 +130,9 @@ function getUserColumns(isAllClients: boolean, isAllPros: boolean): ReportColumn
   ];
 }
 
+// ---------------------------------------------------------------------------
+// 2. Jobs & Marketplace Columns & Types
+// ---------------------------------------------------------------------------
 type JobRow = {
   id: number;
   title: string | null;
@@ -137,28 +144,16 @@ type JobRow = {
   createdAt: Date;
 };
 
-type FinanceRow = {
-  id: number;
-  referenceNumber: string;
-  kind: "Payment" | "Payout";
-  type: string;
-  amount: number;
-  currency: string;
-  status: string;
-  party: string;
-  createdAt: Date;
-};
-
 const jobColumns: ReportColumn<JobRow>[] = [
   {
     key: "title",
     header: "Project Title",
     width: 2.8,
-    format: (row) => `#JOB-${row.id} · ${row.title ?? "Untitled"}`,
+    format: (row) => `#JOB-${row.id} · ${capitalizeWords(row.title ?? "Untitled")}`,
   },
-  { key: "client", header: "Client", width: 1.8, format: (row) => row.clientName },
-  { key: "category", header: "Category", width: 1.4, format: (row) => row.category ?? "General" },
-  { key: "status", header: "Status", width: 1.2, format: (row) => row.status },
+  { key: "client", header: "Client", width: 1.8, format: (row) => capitalizeWords(row.clientName) },
+  { key: "category", header: "Category", width: 1.4, format: (row) => capitalizeWords(row.category ?? "General") },
+  { key: "status", header: "Status", width: 1.2, format: (row) => formatReadableLabel(row.status) },
   {
     key: "budget",
     header: "Budget Value",
@@ -166,7 +161,7 @@ const jobColumns: ReportColumn<JobRow>[] = [
     align: "right",
     format: (row) => row.budget,
   },
-  { key: "workMode", header: "Work Mode", width: 1.2, format: (row) => row.workMode },
+  { key: "workMode", header: "Work Mode", width: 1.2, format: (row) => formatReadableLabel(row.workMode) },
   {
     key: "createdAt",
     header: "Created",
@@ -175,27 +170,178 @@ const jobColumns: ReportColumn<JobRow>[] = [
   },
 ];
 
-const financeColumns: ReportColumn<FinanceRow>[] = [
-  { key: "referenceNumber", header: "Ref #", width: 1.5, format: (row) => row.referenceNumber },
-  { key: "kind", header: "Kind", width: 1, format: (row) => row.kind },
-  { key: "type", header: "Flow Type", width: 1.6, format: (row) => row.type },
+// ---------------------------------------------------------------------------
+// 3. Revenue & Commission Columns & Types
+// ---------------------------------------------------------------------------
+type RevenueRow = {
+  id: number;
+  referenceNumber: string;
+  kind: string;
+  grossAmount: number;
+  commissionAmount: number;
+  netPayoutAmount: number;
+  status: string;
+  clientName: string;
+  professionalName: string;
+  jobTitle: string;
+  createdAt: Date;
+};
+
+const revenueColumns: ReportColumn<RevenueRow>[] = [
+  { key: "referenceNumber", header: "Ref #", width: 1.2, format: (row) => row.referenceNumber },
+  { key: "jobTitle", header: "Project / Engagement", width: 2.2, format: (row) => capitalizeWords(row.jobTitle) },
+  { key: "client", header: "Client Depositor", width: 1.6, format: (row) => capitalizeWords(row.clientName) },
+  { key: "pro", header: "Professional Payee", width: 1.6, format: (row) => capitalizeWords(row.professionalName) },
   {
-    key: "amount",
-    header: "Amount",
-    width: 1.4,
+    key: "gross",
+    header: "Gross Paid",
+    width: 1.3,
     align: "right",
-    format: (row) => `INR ${row.amount.toLocaleString("en-IN")} ${row.currency}`,
+    format: (row) => `₹${row.grossAmount.toLocaleString("en-IN")}`,
   },
-  { key: "status", header: "Status", width: 1.2, format: (row) => row.status },
-  { key: "party", header: "Parties Involved", width: 2.8, format: (row) => row.party },
+  {
+    key: "commission",
+    header: "Platform Cut",
+    width: 1.2,
+    align: "right",
+    format: (row) =>
+      row.commissionAmount > 0 ? `₹${row.commissionAmount.toLocaleString("en-IN")}` : "₹0 (Off)",
+  },
+  {
+    key: "net",
+    header: "Net Pro Payout",
+    width: 1.3,
+    align: "right",
+    format: (row) => `₹${row.netPayoutAmount.toLocaleString("en-IN")}`,
+  },
+  { key: "status", header: "Settlement", width: 1.1, format: (row) => formatReadableLabel(row.status) },
   {
     key: "createdAt",
-    header: "Date",
-    width: 1.3,
+    header: "Settled At",
+    width: 1.2,
     format: (row) => row.createdAt.toLocaleDateString("en-IN"),
   },
 ];
 
+// ---------------------------------------------------------------------------
+// 4. Escrow & Treasury Columns & Types
+// ---------------------------------------------------------------------------
+type EscrowRow = {
+  id: number;
+  projectTitle: string;
+  milestoneTitle: string;
+  clientName: string;
+  professionalName: string;
+  amount: number;
+  milestoneStatus: string;
+  custodyStatus: string;
+  releaseDue: string;
+  createdAt: Date;
+};
+
+const escrowColumns: ReportColumn<EscrowRow>[] = [
+  { key: "id", header: "Milestone ID", width: 1.2, format: (row) => `#MS-${row.id}` },
+  { key: "project", header: "Project Title", width: 2.2, format: (row) => capitalizeWords(row.projectTitle) },
+  { key: "milestone", header: "Milestone Description", width: 2.0, format: (row) => capitalizeWords(row.milestoneTitle) },
+  { key: "client", header: "Client (Depositor)", width: 1.6, format: (row) => capitalizeWords(row.clientName) },
+  { key: "pro", header: "Professional (Beneficiary)", width: 1.6, format: (row) => capitalizeWords(row.professionalName) },
+  {
+    key: "amount",
+    header: "Escrow Held",
+    width: 1.3,
+    align: "right",
+    format: (row) => `₹${row.amount.toLocaleString("en-IN")}`,
+  },
+  { key: "milestoneStatus", header: "Milestone", width: 1.1, format: (row) => formatReadableLabel(row.milestoneStatus) },
+  { key: "custodyStatus", header: "Escrow Custody", width: 1.3, format: (row) => row.custodyStatus },
+  {
+    key: "createdAt",
+    header: "Funded Date",
+    width: 1.2,
+    format: (row) => row.createdAt.toLocaleDateString("en-IN"),
+  },
+];
+
+// ---------------------------------------------------------------------------
+// 5. Bank Withdrawals Columns & Types
+// ---------------------------------------------------------------------------
+type WithdrawalRow = {
+  id: number;
+  referenceNumber: string;
+  professionalName: string;
+  amount: number;
+  destination: string;
+  bankInfo: string;
+  utr: string;
+  status: string;
+  createdAt: Date;
+};
+
+const withdrawalColumns: ReportColumn<WithdrawalRow>[] = [
+  { key: "ref", header: "Payout Ref", width: 1.2, format: (row) => row.referenceNumber },
+  { key: "pro", header: "Professional Payee", width: 2.0, format: (row) => capitalizeWords(row.professionalName) },
+  {
+    key: "amount",
+    header: "Payout Amount",
+    width: 1.3,
+    align: "right",
+    format: (row) => `₹${row.amount.toLocaleString("en-IN")}`,
+  },
+  { key: "destination", header: "Method", width: 1.2, format: (row) => row.destination },
+  { key: "bankInfo", header: "Bank / Destination Details", width: 2.4, format: (row) => row.bankInfo },
+  { key: "utr", header: "UTR / Transaction Ref", width: 1.8, format: (row) => row.utr },
+  { key: "status", header: "Status", width: 1.1, format: (row) => formatReadableLabel(row.status) },
+  {
+    key: "createdAt",
+    header: "Requested Date",
+    width: 1.2,
+    format: (row) => row.createdAt.toLocaleDateString("en-IN"),
+  },
+];
+
+// ---------------------------------------------------------------------------
+// 6. Disputes Columns & Types
+// ---------------------------------------------------------------------------
+type DisputeRow = {
+  id: number;
+  projectTitle: string;
+  issueType: string;
+  priority: string;
+  disputedAmount: number;
+  claimant: string;
+  respondent: string;
+  splitInfo: string;
+  status: string;
+  createdAt: Date;
+};
+
+const disputeColumns: ReportColumn<DisputeRow>[] = [
+  { key: "id", header: "Dispute #", width: 1.1, format: (row) => `#DSP-${row.id}` },
+  { key: "project", header: "Project / Job", width: 2.2, format: (row) => capitalizeWords(row.projectTitle) },
+  { key: "issue", header: "Issue Category", width: 1.6, format: (row) => formatReadableLabel(row.issueType) },
+  { key: "priority", header: "Priority", width: 1.0, format: (row) => row.priority },
+  {
+    key: "amount",
+    header: "Disputed Escrow",
+    width: 1.3,
+    align: "right",
+    format: (row) => `₹${row.disputedAmount.toLocaleString("en-IN")}`,
+  },
+  { key: "claimant", header: "Claimant", width: 1.5, format: (row) => capitalizeWords(row.claimant) },
+  { key: "respondent", header: "Respondent", width: 1.5, format: (row) => capitalizeWords(row.respondent) },
+  { key: "split", header: "Arbitration Decision", width: 2.0, format: (row) => row.splitInfo },
+  { key: "status", header: "Status", width: 1.1, format: (row) => formatReadableLabel(row.status) },
+  {
+    key: "createdAt",
+    header: "Filed Date",
+    width: 1.2,
+    format: (row) => row.createdAt.toLocaleDateString("en-IN"),
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Main POST Handler
+// ---------------------------------------------------------------------------
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ resource: string }> },
@@ -204,16 +350,18 @@ export async function POST(
   if (!session) return NextResponse.json({ error: "Admin access required." }, { status: 403 });
 
   try {
-    const reportRequest = parseReportRequest(await request.json().catch(() => null));
+    const rawBody = await request.json().catch(() => null);
+    const reportRequest = parseReportRequest(rawBody);
     if (!reportRequest)
       return NextResponse.json({ error: "Invalid export request." }, { status: 400 });
     const { resource } = await params;
     const selectedOnly = reportRequest.scope === "selected";
     const ids = reportRequest.ids ?? [];
     const numericIds = ids.map(Number).filter((n) => !isNaN(n) && n > 0);
+    const template = (rawBody as { template?: string } | null)?.template;
 
-    // Single Job Dossier PDF for Admin
-    if (resource === "jobs" && selectedOnly && ids.length === 1 && ids[0] !== undefined) {
+    // Explicit Single Job Dossier (only if template === "dossier")
+    if (resource === "jobs" && selectedOnly && ids.length === 1 && ids[0] !== undefined && template === "dossier") {
       const jobId = Number(ids[0]);
       if (!isNaN(jobId) && jobId > 0) {
         const dossierData = await fetchJobDossierData(jobId, {
@@ -231,38 +379,37 @@ export async function POST(
       }
     }
 
-    // Single Finance Voucher PDF for Admin
-    if (resource === "finance" && selectedOnly && ids.length === 1 && ids[0] !== undefined) {
+    // Explicit Single Finance Voucher (only if template === "voucher")
+    if (resource === "finance" && selectedOnly && ids.length === 1 && ids[0] !== undefined && template === "voucher") {
       const rawId = ids[0];
-      const isPayout =
-        typeof rawId === "string" && (rawId.startsWith("wdr-") || rawId.startsWith("payout-"));
-      if (!isPayout) {
-        const paymentId =
-          typeof rawId === "number"
-            ? rawId
-            : parseInt(String(rawId).replace(/^(tx-|payment-)/, ""), 10);
-        if (!isNaN(paymentId) && paymentId > 0) {
-          const receiptData = await fetchPaymentReceiptData(paymentId, {
-            userId: session.userId,
-            role: "ADMIN",
-          });
-          if (receiptData) {
-            const buffer = await renderReportPdf(
-              createElement(InvoiceDocument, receiptData) as unknown as Parameters<
-                typeof renderReportPdf
-              >[0],
-            );
-            return pdfResponse(buffer, `admin-voucher-${receiptData.invoiceNumber}.pdf`);
-          }
+      const paymentId =
+        typeof rawId === "number"
+          ? rawId
+          : parseInt(String(rawId).replace(/^(tx-|payment-)/, ""), 10);
+      if (!isNaN(paymentId) && paymentId > 0) {
+        const receiptData = await fetchPaymentReceiptData(paymentId, {
+          userId: session.userId,
+          role: "ADMIN",
+        });
+        if (receiptData) {
+          const buffer = await renderReportPdf(
+            createElement(InvoiceDocument, receiptData) as unknown as Parameters<
+              typeof renderReportPdf
+            >[0],
+          );
+          return pdfResponse(buffer, `admin-voucher-${receiptData.invoiceNumber}.pdf`);
         }
       }
     }
 
     let title: string;
     let subtitle: string;
-    let downloadFilename = `klick-pro-admin-${resource}-report.pdf`;
+    const downloadFilename = `klick-pro-admin-${resource}-report.pdf`;
     let document: ReturnType<typeof ReportDocument>;
 
+    // -------------------------------------------------------------------------
+    // Case A: Users Report
+    // -------------------------------------------------------------------------
     if (resource === "users") {
       const rawUsers = await db.user.findMany({
         where: selectedOnly ? { id: { in: numericIds } } : {},
@@ -288,33 +435,25 @@ export async function POST(
       const [jobCounts, proposalCounts, wallets, topupSums, withdrawalSums] =
         await Promise.all([
           db.clientJob
-            .groupBy({
-              by: ["userId"],
-              _count: { id: true },
-            })
+            .groupBy({ by: ["userId"], _count: { id: true } })
             .catch(() => [] as Array<{ userId: number; _count: { id: number } }>),
           db.projectRequest
-            .groupBy({
-              by: ["professionalId"],
-              _count: { id: true },
-            })
+            .groupBy({ by: ["professionalId"], _count: { id: true } })
             .catch(() => [] as Array<{ professionalId: number; _count: { id: number } }>),
           db.wallet
-            .findMany({
-              select: { id: true, userId: true, balance: true },
-            })
-            .catch(() => [] as Array<{ id: number; userId: number; balance: number }>),
+            .findMany({ select: { userId: true, balance: true } })
+            .catch(() => [] as Array<{ userId: number; balance: number }>),
           db.walletTransaction
             .groupBy({
               by: ["walletId"],
-              where: { type: "WALLET_TOP_UP", status: "COMPLETED" },
+              where: { type: "WALLET_TOP_UP" },
               _sum: { amount: true },
             })
             .catch(() => [] as Array<{ walletId: number; _sum: { amount: number | null } }>),
           db.projectWithdrawal
             .groupBy({
               by: ["professionalId"],
-              where: { status: { in: ["COMPLETED", "PAID", "PROCESSED"] } },
+              where: { status: "COMPLETED" },
               _sum: { amount: true },
             })
             .catch(() => [] as Array<{ professionalId: number; _sum: { amount: number | null } }>),
@@ -322,196 +461,64 @@ export async function POST(
 
       const jobCountMap = new Map(jobCounts.map((j) => [j.userId, j._count.id]));
       const proposalCountMap = new Map(proposalCounts.map((p) => [p.professionalId, p._count.id]));
-      const walletByUserId = new Map(wallets.map((w) => [w.userId, w]));
-      const topupByWalletId = new Map(topupSums.map((t) => [t.walletId, t._sum.amount ?? 0]));
-      const withdrawalByProId = new Map(
-        withdrawalSums.map((w) => [w.professionalId, w._sum.amount ?? 0]),
-      );
+      const walletBalanceMap = new Map(wallets.map((w) => [w.userId, w.balance]));
+      const topupMap = new Map(topupSums.map((t) => [t.walletId, t._sum.amount ?? 0]));
+      const withdrawalMap = new Map(withdrawalSums.map((w) => [w.professionalId, w._sum.amount ?? 0]));
 
-      const isAllClients = rawUsers.length > 0 && rawUsers.every((u) => u.role === "CLIENT");
-      const isAllPros = rawUsers.length > 0 && rawUsers.every((u) => u.role === "PROFESSIONAL");
-
-      const users: UserRow[] = rawUsers.map((u) => {
-        const wallet = walletByUserId.get(u.id);
-        const walletBalance = wallet ? wallet.balance : 0;
-        const totalTopUp = wallet ? (topupByWalletId.get(wallet.id) ?? 0) : 0;
-        const totalWithdrawals = withdrawalByProId.get(u.id) ?? 0;
-        const jobsCount =
-          u.role === "CLIENT" ? (jobCountMap.get(u.id) ?? 0) : (proposalCountMap.get(u.id) ?? 0);
-        const daysActive = Math.max(
-          1,
-          Math.floor((Date.now() - new Date(u.createdAt).getTime()) / (1000 * 60 * 60 * 24)),
-        );
-
+      const now = new Date();
+      const rows: UserRow[] = rawUsers.map((u) => {
+        const days = Math.max(1, Math.floor((now.getTime() - u.createdAt.getTime()) / (1000 * 3600 * 24)));
         return {
           id: u.id,
-          username: u.username ?? null,
-          firstName: u.firstName ?? "",
-          lastName: u.lastName ?? "",
-          email: u.email ?? "",
-          phone: u.phone ?? null,
+          username: u.username,
+          firstName: u.firstName,
+          lastName: u.lastName,
+          email: u.email,
+          phone: u.phone,
           role: u.role,
           isActive: u.isActive,
           isVerified: u.isVerified,
           createdAt: u.createdAt,
-          daysActive,
-          jobsCount,
-          walletBalance,
-          totalTopUp,
-          totalWithdrawals,
+          daysActive: days,
+          jobsCount: u.role === "CLIENT" ? (jobCountMap.get(u.id) ?? 0) : (proposalCountMap.get(u.id) ?? 0),
+          walletBalance: walletBalanceMap.get(u.id) ?? 0,
+          totalTopUp: topupMap.get(u.id) ?? 0,
+          totalWithdrawals: withdrawalMap.get(u.id) ?? 0,
         };
       });
 
-      if (isAllClients) {
-        title = "Klick-Pro Admin — Client Compliance & Operations Audit";
-        subtitle = "Executive Oversight — Registered Client Accounts & Job Volume";
-      } else if (isAllPros) {
-        title = "Klick-Pro Admin — Professional Compliance & Earnings Audit";
-        subtitle = "Executive Oversight — Verified Service Professionals & Payout Activity";
-      } else {
-        title = "Klick-Pro Admin — Platform Accounts & Compliance Audit";
-        subtitle = "Executive Oversight — Registered Client & Professional Accounts";
-      }
+      const totalBalance = rows.reduce((sum, r) => sum + r.walletBalance, 0);
+      const verifiedCount = rows.filter((r) => r.isVerified).length;
+      const summaryStats: ReportSummaryStat[] = [
+        { label: "Total Accounts", value: String(rows.length) },
+        { label: "KYC Verified", value: `${verifiedCount} (${rows.length > 0 ? Math.round((verifiedCount / rows.length) * 100) : 0}%)` },
+        { label: "Total Wallet Float", value: `INR ${totalBalance.toLocaleString("en-IN")}` },
+      ];
 
-      const columns = getUserColumns(isAllClients, isAllPros);
-      document = buildDocument(title, subtitle, columns, users, reportRequest, selectedOnly);
+      title = "User Directory & KYC Compliance Audit";
+      subtitle = "Executive Platform Overview — Verified Profiles, Activity Metrics & Account Status";
+      document = ReportDocument({
+        title,
+        subtitle,
+        filterSummary: selectedOnly ? `${rows.length} selected` : `${rows.length} total`,
+        summaryStats,
+        columns: getUserColumns(false, false),
+        rows,
+        pageSize: reportRequest.pageSize,
+        orientation: "landscape",
+      });
+    }
 
-      if (selectedOnly && rawUsers.length === 1 && rawUsers[0]) {
-        const firstUser = rawUsers[0];
-        const [userJobs, userProposals, userTrackings] = await Promise.all([
-          db.clientJob.findMany({
-            where: { userId: firstUser.id },
-            orderBy: { createdAt: "desc" },
-            take: 100,
-            select: {
-              id: true,
-              title: true,
-              category: true,
-              budgetMin: true,
-              budgetMax: true,
-              hourlyRate: true,
-              timingType: true,
-              status: true,
-              createdAt: true,
-            },
-          }),
-          db.projectRequest.findMany({
-            where: { professionalId: firstUser.id },
-            include: {
-              job: { select: { id: true, title: true, category: true } },
-            },
-            orderBy: { createdAt: "desc" },
-            take: 100,
-          }),
-          db.projectTracking.findMany({
-            where:
-              firstUser.role === "CLIENT"
-                ? { clientId: firstUser.id }
-                : { professionalId: firstUser.id },
-            select: { id: true, status: true },
-          }),
-        ]);
-
-        const wallet = walletByUserId.get(firstUser.id);
-        const walletBalance = wallet ? wallet.balance : 0;
-        const totalTopUp = wallet ? (topupByWalletId.get(wallet.id) ?? 0) : 0;
-        const totalWithdrawals = withdrawalByProId.get(firstUser.id) ?? 0;
-        const daysActive = Math.max(
-          1,
-          Math.floor(
-            (Date.now() - new Date(firstUser.createdAt).getTime()) / (1000 * 60 * 60 * 24),
-          ),
-        );
-
-        const dossierData: UserDossierData = {
-          userId: firstUser.id,
-          username: firstUser.username,
-          firstName: firstUser.firstName,
-          lastName: firstUser.lastName,
-          email: firstUser.email,
-          phone: firstUser.phone,
-          role: firstUser.role as "CLIENT" | "PROFESSIONAL" | "ADMIN",
-          isActive: firstUser.isActive,
-          isVerified: firstUser.isVerified,
-          createdAt: new Date(firstUser.createdAt).toLocaleDateString("en-IN", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          }),
-          daysActive,
-          location: firstUser.professionalCity || firstUser.address || null,
-          companyName: firstUser.companyName || null,
-          walletBalance,
-          totalTopUp,
-          totalWithdrawals,
-          completedProjectsCount: userTrackings.filter((t) => t.status === "COMPLETED").length,
-          jobs: userJobs.map((j) => ({
-            id: j.id,
-            title: j.title || "Untitled Job",
-            category: j.category || "General",
-            budget:
-              j.timingType === "HOURLY"
-                ? `₹${j.hourlyRate?.toLocaleString("en-IN") || 0}/hr`
-                : j.budgetMin && j.budgetMax
-                  ? `₹${j.budgetMin.toLocaleString("en-IN")} – ₹${j.budgetMax.toLocaleString("en-IN")}`
-                  : `₹${(j.budgetMax || j.budgetMin || 0).toLocaleString("en-IN")}`,
-            status: j.status,
-            createdAt: new Date(j.createdAt).toLocaleDateString("en-IN"),
-          })),
-          proposals: userProposals.map((p) => ({
-            id: p.id,
-            jobId: p.job?.id || p.jobId,
-            jobTitle: p.job?.title || `Job #${p.jobId}`,
-            category: p.job?.category || "General",
-            bidAmount: `₹${p.bidAmount.toLocaleString("en-IN")}`,
-            status: p.status,
-            createdAt: new Date(p.createdAt).toLocaleDateString("en-IN"),
-          })),
-        };
-
-        const uname = (firstUser.username || `${firstUser.firstName}-${firstUser.lastName}`)
-          .toLowerCase()
-          .replace(/[^a-z0-9_-]/g, "_");
-        const singleFilename = `klick-pro-admin-${uname}.pdf`;
-
-        const buffer = await renderReportPdf(
-          createElement(UserDossierDocument, { data: dossierData }) as unknown as Parameters<
-            typeof renderReportPdf
-          >[0],
-        );
-        return pdfResponse(buffer, singleFilename);
-      }
-
-      if (isAllClients) {
-        downloadFilename = `klick-pro-admin-clients-report.pdf`;
-      } else if (isAllPros) {
-        downloadFilename = `klick-pro-admin-professionals-report.pdf`;
-      } else {
-        downloadFilename = `klick-pro-admin-users-report.pdf`;
-      }
-    } else if (resource === "jobs") {
+    // -------------------------------------------------------------------------
+    // Case B: Jobs & Marketplace Report
+    // -------------------------------------------------------------------------
+    else if (resource === "jobs") {
       const jobs = await db.clientJob.findMany({
         where: selectedOnly ? { id: { in: numericIds } } : {},
-        include: { user: { select: { firstName: true, lastName: true } } },
+        include: { user: { select: { id: true, firstName: true, lastName: true } } },
         orderBy: { createdAt: "desc" },
         take: selectedOnly ? undefined : 500,
       });
-
-      const firstJob = jobs[0];
-      if (jobs.length === 1 && firstJob) {
-        const dossierData = await fetchJobDossierData(firstJob.id, {
-          userId: session.userId,
-          role: "ADMIN",
-        });
-        if (dossierData) {
-          const buffer = await renderReportPdf(
-            createElement(JobDossierDocument, { data: dossierData }) as unknown as Parameters<
-              typeof renderReportPdf
-            >[0],
-          );
-          return pdfResponse(buffer, `admin-job-${firstJob.id}-dossier.pdf`);
-        }
-      }
 
       const rows: JobRow[] = jobs.map((job) => {
         const budgetStr =
@@ -524,9 +531,7 @@ export async function POST(
         return {
           id: job.id,
           title: job.title,
-          clientName: job.user
-            ? `${job.user.firstName ?? ""} ${job.user.lastName ?? ""}`.trim() || "Client"
-            : "Client",
+          clientName: job.user ? `${job.user.firstName} ${job.user.lastName}`.trim() : "Client",
           category: job.category,
           status: job.status,
           budget: budgetStr,
@@ -534,106 +539,314 @@ export async function POST(
           createdAt: job.createdAt,
         };
       });
+
+      const openCount = rows.filter((r) => r.status === "OPEN").length;
+      const summaryStats: ReportSummaryStat[] = [
+        { label: "Total Jobs / Projects", value: String(rows.length) },
+        { label: "Open & Hiring", value: String(openCount) },
+        { label: "Audit Status", value: "Reconciled" },
+      ];
+
       title = "Marketplace Jobs & Projects Audit";
       subtitle = "Admin Oversight — Active Listings & Operational Engagements";
-      document = buildDocument(title, subtitle, jobColumns, rows, reportRequest, selectedOnly);
-    } else if (resource === "finance") {
-      const txIds: number[] = [];
-      const wdrIds: number[] = [];
+      document = ReportDocument({
+        title,
+        subtitle,
+        filterSummary: selectedOnly ? `${rows.length} selected` : `${rows.length} total`,
+        summaryStats,
+        columns: jobColumns,
+        rows,
+        pageSize: reportRequest.pageSize,
+        orientation: "landscape",
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // Case C: Revenue & Commission Reconciliation (or legacy finance)
+    // -------------------------------------------------------------------------
+    else if (resource === "revenue" || resource === "finance") {
+      const paymentIds: number[] = [];
       for (const id of ids) {
-        if (typeof id === "number") {
-          txIds.push(id);
-          wdrIds.push(id);
-        } else if (typeof id === "string") {
-          if (id.startsWith("tx-") || id.startsWith("payment-")) {
-            const num = parseInt(id.replace(/^(tx-|payment-)/, ""), 10);
-            if (!isNaN(num)) txIds.push(num);
-          } else if (id.startsWith("wdr-") || id.startsWith("payout-")) {
-            const num = parseInt(id.replace(/^(wdr-|payout-)/, ""), 10);
-            if (!isNaN(num)) wdrIds.push(num);
-          } else {
-            const num = parseInt(id, 10);
-            if (!isNaN(num)) {
-              txIds.push(num);
-              wdrIds.push(num);
+        const str = String(id);
+        const parsed = parseInt(str.replace(/^(tx-|payment-|PAY-|TXN-)/, ""), 10);
+        if (!isNaN(parsed) && parsed > 0) paymentIds.push(parsed);
+      }
+
+      const payments = await db.payment.findMany({
+        where: selectedOnly ? { id: { in: paymentIds } } : {},
+        include: {
+          client: { select: { firstName: true, lastName: true } },
+          professional: { select: { firstName: true, lastName: true } },
+          job: { select: { title: true } },
+          milestone: { select: { title: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: selectedOnly ? undefined : 500,
+      });
+
+      const rows: RevenueRow[] = payments.map((p) => {
+        const gross = p.baseAmount || p.amount;
+        const commission = p.commissionAmount ?? 0;
+        const net = p.professionalPayoutAmount ?? Math.max(0, gross - commission);
+        const jobTitle = p.job?.title ?? (p.milestone?.title ? `Milestone: ${p.milestone.title}` : `Payment #${p.id}`);
+        return {
+          id: p.id,
+          referenceNumber: `PAY-${p.id}`,
+          kind: "Milestone Settlement",
+          grossAmount: gross,
+          commissionAmount: commission,
+          netPayoutAmount: net,
+          status: p.status,
+          clientName: p.client ? `${p.client.firstName} ${p.client.lastName}`.trim() : "Client",
+          professionalName: p.professional ? `${p.professional.firstName} ${p.professional.lastName}`.trim() : "Professional",
+          jobTitle,
+          createdAt: p.createdAt,
+        };
+      });
+
+      const totalGross = rows.reduce((sum, r) => sum + r.grossAmount, 0);
+      const totalCommission = rows.reduce((sum, r) => sum + r.commissionAmount, 0);
+      const totalNet = rows.reduce((sum, r) => sum + r.netPayoutAmount, 0);
+
+      const summaryStats: ReportSummaryStat[] = [
+        { label: "Total Settlements", value: String(rows.length) },
+        { label: "Gross Volume (GMV)", value: `INR ${totalGross.toLocaleString("en-IN")}` },
+        {
+          label: "Platform Commission",
+          value: totalCommission > 0 ? `INR ${totalCommission.toLocaleString("en-IN")}` : "INR 0 (Off)",
+        },
+        { label: "Net Disbursed", value: `INR ${totalNet.toLocaleString("en-IN")}` },
+      ];
+
+      title = "Revenue & Platform Commission Reconciliation";
+      subtitle = "Admin Executive Oversight — Contractual Billings, Dynamic Commission & Net Payouts";
+      document = ReportDocument({
+        title,
+        subtitle,
+        filterSummary: selectedOnly ? `${rows.length} selected` : `${rows.length} total`,
+        summaryStats,
+        columns: revenueColumns,
+        rows,
+        pageSize: reportRequest.pageSize,
+        orientation: "landscape",
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // Case D: Escrow & Treasury Reconciliation
+    // -------------------------------------------------------------------------
+    else if (resource === "escrow") {
+      const milestones = await db.projectMilestone.findMany({
+        where: selectedOnly ? { id: { in: numericIds } } : {},
+        include: {
+          tracking: {
+            include: {
+              client: { select: { firstName: true, lastName: true } },
+              professional: { select: { firstName: true, lastName: true } },
+              job: { select: { title: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: selectedOnly ? undefined : 500,
+      });
+
+      const rows: EscrowRow[] = milestones.map((m) => {
+        const custody =
+          m.status === "APPROVED"
+            ? "RELEASED TO WALLET"
+            : m.status === "REFUNDED"
+              ? "REFUNDED TO CLIENT"
+              : "HELD IN TRUST";
+        return {
+          id: m.id,
+          projectTitle: m.tracking?.job?.title ?? `Project #${m.trackingId}`,
+          milestoneTitle: m.title,
+          clientName: m.tracking?.client ? `${m.tracking.client.firstName} ${m.tracking.client.lastName}`.trim() : "Client",
+          professionalName: m.tracking?.professional ? `${m.tracking.professional.firstName} ${m.tracking.professional.lastName}`.trim() : "Professional",
+          amount: m.amount,
+          milestoneStatus: m.status,
+          custodyStatus: custody,
+          releaseDue: m.releaseAt ? m.releaseAt.toLocaleDateString("en-IN") : "Pending Review",
+          createdAt: m.createdAt,
+        };
+      });
+
+      const totalEscrow = rows.reduce((sum, r) => sum + r.amount, 0);
+      const heldTotal = rows.filter((r) => r.custodyStatus === "HELD IN TRUST").reduce((sum, r) => sum + r.amount, 0);
+      const summaryStats: ReportSummaryStat[] = [
+        { label: "Milestones in Scope", value: String(rows.length) },
+        { label: "Escrow Held in Trust", value: `INR ${heldTotal.toLocaleString("en-IN")}` },
+        { label: "Total Escrow Handled", value: `INR ${totalEscrow.toLocaleString("en-IN")}` },
+        { label: "Treasury Backing", value: "100% Fully Backed" },
+      ];
+
+      title = "Escrow & Treasury Custody Reconciliation";
+      subtitle = "Contractual Subledger — Milestone Funds in Escrow, Approvals & Disbursed Liabilities";
+      document = ReportDocument({
+        title,
+        subtitle,
+        filterSummary: selectedOnly ? `${rows.length} selected` : `${rows.length} total`,
+        summaryStats,
+        columns: escrowColumns,
+        rows,
+        pageSize: reportRequest.pageSize,
+        orientation: "landscape",
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // Case E: Bank Withdrawals & Payouts Ledger
+    // -------------------------------------------------------------------------
+    else if (resource === "withdrawals") {
+      const withdrawals = await db.projectWithdrawal.findMany({
+        where: selectedOnly ? { id: { in: numericIds } } : {},
+        orderBy: { createdAt: "desc" },
+        take: selectedOnly ? undefined : 500,
+      });
+
+      const proIds = [...new Set(withdrawals.map((w) => w.professionalId))];
+      const pros = await db.user.findMany({
+        where: { id: { in: proIds } },
+        select: { id: true, firstName: true, lastName: true },
+      });
+      const proNameMap = new Map(pros.map((p) => [p.id, `${p.firstName} ${p.lastName}`.trim()]));
+
+      const rows: WithdrawalRow[] = withdrawals.map((w) => {
+        let bankInfo = "Bank / UPI";
+        if (w.destinationLabel) {
+          try {
+            const parsed = JSON.parse(w.destinationLabel);
+            if (parsed && typeof parsed === "object") {
+              const parts = [];
+              if (parsed.bankName) parts.push(parsed.bankName);
+              if (parsed.accountNumber || parsed.last4)
+                parts.push(maskAccountNumber(parsed.last4 || parsed.accountNumber));
+              if (parsed.ifsc) parts.push(`IFSC: ${parsed.ifsc}`);
+              if (parsed.vpa) parts.push(maskDestinationString(parsed.vpa));
+              bankInfo = parts.length > 0 ? parts.join(" · ") : maskDestinationString(w.destinationLabel);
+            } else {
+              bankInfo = maskDestinationString(w.destinationLabel);
             }
+          } catch {
+            bankInfo = maskDestinationString(w.destinationLabel);
           }
         }
-      }
 
-      const [transactions, withdrawals] = await Promise.all([
-        db.projectTransaction.findMany({
-          where: selectedOnly ? { id: { in: txIds } } : {},
-          orderBy: { createdAt: "desc" },
-          take: selectedOnly ? undefined : 500,
-        }),
-        db.projectWithdrawal.findMany({
-          where: selectedOnly ? { id: { in: wdrIds } } : {},
-          orderBy: { createdAt: "desc" },
-          take: selectedOnly ? undefined : 500,
-        }),
-      ]);
+        return {
+          id: w.id,
+          referenceNumber: `WDR-${w.id}`,
+          professionalName: proNameMap.get(w.professionalId) ?? `#${w.professionalId}`,
+          amount: w.amount,
+          destination: w.payoutMode || "Bank Transfer",
+          bankInfo,
+          utr: w.utr || "—",
+          status: w.status,
+          createdAt: w.createdAt,
+        };
+      });
 
-      const firstTx = transactions[0];
-      if (transactions.length === 1 && withdrawals.length === 0 && firstTx) {
-        const receiptData = await fetchPaymentReceiptData(firstTx.id, {
-          userId: session.userId,
-          role: "ADMIN",
-        });
-        if (receiptData) {
-          const buffer = await renderReportPdf(
-            createElement(InvoiceDocument, receiptData) as unknown as Parameters<
-              typeof renderReportPdf
-            >[0],
-          );
-          return pdfResponse(buffer, `admin-voucher-${receiptData.invoiceNumber}.pdf`);
-        }
-      }
+      const totalRequested = rows.reduce((sum, r) => sum + r.amount, 0);
+      const settledTotal = rows.filter((r) => r.status === "COMPLETED").reduce((sum, r) => sum + r.amount, 0);
+      const pendingCount = rows.filter((r) => r.status === "PENDING" || r.status === "PROCESSING").length;
+
+      const summaryStats: ReportSummaryStat[] = [
+        { label: "Total Requests", value: String(rows.length) },
+        { label: "Settled Payouts", value: `INR ${settledTotal.toLocaleString("en-IN")}` },
+        { label: "Total Volume", value: `INR ${totalRequested.toLocaleString("en-IN")}` },
+        { label: "Pending Processing", value: String(pendingCount) },
+      ];
+
+      title = "Bank Withdrawals & Settlement Ledger";
+      subtitle = "Disbursement Records — Professional Bank Transfers, UPI Payouts & UTR Reconciliation";
+      document = ReportDocument({
+        title,
+        subtitle,
+        filterSummary: selectedOnly ? `${rows.length} selected` : `${rows.length} total`,
+        summaryStats,
+        columns: withdrawalColumns,
+        rows,
+        pageSize: reportRequest.pageSize,
+        orientation: "landscape",
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // Case F: Disputes & Arbitration Audit
+    // -------------------------------------------------------------------------
+    else if (resource === "disputes") {
+      const disputes = await db.projectDispute.findMany({
+        where: selectedOnly ? { id: { in: numericIds } } : {},
+        orderBy: { createdAt: "desc" },
+        take: selectedOnly ? undefined : 500,
+      });
 
       const userIds = [
         ...new Set(
-          [
-            ...transactions.flatMap((item) => [item.clientId, item.professionalId]),
-            ...withdrawals.map((item) => item.professionalId),
-          ].filter((id): id is number => typeof id === "number" && id > 0),
+          disputes.flatMap((d) => [d.clientId, d.professionalId, d.reporterId]).filter((id) => id > 0),
         ),
       ];
       const users = await db.user.findMany({
         where: { id: { in: userIds } },
         select: { id: true, firstName: true, lastName: true },
       });
-      const names = new Map(
-        users.map((user) => [user.id, `${user.firstName} ${user.lastName}`.trim()]),
-      );
-      const rows: FinanceRow[] = [
-        ...transactions.map((item) => ({
-          id: item.id,
-          referenceNumber: `TXN-${item.id}`,
-          kind: "Payment" as const,
-          type: item.type,
-          amount: item.amount,
-          currency: item.currency,
-          status: item.status,
-          party: `Client: ${names.get(item.clientId) ?? `#${item.clientId}`} · Pro: ${names.get(item.professionalId) ?? `#${item.professionalId}`}`,
-          createdAt: item.createdAt,
-        })),
-        ...withdrawals.map((item) => ({
-          id: item.id,
-          referenceNumber: `WDR-${item.id}`,
-          kind: "Payout" as const,
-          type: "Withdrawal",
-          amount: item.amount,
-          currency: item.currency,
-          status: item.status,
-          party: `Professional: ${names.get(item.professionalId) ?? `#${item.professionalId}`}`,
-          createdAt: item.createdAt,
-        })),
-      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      title = "Financial Transactions & Disbursements Audit";
-      subtitle = "Admin Oversight — Inbound Payments, Retained Margins & Outbound Payouts";
-      document = buildDocument(title, subtitle, financeColumns, rows, reportRequest, selectedOnly);
+      const nameMap = new Map(users.map((u) => [u.id, `${u.firstName} ${u.lastName}`.trim()]));
+
+      const trackingIds = [...new Set(disputes.map((d) => d.trackingId))];
+      const trackings = await db.projectTracking.findMany({
+        where: { id: { in: trackingIds } },
+        include: { job: { select: { title: true } } },
+      });
+      const trackingMap = new Map(trackings.map((t) => [t.id, t.job?.title ?? `Project #${t.id}`]));
+
+      const rows: DisputeRow[] = disputes.map((d) => {
+        const clientName = nameMap.get(d.clientId) ?? `Client #${d.clientId}`;
+        const proName = nameMap.get(d.professionalId) ?? `Pro #${d.professionalId}`;
+        const claimant = d.reporterRole === "CLIENT" ? clientName : proName;
+        const respondent = d.reporterRole === "CLIENT" ? proName : clientName;
+        const splitInfo =
+          d.status === "RESOLVED"
+            ? `Refund: ₹${(d.refundAmount ?? 0).toLocaleString("en-IN")} · Payout: ₹${(d.payoutAmount ?? 0).toLocaleString("en-IN")}`
+            : "Under Arbitration";
+
+        return {
+          id: d.id,
+          projectTitle: trackingMap.get(d.trackingId) ?? `Project #${d.trackingId}`,
+          issueType: d.issueType,
+          priority: d.priority,
+          disputedAmount: (d.refundAmount ?? 0) + (d.payoutAmount ?? 0),
+          claimant,
+          respondent,
+          splitInfo,
+          status: d.status,
+          createdAt: d.createdAt,
+        };
+      });
+
+      const openCount = rows.filter((r) => r.status !== "RESOLVED" && r.status !== "CANCELLED").length;
+      const totalDisputed = rows.reduce((sum, r) => sum + r.disputedAmount, 0);
+
+      const summaryStats: ReportSummaryStat[] = [
+        { label: "Total Disputes", value: String(rows.length) },
+        { label: "Open / In Review", value: String(openCount) },
+        { label: "Total Exposure", value: `INR ${totalDisputed.toLocaleString("en-IN")}` },
+        { label: "Arbitration Status", value: "Compliant" },
+      ];
+
+      title = "Disputes & Contract Arbitration Audit";
+      subtitle = "Operational Risk Audit — Case Logs, Disputed Escrow, Decisions & Settlement Splits";
+      document = ReportDocument({
+        title,
+        subtitle,
+        filterSummary: selectedOnly ? `${rows.length} selected` : `${rows.length} total`,
+        summaryStats,
+        columns: disputeColumns,
+        rows,
+        pageSize: reportRequest.pageSize,
+        orientation: "landscape",
+      });
     } else {
-      return NextResponse.json({ error: "Unknown report." }, { status: 404 });
+      return NextResponse.json({ error: "Unknown report category." }, { status: 404 });
     }
 
     const buffer = await renderReportPdf(document);
@@ -645,27 +858,4 @@ export async function POST(
       { status: 500 },
     );
   }
-}
-
-function buildDocument<T>(
-  title: string,
-  subtitle: string,
-  columns: ReportColumn<T>[],
-  rows: T[],
-  reportRequest: {
-    scope: "all" | "selected";
-    pageSize?: ReportPageSize;
-    orientation?: ReportOrientation;
-  },
-  selectedOnly: boolean,
-) {
-  return ReportDocument({
-    title,
-    subtitle,
-    filterSummary: selectedOnly ? `${rows.length} selected` : `${rows.length} total`,
-    columns,
-    rows,
-    pageSize: reportRequest.pageSize,
-    orientation: reportRequest.orientation ?? "landscape",
-  });
 }

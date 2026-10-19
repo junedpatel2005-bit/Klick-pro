@@ -24,10 +24,13 @@ export type CsvExportOptions = {
 
 function sanitizeCell(value: unknown): string {
   if (value == null) return '""';
+  if (typeof value === "number" && !isNaN(value)) {
+    return String(value);
+  }
   let stringValue = String(value);
 
-  // CSV formula injection protection: if cell starts with =, +, -, or @, prefix with a single quote
-  if (/^[=+\-@\t\r]/.test(stringValue)) {
+  // CSV formula injection protection: if cell starts with =, +, -, or @ (and not a clean negative number)
+  if (/^[=+@\t\r]/.test(stringValue) || (/^-/.test(stringValue) && !/^-\d+(\.\d+)?$/.test(stringValue.trim()))) {
     stringValue = `'${stringValue}`;
   }
 

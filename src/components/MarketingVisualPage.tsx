@@ -715,7 +715,7 @@ function CTA() {
             variant="outline"
             className="border-white/30 bg-white/10 text-white"
           >
-            <Link href="/signup">Become a Pro</Link>
+            <Link href="/signup">Become a Professional</Link>
           </Button>
         </div>
       </div>

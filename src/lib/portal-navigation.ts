@@ -18,7 +18,7 @@ import type { NavigationItem } from "@/components/AppNavigation";
 
 export const clientItems: NavigationItem[] = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/discover", icon: Users, label: "Find pros" },
+  { to: "/discover", icon: Users, label: "Find professionals" },
   { to: "/post-job", icon: PlusCircle, label: "Post a job" },
   { to: "/my-jobs", icon: FolderKanban, label: "Projects" },
   { to: "/reports", icon: FileBarChart, label: "Reports" },

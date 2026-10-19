@@ -203,26 +203,10 @@ export default function MyJobs() {
               (job) => jobStatus(job) === status && (status !== "OPEN" || !isScheduled(job)),
             );
     return [...filtered].sort((a, b) => {
-      const statusRank: Record<Job["status"], number> = {
-        OPEN: 0,
-        RUNNING: 1,
-        DRAFT: 2,
-        COMPLETED: 3,
-        CLOSED: 4,
-      };
-
-      const aStatus = jobStatus(a);
-      const bStatus = jobStatus(b);
-
-      if (statusRank[aStatus] !== statusRank[bStatus]) {
-        return statusRank[aStatus] - statusRank[bStatus];
-      }
-
-      if (aStatus === "OPEN" && bStatus === "OPEN") {
-        if (b.proposalCount !== a.proposalCount) return b.proposalCount - a.proposalCount;
-      }
-
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      const dateB = new Date(b.createdAt || b.updatedAt).getTime();
+      const dateA = new Date(a.createdAt || a.updatedAt).getTime();
+      if (dateB !== dateA) return dateB - dateA;
+      return b.id - a.id;
     });
   }, [jobs, status]);
 

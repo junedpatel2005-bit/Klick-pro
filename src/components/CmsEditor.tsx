@@ -935,7 +935,7 @@ function HomeCmsEditor({
     "Connect with vetted professionals for home, IT, and creative services with milestone escrow security.",
   );
   const [metaKeywords, setMetaKeywords] = useState(
-    "hire professionals, verified pros, escrow freelance, local services",
+    "hire professionals, verified professionals, escrow freelance, local services",
   );
 
   useEffect(() => {

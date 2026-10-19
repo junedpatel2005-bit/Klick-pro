@@ -468,7 +468,7 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
                       unread: unreadChatsCount,
                     },
                     { key: "CLIENT", label: "Clients", unread: clientUnread },
-                    { key: "PROFESSIONAL", label: "Pros", unread: proUnread },
+                    { key: "PROFESSIONAL", label: "Professionals", unread: proUnread },
                   ] as const
                 ).map((tab) => (
                   <button
@@ -629,7 +629,7 @@ function MessagesWorkspaceInner({ admin = false }: { admin?: boolean }) {
                                 : "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
                             }`}
                           >
-                            {contact.role === "PROFESSIONAL" ? "Pro" : "Client"}
+                            {contact.role === "PROFESSIONAL" ? "Professional" : "Client"}
                           </span>
                         )}
                       </div>

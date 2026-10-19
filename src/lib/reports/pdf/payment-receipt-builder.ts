@@ -21,6 +21,7 @@ export type PaymentReceiptData = {
   paymentReference?: string | null;
   jobTitle?: string;
   milestoneTitle?: string;
+  showCommission?: boolean;
 };
 
 export async function fetchPaymentReceiptData(
@@ -201,6 +202,7 @@ export async function fetchPaymentReceiptData(
       paymentReference: `#TXN-${transaction.id}`,
       jobTitle: tracking.job.title ?? "Job Record",
       milestoneTitle: milestone?.title,
+      showCommission: !isClient && fee > 0,
     };
   }
 
@@ -227,12 +229,14 @@ export async function fetchPaymentReceiptData(
         gross: payment.amount,
         fee: payment.clientFeeAmount,
         net: payment.baseAmount,
-        grossLabel: "Total Charged",
+        grossLabel: payment.clientFeeAmount > 0 ? "Total Charged" : "Milestone Payment",
         feeLabel: "Client Service Fee",
-        netLabel: "Milestone Net Amount",
+        netLabel: payment.clientFeeAmount > 0 ? "Milestone Net Amount" : "Total Paid",
         lineDescription: payment.milestone?.title
           ? `Milestone: ${payment.milestone.title}`
-          : "Milestone payment plus platform service fee",
+          : payment.clientFeeAmount > 0
+            ? "Milestone payment plus platform service fee"
+            : "Milestone escrow payment",
         note: "This client receipt confirms the milestone escrow payment charged to your account.",
       }
     : isProfessionalView
@@ -240,13 +244,16 @@ export async function fetchPaymentReceiptData(
           gross: payment.baseAmount,
           fee: payment.commissionAmount,
           net: payment.professionalPayoutAmount,
-          grossLabel: "Client Milestone Payment",
+          grossLabel: payment.commissionAmount > 0 ? "Client Milestone Payment" : "Milestone Payment",
           feeLabel: "Platform Commission",
-          netLabel: "Net Earnings Credited",
+          netLabel: payment.commissionAmount > 0 ? "Net Earnings Credited" : "Total Earnings Credited",
           lineDescription: payment.milestone?.title
             ? `Milestone: ${payment.milestone.title}`
             : "Agreed milestone earnings approved by client",
-          note: "This professional payout voucher confirms the milestone earnings credited after settlement.",
+          note:
+            payment.commissionAmount > 0
+              ? "This professional payout voucher confirms the milestone earnings credited after settlement."
+              : "This professional payout voucher confirms the milestone earnings credited after settlement with zero platform deductions.",
         }
       : {
           gross: payment.amount,
@@ -297,5 +304,6 @@ export async function fetchPaymentReceiptData(
       payment.razorpayPaymentId || payment.providerReference || `#PAY-${payment.id}`,
     jobTitle: payment.job?.title ?? undefined,
     milestoneTitle: payment.milestone?.title ?? undefined,
+    showCommission: !isClientView && (visibleAmounts.fee ?? 0) > 0,
   };
 }

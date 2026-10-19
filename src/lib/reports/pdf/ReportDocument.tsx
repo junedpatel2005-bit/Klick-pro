@@ -3,12 +3,17 @@ import { reportTheme } from "./theme";
 import { getBrandLogoBase64 } from "./brand-logo";
 import type { ReportColumn, ReportOrientation, ReportPageSize } from "./types";
 
+export type ReportSummaryStat = {
+  label: string;
+  value: string;
+};
+
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 100,
-    paddingBottom: 56,
+    paddingTop: 96,
+    paddingBottom: 50,
     paddingHorizontal: 32,
-    fontSize: 9,
+    fontSize: 8.5,
     fontFamily: "Helvetica",
     color: reportTheme.ink,
   },
@@ -20,32 +25,121 @@ const styles = StyleSheet.create({
     height: 84,
     backgroundColor: reportTheme.ink,
     paddingHorizontal: 32,
-    paddingTop: 22,
+    paddingTop: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
   },
-  brand: {
-    fontSize: 9,
+  headerLeft: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  brandCapsule: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  logoBox: {
+    width: 28,
+    height: 28,
+    backgroundColor: reportTheme.white,
+    borderRadius: 6,
+    padding: 3,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  logoImage: {
+    width: 22,
+    height: 22,
+    objectFit: "contain",
+  },
+  brandName: {
+    fontSize: 11,
+    fontWeight: "bold",
+    color: reportTheme.white,
+    letterSpacing: 1.5,
+  },
+  brandSub: {
+    fontSize: 6.8,
     fontWeight: "bold",
     color: reportTheme.cta,
-    letterSpacing: 2,
+    letterSpacing: 1,
     textTransform: "uppercase",
   },
   title: {
-    marginTop: 5,
-    fontSize: 17,
+    marginTop: 2,
+    fontSize: 14.5,
     fontWeight: "bold",
     color: reportTheme.white,
   },
+  headerRight: {
+    alignItems: "flex-end",
+    minWidth: 160,
+  },
+  confidentialBadge: {
+    backgroundColor: "#1e293b",
+    borderWidth: 0.8,
+    borderColor: "#334155",
+    borderRadius: 3,
+    paddingVertical: 2.5,
+    paddingHorizontal: 7,
+    marginBottom: 4,
+  },
+  confidentialText: {
+    fontSize: 6.8,
+    fontWeight: "bold",
+    color: "#38bdf8",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
   meta: {
-    marginTop: 5,
-    fontSize: 8,
+    fontSize: 7.2,
     color: "#cbd5e1",
+    lineHeight: 1.35,
+    textAlign: "right",
+  },
+  accentBar: {
+    position: "absolute",
+    top: 84,
+    left: 0,
+    right: 0,
+    height: 2.5,
+    backgroundColor: reportTheme.cta,
+  },
+  summaryRibbon: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: reportTheme.zebra,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: reportTheme.border,
+  },
+  statBox: {
+    flex: 1,
+  },
+  statLabel: {
+    fontSize: 6.5,
+    fontWeight: "bold",
+    color: reportTheme.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  statValue: {
+    fontSize: 10,
+    fontWeight: "bold",
+    color: reportTheme.ink,
+    marginTop: 1.5,
   },
   footer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    height: 40,
+    height: 38,
     paddingHorizontal: 32,
     paddingTop: 10,
     borderTopWidth: 1,
@@ -54,20 +148,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   footerText: {
-    fontSize: 8,
+    fontSize: 7.5,
     color: reportTheme.muted,
   },
   table: {
-    marginTop: 10,
+    marginTop: 6,
   },
   tableHeaderRow: {
     flexDirection: "row",
     backgroundColor: reportTheme.ink,
-    borderRadius: 2,
+    borderRadius: 3,
   },
   tableHeaderCell: {
-    padding: 6,
-    fontSize: 8,
+    paddingVertical: 5.5,
+    paddingHorizontal: 6,
+    fontSize: 7.2,
     fontWeight: "bold",
     color: reportTheme.white,
     textTransform: "uppercase",
@@ -75,28 +170,32 @@ const styles = StyleSheet.create({
   },
   tableRow: {
     flexDirection: "row",
-    borderBottomWidth: 1,
+    borderBottomWidth: 0.8,
     borderBottomColor: reportTheme.border,
   },
   tableRowAlt: {
     backgroundColor: reportTheme.zebra,
   },
   tableCell: {
-    padding: 6,
-    fontSize: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    fontSize: 7.5,
+    color: "#1e293b",
   },
   empty: {
     padding: 16,
-    fontSize: 9,
+    fontSize: 8.5,
     color: reportTheme.muted,
     textAlign: "center",
   },
 });
 
 function formatGeneratedAt() {
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(
-    new Date(),
-  );
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date());
 }
 
 export function ReportHeader({
@@ -112,19 +211,49 @@ export function ReportHeader({
 }) {
   const brandLogo = getBrandLogoBase64();
   return (
-    <View style={styles.header} fixed>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
-        {brandLogo ? (
-          <Image src={brandLogo} style={{ width: 14, height: 14, objectFit: "contain" }} />
-        ) : null}
-        <Text style={styles.brand}>Klick-Pro report</Text>
+    <>
+      <View style={styles.header} fixed>
+        <View style={styles.headerLeft}>
+          <View style={styles.brandCapsule}>
+            <View style={styles.logoBox}>
+              {brandLogo ? (
+                <Image src={brandLogo} style={styles.logoImage} />
+              ) : (
+                <Text style={{ fontSize: 9, fontWeight: "bold", color: reportTheme.ink }}>KP</Text>
+              )}
+            </View>
+            <View>
+              <Text style={styles.brandName}>KLICK-PRO</Text>
+              <Text style={styles.brandSub}>Financial Ledger & Audit Division</Text>
+            </View>
+          </View>
+          <Text style={styles.title}>{title}</Text>
+        </View>
+
+        <View style={styles.headerRight}>
+          <View style={styles.confidentialBadge}>
+            <Text style={styles.confidentialText}>Confidential Audit</Text>
+          </View>
+          <Text style={styles.meta}>Generated: {formatGeneratedAt()} IST</Text>
+          {generatedFor ? <Text style={styles.meta}>Auditor: {generatedFor}</Text> : null}
+          {filterSummary ? <Text style={styles.meta}>Scope: {filterSummary}</Text> : null}
+        </View>
       </View>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.meta}>
-        {subtitle} · Generated {formatGeneratedAt()}
-        {generatedFor ? ` · For ${generatedFor}` : ""}
-        {filterSummary ? ` · ${filterSummary}` : ""}
-      </Text>
+      <View style={styles.accentBar} fixed />
+    </>
+  );
+}
+
+export function ReportSummaryStrip({ stats }: { stats: ReportSummaryStat[] }) {
+  if (!stats || stats.length === 0) return null;
+  return (
+    <View style={styles.summaryRibbon}>
+      {stats.map((stat, idx) => (
+        <View key={idx} style={styles.statBox}>
+          <Text style={styles.statLabel}>{stat.label}</Text>
+          <Text style={styles.statValue}>{stat.value}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -132,7 +261,9 @@ export function ReportHeader({
 export function ReportFooter() {
   return (
     <View style={styles.footer} fixed>
-      <Text style={styles.footerText}>Klick-Pro · Confidential report</Text>
+      <Text style={styles.footerText}>
+        Klick-Pro Enterprise Platform · Official Compliance & Financial Audit Record
+      </Text>
       <Text
         style={styles.footerText}
         render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
@@ -193,7 +324,7 @@ export function ReportTable<T>({ columns, rows }: { columns: ReportColumn<T>[]; 
           })}
         </View>
       ))}
-      {rows.length === 0 && <Text style={styles.empty}>No records match this export.</Text>}
+      {rows.length === 0 && <Text style={styles.empty}>No records match this audit export.</Text>}
     </View>
   );
 }
@@ -203,6 +334,7 @@ export function ReportDocument<T>({
   subtitle,
   generatedFor,
   filterSummary,
+  summaryStats,
   columns,
   rows,
   pageSize = "A4",
@@ -212,6 +344,7 @@ export function ReportDocument<T>({
   subtitle: string;
   generatedFor?: string;
   filterSummary?: string;
+  summaryStats?: ReportSummaryStat[];
   columns: ReportColumn<T>[];
   rows: T[];
   pageSize?: ReportPageSize;
@@ -226,6 +359,9 @@ export function ReportDocument<T>({
           generatedFor={generatedFor}
           filterSummary={filterSummary}
         />
+        {summaryStats && summaryStats.length > 0 ? (
+          <ReportSummaryStrip stats={summaryStats} />
+        ) : null}
         <ReportTable columns={columns} rows={rows} />
         <ReportFooter />
       </Page>

@@ -306,10 +306,12 @@ export function UserDossierDocument({ data }: { data: UserDossierData }) {
       <Page size="A4" style={styles.page} wrap>
         {/* Header - Role specific title, showing ONLY client or ONLY professional */}
         <View style={styles.header} fixed>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 }}>
-            {getBrandLogoBase64() ? (
-              <Image src={getBrandLogoBase64()} style={{ width: 14, height: 14, objectFit: "contain" }} />
-            ) : null}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <View style={{ width: 26, height: 26, backgroundColor: "#ffffff", borderRadius: 5, padding: 3, justifyContent: "center", alignItems: "center" }}>
+              {getBrandLogoBase64() ? (
+                <Image src={getBrandLogoBase64()} style={{ width: 20, height: 20, objectFit: "contain" }} />
+              ) : null}
+            </View>
             <Text style={styles.brand}>
               {isClient
                 ? "KLICK-PRO · CLIENT AUDIT DOSSIER"

@@ -65,8 +65,14 @@ export async function GET(
         grossLabel: "Total charged",
         feeLabel: "Client service fee",
         netLabel: "Milestone amount",
-        lineDescription: "Milestone payment plus client service fee",
-        note: "This client receipt shows the agreed milestone amount and the service fee charged to the client wallet.",
+        lineDescription:
+          payment.clientFeeAmount > 0
+            ? "Milestone payment plus client service fee"
+            : "Milestone escrow payment",
+        note:
+          payment.clientFeeAmount > 0
+            ? "This client receipt shows the agreed milestone amount and the service fee charged to the client wallet."
+            : "This client receipt confirms the milestone escrow payment charged to your account.",
       }
     : isProfessionalView
       ? {
@@ -76,8 +82,11 @@ export async function GET(
           grossLabel: "Client milestone payment",
           feeLabel: "Platform commission",
           netLabel: "Net earnings",
-          lineDescription: "Agreed milestone amount paid by the client",
-          note: "This professional payout statement shows the agreed milestone amount, platform commission, and net earnings credited after admin approval.",
+          lineDescription: "Agreed milestone earnings credited to your account",
+          note:
+            payment.commissionAmount > 0
+              ? "This professional payout statement shows the agreed milestone amount, platform commission, and net earnings credited after admin approval."
+              : "This professional payout voucher confirms the milestone earnings credited after settlement with zero platform deductions.",
         }
       : {
           gross: payment.amount,
@@ -118,6 +127,7 @@ export async function GET(
       note={visibleAmounts.note}
       currency={invoice.currency}
       paymentReference={payment.razorpayPaymentId ?? payment.providerReference}
+      showCommission={visibleAmounts.fee > 0}
     />,
   );
   return pdfResponse(buffer, `${invoice.invoiceNumber}.pdf`);

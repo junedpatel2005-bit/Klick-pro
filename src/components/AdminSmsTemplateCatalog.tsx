@@ -235,7 +235,7 @@ export function AdminSmsTemplateCatalog() {
               [
                 { id: "ALL", label: `All (${templates.length})` },
                 { id: "CLIENT", label: `Client (${clientCount})` },
-                { id: "PROFESSIONAL", label: `Pro (${profCount})` },
+                { id: "PROFESSIONAL", label: `Professional (${profCount})` },
                 { id: "SYSTEM", label: `System (${systemCount})` },
               ] as const
             ).map((filter) => (

@@ -608,7 +608,7 @@ export default function ClientReviews() {
                       className="bg-amber-500 text-white hover:bg-amber-600"
                     >
                       <Star className="mr-1.5 h-4 w-4 fill-white" />
-                      Rate & Review Pro
+                      Rate & Review Professional
                     </Button>
                   </div>
                 </div>
@@ -682,7 +682,7 @@ export default function ClientReviews() {
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold text-foreground">{capitalizeWords(displayName)}</h3>
                           <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                            {activeTab === "received" ? "Verified Professional" : "Reviewed Pro"}
+                            {activeTab === "received" ? "Verified Professional" : "Reviewed Professional"}
                           </span>
                         </div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

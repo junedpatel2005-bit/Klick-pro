@@ -392,7 +392,7 @@ function DiscoverContent() {
           <h1 className="text-2xl font-semibold tracking-tight">Find professionals</h1>
           <p className="text-sm text-muted-foreground">
             {totalProfessionals > 0
-              ? `${totalProfessionals} vetted pros available across all categories.`
+              ? `${totalProfessionals} vetted professionals available across all categories.`
               : "Browse vetted professionals across all categories."}
           </p>
         </div>
@@ -462,7 +462,7 @@ function DiscoverContent() {
             </label>
             {savedIds.length > 0 && (
               <p className="mt-1 text-xs text-muted-foreground">
-                {savedIds.length} {savedIds.length === 1 ? "pro" : "pros"} saved in your favorites
+                {savedIds.length} {savedIds.length === 1 ? "professional" : "professionals"} saved in your favorites
               </p>
             )}
           </div>
@@ -532,7 +532,7 @@ function DiscoverContent() {
 
           <FilterSection title="Verified only">
             <label className="flex items-center justify-between text-sm">
-              <span>Verified pros</span>
+              <span>Verified professionals</span>
               <input
                 type="checkbox"
                 checked={verifiedOnly}

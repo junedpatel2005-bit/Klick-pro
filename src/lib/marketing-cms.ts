@@ -127,7 +127,7 @@ export const marketingDefaults: Record<MarketingPageId, MarketingPageContent> = 
   "for-clients": {
     hero: {
       label: "For clients",
-      title: "Hire trusted pros — without the back-and-forth",
+      title: "Hire trusted professionals — without the back-and-forth",
       description:
         "Post once. Get qualified, vetted proposals fast. Pay securely only when work is completed and approved.",
     },
@@ -220,7 +220,7 @@ export const marketingDefaults: Record<MarketingPageId, MarketingPageContent> = 
     hero: {
       label: "Pricing",
       title: "Simple, transparent pricing",
-      description: "Free for clients. Pros pay only when they get paid. No hidden fees.",
+      description: "Free for clients. Professionals pay only when they get paid. No hidden fees.",
     },
     items: [
       item(

@@ -747,7 +747,7 @@ export function AdminNotificationCenter() {
                           )}
                           {group.professionalName && (
                             <span className="inline-flex items-center gap-1.5">
-                              <UsersRound className="h-3.5 w-3.5 text-violet-600" /> Pro:{" "}
+                              <UsersRound className="h-3.5 w-3.5 text-violet-600" /> Professional:{" "}
                               <strong className="text-slate-800 font-medium">
                                 {group.professionalName}
                               </strong>

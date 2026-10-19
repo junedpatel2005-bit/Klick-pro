@@ -81,25 +81,40 @@ export function isWithinCustomDateRange(
 }
 
 interface DateRangeFilterProps {
-  preset: DatePreset;
+  preset?: DatePreset;
+  activePreset?: DatePreset;
   onPresetChange: (preset: DatePreset) => void;
-  startDate: string;
-  onStartDateChange: (date: string) => void;
-  endDate: string;
-  onEndDateChange: (date: string) => void;
+  startDate?: string;
+  onStartDateChange?: (date: string) => void;
+  endDate?: string;
+  onEndDateChange?: (date: string) => void;
+  onCustomDateChange?: (start: string, end: string) => void;
   className?: string;
 }
 
 export function DateRangeFilter({
   preset,
+  activePreset,
   onPresetChange,
-  startDate,
+  startDate = "",
   onStartDateChange,
-  endDate,
+  endDate = "",
   onEndDateChange,
+  onCustomDateChange,
   className = "",
 }: DateRangeFilterProps) {
-  const isCustom = preset === "custom";
+  const currentPreset = activePreset ?? preset ?? "all";
+  const isCustom = currentPreset === "custom";
+
+  const handleStartChange = (val: string) => {
+    onStartDateChange?.(val);
+    onCustomDateChange?.(val, endDate);
+  };
+
+  const handleEndChange = (val: string) => {
+    onEndDateChange?.(val);
+    onCustomDateChange?.(startDate, val);
+  };
 
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className}`}>
@@ -107,7 +122,7 @@ export function DateRangeFilter({
       <div className="relative inline-flex items-center">
         <Calendar className="pointer-events-none absolute left-3 h-4 w-4 text-muted-foreground" />
         <select
-          value={preset}
+          value={currentPreset}
           onChange={(e) => {
             const next = e.target.value as DatePreset;
             onPresetChange(next);
@@ -135,7 +150,7 @@ export function DateRangeFilter({
             <input
               type="date"
               value={startDate}
-              onChange={(e) => onStartDateChange(e.target.value)}
+              onChange={(e) => handleStartChange(e.target.value)}
               className="h-8 rounded-lg border border-border bg-background px-2 text-xs font-medium text-foreground focus:border-primary focus:outline-none"
             />
           </div>
@@ -145,7 +160,7 @@ export function DateRangeFilter({
             <input
               type="date"
               value={endDate}
-              onChange={(e) => onEndDateChange(e.target.value)}
+              onChange={(e) => handleEndChange(e.target.value)}
               className="h-8 rounded-lg border border-border bg-background px-2 text-xs font-medium text-foreground focus:border-primary focus:outline-none"
             />
           </div>
@@ -154,8 +169,9 @@ export function DateRangeFilter({
             <button
               type="button"
               onClick={() => {
-                onStartDateChange("");
-                onEndDateChange("");
+                onStartDateChange?.("");
+                onEndDateChange?.("");
+                onCustomDateChange?.("", "");
                 onPresetChange("all");
               }}
               title="Reset date filter"

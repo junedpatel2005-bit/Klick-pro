@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
       const payment = item.milestoneId ? paymentMap.get(item.milestoneId) : null;
 
       const gross = payment?.baseAmount ?? item.amount;
-      const commission = payment?.commissionAmount ?? Math.round(item.amount * 0.1);
+      const commission = payment?.commissionAmount ?? 0;
       const net = payment?.professionalPayoutAmount ?? item.amount - commission;
 
       return {

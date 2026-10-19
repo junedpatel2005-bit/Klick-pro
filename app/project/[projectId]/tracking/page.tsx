@@ -1559,6 +1559,11 @@ export default function SharedProjectTrackingPage() {
     }
   };
   const submit = (milestoneId: number) => {
+    const targetMilestone = data.milestones.find((m) => m.id === milestoneId);
+    if (targetMilestone?.status === "AWAITING_CLIENT_REVIEW") {
+      toast.error("This milestone deliverable has already been submitted and is awaiting client review & payment.");
+      return;
+    }
     if (!files.length && !note.trim()) {
       toast.error("Enter a completion note and choose at least one file.");
       return;
@@ -2968,6 +2973,7 @@ export default function SharedProjectTrackingPage() {
                       !isApproved &&
                       !inValidity &&
                       !isPendingPayment &&
+                      !isAwaitingReview &&
                       (["IN_PROGRESS", "REVISION_REQUESTED"].includes(m.status) ||
                         isPrecedingApproved);
 
@@ -3523,6 +3529,28 @@ export default function SharedProjectTrackingPage() {
                                 ? "Submit Revised Proof"
                                 : "Request Payment"}
                           </Button>
+                        </div>
+                      )}
+
+                      {/* Notice for Professional: Deliverable Submitted & Awaiting Client Review */}
+                      {isProfessional && isAwaitingReview && (
+                        <div className="pt-2 border-t">
+                          <div className="rounded-xl border border-amber-300/60 bg-amber-50/70 dark:bg-amber-950/30 p-3.5 sm:p-4 text-amber-900 dark:text-amber-200">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs font-bold uppercase tracking-wide flex items-center gap-1.5">
+                                <Clock3 className="h-4 w-4 text-amber-600" />
+                                Deliverables Submitted · Awaiting Client Review & Payment
+                              </p>
+                              {m.submittedAt && (
+                                <span className="text-xs text-amber-700/80 dark:text-amber-300/80">
+                                  Submitted {date(m.submittedAt)}
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1.5 text-xs text-amber-800/90 dark:text-amber-300/90">
+                              You have already submitted deliverables and requested payment for this milestone. Re-submission is disabled while awaiting client approval and payment.
+                            </p>
+                          </div>
                         </div>
                       )}
 

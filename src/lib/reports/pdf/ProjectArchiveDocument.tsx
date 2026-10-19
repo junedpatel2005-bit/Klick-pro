@@ -221,10 +221,12 @@ function Header({ data }: { data: ProjectArchiveData }) {
   const brandLogo = getBrandLogoBase64();
   return (
     <View style={styles.header} fixed>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 }}>
-        {brandLogo ? (
-          <Image src={brandLogo} style={{ width: 14, height: 14, objectFit: "contain" }} />
-        ) : null}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <View style={{ width: 26, height: 26, backgroundColor: "#ffffff", borderRadius: 5, padding: 3, justifyContent: "center", alignItems: "center" }}>
+          {brandLogo ? (
+            <Image src={brandLogo} style={{ width: 20, height: 20, objectFit: "contain" }} />
+          ) : null}
+        </View>
         <Text style={styles.brand}>Klick-Pro project record</Text>
       </View>
       <Text style={styles.title}>Completed project details</Text>
