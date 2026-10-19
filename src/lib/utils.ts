@@ -88,3 +88,22 @@ export function formatUserDetail(
   return mode === "sentence" ? capitalizeFirst(value) : capitalizeWords(value);
 }
 
+/**
+ * Formats a project title into a clean, safe filename for PDF downloads.
+ * Returns only the project name formatted safely (e.g. "Website-Redesign.pdf").
+ */
+export function formatProjectPdfFilename(
+  title: string | null | undefined,
+  fallback = "project",
+): string {
+  const raw = (title || fallback).trim();
+  const sanitized = raw
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  const base = sanitized || fallback;
+  return `${base}.pdf`;
+}
+

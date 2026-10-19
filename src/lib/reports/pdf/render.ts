@@ -11,6 +11,7 @@ export function pdfResponse(buffer: Buffer, filename: string) {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${filename}"`,
+      "Access-Control-Expose-Headers": "Content-Disposition",
     },
   });
 }

@@ -11,6 +11,7 @@ import {
 } from "@/lib/reports/pdf/JobDossierDocument";
 import { pdfResponse, renderReportPdf } from "@/lib/reports/pdf/render";
 import { generateCsvContent } from "@/lib/reports/csv/export-csv";
+import { formatProjectPdfFilename } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -337,11 +338,7 @@ export async function GET(
   // PDF generation
   try {
     const buffer = await renderReportPdf(<JobDossierDocument data={dossierData} />);
-    const safeTitle = (job.title || `job-${job.id}`)
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .slice(0, 50);
-    return pdfResponse(buffer, `klick-pro-job-${job.id}-${safeTitle}-dossier.pdf`);
+    return pdfResponse(buffer, formatProjectPdfFilename(job.title, `job-${job.id}`));
   } catch (err) {
     console.error("Failed to render JobDossierDocument PDF:", err);
     return NextResponse.json({ error: "Failed to render PDF dossier." }, { status: 500 });

@@ -4,7 +4,12 @@ import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { ensureWallet, creditWalletFromVerifiedProvider } from "@/lib/wallet-ledger";
 import { fetchRazorpayOrderPayments, isRazorpayConfigured } from "@/lib/razorpay";
-import { getMinWithdrawalAmount, isAutoWithdrawalEnabled } from "@/lib/platform-settings";
+import {
+  getMinWithdrawalAmount,
+  isAutoWithdrawalEnabled,
+  isCommissionEnabled,
+  getPlatformCommissionRate,
+} from "@/lib/platform-settings";
 import { Prisma } from "@generated/prisma/client";
 import { encryptAccountNumber, decryptAccountNumber, maskAccountNumber } from "@/lib/encryption";
 import { maskDestinationString } from "@/lib/account-formatting";
@@ -140,6 +145,8 @@ export async function GET(request: NextRequest) {
   });
   const available = canWithdraw ? Math.max(0, wallet.balance - withdrawals) : wallet.balance;
   const minWithdrawalAmount = await getMinWithdrawalAmount();
+  const commissionEnabled = await isCommissionEnabled();
+  const commissionRate = await getPlatformCommissionRate();
 
   // Active Locked / Frozen Milestones for Clients during Validity Period
   let lockedMilestones: Array<{
@@ -257,6 +264,8 @@ export async function GET(request: NextRequest) {
     withdrawals: withdrawalHistory,
     transactions,
     minWithdrawalAmount,
+    commissionEnabled,
+    commissionRate,
   });
 }
 import {

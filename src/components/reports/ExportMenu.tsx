@@ -56,11 +56,7 @@ export function ExportMenu({
     }
 
     if (!endpoint) {
-      if (onExportCsv) {
-        onExportCsv(effectiveSelectedCount > 0 ? "selected" : "all");
-        return;
-      }
-      toast.error(emptyMessage);
+      toast.error("PDF export is not configured for this report.");
       return;
     }
 
@@ -88,7 +84,9 @@ export function ExportMenu({
 
       const blob = await response.blob();
       const contentDisposition = response.headers.get("content-disposition");
-      let filename = `klick-pro-${fileBaseName.replace(/^klick-pro-/, "")}.pdf`;
+      let filename = fileBaseName.endsWith(".pdf")
+        ? fileBaseName
+        : `${fileBaseName}.pdf`;
 
       if (contentDisposition) {
         const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
@@ -136,34 +134,36 @@ export function ExportMenu({
         </Button>
       )}
 
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={handleDownload}
-        disabled={downloading}
-        className={cn(
-          "gap-1.5 rounded-xl border-border hover:bg-muted text-xs font-semibold transition-all",
-          triggerClassName,
-        )}
-      >
-        {downloading ? (
-          <>
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-            <span>Generating…</span>
-          </>
-        ) : (
-          <>
-            <FileDown className="h-3.5 w-3.5 text-primary" />
-            <span>{buttonLabel}</span>
-            {effectiveSelectedCount > 0 && (
-              <span className="rounded-full bg-primary/15 px-1.5 py-0.2 text-[10px] font-bold text-primary">
-                {effectiveSelectedCount}
-              </span>
-            )}
-          </>
-        )}
-      </Button>
+      {(endpoint || onExportPdf) && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleDownload}
+          disabled={downloading}
+          className={cn(
+            "gap-1.5 rounded-xl border-border hover:bg-muted text-xs font-semibold transition-all",
+            triggerClassName,
+          )}
+        >
+          {downloading ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+              <span>Generating…</span>
+            </>
+          ) : (
+            <>
+              <FileDown className="h-3.5 w-3.5 text-primary" />
+              <span>{buttonLabel}</span>
+              {effectiveSelectedCount > 0 && (
+                <span className="rounded-full bg-primary/15 px-1.5 py-0.2 text-[10px] font-bold text-primary">
+                  {effectiveSelectedCount}
+                </span>
+              )}
+            </>
+          )}
+        </Button>
+      )}
     </div>
   );
 }

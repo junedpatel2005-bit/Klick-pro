@@ -7,6 +7,7 @@ import {
   type ProjectArchiveData,
 } from "@/lib/reports/pdf/ProjectArchiveDocument";
 import { pdfResponse, renderReportPdf } from "@/lib/reports/pdf/render";
+import { formatProjectPdfFilename } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -451,10 +452,7 @@ export async function GET(
 
   try {
     const buffer = await renderReportPdf(<ProjectArchiveDocument data={archive} />);
-    return pdfResponse(
-      buffer,
-      `project-${project.id}-${safeFilename(archive.title)}-complete-record.pdf`,
-    );
+    return pdfResponse(buffer, formatProjectPdfFilename(archive.title, `project-${project.id}`));
   } catch (error) {
     console.error("project.archive_pdf.failed", { projectId: project.id, error });
     return NextResponse.json({ error: "Unable to generate the project PDF." }, { status: 500 });

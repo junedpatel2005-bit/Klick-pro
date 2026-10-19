@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ensureWallet } from "@/lib/wallet-ledger";
 import { sessionCookie, verifySession } from "@/lib/auth";
-import { isAutoWithdrawalEnabled } from "@/lib/platform-settings";
+import {
+  isAutoWithdrawalEnabled,
+  isCommissionEnabled,
+  getPlatformCommissionRate,
+} from "@/lib/platform-settings";
 import { maskAccountNumber, maskDestinationString } from "@/lib/account-formatting";
 
 export async function GET(
@@ -579,8 +583,16 @@ export async function GET(
   }
   if (resource === "finance") {
     try {
-      const [transactions, withdrawals, payments, walletTransactions, adminUsers, autoWithdrawalEnabled] =
-        await Promise.all([
+      const [
+        transactions,
+        withdrawals,
+        payments,
+        walletTransactions,
+        adminUsers,
+        autoWithdrawalEnabled,
+        commissionEnabled,
+        commissionRate,
+      ] = await Promise.all([
           db.projectTransaction.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
           db.projectWithdrawal.findMany({ orderBy: { createdAt: "desc" }, take: 100 }),
           db.payment.findMany({
@@ -679,6 +691,8 @@ export async function GET(
             select: { id: true, firstName: true, lastName: true },
           }),
           isAutoWithdrawalEnabled(),
+          isCommissionEnabled(),
+          getPlatformCommissionRate(),
         ]);
       // Milestone settlements credit whichever ADMIN row `findFirst` happens to resolve first
       // (src/lib/wallet-ledger.ts has no deterministic tie-breaker), so with multiple admin
@@ -977,6 +991,8 @@ export async function GET(
         names,
         usersById,
         autoWithdrawalEnabled,
+        commissionEnabled,
+        commissionRate,
       });
     } catch (err) {
       console.error("Failed to load admin finance data:", err);

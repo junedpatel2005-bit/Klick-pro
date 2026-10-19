@@ -55,7 +55,8 @@ export function getFinancialYearBounds(
   fyString: string,
   quarter: IndianQuarter = "ALL",
 ): { startDate: string; endDate: string; label: string } {
-  const startYear = parseInt(fyString.split("-")[0]!, 10);
+  const cleanYear = fyString.replace(/^FY\s*/i, "").trim();
+  const startYear = parseInt(cleanYear.split("-")[0]!, 10);
   const nextYear = startYear + 1;
 
   switch (quarter) {
@@ -63,32 +64,32 @@ export function getFinancialYearBounds(
       return {
         startDate: `${startYear}-04-01`,
         endDate: `${startYear}-06-30`,
-        label: `FY ${fyString} Q1 (Apr–Jun ${startYear})`,
+        label: `${cleanYear} Q1 (Apr–Jun ${startYear})`,
       };
     case "Q2": // Jul 1 - Sep 30
       return {
         startDate: `${startYear}-07-01`,
         endDate: `${startYear}-09-30`,
-        label: `FY ${fyString} Q2 (Jul–Sep ${startYear})`,
+        label: `${cleanYear} Q2 (Jul–Sep ${startYear})`,
       };
     case "Q3": // Oct 1 - Dec 31
       return {
         startDate: `${startYear}-10-01`,
         endDate: `${startYear}-12-31`,
-        label: `FY ${fyString} Q3 (Oct–Dec ${startYear})`,
+        label: `${cleanYear} Q3 (Oct–Dec ${startYear})`,
       };
     case "Q4": // Jan 1 - Mar 31 of nextYear
       return {
         startDate: `${nextYear}-01-01`,
         endDate: `${nextYear}-03-31`,
-        label: `FY ${fyString} Q4 (Jan–Mar ${nextYear})`,
+        label: `${cleanYear} Q4 (Jan–Mar ${nextYear})`,
       };
     case "ALL":
     default:
       return {
         startDate: `${startYear}-04-01`,
         endDate: `${nextYear}-03-31`,
-        label: `FY ${fyString} Full Year (1 Apr ${startYear} – 31 Mar ${nextYear})`,
+        label: `${cleanYear} Full Year (1 Apr ${startYear} – 31 Mar ${nextYear})`,
       };
   }
 }

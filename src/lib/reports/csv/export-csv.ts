@@ -39,38 +39,38 @@ function sanitizeCell(value: unknown): string {
   return `"${escaped}"`;
 }
 
-export function generateCsvContent(options: CsvExportOptions & { includeMetadataBanner?: boolean }): string {
+export function generateCsvContent(options: CsvExportOptions): string {
   const lines: string[] = [];
 
-  // When metadata banner is explicitly enabled, pad each row to match total column count
-  if (options.includeMetadataBanner) {
-    if (options.title) {
-      const titleLine = [sanitizeCell(`KLICK-PRO · ${options.title.toUpperCase()}`)];
-      while (titleLine.length < options.headers.length) titleLine.push('""');
-      lines.push(titleLine.join(","));
+  const websiteTitle = options.title
+    ? `Klick-Pro · ${options.title}`
+    : "Klick-Pro Enterprise Platform · Official Statement";
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
+  const timeStr = now.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
+  });
+  const dateLine = `Generated Date: ${dateStr}, ${timeStr} IST`;
 
-      const generatedLine = [
-        sanitizeCell("Generated At"),
-        sanitizeCell(`${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST`),
-      ];
-      while (generatedLine.length < options.headers.length) generatedLine.push('""');
-      lines.push(generatedLine.join(","));
-    }
+  // Line 1: Website Name
+  lines.push(sanitizeCell(websiteTitle));
+  // Line 2: Date
+  lines.push(sanitizeCell(dateLine));
+  // Line 3: Blank separator row
+  lines.push('""');
 
-    if (options.metadata && options.metadata.length > 0) {
-      for (const entry of options.metadata) {
-        const metaLine = [sanitizeCell(entry.label), sanitizeCell(entry.value)];
-        while (metaLine.length < options.headers.length) metaLine.push('""');
-        lines.push(metaLine.join(","));
-      }
-      lines.push(new Array(options.headers.length).fill('""').join(","));
-    }
-  }
-
-  // Column headers always line up cleanly
+  // Line 4: Column headers always line up cleanly
   lines.push(options.headers.map(sanitizeCell).join(","));
 
-  // Data rows
+  // Line 5+: Exact data rows (1 row if 1 selected, 10 rows if 10 selected)
   for (const row of options.rows) {
     lines.push(row.map(sanitizeCell).join(","));
   }

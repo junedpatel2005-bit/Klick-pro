@@ -33,8 +33,6 @@ import {
   Percent,
 } from "lucide-react";
 import { ExportMenu } from "@/components/reports/ExportMenu";
-import { SelectableReportTable, type ReportTableColumn } from "@/components/reports/SelectableReportTable";
-import { useRowSelection } from "@/hooks/use-row-selection";
 import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
 import {
   ReportingPeriodSelector,
@@ -45,7 +43,12 @@ import {
   isDateWithinPeriod,
   formatINR,
 } from "@/lib/reports/financial-periods";
-import { formatReadableLabel, capitalizeWords, capitalizeFirst } from "@/lib/utils";
+import {
+  formatReadableLabel,
+  capitalizeWords,
+  capitalizeFirst,
+  formatProjectPdfFilename,
+} from "@/lib/utils";
 
 type Job = {
   id: number;
@@ -187,6 +190,62 @@ export default function ClientReports() {
     });
   }, [payments, period]);
 
+
+  // Single item CSV exporters
+  const exportSingleJobCsv = (job: Job) => {
+    downloadCsvFile({
+      filename: `klick-pro-job-${job.id}`,
+      title: `Project Engagement Statement #${job.id}`,
+      headers: [
+        "Job ID",
+        "Project Title",
+        "Category",
+        "Status",
+        "Contract Value",
+        "Milestones Done",
+        "Total Milestones",
+        "Created Date",
+      ],
+      rows: [
+        [
+          job.id,
+          capitalizeWords(job.title || `Project #${job.id}`),
+          capitalizeWords(job.category || "General"),
+          capitalizeWords(job.status),
+          job.agreedAmount ? formatINR(job.agreedAmount) : "Pending",
+          job.milestoneStats?.completed ?? 0,
+          job.milestoneStats?.total ?? 0,
+          formatDateSafely(job.createdAt),
+        ],
+      ],
+    });
+  };
+
+  const exportSinglePaymentCsv = (p: Payment) => {
+    downloadCsvFile({
+      filename: `klick-pro-payment-receipt-${p.id}`,
+      title: `Official Payment Receipt #${p.invoiceNumber || p.id}`,
+      headers: [
+        "Payment Ref #",
+        "Date",
+        "Recipient Professional",
+        "Particulars / Description",
+        "Status",
+        "Amount (INR)",
+      ],
+      rows: [
+        [
+          p.id,
+          formatDateSafely(p.createdAt),
+          capitalizeWords(p.professionalName || "Assigned Professional"),
+          capitalizeFirst(p.description),
+          capitalizeWords(p.status),
+          p.amount,
+        ],
+      ],
+    });
+  };
+
   // Executive Spend Calculations
   const metrics = useMemo(() => {
     const clearedPayments = periodFilteredPayments.filter(
@@ -274,7 +333,7 @@ export default function ClientReports() {
   }, [periodFilteredPayments]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       {/* Top Banner */}
       <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-card via-card to-primary/5 p-6 sm:p-8 text-foreground shadow-card">
         <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
@@ -298,7 +357,7 @@ export default function ClientReports() {
               type="button"
               onClick={loadData}
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted transition"
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted transition cursor-pointer"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
               <span>Refresh Records</span>
@@ -378,7 +437,7 @@ export default function ClientReports() {
               setTab(t.key as ClientTab);
               setSearch("");
             }}
-            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all ${
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
               tab === t.key
                 ? "bg-card text-foreground shadow-soft"
                 : "text-muted-foreground hover:text-foreground"
@@ -390,7 +449,9 @@ export default function ClientReports() {
         ))}
       </div>
 
-      {/* Main Tab Panels */}
+      {/* ===================================================================== */}
+      {/* TAB 1: CONSOLIDATED EXPENSE STATEMENT */}
+      {/* ===================================================================== */}
       {tab === "summary" && (
         <div className="rounded-2xl border border-border bg-card p-5 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
@@ -399,34 +460,32 @@ export default function ClientReports() {
                 Consolidated Spend Statement ({period.label})
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Accounting breakdown separating cash funded into escrow from milestone releases and
-                recognized project expense.
+                Accounting breakdown separating cash funded into escrow from milestone releases and recognized project expense.
               </p>
             </div>
             <ExportMenu
+              endpoint="/api/client/payments/export"
               selectedIds={periodFilteredPayments.map((p) => p.id)}
-              fileBaseName={`klick-pro-client-statement-${period.financialYear}`}
+              totalCount={periodFilteredPayments.length}
+              fileBaseName={`klick-pro-spend-statement-${period.financialYear}`}
+              buttonLabel="Download Spend Statement (PDF)"
               onExportCsv={() => {
                 downloadCsvFile({
                   filename: `client-spend-summary-${period.financialYear}`,
-                  title: `Klick-Pro Consolidated Spend Statement (${period.label})`,
-                  metadata: [
-                    { label: "Financial Year", value: period.financialYear },
-                    { label: "Quarter", value: period.quarter },
-                    { label: "Total Spent", value: formatINR(metrics.totalSpent) },
-                    { label: "Escrow Held", value: formatINR(metrics.escrowHeld) },
-                  ],
+                  title: `Consolidated Spend Statement (${period.label})`,
                   headers: [
+                    "Payment Ref #",
                     "Date",
+                    "Recipient Professional",
                     "Particulars / Description",
-                    "Professional",
                     "Status",
                     "Amount (INR)",
                   ],
                   rows: periodFilteredPayments.map((p) => [
+                    p.id,
                     formatDateSafely(p.createdAt),
-                    capitalizeFirst(p.description),
                     capitalizeWords(p.professionalName || "Assigned Professional"),
+                    capitalizeFirst(p.description),
                     capitalizeWords(p.status),
                     p.amount,
                   ]),
@@ -435,6 +494,7 @@ export default function ClientReports() {
             />
           </div>
 
+          {/* 3 Summary Boxes */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-2">
             <div className="rounded-xl border border-border bg-muted/30 p-4">
               <span className="text-xs font-semibold text-muted-foreground uppercase">
@@ -466,25 +526,108 @@ export default function ClientReports() {
               <p className="text-xs text-muted-foreground mt-1">Pending milestone review & signoff</p>
             </div>
           </div>
+
+          {/* Detailed Statement Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-border bg-muted/40 font-semibold text-muted-foreground uppercase text-[10px]">
+                <tr>
+                  <th className="p-3">Date</th>
+                  <th className="p-3">Particulars / Milestone</th>
+                  <th className="p-3">Recipient Professional</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3 text-right">Amount</th>
+                  <th className="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {periodFilteredPayments.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-6 text-center text-muted-foreground">
+                      No spend transactions recorded for this reporting period.
+                    </td>
+                  </tr>
+                ) : (
+                  periodFilteredPayments.map((p) => {
+                    return (
+                      <tr
+                        key={p.id}
+                        className="hover:bg-muted/40 transition"
+                      >
+                        <td className="p-3 text-muted-foreground">{formatDateSafely(p.createdAt)}</td>
+                        <td className="p-3 font-medium text-foreground max-w-[240px] truncate">
+                          {capitalizeFirst(p.description)}
+                        </td>
+                        <td className="p-3 text-muted-foreground">
+                          {capitalizeWords(p.professionalName || "Assigned Professional")}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${statusBadgeClass(
+                              p.status,
+                            )}`}
+                          >
+                            {capitalizeWords(p.status)}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right font-mono font-bold text-foreground">
+                          {formatINR(p.amount)}
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <a
+                              href={`/api/portal/invoices/${p.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted"
+                              title="Download official Tax Invoice PDF"
+                            >
+                              <FileDown className="h-3 w-3 text-primary" />
+                              <span>Invoice PDF</span>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => exportSinglePaymentCsv(p)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted cursor-pointer"
+                              title="Export single payment CSV"
+                            >
+                              <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                              <span>CSV</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
+      {/* ===================================================================== */}
+      {/* TAB 2: PROJECTS & COST LEDGER */}
+      {/* ===================================================================== */}
       {tab === "projects" && (
         <div className="rounded-2xl border border-border bg-card p-5 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
             <div>
               <h2 className="text-base font-bold text-foreground">Project Cost Ledger</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Contract values, milestone completion, and financial lifecycle per project.
+                Contract values, milestone completion, and financial lifecycle per project. Select 1 or more projects to download.
               </p>
             </div>
             <ExportMenu
+              endpoint="/api/client/jobs/export"
               selectedIds={periodFilteredJobs.map((j) => j.id)}
-              fileBaseName="klick-pro-client-projects"
+              totalCount={periodFilteredJobs.length}
+              fileBaseName="client-projects"
+              buttonLabel="Download Projects (PDF)"
               onExportCsv={() => {
                 downloadCsvFile({
                   filename: "client-projects-cost-ledger",
-                  title: `Klick-Pro Project Cost Ledger (${period.label})`,
+                  title: `Project Cost Ledger (${period.label})`,
                   headers: [
                     "Job ID",
                     "Project Title",
@@ -493,6 +636,7 @@ export default function ClientReports() {
                     "Agreed Amount",
                     "Completed Milestones",
                     "Total Milestones",
+                    "Created Date",
                   ],
                   rows: periodFilteredJobs.map((j) => [
                     j.id,
@@ -502,6 +646,7 @@ export default function ClientReports() {
                     j.agreedAmount ? formatINR(j.agreedAmount) : "Not Set",
                     j.milestoneStats?.completed ?? 0,
                     j.milestoneStats?.total ?? 0,
+                    formatDateSafely(j.createdAt),
                   ]),
                 });
               }}
@@ -528,52 +673,79 @@ export default function ClientReports() {
                     </td>
                   </tr>
                 ) : (
-                  periodFilteredJobs.map((job) => (
-                    <tr key={job.id} className="hover:bg-muted/40 transition">
-                      <td className="p-3 font-semibold text-foreground">
-                        <Link
-                          href={job.projectId ? `/project/${job.projectId}/tracking` : `/job/${job.id}`}
-                          className="hover:text-primary transition"
-                        >
-                          {capitalizeWords(job.title || `Project #${job.id}`)}
-                        </Link>
-                      </td>
-                      <td className="p-3 text-muted-foreground">
-                        {capitalizeWords(job.category || "General")}
-                      </td>
-                      <td className="p-3 font-semibold font-mono text-foreground">
-                        {job.agreedAmount ? formatINR(job.agreedAmount) : "Budget Pending"}
-                      </td>
-                      <td className="p-3 text-muted-foreground">
-                        {job.milestoneStats ? (
-                          <span>
-                            {job.milestoneStats.completed} / {job.milestoneStats.total} done
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="p-3">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${statusBadgeClass(
-                            job.status,
-                          )}`}
-                        >
-                          {readableStatus(job.status)}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right">
-                        {job.projectId && (
+                  periodFilteredJobs.map((job) => {
+                    return (
+                      <tr
+                        key={job.id}
+                        className="hover:bg-muted/40 transition"
+                      >
+                        <td className="p-3 font-semibold text-foreground">
                           <Link
-                            href={`/project/${job.projectId}/tracking`}
-                            className="font-medium text-primary hover:underline text-[11px]"
+                            href={job.projectId ? `/project/${job.projectId}/tracking` : `/job/${job.id}`}
+                            className="hover:text-primary transition"
                           >
-                            Open Workspace →
+                            {capitalizeWords(job.title || `Project #${job.id}`)}
                           </Link>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="p-3 text-muted-foreground">
+                          {capitalizeWords(job.category || "General")}
+                        </td>
+                        <td className="p-3 font-semibold font-mono text-foreground">
+                          {job.agreedAmount ? formatINR(job.agreedAmount) : "Budget Pending"}
+                        </td>
+                        <td className="p-3 text-muted-foreground">
+                          {job.milestoneStats ? (
+                            <span>
+                              {job.milestoneStats.completed} / {job.milestoneStats.total} done
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${statusBadgeClass(
+                              job.status,
+                            )}`}
+                          >
+                            {readableStatus(job.status)}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <a
+                              href={job.projectId ? `/api/portal/projects/${job.projectId}/export` : `/api/portal/jobs/${job.id}/export`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              download={formatProjectPdfFilename(job.title, `project-${job.id}`)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted"
+                              title="Download official Project Dossier PDF"
+                            >
+                              <FileDown className="h-3 w-3 text-primary" />
+                              <span>Dossier PDF</span>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => exportSingleJobCsv(job)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted cursor-pointer"
+                              title="Export single project CSV"
+                            >
+                              <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                              <span>CSV</span>
+                            </button>
+                            {job.projectId && (
+                              <Link
+                                href={`/project/${job.projectId}/tracking`}
+                                className="font-medium text-primary hover:underline text-[11px]"
+                              >
+                                Workspace →
+                              </Link>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -581,6 +753,9 @@ export default function ClientReports() {
         </div>
       )}
 
+      {/* ===================================================================== */}
+      {/* TAB 3: CONTRACTOR SPEND BREAKDOWN */}
+      {/* ===================================================================== */}
       {tab === "contractors" && (
         <div className="rounded-2xl border border-border bg-card p-5 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
@@ -596,7 +771,7 @@ export default function ClientReports() {
               onExportCsv={() => {
                 downloadCsvFile({
                   filename: "contractor-spend-breakdown",
-                  title: `Klick-Pro Contractor Expenditure Breakdown (${period.label})`,
+                  title: `Contractor Expenditure Breakdown (${period.label})`,
                   headers: [
                     "Professional Name",
                     "Total Released (INR)",
@@ -625,12 +800,13 @@ export default function ClientReports() {
                   <th className="p-3">Currently in Escrow</th>
                   <th className="p-3">Effective Total Cost</th>
                   <th className="p-3 text-right">Last Engagement</th>
+                  <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {contractorRows.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={6} className="p-6 text-center text-muted-foreground">
                       No contractor expenditure recorded for this reporting period.
                     </td>
                   </tr>
@@ -653,6 +829,36 @@ export default function ClientReports() {
                       <td className="p-3 text-right text-muted-foreground">
                         {formatDateSafely(c.lastDate)}
                       </td>
+                      <td className="p-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            downloadCsvFile({
+                              filename: `contractor-${c.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-spend`,
+                              title: `Contractor Spend Breakdown · ${c.name}`,
+                              headers: [
+                                "Professional Name",
+                                "Total Released (INR)",
+                                "In Escrow (INR)",
+                                "Effective Cost (INR)",
+                                "Last Activity",
+                              ],
+                              rows: [[
+                                c.name,
+                                c.totalReleased,
+                                c.totalFunded,
+                                c.effectiveCost,
+                                formatDateSafely(c.lastDate),
+                              ]],
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted cursor-pointer"
+                          title="Export single contractor spend CSV"
+                        >
+                          <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                          <span>CSV</span>
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -662,23 +868,28 @@ export default function ClientReports() {
         </div>
       )}
 
+      {/* ===================================================================== */}
+      {/* TAB 4: INVOICES & PAYMENT REGISTER */}
+      {/* ===================================================================== */}
       {tab === "payments" && (
         <div className="rounded-2xl border border-border bg-card p-5 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
             <div>
               <h2 className="text-base font-bold text-foreground">Invoices & Payment Register</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Official invoices, gateway receipts, and milestone settlement records.
+                Official invoices, gateway receipts, and milestone settlement records. Select 1 or more to download.
               </p>
             </div>
             <ExportMenu
               endpoint="/api/client/payments/export"
               selectedIds={periodFilteredPayments.map((p) => p.id)}
+              totalCount={periodFilteredPayments.length}
               fileBaseName="klick-pro-client-payments"
+              buttonLabel="Download Invoices (PDF)"
               onExportCsv={() => {
                 downloadCsvFile({
                   filename: "client-payments-register",
-                  title: `Klick-Pro Payment Register & Invoices (${period.label})`,
+                  title: `Payment Register & Invoices (${period.label})`,
                   headers: [
                     "Payment Ref #",
                     "Date",
@@ -710,40 +921,69 @@ export default function ClientReports() {
                   <th className="p-3">Description</th>
                   <th className="p-3">Status</th>
                   <th className="p-3 text-right">Amount</th>
+                  <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {periodFilteredPayments.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={7} className="p-6 text-center text-muted-foreground">
                       No invoices or payments match the selected period.
                     </td>
                   </tr>
                 ) : (
-                  periodFilteredPayments.map((p) => (
-                    <tr key={p.id} className="hover:bg-muted/40 transition">
-                      <td className="p-3 font-mono font-semibold text-primary">#{p.id}</td>
-                      <td className="p-3 text-muted-foreground">{formatDateSafely(p.createdAt)}</td>
-                      <td className="p-3 font-medium text-foreground">
-                        {capitalizeWords(p.professionalName || "Assigned Professional")}
-                      </td>
-                      <td className="p-3 text-muted-foreground max-w-[280px] truncate">
-                        {capitalizeFirst(p.description)}
-                      </td>
-                      <td className="p-3">
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${statusBadgeClass(
-                            p.status,
-                          )}`}
-                        >
-                          {capitalizeWords(p.status)}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right font-mono font-bold text-foreground">
-                        {formatINR(p.amount)}
-                      </td>
-                    </tr>
-                  ))
+                  periodFilteredPayments.map((p) => {
+                    return (
+                      <tr
+                        key={p.id}
+                        className="hover:bg-muted/40 transition"
+                      >
+                        <td className="p-3 font-mono font-semibold text-primary">#{p.id}</td>
+                        <td className="p-3 text-muted-foreground">{formatDateSafely(p.createdAt)}</td>
+                        <td className="p-3 font-medium text-foreground">
+                          {capitalizeWords(p.professionalName || "Assigned Professional")}
+                        </td>
+                        <td className="p-3 text-muted-foreground max-w-[280px] truncate">
+                          {capitalizeFirst(p.description)}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${statusBadgeClass(
+                              p.status,
+                            )}`}
+                          >
+                            {capitalizeWords(p.status)}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right font-mono font-bold text-foreground">
+                          {formatINR(p.amount)}
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <a
+                              href={`/api/portal/invoices/${p.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted"
+                              title="Download official Tax Invoice PDF"
+                            >
+                              <FileDown className="h-3 w-3 text-primary" />
+                              <span>Invoice PDF</span>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => exportSinglePaymentCsv(p)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted cursor-pointer"
+                              title="Export single payment CSV"
+                            >
+                              <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                              <span>CSV</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

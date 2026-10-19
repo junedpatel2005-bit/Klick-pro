@@ -8,6 +8,7 @@ import { fetchJobDossierData } from "@/lib/reports/pdf/job-dossier-builder";
 import { renderReportPdf, pdfResponse } from "@/lib/reports/pdf/render";
 import { parseReportRequest } from "@/lib/reports/pdf/request";
 import type { ReportColumn } from "@/lib/reports/pdf/types";
+import { formatProjectPdfFilename } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -108,11 +109,7 @@ export async function POST(request: NextRequest) {
             typeof renderReportPdf
           >[0],
         );
-        const safeTitle = (dossierData.title || `job-${jobId}`)
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "");
-        return pdfResponse(buffer, `klick-pro-${safeTitle}.pdf`);
+        return pdfResponse(buffer, formatProjectPdfFilename(dossierData.title, `job-${jobId}`));
       }
     }
 
@@ -145,11 +142,7 @@ export async function POST(request: NextRequest) {
             typeof renderReportPdf
           >[0],
         );
-        const safeTitle = (dossierData.title || `job-${firstJob.id}`)
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "");
-        return pdfResponse(buffer, `klick-pro-${safeTitle}.pdf`);
+        return pdfResponse(buffer, formatProjectPdfFilename(dossierData.title, `job-${firstJob.id}`));
       }
     }
 
@@ -239,12 +232,7 @@ export async function GET(request: NextRequest) {
       >[0],
     );
 
-    const safeTitle = (dossierData.title || `job-${jobId}`)
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-
-    return pdfResponse(buffer, `klick-pro-${safeTitle}-dossier.pdf`);
+    return pdfResponse(buffer, formatProjectPdfFilename(dossierData.title, `job-${jobId}`));
   } catch (error) {
     console.error("Job dossier PDF GET failed:", error);
     return NextResponse.json({ error: "Failed to generate job dossier." }, { status: 500 });

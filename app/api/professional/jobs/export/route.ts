@@ -8,7 +8,7 @@ import { fetchJobDossierData } from "@/lib/reports/pdf/job-dossier-builder";
 import { renderReportPdf, pdfResponse } from "@/lib/reports/pdf/render";
 import { parseReportRequest } from "@/lib/reports/pdf/request";
 import type { ReportColumn } from "@/lib/reports/pdf/types";
-import { formatReadableLabel } from "@/lib/utils";
+import { formatReadableLabel, formatProjectPdfFilename } from "@/lib/utils";
 
 export const runtime = "nodejs";
 
@@ -135,11 +135,7 @@ export async function POST(request: NextRequest) {
             typeof renderReportPdf
           >[0],
         );
-        const safeTitle = (dossierData.title || `project-${firstProject.id}`)
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "");
-        return pdfResponse(buffer, `klick-pro-${safeTitle}.pdf`);
+        return pdfResponse(buffer, formatProjectPdfFilename(dossierData.title, `project-${firstProject.id}`));
       }
     }
 

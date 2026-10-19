@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   FileText,
@@ -22,9 +23,9 @@ import {
   FileSpreadsheet,
   FileCheck,
   Percent,
+  ExternalLink,
 } from "lucide-react";
 import { SelectableReportTable, type ReportTableColumn } from "@/components/reports/SelectableReportTable";
-import { useRowSelection } from "@/hooks/use-row-selection";
 import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
 import {
   DateRangeFilter,
@@ -104,13 +105,22 @@ type RevenueRow = {
   createdAt: string;
 };
 
-function RevenueReport() {
+function RevenueReport({
+  commissionEnabled: propCommissionEnabled,
+  commissionRate: propCommissionRate,
+}: {
+  commissionEnabled?: boolean;
+  commissionRate?: number;
+} = {}) {
   const [rows, setRows] = useState<RevenueRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [downloadingRowId, setDownloadingRowId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [commissionFilter, setCommissionFilter] = useState("ALL");
+  const [commissionEnabled, setCommissionEnabled] = useState(propCommissionEnabled ?? false);
+  const [commissionRate, setCommissionRate] = useState(propCommissionRate ?? 0.1);
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -118,10 +128,28 @@ function RevenueReport() {
   const PAGE_SIZE = 15;
 
   useEffect(() => {
+    if (typeof propCommissionEnabled === "boolean") {
+      setCommissionEnabled(propCommissionEnabled);
+    }
+  }, [propCommissionEnabled]);
+
+  useEffect(() => {
+    if (typeof propCommissionRate === "number") {
+      setCommissionRate(propCommissionRate);
+    }
+  }, [propCommissionRate]);
+
+  useEffect(() => {
     void fetch("/api/v1/admin/data/finance", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!data) return;
+        if (typeof data.commissionEnabled === "boolean") {
+          setCommissionEnabled(data.commissionEnabled);
+        }
+        if (typeof data.commissionRate === "number") {
+          setCommissionRate(data.commissionRate);
+        }
         const payments = Array.isArray(data.payments) ? data.payments : [];
 
         type ApiPayment = {
@@ -199,6 +227,7 @@ function RevenueReport() {
 
       const matchesStatus = statusFilter === "ALL" || r.status.toUpperCase() === statusFilter;
       const matchesCommission =
+        !commissionEnabled ||
         commissionFilter === "ALL" ||
         (commissionFilter === "WITH_COMMISSION" && r.commissionAmount > 0) ||
         (commissionFilter === "ZERO_COMMISSION" && r.commissionAmount === 0);
@@ -206,11 +235,7 @@ function RevenueReport() {
 
       return matchesSearch && matchesStatus && matchesCommission && matchesDate;
     });
-  }, [rows, search, statusFilter, commissionFilter, datePreset, startDate, endDate]);
-
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
-    useRowSelection(filteredRows);
-  const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
+  }, [rows, search, statusFilter, commissionFilter, commissionEnabled, datePreset, startDate, endDate]);
 
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -224,29 +249,28 @@ function RevenueReport() {
   const completedCount = filteredRows.filter((r) => r.status.toUpperCase() === "COMPLETED").length;
 
   const handleExportCsv = () => {
-    const isSelected = selectedList.length > 0;
-    const rowsToExport = isSelected
-      ? filteredRows.filter((r) => selectedIds.has(r.id))
-      : filteredRows;
-
     downloadCsvFile({
-      filename: "klick-pro-revenue-commission-audit",
-      title: "Revenue & Platform Commission Reconciliation Ledger",
+      filename: "klick-pro-revenue-settlements-audit",
+      title: commissionEnabled
+        ? "Revenue & Platform Commission Reconciliation Ledger"
+        : "Revenue & Milestone Settlements Reconciliation Ledger",
       metadata: [
         {
           label: "Scope",
-          value: isSelected
-            ? `${rowsToExport.length} Selected Transactions`
-            : `All Filtered (${rowsToExport.length})`,
+          value: `All Filtered (${filteredRows.length} Transactions)`,
         },
         { label: "Gross Volume (GMV)", value: `INR ${totalGross.toLocaleString("en-IN")}` },
-        {
-          label: "Total Commission",
-          value:
-            totalCommission > 0
-              ? `INR ${totalCommission.toLocaleString("en-IN")}`
-              : "INR 0 (Commission Disabled / Off)",
-        },
+        ...(commissionEnabled
+          ? [
+              {
+                label: "Total Commission",
+                value:
+                  totalCommission > 0
+                    ? `INR ${totalCommission.toLocaleString("en-IN")}`
+                    : "INR 0 (Commission Disabled / Off)",
+              },
+            ]
+          : []),
         { label: "Net Pro Disbursements", value: `INR ${totalNet.toLocaleString("en-IN")}` },
         { label: "Active Status Filter", value: statusFilter },
         { label: "Active Date Range", value: datePreset },
@@ -258,12 +282,12 @@ function RevenueReport() {
         "Client Depositor",
         "Professional Payee",
         "Gross Paid (INR)",
-        "Platform Commission (INR)",
+        ...(commissionEnabled ? ["Platform Commission (INR)"] : []),
         "Net Pro Payout (INR)",
         "Payment Method",
         "Settlement Status",
       ],
-      rows: rowsToExport.map((r) => [
+      rows: filteredRows.map((r) => [
         `#${r.referenceNumber}`,
         formatDateSafely(r.createdAt, {
           day: "2-digit",
@@ -276,7 +300,7 @@ function RevenueReport() {
         r.clientName,
         r.professionalName,
         r.grossAmount,
-        r.commissionAmount,
+        ...(commissionEnabled ? [r.commissionAmount] : []),
         r.netPayoutAmount,
         r.paymentMethod,
         formatReadableLabel(r.status),
@@ -285,19 +309,14 @@ function RevenueReport() {
   };
 
   const handleExportPdf = async () => {
-    const isSelected = selectedList.length > 0;
-    const rowsToExport = isSelected
-      ? filteredRows.filter((r) => selectedIds.has(r.id))
-      : filteredRows;
-    const ids = rowsToExport.map((r) => r.rawId);
-
+    const ids = filteredRows.map((r) => r.rawId);
     setExportingPdf(true);
     try {
       const res = await fetch("/api/admin/reports/revenue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scope: isSelected ? "selected" : "all",
+          scope: "all",
           ids,
           orientation: "landscape",
         }),
@@ -307,7 +326,7 @@ function RevenueReport() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `klick-pro-revenue-commission-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+        link.download = `klick-pro-revenue-report-${new Date().toISOString().slice(0, 10)}.pdf`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -317,6 +336,88 @@ function RevenueReport() {
       console.error("PDF download failed:", err);
     } finally {
       setExportingPdf(false);
+    }
+  };
+
+  const exportSingleRowCsv = (r: RevenueRow) => {
+    downloadCsvFile({
+      filename: `klick-pro-revenue-${r.referenceNumber.toLowerCase()}`,
+      title: `Transaction Receipt & Ledger Record #${r.referenceNumber}`,
+      metadata: [
+        { label: "Reference #", value: `#${r.referenceNumber}` },
+        { label: "Date Recorded", value: formatDateSafely(r.createdAt) },
+        { label: "Project Title", value: r.jobTitle },
+        { label: "Client Depositor", value: r.clientName },
+        { label: "Professional Payee", value: r.professionalName },
+        { label: "Gross Paid", value: `INR ${r.grossAmount.toLocaleString("en-IN")}` },
+        ...(commissionEnabled
+          ? [{ label: "Platform Commission", value: `INR ${r.commissionAmount.toLocaleString("en-IN")}` }]
+          : []),
+        { label: "Net Pro Payout", value: `INR ${r.netPayoutAmount.toLocaleString("en-IN")}` },
+        { label: "Settlement Status", value: formatReadableLabel(r.status) },
+      ],
+      headers: [
+        "Settlement Ref #",
+        "Date Recorded",
+        "Project / Engagement",
+        "Client Depositor",
+        "Professional Payee",
+        "Gross Paid (INR)",
+        ...(commissionEnabled ? ["Platform Commission (INR)"] : []),
+        "Net Pro Payout (INR)",
+        "Payment Method",
+        "Settlement Status",
+      ],
+      rows: [
+        [
+          `#${r.referenceNumber}`,
+          formatDateSafely(r.createdAt, {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          r.jobTitle,
+          r.clientName,
+          r.professionalName,
+          r.grossAmount,
+          ...(commissionEnabled ? [r.commissionAmount] : []),
+          r.netPayoutAmount,
+          r.paymentMethod,
+          formatReadableLabel(r.status),
+        ],
+      ],
+    });
+  };
+
+  const exportSingleRowPdf = async (r: RevenueRow) => {
+    setDownloadingRowId(r.rawId);
+    try {
+      const res = await fetch("/api/admin/reports/revenue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scope: "single",
+          ids: [r.rawId],
+          orientation: "portrait",
+        }),
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `klick-pro-revenue-receipt-${r.referenceNumber.toLowerCase()}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error("Single PDF download failed:", err);
+    } finally {
+      setDownloadingRowId(null);
     }
   };
 
@@ -374,22 +475,26 @@ function RevenueReport() {
         </span>
       ),
     },
-    {
-      key: "commission",
-      header: "Platform Cut",
-      align: "right",
-      render: (r) => (
-        <span className="font-mono text-xs whitespace-nowrap">
-          {r.commissionAmount > 0 ? (
-            <span className="font-semibold text-emerald-600">
-              ₹{r.commissionAmount.toLocaleString("en-IN")}
-            </span>
-          ) : (
-            <span className="text-slate-400">₹0 (0%)</span>
-          )}
-        </span>
-      ),
-    },
+    ...(commissionEnabled
+      ? [
+          {
+            key: "commission" as const,
+            header: "Platform Cut",
+            align: "right" as const,
+            render: (r: RevenueRow) => (
+              <span className="font-mono text-xs whitespace-nowrap">
+                {r.commissionAmount > 0 ? (
+                  <span className="font-semibold text-emerald-600">
+                    ₹{r.commissionAmount.toLocaleString("en-IN")}
+                  </span>
+                ) : (
+                  <span className="text-slate-400">₹0 (0%)</span>
+                )}
+              </span>
+            ),
+          },
+        ]
+      : []),
     {
       key: "net",
       header: "Net Pro Payout",
@@ -418,12 +523,40 @@ function RevenueReport() {
         </span>
       ),
     },
+    {
+      key: "actions",
+      header: "Actions",
+      align: "right",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          <button
+            type="button"
+            disabled={downloadingRowId === r.rawId}
+            onClick={() => void exportSingleRowPdf(r)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+            title="Download PDF"
+          >
+            <Download className="h-3 w-3 text-indigo-600" />
+            <span>{downloadingRowId === r.rawId ? "..." : "PDF"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => exportSingleRowCsv(r)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
+            title="Download CSV"
+          >
+            <FileSpreadsheet className="h-3 w-3 text-emerald-600" />
+            <span>CSV</span>
+          </button>
+        </div>
+      ),
+    },
   ];
 
   return (
     <div className="space-y-6">
-      {/* 4 High-Density Stat Cards - Zero Charts */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      {/* High-Density Stat Cards - Dynamic 3 or 4 Cards based on commission setting */}
+      <div className={`grid grid-cols-2 gap-4 ${commissionEnabled ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-xs font-semibold uppercase tracking-wider">Gross Volume (GMV)</span>
@@ -439,30 +572,34 @@ function RevenueReport() {
           <p className="mt-1 text-xs text-slate-500">{filteredRows.length} client payments recorded</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Platform Commission</span>
-            <Percent className="h-4 w-4 text-emerald-600" />
-          </div>
-          {loading ? (
-            <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
-          ) : (
-            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-emerald-600 sm:text-3xl truncate">
-              ₹{totalCommission.toLocaleString()}
+        {commissionEnabled && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-xs font-semibold uppercase tracking-wider">Platform Commission</span>
+              <Percent className="h-4 w-4 text-emerald-600" />
             </div>
-          )}
-          <div className="mt-1 flex items-center gap-1.5">
-            <span
-              className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
-                totalCommission > 0
-                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                  : "bg-slate-100 text-slate-600 border border-slate-200"
-              }`}
-            >
-              {totalCommission > 0 ? "Rate: Active Commission" : "Rate: 0% · Commission Disabled"}
-            </span>
+            {loading ? (
+              <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
+            ) : (
+              <div className="mt-2 font-display text-2xl font-bold tracking-tight text-emerald-600 sm:text-3xl truncate">
+                ₹{totalCommission.toLocaleString()}
+              </div>
+            )}
+            <div className="mt-1 flex items-center gap-1.5">
+              <span
+                className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                  totalCommission > 0
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}
+              >
+                {totalCommission > 0
+                  ? `Rate: ${Math.round(commissionRate * 100)}% · Active Commission`
+                  : "Rate: 0% · Commission Disabled"}
+              </span>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-slate-500">
@@ -548,18 +685,20 @@ function RevenueReport() {
             <option value="REFUNDED">Refunded</option>
           </select>
 
-          <select
-            value={commissionFilter}
-            onChange={(e) => {
-              setCommissionFilter(e.target.value);
-              setPage(1);
-            }}
-            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 focus:border-indigo-500 focus:bg-white focus:outline-hidden"
-          >
-            <option value="ALL">All Fee Modes</option>
-            <option value="WITH_COMMISSION">With Commission (&gt; 0)</option>
-            <option value="ZERO_COMMISSION">Zero Commission (0%)</option>
-          </select>
+          {commissionEnabled && (
+            <select
+              value={commissionFilter}
+              onChange={(e) => {
+                setCommissionFilter(e.target.value);
+                setPage(1);
+              }}
+              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 focus:border-indigo-500 focus:bg-white focus:outline-hidden"
+            >
+              <option value="ALL">All Fee Modes</option>
+              <option value="WITH_COMMISSION">With Commission (&gt; 0)</option>
+              <option value="ZERO_COMMISSION">Zero Commission (0%)</option>
+            </select>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
@@ -569,7 +708,7 @@ function RevenueReport() {
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition cursor-pointer"
           >
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            <span>Export CSV {selectedList.length > 0 ? `(${selectedList.length})` : ""}</span>
+            <span>Export CSV</span>
           </button>
           <button
             type="button"
@@ -578,7 +717,7 @@ function RevenueReport() {
             className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition cursor-pointer disabled:opacity-50"
           >
             <Download className="h-4 w-4 text-indigo-400" />
-            <span>{exportingPdf ? "Generating..." : `Export PDF ${selectedList.length > 0 ? `(${selectedList.length})` : ""}`}</span>
+            <span>{exportingPdf ? "Generating..." : "Export PDF"}</span>
           </button>
         </div>
       </div>
@@ -589,10 +728,7 @@ function RevenueReport() {
           loading={loading}
           rows={paginatedRows}
           emptyMessage="No revenue records match the active filter criteria."
-          selectedIds={selectedIds}
-          onToggle={toggle}
-          allSelected={allVisibleSelected}
-          onToggleAll={toggleAllVisible}
+          selectable={false}
           rowLabel={(r) => r.referenceNumber}
           columns={columns}
         />
@@ -628,6 +764,7 @@ function EscrowReport() {
   const [rows, setRows] = useState<EscrowRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [downloadingRowId, setDownloadingRowId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [custodyFilter, setCustodyFilter] = useState("ALL");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -762,10 +899,6 @@ function EscrowReport() {
     });
   }, [rows, search, custodyFilter, datePreset, startDate, endDate]);
 
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
-    useRowSelection(filteredRows);
-  const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
-
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
     return filteredRows.slice(start, start + PAGE_SIZE);
@@ -782,20 +915,13 @@ function EscrowReport() {
   const heldCount = filteredRows.filter((r) => r.custodyStatus === "HELD IN TRUST").length;
 
   const handleExportCsv = () => {
-    const isSelected = selectedList.length > 0;
-    const rowsToExport = isSelected
-      ? filteredRows.filter((r) => selectedIds.has(r.id))
-      : filteredRows;
-
     downloadCsvFile({
       filename: "klick-pro-escrow-treasury-audit",
       title: "Escrow Subledger & Treasury Custody Audit Statement",
       metadata: [
         {
           label: "Scope",
-          value: isSelected
-            ? `${rowsToExport.length} Selected Records`
-            : `All Filtered (${rowsToExport.length})`,
+          value: `All Filtered (${filteredRows.length} Records)`,
         },
         { label: "Total Escrow Volume", value: `INR ${totalEscrowVolume.toLocaleString("en-IN")}` },
         { label: "Escrow Held in Trust", value: `INR ${heldEscrow.toLocaleString("en-IN")}` },
@@ -815,7 +941,7 @@ function EscrowReport() {
         "Release Timeline",
         "Funded Date",
       ],
-      rows: rowsToExport.map((r) => [
+      rows: filteredRows.map((r) => [
         `#MS-${r.rawId}`,
         r.projectTitle,
         r.milestoneTitle,
@@ -831,19 +957,14 @@ function EscrowReport() {
   };
 
   const handleExportPdf = async () => {
-    const isSelected = selectedList.length > 0;
-    const rowsToExport = isSelected
-      ? filteredRows.filter((r) => selectedIds.has(r.id))
-      : filteredRows;
-    const ids = rowsToExport.map((r) => r.rawId);
-
+    const ids = filteredRows.map((r) => r.rawId);
     setExportingPdf(true);
     try {
       const res = await fetch("/api/admin/reports/escrow", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scope: isSelected ? "selected" : "all",
+          scope: "all",
           ids,
           orientation: "landscape",
         }),
@@ -863,6 +984,80 @@ function EscrowReport() {
       console.error("PDF download failed:", err);
     } finally {
       setExportingPdf(false);
+    }
+  };
+
+  const exportSingleRowCsv = (r: EscrowRow) => {
+    downloadCsvFile({
+      filename: `klick-pro-escrow-ms-${r.rawId}`,
+      title: `Escrow Custody Record #MS-${r.rawId}`,
+      metadata: [
+        { label: "Milestone ID", value: `#MS-${r.rawId}` },
+        { label: "Project Title", value: r.projectTitle },
+        { label: "Milestone", value: r.milestoneTitle },
+        { label: "Client Depositor", value: r.clientName },
+        { label: "Assigned Professional", value: r.professionalName },
+        { label: "Escrow Amount", value: `INR ${r.amount.toLocaleString("en-IN")}` },
+        { label: "Custody Status", value: r.custodyStatus },
+        { label: "Release Due", value: r.releaseDue },
+        { label: "Funded Date", value: formatDateSafely(r.createdAt) },
+      ],
+      headers: [
+        "Milestone ID",
+        "Project Title",
+        "Milestone Description",
+        "Client Depositor",
+        "Assigned Professional",
+        "Escrow Amount (INR)",
+        "Milestone Status",
+        "Escrow Custody Status",
+        "Release Timeline",
+        "Funded Date",
+      ],
+      rows: [
+        [
+          `#MS-${r.rawId}`,
+          r.projectTitle,
+          r.milestoneTitle,
+          r.clientName,
+          r.professionalName,
+          r.amount,
+          formatReadableLabel(r.milestoneStatus),
+          r.custodyStatus,
+          r.releaseDue,
+          formatDateSafely(r.createdAt),
+        ],
+      ],
+    });
+  };
+
+  const exportSingleRowPdf = async (r: EscrowRow) => {
+    setDownloadingRowId(r.rawId);
+    try {
+      const res = await fetch("/api/admin/reports/escrow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scope: "single",
+          ids: [r.rawId],
+          orientation: "landscape",
+        }),
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `klick-pro-escrow-certificate-ms-${r.rawId}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error("Single PDF download failed:", err);
+    } finally {
+      setDownloadingRowId(null);
     }
   };
 
@@ -953,6 +1148,34 @@ function EscrowReport() {
       key: "created",
       header: "Funded Date",
       render: (r) => <span className="text-xs text-slate-500 whitespace-nowrap">{formatDateSafely(r.createdAt)}</span>,
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      align: "right",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          <button
+            type="button"
+            disabled={downloadingRowId === r.rawId}
+            onClick={() => void exportSingleRowPdf(r)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+            title="Download PDF Certificate"
+          >
+            <Download className="h-3 w-3 text-indigo-600" />
+            <span>{downloadingRowId === r.rawId ? "..." : "PDF"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => exportSingleRowCsv(r)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
+            title="Download CSV Record"
+          >
+            <FileSpreadsheet className="h-3 w-3 text-emerald-600" />
+            <span>CSV</span>
+          </button>
+        </div>
+      ),
     },
   ];
 
@@ -1078,7 +1301,7 @@ function EscrowReport() {
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition cursor-pointer"
           >
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            <span>Export CSV {selectedList.length > 0 ? `(${selectedList.length})` : ""}</span>
+            <span>Export CSV</span>
           </button>
           <button
             type="button"
@@ -1087,7 +1310,7 @@ function EscrowReport() {
             className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition cursor-pointer disabled:opacity-50"
           >
             <Download className="h-4 w-4 text-indigo-400" />
-            <span>{exportingPdf ? "Generating..." : `Export PDF ${selectedList.length > 0 ? `(${selectedList.length})` : ""}`}</span>
+            <span>{exportingPdf ? "Generating..." : "Export PDF"}</span>
           </button>
         </div>
       </div>
@@ -1098,10 +1321,7 @@ function EscrowReport() {
           loading={loading}
           rows={paginatedRows}
           emptyMessage="No escrow records match the active filter criteria."
-          selectedIds={selectedIds}
-          onToggle={toggle}
-          allSelected={allVisibleSelected}
-          onToggleAll={toggleAllVisible}
+          selectable={false}
           rowLabel={(r) => `#MS-${r.rawId}`}
           columns={columns}
         />
@@ -1136,6 +1356,7 @@ function WithdrawalsReport() {
   const [rows, setRows] = useState<WithdrawalRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [downloadingRowId, setDownloadingRowId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -1231,10 +1452,6 @@ function WithdrawalsReport() {
     });
   }, [rows, search, statusFilter, datePreset, startDate, endDate]);
 
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
-    useRowSelection(filteredRows);
-  const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
-
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
     return filteredRows.slice(start, start + PAGE_SIZE);
@@ -1253,20 +1470,13 @@ function WithdrawalsReport() {
   ).length;
 
   const handleExportCsv = () => {
-    const isSelected = selectedList.length > 0;
-    const rowsToExport = isSelected
-      ? filteredRows.filter((r) => selectedIds.has(r.id))
-      : filteredRows;
-
     downloadCsvFile({
       filename: "klick-pro-bank-withdrawals-audit",
       title: "Bank Withdrawals & Payout Settlements Ledger",
       metadata: [
         {
           label: "Scope",
-          value: isSelected
-            ? `${rowsToExport.length} Selected Records`
-            : `All Filtered (${rowsToExport.length})`,
+          value: `All Filtered (${filteredRows.length} Records)`,
         },
         { label: "Total Requested Volume", value: `INR ${totalVolume.toLocaleString("en-IN")}` },
         { label: "Settled Bank Credits", value: `INR ${settledVolume.toLocaleString("en-IN")}` },
@@ -1284,7 +1494,7 @@ function WithdrawalsReport() {
         "UTR / Bank Reference",
         "Settlement Status",
       ],
-      rows: rowsToExport.map((r) => [
+      rows: filteredRows.map((r) => [
         `#${r.referenceNumber}`,
         formatDateSafely(r.createdAt, {
           day: "2-digit",
@@ -1304,19 +1514,14 @@ function WithdrawalsReport() {
   };
 
   const handleExportPdf = async () => {
-    const isSelected = selectedList.length > 0;
-    const rowsToExport = isSelected
-      ? filteredRows.filter((r) => selectedIds.has(r.id))
-      : filteredRows;
-    const ids = rowsToExport.map((r) => r.rawId);
-
+    const ids = filteredRows.map((r) => r.rawId);
     setExportingPdf(true);
     try {
       const res = await fetch("/api/admin/reports/withdrawals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scope: isSelected ? "selected" : "all",
+          scope: "all",
           ids,
           orientation: "landscape",
         }),
@@ -1336,6 +1541,81 @@ function WithdrawalsReport() {
       console.error("PDF download failed:", err);
     } finally {
       setExportingPdf(false);
+    }
+  };
+
+  const exportSingleRowCsv = (r: WithdrawalRow) => {
+    downloadCsvFile({
+      filename: `klick-pro-withdrawal-${r.referenceNumber.toLowerCase()}`,
+      title: `Bank Withdrawal Payout Record #${r.referenceNumber}`,
+      metadata: [
+        { label: "Payout Ref #", value: `#${r.referenceNumber}` },
+        { label: "Date Requested", value: formatDateSafely(r.createdAt) },
+        { label: "Professional Payee", value: r.professionalName },
+        { label: "Amount", value: `INR ${r.amount.toLocaleString("en-IN")}` },
+        { label: "Payment Mode", value: r.destination },
+        { label: "Bank / Destination", value: r.bankInfo },
+        { label: "UTR / Reference", value: r.utr },
+        { label: "Status", value: formatReadableLabel(r.status) },
+      ],
+      headers: [
+        "Payout Ref #",
+        "Request Date",
+        "Professional Payee",
+        "Requested Amount (INR)",
+        "Disbursement Method",
+        "Bank / Destination Details",
+        "UTR / Bank Reference",
+        "Settlement Status",
+      ],
+      rows: [
+        [
+          `#${r.referenceNumber}`,
+          formatDateSafely(r.createdAt, {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          r.professionalName,
+          r.amount,
+          r.destination,
+          r.bankInfo,
+          r.utr,
+          formatReadableLabel(r.status),
+        ],
+      ],
+    });
+  };
+
+  const exportSingleRowPdf = async (r: WithdrawalRow) => {
+    setDownloadingRowId(r.rawId);
+    try {
+      const res = await fetch("/api/admin/reports/withdrawals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scope: "single",
+          ids: [r.rawId],
+          orientation: "landscape",
+        }),
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `klick-pro-withdrawal-${r.referenceNumber.toLowerCase()}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error("Single PDF download failed:", err);
+    } finally {
+      setDownloadingRowId(null);
     }
   };
 
@@ -1405,6 +1685,34 @@ function WithdrawalsReport() {
         >
           {formatReadableLabel(r.status)}
         </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      align: "right",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          <button
+            type="button"
+            disabled={downloadingRowId === r.rawId}
+            onClick={() => void exportSingleRowPdf(r)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+            title="Download PDF"
+          >
+            <Download className="h-3 w-3 text-indigo-600" />
+            <span>{downloadingRowId === r.rawId ? "..." : "PDF"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => exportSingleRowCsv(r)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
+            title="Download CSV"
+          >
+            <FileSpreadsheet className="h-3 w-3 text-emerald-600" />
+            <span>CSV</span>
+          </button>
+        </div>
       ),
     },
   ];
@@ -1487,7 +1795,7 @@ function WithdrawalsReport() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search ref #, pro name, bank, UTR..."
+              placeholder="Search ref #, pro, UTR, bank details..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -1539,7 +1847,7 @@ function WithdrawalsReport() {
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition cursor-pointer"
           >
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            <span>Export CSV {selectedList.length > 0 ? `(${selectedList.length})` : ""}</span>
+            <span>Export CSV</span>
           </button>
           <button
             type="button"
@@ -1548,7 +1856,7 @@ function WithdrawalsReport() {
             className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition cursor-pointer disabled:opacity-50"
           >
             <Download className="h-4 w-4 text-indigo-400" />
-            <span>{exportingPdf ? "Generating..." : `Export PDF ${selectedList.length > 0 ? `(${selectedList.length})` : ""}`}</span>
+            <span>{exportingPdf ? "Generating..." : "Export PDF"}</span>
           </button>
         </div>
       </div>
@@ -1559,10 +1867,7 @@ function WithdrawalsReport() {
           loading={loading}
           rows={paginatedRows}
           emptyMessage="No payout records match the active filter criteria."
-          selectedIds={selectedIds}
-          onToggle={toggle}
-          allSelected={allVisibleSelected}
-          onToggleAll={toggleAllVisible}
+          selectable={false}
           rowLabel={(r) => r.referenceNumber}
           columns={columns}
         />
@@ -1599,6 +1904,7 @@ function DisputesReport() {
   const [rows, setRows] = useState<DisputeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [downloadingRowId, setDownloadingRowId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -1701,10 +2007,6 @@ function DisputesReport() {
     });
   }, [rows, search, statusFilter, datePreset, startDate, endDate]);
 
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
-    useRowSelection(filteredRows);
-  const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
-
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
     return filteredRows.slice(start, start + PAGE_SIZE);
@@ -1718,22 +2020,15 @@ function DisputesReport() {
   const totalDisputedEscrow = filteredRows.reduce((sum, r) => sum + r.disputedAmount, 0);
 
   const handleExportCsv = () => {
-    const isSelected = selectedList.length > 0;
-    const rowsToExport = isSelected
-      ? filteredRows.filter((r) => selectedIds.has(r.id))
-      : filteredRows;
-
     downloadCsvFile({
       filename: "klick-pro-disputes-arbitration-audit",
       title: "Disputes & Contract Arbitration Audit Register",
       metadata: [
         {
           label: "Scope",
-          value: isSelected
-            ? `${rowsToExport.length} Selected Records`
-            : `All Filtered (${rowsToExport.length})`,
+          value: `All Filtered (${filteredRows.length} Records)`,
         },
-        { label: "Total Disputes Filed", value: rowsToExport.length },
+        { label: "Total Disputes Filed", value: filteredRows.length },
         { label: "Open / Under Review", value: openCount },
         { label: "Resolved Disputes", value: resolvedCount },
         { label: "Disputed Escrow Exposure", value: `INR ${totalDisputedEscrow.toLocaleString("en-IN")}` },
@@ -1752,7 +2047,7 @@ function DisputesReport() {
         "Arbitration Decision / Split",
         "Dispute Status",
       ],
-      rows: rowsToExport.map((r) => [
+      rows: filteredRows.map((r) => [
         `#${r.referenceNumber}`,
         formatDateSafely(r.createdAt),
         r.projectTitle,
@@ -1768,19 +2063,14 @@ function DisputesReport() {
   };
 
   const handleExportPdf = async () => {
-    const isSelected = selectedList.length > 0;
-    const rowsToExport = isSelected
-      ? filteredRows.filter((r) => selectedIds.has(r.id))
-      : filteredRows;
-    const ids = rowsToExport.map((r) => r.rawId);
-
+    const ids = filteredRows.map((r) => r.rawId);
     setExportingPdf(true);
     try {
       const res = await fetch("/api/admin/reports/disputes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scope: isSelected ? "selected" : "all",
+          scope: "all",
           ids,
           orientation: "landscape",
         }),
@@ -1800,6 +2090,81 @@ function DisputesReport() {
       console.error("PDF download failed:", err);
     } finally {
       setExportingPdf(false);
+    }
+  };
+
+  const exportSingleRowCsv = (r: DisputeRow) => {
+    downloadCsvFile({
+      filename: `klick-pro-dispute-${r.referenceNumber.toLowerCase()}`,
+      title: `Dispute Case Record #${r.referenceNumber}`,
+      metadata: [
+        { label: "Dispute Ref #", value: `#${r.referenceNumber}` },
+        { label: "Date Filed", value: formatDateSafely(r.createdAt) },
+        { label: "Project Title", value: r.projectTitle },
+        { label: "Issue Type", value: r.issueType },
+        { label: "Priority", value: r.priority },
+        { label: "Claimant", value: r.claimant },
+        { label: "Respondent", value: r.respondent },
+        { label: "Disputed Escrow", value: `INR ${r.disputedAmount.toLocaleString("en-IN")}` },
+        { label: "Decision / Split", value: r.decisionSplit },
+        { label: "Status", value: formatReadableLabel(r.status) },
+      ],
+      headers: [
+        "Dispute Ref #",
+        "Date Filed",
+        "Project / Job Title",
+        "Issue Category",
+        "Priority",
+        "Claimant",
+        "Respondent",
+        "Disputed Escrow (INR)",
+        "Arbitration Decision / Split",
+        "Dispute Status",
+      ],
+      rows: [
+        [
+          `#${r.referenceNumber}`,
+          formatDateSafely(r.createdAt),
+          r.projectTitle,
+          r.issueType,
+          r.priority,
+          r.claimant,
+          r.respondent,
+          r.disputedAmount,
+          r.decisionSplit,
+          formatReadableLabel(r.status),
+        ],
+      ],
+    });
+  };
+
+  const exportSingleRowPdf = async (r: DisputeRow) => {
+    setDownloadingRowId(r.rawId);
+    try {
+      const res = await fetch("/api/admin/reports/disputes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scope: "single",
+          ids: [r.rawId],
+          orientation: "landscape",
+        }),
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `klick-pro-dispute-${r.referenceNumber.toLowerCase()}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error("Single PDF download failed:", err);
+    } finally {
+      setDownloadingRowId(null);
     }
   };
 
@@ -1883,6 +2248,34 @@ function DisputesReport() {
         >
           {formatReadableLabel(r.status)}
         </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      align: "right",
+      render: (r) => (
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          <button
+            type="button"
+            disabled={downloadingRowId === r.rawId}
+            onClick={() => void exportSingleRowPdf(r)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+            title="Download PDF"
+          >
+            <Download className="h-3 w-3 text-indigo-600" />
+            <span>{downloadingRowId === r.rawId ? "..." : "PDF"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => exportSingleRowCsv(r)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
+            title="Download CSV"
+          >
+            <FileSpreadsheet className="h-3 w-3 text-emerald-600" />
+            <span>CSV</span>
+          </button>
+        </div>
       ),
     },
   ];
@@ -2010,7 +2403,7 @@ function DisputesReport() {
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition cursor-pointer"
           >
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            <span>Export CSV {selectedList.length > 0 ? `(${selectedList.length})` : ""}</span>
+            <span>Export CSV</span>
           </button>
           <button
             type="button"
@@ -2019,7 +2412,7 @@ function DisputesReport() {
             className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition cursor-pointer disabled:opacity-50"
           >
             <Download className="h-4 w-4 text-indigo-400" />
-            <span>{exportingPdf ? "Generating..." : `Export PDF ${selectedList.length > 0 ? `(${selectedList.length})` : ""}`}</span>
+            <span>{exportingPdf ? "Generating..." : "Export PDF"}</span>
           </button>
         </div>
       </div>
@@ -2030,10 +2423,7 @@ function DisputesReport() {
           loading={loading}
           rows={paginatedRows}
           emptyMessage="No dispute records match the active filter criteria."
-          selectedIds={selectedIds}
-          onToggle={toggle}
-          allSelected={allVisibleSelected}
-          onToggleAll={toggleAllVisible}
+          selectable={false}
           rowLabel={(r) => r.referenceNumber}
           columns={columns}
         />
@@ -2064,6 +2454,7 @@ function JobsReport() {
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [downloadingRowId, setDownloadingRowId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -2101,10 +2492,6 @@ function JobsReport() {
     });
   }, [jobs, search, statusFilter, datePreset, startDate, endDate]);
 
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
-    useRowSelection(filteredJobs);
-  const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
-
   const paginatedJobs = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
     return filteredJobs.slice(start, start + PAGE_SIZE);
@@ -2117,22 +2504,15 @@ function JobsReport() {
   const completedCount = filteredJobs.filter((j) => j.status.toUpperCase() === "COMPLETED").length;
 
   const handleExportCsv = () => {
-    const isSelected = selectedList.length > 0;
-    const rowsToExport = isSelected
-      ? filteredJobs.filter((j) => selectedIds.has(j.id))
-      : filteredJobs;
-
     downloadCsvFile({
       filename: "klick-pro-admin-jobs-audit",
       title: "Marketplace Job Postings & Project Operations Audit",
       metadata: [
         {
           label: "Scope",
-          value: isSelected
-            ? `${rowsToExport.length} Selected Jobs`
-            : `All Filtered (${rowsToExport.length})`,
+          value: `All Filtered (${filteredJobs.length} Jobs)`,
         },
-        { label: "Total Listings", value: rowsToExport.length },
+        { label: "Total Listings", value: filteredJobs.length },
         { label: "Open & Hiring", value: openCount },
         { label: "Running Projects", value: runningCount },
         { label: "Completed Projects", value: completedCount },
@@ -2147,7 +2527,7 @@ function JobsReport() {
         "Marketplace Status",
         "Date Posted",
       ],
-      rows: rowsToExport.map((j) => [
+      rows: filteredJobs.map((j) => [
         `#JOB-${j.id}`,
         capitalizeWords(j.title ?? "Untitled"),
         capitalizeWords(j.category ?? "General"),
@@ -2159,19 +2539,14 @@ function JobsReport() {
   };
 
   const handleExportPdf = async () => {
-    const isSelected = selectedList.length > 0;
-    const rowsToExport = isSelected
-      ? filteredJobs.filter((j) => selectedIds.has(j.id))
-      : filteredJobs;
-    const ids = rowsToExport.map((j) => j.id);
-
+    const ids = filteredJobs.map((j) => j.id);
     setExportingPdf(true);
     try {
       const res = await fetch("/api/admin/reports/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scope: isSelected ? "selected" : "all",
+          scope: "all",
           ids,
           orientation: "landscape",
         }),
@@ -2191,6 +2566,63 @@ function JobsReport() {
       console.error("PDF download failed:", err);
     } finally {
       setExportingPdf(false);
+    }
+  };
+
+  const exportSingleRowCsv = (j: JobRow) => {
+    downloadCsvFile({
+      filename: `klick-pro-job-${j.id}`,
+      title: `Project Dossier Summary #JOB-${j.id}`,
+      metadata: [
+        { label: "Job Reference", value: `#JOB-${j.id}` },
+        { label: "Project Title", value: capitalizeWords(j.title ?? "Untitled") },
+        { label: "Category", value: capitalizeWords(j.category ?? "General") },
+        { label: "Client Name", value: capitalizeWords(`${j.user?.firstName ?? ""} ${j.user?.lastName ?? ""}`.trim() || "Client") },
+        { label: "Marketplace Status", value: formatReadableLabel(j.status) },
+        { label: "Date Posted", value: formatDateSafely(j.createdAt) },
+      ],
+      headers: [
+        "Job ID",
+        "Project Title",
+        "Category",
+        "Client Name",
+        "Marketplace Status",
+        "Date Posted",
+      ],
+      rows: [
+        [
+          `#JOB-${j.id}`,
+          capitalizeWords(j.title ?? "Untitled"),
+          capitalizeWords(j.category ?? "General"),
+          capitalizeWords(`${j.user?.firstName ?? ""} ${j.user?.lastName ?? ""}`.trim() || "Client"),
+          formatReadableLabel(j.status),
+          formatDateSafely(j.createdAt),
+        ],
+      ],
+    });
+  };
+
+  const exportSingleRowPdf = async (j: JobRow) => {
+    setDownloadingRowId(j.id);
+    try {
+      const res = await fetch(`/api/portal/jobs/${j.id}/export`, {
+        method: "GET",
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${(j.title || `job-${j.id}`).toLowerCase().replace(/[^a-z0-9]+/g, "-")}-dossier.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error("Single Job PDF download failed:", err);
+    } finally {
+      setDownloadingRowId(null);
     }
   };
 
@@ -2248,6 +2680,34 @@ function JobsReport() {
       key: "date",
       header: "Date Posted",
       render: (j) => <span className="text-xs text-slate-500 whitespace-nowrap">{formatDateSafely(j.createdAt)}</span>,
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      align: "right",
+      render: (j) => (
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          <button
+            type="button"
+            disabled={downloadingRowId === j.id}
+            onClick={() => void exportSingleRowPdf(j)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+            title="Download PDF Dossier"
+          >
+            <Download className="h-3 w-3 text-indigo-600" />
+            <span>{downloadingRowId === j.id ? "..." : "PDF"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => exportSingleRowCsv(j)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
+            title="Download CSV Record"
+          >
+            <FileSpreadsheet className="h-3 w-3 text-emerald-600" />
+            <span>CSV</span>
+          </button>
+        </div>
+      ),
     },
   ];
 
@@ -2375,7 +2835,7 @@ function JobsReport() {
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition cursor-pointer"
           >
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            <span>Export CSV {selectedList.length > 0 ? `(${selectedList.length})` : ""}</span>
+            <span>Export CSV</span>
           </button>
           <button
             type="button"
@@ -2384,7 +2844,7 @@ function JobsReport() {
             className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition cursor-pointer disabled:opacity-50"
           >
             <Download className="h-4 w-4 text-indigo-400" />
-            <span>{exportingPdf ? "Generating..." : `Export PDF ${selectedList.length > 0 ? `(${selectedList.length})` : ""}`}</span>
+            <span>{exportingPdf ? "Generating..." : "Export PDF"}</span>
           </button>
         </div>
       </div>
@@ -2395,10 +2855,7 @@ function JobsReport() {
           loading={loading}
           rows={paginatedJobs}
           emptyMessage="No job records match the active filter criteria."
-          selectedIds={selectedIds}
-          onToggle={toggle}
-          allSelected={allVisibleSelected}
-          onToggleAll={toggleAllVisible}
+          selectable={false}
           rowLabel={(j) => j.title ?? `Job #${j.id}`}
           columns={columns}
         />
@@ -2487,9 +2944,7 @@ function UsersReport() {
     });
   }, [users, search, roleFilter, verificationFilter, statusFilter, datePreset, startDate, endDate]);
 
-  const { selectedIds, toggle, allVisibleSelected, toggleAllVisible } =
-    useRowSelection(filteredUsers);
-  const selectedList = useMemo(() => [...selectedIds], [selectedIds]);
+  const [downloadingRowId, setDownloadingRowId] = useState<number | null>(null);
 
   const paginatedUsers = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -2502,22 +2957,12 @@ function UsersReport() {
   const clientsCount = filteredUsers.filter((u) => u.role === "CLIENT").length;
 
   const handleExportCsv = () => {
-    const isSelected = selectedList.length > 0;
-    const rowsToExport = isSelected
-      ? filteredUsers.filter((u) => selectedIds.has(u.id))
-      : filteredUsers;
-
     downloadCsvFile({
       filename: "klick-pro-admin-users-audit",
       title: "User Accounts & KYC Compliance Directory",
       metadata: [
-        {
-          label: "Scope",
-          value: isSelected
-            ? `${rowsToExport.length} Selected Accounts`
-            : `All Filtered (${rowsToExport.length})`,
-        },
-        { label: "Total Profiles", value: rowsToExport.length },
+        { label: "Scope", value: `All Filtered (${filteredUsers.length})` },
+        { label: "Total Profiles", value: filteredUsers.length },
         { label: "KYC Verified", value: verifiedCount },
         { label: "Professionals", value: prosCount },
         { label: "Clients", value: clientsCount },
@@ -2537,7 +2982,7 @@ function UsersReport() {
         "Account Status",
         "Registered Date",
       ],
-      rows: rowsToExport.map((u) => [
+      rows: filteredUsers.map((u) => [
         `#USR-${u.id}`,
         capitalizeWords(`${u.firstName ?? ""} ${u.lastName ?? ""}`.trim()),
         capitalizeWords(u.role),
@@ -2554,11 +2999,7 @@ function UsersReport() {
   };
 
   const handleExportPdf = async () => {
-    const isSelected = selectedList.length > 0;
-    const rowsToExport = isSelected
-      ? filteredUsers.filter((u) => selectedIds.has(u.id))
-      : filteredUsers;
-    const ids = rowsToExport.map((u) => u.id);
+    const ids = filteredUsers.map((u) => u.id);
 
     setExportingPdf(true);
     try {
@@ -2566,7 +3007,7 @@ function UsersReport() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scope: isSelected ? "selected" : "all",
+          scope: "all",
           ids,
           orientation: "landscape",
         }),
@@ -2586,6 +3027,86 @@ function UsersReport() {
       console.error("PDF download failed:", err);
     } finally {
       setExportingPdf(false);
+    }
+  };
+
+  const exportSingleRowCsv = (u: UserRow) => {
+    const fullName = capitalizeWords(`${u.firstName ?? ""} ${u.lastName ?? ""}`.trim());
+    downloadCsvFile({
+      filename: `user-${u.id}-${fullName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      title: `User Account Audit Dossier - ${fullName}`,
+      metadata: [
+        { label: "Account ID", value: `#USR-${u.id}` },
+        { label: "Account Holder", value: fullName },
+        { label: "Platform Role", value: capitalizeWords(u.role) },
+        { label: "Email Address", value: u.email },
+        { label: "Phone Number", value: u.phone || "—" },
+        { label: "KYC Verification", value: u.isVerified ? "Verified" : "Unverified" },
+        { label: "Account Status", value: u.isActive ? "Active" : "Suspended" },
+        { label: "Wallet Balance", value: `INR ${(u.walletBalance ?? 0).toLocaleString("en-IN")}` },
+        { label: "Total Lifetime Top-Up", value: `INR ${(u.totalTopUp ?? 0).toLocaleString("en-IN")}` },
+        { label: "Total Withdrawals", value: `INR ${(u.totalWithdrawals ?? 0).toLocaleString("en-IN")}` },
+        { label: "Registration Date", value: formatDateSafely(u.createdAt) },
+      ],
+      headers: [
+        "User ID",
+        "Full Name",
+        "Platform Role",
+        "Email Address",
+        "Phone Number",
+        "KYC Status",
+        "Wallet Balance (INR)",
+        "Lifetime Top-Up (INR)",
+        "Lifetime Withdrawals (INR)",
+        "Account Status",
+        "Registered Date",
+      ],
+      rows: [
+        [
+          `#USR-${u.id}`,
+          fullName,
+          capitalizeWords(u.role),
+          u.email,
+          u.phone || "—",
+          u.isVerified ? "Verified" : "Unverified",
+          u.walletBalance ?? 0,
+          u.totalTopUp ?? 0,
+          u.totalWithdrawals ?? 0,
+          u.isActive ? "Active" : "Suspended",
+          formatDateSafely(u.createdAt),
+        ],
+      ],
+    });
+  };
+
+  const exportSingleRowPdf = async (u: UserRow) => {
+    setDownloadingRowId(u.id);
+    try {
+      const res = await fetch("/api/admin/reports/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scope: "single",
+          ids: [u.id],
+          orientation: "portrait",
+        }),
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        const safeName = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        link.download = `user-${u.id}-${safeName || "profile"}-audit.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error("Single User PDF download failed:", err);
+    } finally {
+      setDownloadingRowId(null);
     }
   };
 
@@ -2699,6 +3220,34 @@ function UsersReport() {
       key: "created",
       header: "Registered",
       render: (u) => <span className="text-xs text-slate-500 whitespace-nowrap">{formatDateSafely(u.createdAt)}</span>,
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      align: "right",
+      render: (u) => (
+        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+          <button
+            type="button"
+            disabled={downloadingRowId === u.id}
+            onClick={() => void exportSingleRowPdf(u)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+            title="Download PDF Dossier"
+          >
+            <Download className="h-3 w-3 text-indigo-600" />
+            <span>{downloadingRowId === u.id ? "..." : "PDF"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => exportSingleRowCsv(u)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
+            title="Download CSV Record"
+          >
+            <FileSpreadsheet className="h-3 w-3 text-emerald-600" />
+            <span>CSV</span>
+          </button>
+        </div>
+      ),
     },
   ];
 
@@ -2841,7 +3390,7 @@ function UsersReport() {
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition cursor-pointer"
           >
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            <span>Export CSV {selectedList.length > 0 ? `(${selectedList.length})` : ""}</span>
+            <span>Export CSV</span>
           </button>
           <button
             type="button"
@@ -2850,7 +3399,7 @@ function UsersReport() {
             className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition cursor-pointer disabled:opacity-50"
           >
             <Download className="h-4 w-4 text-indigo-400" />
-            <span>{exportingPdf ? "Generating..." : `Export PDF ${selectedList.length > 0 ? `(${selectedList.length})` : ""}`}</span>
+            <span>{exportingPdf ? "Generating..." : "Export PDF"}</span>
           </button>
         </div>
       </div>
@@ -2861,10 +3410,7 @@ function UsersReport() {
           loading={loading}
           rows={paginatedUsers}
           emptyMessage="No user accounts match the active filter criteria."
-          selectedIds={selectedIds}
-          onToggle={toggle}
-          allSelected={allVisibleSelected}
-          onToggleAll={toggleAllVisible}
+          selectable={false}
           rowLabel={(u) => `${u.firstName} ${u.lastName}`}
           columns={columns}
         />
@@ -2880,119 +3426,190 @@ function UsersReport() {
 }
 
 // ===========================================================================
+// ===========================================================================
 // MAIN ADMIN REPORTS PAGE COMPONENT
 // ===========================================================================
 export default function AdminReportsPage() {
   const [tab, setTab] = useState<
     "revenue" | "escrow" | "withdrawals" | "disputes" | "jobs" | "users"
   >("revenue");
+  const [commissionEnabled, setCommissionEnabled] = useState(false);
+  const [commissionRate, setCommissionRate] = useState(0.1);
+  const [loadingConfig, setLoadingConfig] = useState(true);
+
+  useEffect(() => {
+    void fetch("/api/v1/admin/data/finance", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        if (typeof data.commissionEnabled === "boolean") {
+          setCommissionEnabled(data.commissionEnabled);
+        }
+        if (typeof data.commissionRate === "number") {
+          setCommissionRate(data.commissionRate);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load platform finance configuration:", err);
+      })
+      .finally(() => setLoadingConfig(false));
+  }, []);
+
+  const activeRatePercent =
+    commissionRate <= 1 ? Math.round(commissionRate * 100) : commissionRate;
 
   return (
     <div className="space-y-6">
-      {/* Executive Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-6 sm:p-8 text-white shadow-xl">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.18),transparent_50%)] pointer-events-none" />
-        <div className="relative z-10 flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+      {/* Executive Admin Header Card */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-indigo-300">
-              <FileText className="h-3.5 w-3.5 text-indigo-400" />
-              <span>Enterprise Financial Control & Audit</span>
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50/80 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+              <FileText className="h-3.5 w-3.5 text-indigo-600" />
+              <span>Enterprise Financial Control & Compliance</span>
             </div>
-            <h1 className="mt-3 font-display text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            <h1 className="mt-2 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 font-display">
               Platform Reports & Audit Ledgers
             </h1>
-            <p className="mt-1.5 text-sm text-slate-300 max-w-2xl leading-relaxed">
+            <p className="mt-1 text-xs sm:text-sm text-slate-500 max-w-2xl leading-relaxed">
               Official regulatory compliance records of verified accounts, escrow custody liabilities,
               milestone settlement transactions, dispute arbitration, and marketplace health.
             </p>
           </div>
 
-          {/* 6 Tab Switcher */}
-          <div className="flex flex-nowrap shrink-0 items-center gap-1.5 overflow-x-auto rounded-2xl border border-white/10 bg-white/5 p-1.5 backdrop-blur-sm whitespace-nowrap">
-            <button
-              type="button"
-              onClick={() => setTab("revenue")}
-              className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-semibold transition cursor-pointer ${
-                tab === "revenue"
-                  ? "bg-white text-slate-950 shadow-md font-bold"
-                  : "text-slate-300 hover:text-white hover:bg-white/10"
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {/* Live Commission Status Indicator Button linking to Settings */}
+            <Link
+              href="/admin/settings"
+              title="Platform Commission Rule: Click to review or modify commission rates in Admin Settings"
+              className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs sm:text-sm font-semibold shadow-2xs transition hover:shadow-xs active:scale-95 ${
+                loadingConfig
+                  ? "border-slate-200 bg-slate-50 text-slate-500"
+                  : commissionEnabled
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                    : "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200"
               }`}
             >
-              <Landmark className="h-4 w-4" />
-              <span>Revenue & Commission</span>
-            </button>
+              <Percent
+                className={`h-4 w-4 ${
+                  commissionEnabled ? "text-emerald-600" : "text-slate-500"
+                }`}
+              />
+              <span>
+                Commission:{" "}
+                <span className="font-bold underline underline-offset-2">
+                  {loadingConfig
+                    ? "Checking..."
+                    : commissionEnabled
+                      ? `ON (${activeRatePercent}%)`
+                      : "OFF (0% cut)"}
+                </span>
+              </span>
+            </Link>
 
-            <button
-              type="button"
-              onClick={() => setTab("escrow")}
-              className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-semibold transition cursor-pointer ${
-                tab === "escrow"
-                  ? "bg-white text-slate-950 shadow-md font-bold"
-                  : "text-slate-300 hover:text-white hover:bg-white/10"
-              }`}
+            {/* Platform Settings Link */}
+            <Link
+              href="/admin/settings"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition active:scale-95"
             >
-              <ShieldCheck className="h-4 w-4" />
-              <span>Escrow & Treasury</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setTab("withdrawals")}
-              className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-semibold transition cursor-pointer ${
-                tab === "withdrawals"
-                  ? "bg-white text-slate-950 shadow-md font-bold"
-                  : "text-slate-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <ArrowDownToLine className="h-4 w-4" />
-              <span>Bank Withdrawals</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setTab("disputes")}
-              className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-semibold transition cursor-pointer ${
-                tab === "disputes"
-                  ? "bg-white text-slate-950 shadow-md font-bold"
-                  : "text-slate-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Scale className="h-4 w-4" />
-              <span>Disputes & Arbitration</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setTab("jobs")}
-              className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-semibold transition cursor-pointer ${
-                tab === "jobs"
-                  ? "bg-white text-slate-950 shadow-md font-bold"
-                  : "text-slate-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Briefcase className="h-4 w-4" />
-              <span>Jobs & Projects</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setTab("users")}
-              className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-semibold transition cursor-pointer ${
-                tab === "users"
-                  ? "bg-white text-slate-950 shadow-md font-bold"
-                  : "text-slate-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Users className="h-4 w-4" />
-              <span>User Accounts</span>
-            </button>
+              <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
+              <span>Platform Rules</span>
+            </Link>
           </div>
+        </div>
+
+        {/* Executive 6-Tab Navigation Bar */}
+        <div className="mt-6 flex items-center gap-1.5 overflow-x-auto pb-1 border-t border-slate-100 pt-4">
+          <button
+            type="button"
+            onClick={() => setTab("revenue")}
+            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
+              tab === "revenue"
+                ? "bg-slate-900 text-white shadow-xs font-bold"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            <Landmark className="h-4 w-4" />
+            <span>
+              {commissionEnabled ? "Revenue & Commission" : "Revenue & Settlements"}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTab("escrow")}
+            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
+              tab === "escrow"
+                ? "bg-slate-900 text-white shadow-xs font-bold"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            <span>Escrow & Treasury</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTab("withdrawals")}
+            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
+              tab === "withdrawals"
+                ? "bg-slate-900 text-white shadow-xs font-bold"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            <ArrowDownToLine className="h-4 w-4" />
+            <span>Bank Withdrawals</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTab("disputes")}
+            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
+              tab === "disputes"
+                ? "bg-slate-900 text-white shadow-xs font-bold"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            <Scale className="h-4 w-4" />
+            <span>Disputes & Arbitration</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTab("jobs")}
+            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
+              tab === "jobs"
+                ? "bg-slate-900 text-white shadow-xs font-bold"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            <Briefcase className="h-4 w-4" />
+            <span>Jobs & Projects</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTab("users")}
+            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
+              tab === "users"
+                ? "bg-slate-900 text-white shadow-xs font-bold"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            <Users className="h-4 w-4" />
+            <span>User Accounts</span>
+          </button>
         </div>
       </div>
 
       {/* Main Tab Content */}
       <section>
-        {tab === "revenue" && <RevenueReport />}
+        {tab === "revenue" && (
+          <RevenueReport
+            commissionEnabled={commissionEnabled}
+            commissionRate={commissionRate}
+          />
+        )}
         {tab === "escrow" && <EscrowReport />}
         {tab === "withdrawals" && <WithdrawalsReport />}
         {tab === "disputes" && <DisputesReport />}

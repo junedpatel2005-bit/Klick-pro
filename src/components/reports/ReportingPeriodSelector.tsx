@@ -147,45 +147,28 @@ export function ReportingPeriodSelector({
             Custom Range
           </button>
         </div>
-
-        {/* Right: Date Basis Selector */}
-        {!hideDateBasis && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1 shrink-0">
-              <Clock className="h-3.5 w-3.5" />
-              Basis:
-            </span>
-            <select
-              value={value.dateBasis}
-              onChange={(e) => handleDateBasisChange(e.target.value as DateBasis)}
-              className="h-8.5 rounded-lg border border-input bg-background px-2.5 text-xs font-medium text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-            >
-              <option value="EVENT_DATE">Financial Event Date (Deliveries / Approvals)</option>
-              <option value="POSTING_DATE">Ledger Posting Date (Accounting)</option>
-              <option value="SETTLEMENT_DATE">Bank / UPI Settlement Date</option>
-              <option value="INVOICE_DATE">Invoice Issue Date</option>
-            </select>
-          </div>
-        )}
       </div>
 
       {/* Primary Filtering Controls based on System */}
       <div className="mt-4 pt-4 border-t border-border flex flex-wrap items-center justify-between gap-3">
         {value.system === "INDIAN_FY" && (
           <div className="flex flex-wrap items-center gap-3">
-            {/* FY Dropdown */}
+            {/* Year Dropdown */}
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-semibold text-muted-foreground">FY:</span>
+              <span className="text-xs font-semibold text-muted-foreground">Year:</span>
               <select
-                value={value.financialYear}
-                onChange={(e) => handleYearChange(e.target.value)}
+                value={value.financialYear.replace(/^FY\s*/i, "")}
+                onChange={(e) => handleYearChange(e.target.value.replace(/^FY\s*/i, ""))}
                 className="h-8.5 rounded-lg border border-input bg-background px-3 text-xs font-bold text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
               >
-                {availableYears.map((fy) => (
-                  <option key={fy} value={fy}>
-                    FY {fy}
-                  </option>
-                ))}
+                {availableYears.map((fy) => {
+                  const cleanYear = fy.replace(/^FY\s*/i, "");
+                  return (
+                    <option key={cleanYear} value={cleanYear}>
+                      {cleanYear}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 

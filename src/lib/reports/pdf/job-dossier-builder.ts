@@ -159,6 +159,9 @@ export async function fetchJobDossierData(
         dueDate: formatDate(m.dueDate),
         approvedAt: formatDate(m.approvedAt),
         description: m.description || undefined,
+        validityDays: m.validityDays ?? undefined,
+        releaseAt: m.releaseAt ? formatDate(m.releaseAt) : undefined,
+        paymentStatus: m.autoReleaseStatus || m.status,
       }))
     : job.milestones.map((m, idx) => ({
         number: idx + 1,
@@ -200,6 +203,7 @@ export async function fetchJobDossierData(
     timingType: job.timingType,
     urgency: job.urgency,
     postedAt: formatDate(job.createdAt),
+    hiredAt: trackingProject?.acceptedAt ? formatDate(trackingProject.acceptedAt) : undefined,
     jobDate: formatDate(job.jobDate),
     deadline: formatDate(job.deadline),
     budget:

@@ -37,7 +37,6 @@ import {
 } from "lucide-react";
 import { ExportMenu } from "@/components/reports/ExportMenu";
 import { SelectableReportTable, type ReportTableColumn } from "@/components/reports/SelectableReportTable";
-import { useRowSelection } from "@/hooks/use-row-selection";
 import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
 import {
   ReportingPeriodSelector,
@@ -48,7 +47,12 @@ import {
   isDateWithinPeriod,
   formatINR,
 } from "@/lib/reports/financial-periods";
-import { formatReadableLabel, capitalizeWords, capitalizeFirst } from "@/lib/utils";
+import {
+  formatReadableLabel,
+  capitalizeWords,
+  capitalizeFirst,
+  formatProjectPdfFilename,
+} from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Type Definitions
@@ -107,6 +111,8 @@ type WalletData = {
   earned?: number;
   commission?: number;
   withdrawals?: WithdrawalRecord[];
+  commissionEnabled?: boolean;
+  commissionRate?: number;
 };
 
 type ProfessionalTab = "summary" | "projects" | "settlements" | "concentration";
@@ -358,13 +364,8 @@ export default function ProfessionalReports() {
     });
   }, [periodFilteredEarnings, search, statusFilter]);
 
-  // Multi-select for earnings
-  const {
-    selectedIds: selectedEarningsIds,
-    toggle: toggleEarnings,
-    allVisibleSelected: allEarningsSelected,
-    toggleAllVisible: toggleAllEarnings,
-  } = useRowSelection(displayEarnings);
+  const isCommissionOn = walletData?.commissionEnabled ?? false;
+  const commissionRate = walletData?.commissionRate ?? 0.1;
 
   // Search and status filtered projects
   const displayProjects = useMemo(() => {
@@ -386,14 +387,6 @@ export default function ProfessionalReports() {
       return matchesSearch && matchesStatus;
     });
   }, [periodFilteredProjects, search, statusFilter]);
-
-  // Multi-select for projects
-  const {
-    selectedIds: selectedProjectIds,
-    toggle: toggleProject,
-    allVisibleSelected: allProjectsSelected,
-    toggleAllVisible: toggleAllProjects,
-  } = useRowSelection(displayProjects);
 
   // Client Concentration aggregation
   const clientConcentration = useMemo(() => {
@@ -546,7 +539,7 @@ export default function ProfessionalReports() {
         <ReportingPeriodSelector
           value={period}
           onChange={setPeriod}
-          availableYears={["FY 2026-27", "FY 2025-26", "FY 2024-25"]}
+          availableYears={["2026-27", "2025-26", "2024-25"]}
         />
       </section>
 
@@ -567,20 +560,37 @@ export default function ProfessionalReports() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Platform Commission
-            </span>
-            <Percent className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+        {isCommissionOn ? (
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Platform Commission
+              </span>
+              <Percent className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div className="mt-2 text-2xl font-bold font-mono tracking-tight text-foreground">
+              {formatINR(metrics.commissionDeducted)}
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Platform service fee ({Math.round(commissionRate * 100)}%) retained
+            </p>
           </div>
-          <div className="mt-2 text-2xl font-bold font-mono tracking-tight text-foreground">
-            {formatINR(metrics.commissionDeducted)}
+        ) : (
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Net Milestone Earnings
+              </span>
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="mt-2 text-2xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400">
+              {formatINR(metrics.netEarningsCredited)}
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              100% credited to wallet · Zero commission cut
+            </p>
           </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Platform service fee retained by Klick-Pro
-          </p>
-        </div>
+        )}
 
         <div className="rounded-2xl border border-border bg-card p-5 shadow-xs">
           <div className="flex items-center justify-between">
@@ -662,49 +672,61 @@ export default function ProfessionalReports() {
 
             {/* Export Menu */}
             <ExportMenu
-              selectedIds={Array.from(selectedEarningsIds)}
-              selectedCount={selectedEarningsIds.size}
+              endpoint="/api/professional/earnings/export"
+              selectedIds={displayEarnings.map((e) => e.id)}
               totalCount={displayEarnings.length}
               fileBaseName="klick-pro-professional-earnings"
+              buttonLabel="Download Earnings (PDF)"
               onExportCsv={() => {
-                const rowsToExport =
-                  selectedEarningsIds.size > 0
-                    ? displayEarnings.filter((e) => selectedEarningsIds.has(e.id))
-                    : displayEarnings;
-
                 downloadCsvFile({
                   filename: "professional-earnings-statement",
-                  title: `Klick-Pro Official Professional Earnings Statement (${period.label})`,
-                  metadata: [
-                    { label: "Financial Reporting Period", value: period.label },
-                    { label: "Quarter", value: period.quarter },
-                    { label: "Total Gross Billings", value: formatINR(metrics.grossEarnings) },
-                    { label: "Commission Retained", value: formatINR(metrics.commissionDeducted) },
-                    { label: "TDS Deducted (Sec 194-O)", value: formatINR(metrics.tdsDeducted) },
-                    { label: "Net Credited", value: formatINR(metrics.netEarningsCredited) },
-                  ],
-                  headers: [
-                    "Voucher #",
-                    "Date",
-                    "Milestone / Description",
-                    "Project Title",
-                    "Client Name",
-                    "Gross Amount (INR)",
-                    "Commission (INR)",
-                    "Net Credited (INR)",
-                    "Status",
-                  ],
-                  rows: rowsToExport.map((e) => [
-                    e.invoiceNumber || `#EARN-${e.id}`,
-                    formatDateSafely(e.createdAt),
-                    capitalizeFirst(e.description || e.milestoneTitle || "Milestone Settlement"),
-                    capitalizeWords(e.projectTitle || `Project #${e.trackingId ?? e.id}`),
-                    capitalizeWords(e.clientName || "Direct Client"),
-                    e.baseAmount ?? e.amount,
-                    e.feeAmount ?? 0,
-                    e.netAmount ?? e.amount,
-                    capitalizeWords(e.status),
-                  ]),
+                  title: `Official Professional Earnings Statement (${period.label})`,
+                  headers: isCommissionOn
+                    ? [
+                        "Voucher #",
+                        "Date",
+                        "Milestone / Description",
+                        "Project Title",
+                        "Client Name",
+                        "Gross Amount (INR)",
+                        "Commission (INR)",
+                        "Net Credited (INR)",
+                        "Status",
+                      ]
+                    : [
+                        "Voucher #",
+                        "Date",
+                        "Milestone / Description",
+                        "Project Title",
+                        "Client Name",
+                        "Gross Amount (INR)",
+                        "Net Credited (INR)",
+                        "Status",
+                      ],
+                  rows: displayEarnings.map((e) =>
+                    isCommissionOn
+                      ? [
+                          e.invoiceNumber || `#EARN-${e.id}`,
+                          formatDateSafely(e.createdAt),
+                          capitalizeFirst(e.description || e.milestoneTitle || "Milestone Settlement"),
+                          capitalizeWords(e.projectTitle || `Project #${e.trackingId ?? e.id}`),
+                          capitalizeWords(e.clientName || "Direct Client"),
+                          e.baseAmount ?? e.amount,
+                          e.feeAmount ?? 0,
+                          e.netAmount ?? e.amount,
+                          capitalizeWords(e.status),
+                        ]
+                      : [
+                          e.invoiceNumber || `#EARN-${e.id}`,
+                          formatDateSafely(e.createdAt),
+                          capitalizeFirst(e.description || e.milestoneTitle || "Milestone Settlement"),
+                          capitalizeWords(e.projectTitle || `Project #${e.trackingId ?? e.id}`),
+                          capitalizeWords(e.clientName || "Direct Client"),
+                          e.baseAmount ?? e.amount,
+                          e.netAmount ?? e.amount,
+                          capitalizeWords(e.status),
+                        ],
+                  ),
                 });
               }}
             />
@@ -715,12 +737,8 @@ export default function ProfessionalReports() {
             <SelectableReportTable
               loading={loading}
               rows={displayEarnings}
+              selectable={false}
               emptyMessage="No earnings records match the active period or filter criteria."
-              selectedIds={selectedEarningsIds}
-              onToggle={toggleEarnings}
-              allSelected={allEarningsSelected}
-              onToggleAll={toggleAllEarnings}
-              rowLabel={(item) => item.description || `#EARN-${item.id}`}
               columns={[
                 {
                   key: "invoiceNumber",
@@ -764,16 +782,20 @@ export default function ProfessionalReports() {
                     </span>
                   ),
                 },
-                {
-                  key: "commission",
-                  header: "Commission",
-                  align: "right",
-                  render: (item) => (
-                    <span className="font-mono text-xs text-rose-600 dark:text-rose-400">
-                      -{formatINR(Number(item.feeAmount) || 0)}
-                    </span>
-                  ),
-                },
+                ...(isCommissionOn
+                  ? [
+                      {
+                        key: "commission",
+                        header: "Commission",
+                        align: "right" as const,
+                        render: (item: EarningsItem) => (
+                          <span className="font-mono text-xs text-rose-600 dark:text-rose-400">
+                            -{formatINR(Number(item.feeAmount) || 0)}
+                          </span>
+                        ),
+                      },
+                    ]
+                  : []),
                 {
                   key: "netAmount",
                   header: "Net Credited",
@@ -810,19 +832,81 @@ export default function ProfessionalReports() {
                 },
                 {
                   key: "actions",
-                  header: "Voucher",
+                  header: "Actions",
                   align: "right",
                   render: (item) => (
-                    <a
-                      href={`/api/portal/invoices/${item.invoicePaymentId || item.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
-                      title="Download official Payout Receipt"
-                    >
-                      <FileDown className="h-3 w-3" />
-                      Receipt
-                    </a>
+                    <div className="flex items-center justify-end gap-2">
+                      <a
+                        href={`/api/portal/invoices/${item.invoicePaymentId || item.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted"
+                        title="Download official Payout Receipt PDF"
+                      >
+                        <FileDown className="h-3 w-3 text-primary" />
+                        <span>Receipt PDF</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          downloadCsvFile({
+                            filename: `earning-voucher-${item.id}`,
+                            title: `Earning Voucher · ${item.invoiceNumber || `#EARN-${item.id}`}`,
+                            headers: isCommissionOn
+                              ? [
+                                  "Voucher #",
+                                  "Date",
+                                  "Milestone / Description",
+                                  "Project Title",
+                                  "Client Name",
+                                  "Gross Amount (INR)",
+                                  "Commission (INR)",
+                                  "Net Credited (INR)",
+                                  "Status",
+                                ]
+                              : [
+                                  "Voucher #",
+                                  "Date",
+                                  "Milestone / Description",
+                                  "Project Title",
+                                  "Client Name",
+                                  "Gross Amount (INR)",
+                                  "Net Credited (INR)",
+                                  "Status",
+                                ],
+                            rows: [
+                              isCommissionOn
+                                ? [
+                                    item.invoiceNumber || `#EARN-${item.id}`,
+                                    formatDateSafely(item.createdAt),
+                                    capitalizeFirst(item.description || item.milestoneTitle || "Milestone Settlement"),
+                                    capitalizeWords(item.projectTitle || `Project #${item.trackingId ?? item.id}`),
+                                    capitalizeWords(item.clientName || "Direct Client"),
+                                    item.baseAmount ?? item.amount,
+                                    item.feeAmount ?? 0,
+                                    item.netAmount ?? item.amount,
+                                    capitalizeWords(item.status),
+                                  ]
+                                : [
+                                    item.invoiceNumber || `#EARN-${item.id}`,
+                                    formatDateSafely(item.createdAt),
+                                    capitalizeFirst(item.description || item.milestoneTitle || "Milestone Settlement"),
+                                    capitalizeWords(item.projectTitle || `Project #${item.trackingId ?? item.id}`),
+                                    capitalizeWords(item.clientName || "Direct Client"),
+                                    item.baseAmount ?? item.amount,
+                                    item.netAmount ?? item.amount,
+                                    capitalizeWords(item.status),
+                                  ],
+                            ],
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted cursor-pointer"
+                        title="Export single earning CSV"
+                      >
+                        <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                        <span>CSV</span>
+                      </button>
+                    </div>
                   ),
                 },
               ]}
@@ -834,11 +918,6 @@ export default function ProfessionalReports() {
             <div>
               Showing <span className="font-semibold text-foreground">{displayEarnings.length}</span> of{" "}
               <span className="font-semibold text-foreground">{periodFilteredEarnings.length}</span> records for {period.label}.
-              {selectedEarningsIds.size > 0 && (
-                <span className="ml-2 font-semibold text-primary">
-                  ({selectedEarningsIds.size} selected)
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-4 font-mono text-xs">
               <span>
@@ -908,19 +987,15 @@ export default function ProfessionalReports() {
             </div>
 
             <ExportMenu
-              selectedIds={Array.from(selectedProjectIds)}
-              selectedCount={selectedProjectIds.size}
+              endpoint="/api/professional/jobs/export"
+              selectedIds={displayProjects.map((p) => p.id)}
               totalCount={displayProjects.length}
-              fileBaseName="klick-pro-professional-projects"
+              fileBaseName="professional-projects"
+              buttonLabel="Download Projects (PDF)"
               onExportCsv={() => {
-                const rowsToExport =
-                  selectedProjectIds.size > 0
-                    ? displayProjects.filter((p) => selectedProjectIds.has(p.id))
-                    : displayProjects;
-
                 downloadCsvFile({
                   filename: "professional-projects-statement",
-                  title: `Klick-Pro Professional Contracts Statement (${period.label})`,
+                  title: `Professional Contracts Statement (${period.label})`,
                   headers: [
                     "Project Ref",
                     "Job Scope",
@@ -931,7 +1006,7 @@ export default function ProfessionalReports() {
                     "Target Deadline",
                     "Accepted Date",
                   ],
-                  rows: rowsToExport.map((p) => [
+                  rows: displayProjects.map((p) => [
                     `#PRJ-${p.id}`,
                     capitalizeWords(p.jobTitle || `Project #${p.id}`),
                     capitalizeWords(p.clientName || "Direct Client"),
@@ -958,25 +1033,14 @@ export default function ProfessionalReports() {
               ) : (
                 displayProjects.map((project) => {
                   const trackingHref = `/project/${project.id}/tracking`;
-                  const isSelected = selectedProjectIds.has(project.id);
                   return (
                     <article
                       key={project.id}
-                      className={`relative flex flex-col justify-between rounded-2xl border p-5 shadow-xs transition ${
-                        isSelected
-                          ? "border-primary bg-primary/[0.03] ring-1 ring-primary/40"
-                          : "border-border bg-card hover:border-primary/40"
-                      }`}
+                      className="relative flex flex-col justify-between rounded-2xl border border-border bg-card p-5 shadow-xs transition hover:border-primary/40"
                     >
                       <div>
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleProject(project.id)}
-                              className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
-                            />
                             <span className="font-mono text-xs font-semibold text-muted-foreground bg-muted/60 px-2 py-0.5 rounded">
                               #PRJ-{project.id}
                             </span>
@@ -1042,12 +1106,47 @@ export default function ProfessionalReports() {
                             href={`/api/portal/projects/${project.id}/export`}
                             target="_blank"
                             rel="noopener noreferrer"
+                            download={formatProjectPdfFilename(project.jobTitle, `project-${project.id}`)}
                             className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground shadow-xs hover:bg-muted"
                             title="Download official Project Dossier PDF"
                           >
                             <FileDown className="h-3.5 w-3.5 text-primary" />
                             <span>Dossier PDF</span>
                           </a>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              downloadCsvFile({
+                                filename: `project-${project.id}-contract`,
+                                title: `Project Contract · #PRJ-${project.id}`,
+                                headers: [
+                                  "Project Ref",
+                                  "Job Scope",
+                                  "Client Name",
+                                  "Status",
+                                  "Contract Amount (INR)",
+                                  "Progress %",
+                                  "Target Deadline",
+                                  "Accepted Date",
+                                ],
+                                rows: [[
+                                  `#PRJ-${project.id}`,
+                                  capitalizeWords(project.jobTitle || `Project #${project.id}`),
+                                  capitalizeWords(project.clientName || "Direct Client"),
+                                  displayStatus(project.status),
+                                  project.budget ?? 0,
+                                  `${project.progress}%`,
+                                  project.deadline ? formatDateSafely(project.deadline) : "Flexible",
+                                  formatDateSafely(project.acceptedAt),
+                                ]],
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground shadow-xs hover:bg-muted cursor-pointer"
+                            title="Export single project CSV"
+                          >
+                            <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                            <span>CSV</span>
+                          </button>
                           <Link
                             href={trackingHref}
                             className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90"
@@ -1067,12 +1166,8 @@ export default function ProfessionalReports() {
               <SelectableReportTable
                 loading={loading}
                 rows={displayProjects}
+                selectable={false}
                 emptyMessage="No project records match the active period or filter criteria."
-                selectedIds={selectedProjectIds}
-                onToggle={toggleProject}
-                allSelected={allProjectsSelected}
-                onToggleAll={toggleAllProjects}
-                rowLabel={(p) => capitalizeWords(p.jobTitle) || `Project #${p.id}`}
                 columns={[
                   {
                     key: "id",
@@ -1148,11 +1243,47 @@ export default function ProfessionalReports() {
                           href={`/api/portal/projects/${p.id}/export`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                          download={formatProjectPdfFilename(p.jobTitle, `project-${p.id}`)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted"
+                          title="Download official Project Dossier PDF"
                         >
-                          <FileDown className="h-3 w-3" />
-                          Dossier
+                          <FileDown className="h-3 w-3 text-primary" />
+                          <span>Dossier PDF</span>
                         </a>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            downloadCsvFile({
+                              filename: `project-${p.id}-contract`,
+                              title: `Project Contract · #PRJ-${p.id}`,
+                              headers: [
+                                "Project Ref",
+                                "Job Scope",
+                                "Client Name",
+                                "Status",
+                                "Contract Amount (INR)",
+                                "Progress %",
+                                "Target Deadline",
+                                "Accepted Date",
+                              ],
+                              rows: [[
+                                `#PRJ-${p.id}`,
+                                capitalizeWords(p.jobTitle || `Project #${p.id}`),
+                                capitalizeWords(p.clientName || "Direct Client"),
+                                displayStatus(p.status),
+                                p.budget ?? 0,
+                                `${p.progress}%`,
+                                p.deadline ? formatDateSafely(p.deadline) : "Flexible",
+                                formatDateSafely(p.acceptedAt),
+                              ]],
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted cursor-pointer"
+                          title="Export single project CSV"
+                        >
+                          <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                          <span>CSV</span>
+                        </button>
                       </div>
                     ),
                   },
@@ -1178,13 +1309,13 @@ export default function ProfessionalReports() {
 
             <ExportMenu
               selectedIds={periodFilteredWithdrawals.map((w) => w.id)}
-              selectedCount={periodFilteredWithdrawals.length}
               totalCount={periodFilteredWithdrawals.length}
               fileBaseName="klick-pro-settlements-audit"
+              buttonLabel="Export Settlements (CSV)"
               onExportCsv={() => {
                 downloadCsvFile({
                   filename: "bank-upi-settlements-audit",
-                  title: `Klick-Pro Bank & UPI Settlements Audit Log (${period.label})`,
+                  title: `Bank & UPI Settlements Audit Log (${period.label})`,
                   headers: [
                     "Withdrawal Ref #",
                     "Requested Date",
@@ -1219,51 +1350,91 @@ export default function ProfessionalReports() {
                   <th className="p-3">UTR / Bank Ref</th>
                   <th className="p-3">Status</th>
                   <th className="p-3 text-right">Settled Amount</th>
+                  <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {periodFilteredWithdrawals.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="p-8 text-center text-muted-foreground">
                       No bank or UPI withdrawal settlements recorded in {period.label}.
                     </td>
                   </tr>
                 ) : (
-                  periodFilteredWithdrawals.map((w) => (
-                    <tr key={w.id} className="hover:bg-muted/30 transition">
-                      <td className="p-3 font-mono font-semibold text-muted-foreground">
-                        #WD-{w.id}
-                      </td>
-                      <td className="p-3 text-muted-foreground">
-                        {formatDateSafely(w.createdAt)}
-                      </td>
-                      <td className="p-3">
-                        <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground">
-                          <CreditCard className="h-3 w-3 text-primary" />
-                          {w.payoutRail || "IMPS / NEFT"}
-                        </span>
-                      </td>
-                      <td className="p-3 font-mono text-xs text-foreground">
-                        {w.destinationLabel || "Verified Account"}
-                      </td>
-                      <td className="p-3 font-mono text-xs text-muted-foreground">
-                        {w.referenceNumber || <span className="text-amber-600">Pending UTR</span>}
-                      </td>
-                      <td className="p-3">
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusBadgeClass(
-                            w.status,
-                          )}`}
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                          {displayStatus(w.status)}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right font-mono font-bold text-foreground">
-                        {formatINR(w.amount)}
-                      </td>
-                    </tr>
-                  ))
+                  periodFilteredWithdrawals.map((w) => {
+                    return (
+                      <tr
+                        key={w.id}
+                        className="hover:bg-muted/30 transition"
+                      >
+                        <td className="p-3 font-mono font-semibold text-muted-foreground">
+                          #WD-{w.id}
+                        </td>
+                        <td className="p-3 text-muted-foreground">
+                          {formatDateSafely(w.createdAt)}
+                        </td>
+                        <td className="p-3">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground">
+                            <CreditCard className="h-3 w-3 text-primary" />
+                            {w.payoutRail || "IMPS / NEFT"}
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono text-xs text-foreground">
+                          {w.destinationLabel || "Verified Account"}
+                        </td>
+                        <td className="p-3 font-mono text-xs text-muted-foreground">
+                          {w.referenceNumber || <span className="text-amber-600">Pending UTR</span>}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusBadgeClass(
+                              w.status,
+                            )}`}
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                            {displayStatus(w.status)}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right font-mono font-bold text-foreground">
+                          {formatINR(w.amount)}
+                        </td>
+                        <td className="p-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              downloadCsvFile({
+                                filename: `settlement-voucher-${w.id}`,
+                                title: `Settlement Voucher · #WD-${w.id}`,
+                                headers: [
+                                  "Withdrawal Ref #",
+                                  "Requested Date",
+                                  "Payout Rail",
+                                  "Destination Account / VPA",
+                                  "UTR / Bank Reference",
+                                  "Status",
+                                  "Amount (INR)",
+                                ],
+                                rows: [[
+                                  `#WD-${w.id}`,
+                                  formatDateSafely(w.createdAt),
+                                  w.payoutRail || "BANK_TRANSFER",
+                                  w.destinationLabel || "Verified Bank Account",
+                                  w.referenceNumber || "Processing via Gateway",
+                                  capitalizeWords(w.status),
+                                  w.amount,
+                                ]],
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted cursor-pointer"
+                            title="Export single settlement CSV"
+                          >
+                            <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                            <span>CSV</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -1292,7 +1463,7 @@ export default function ProfessionalReports() {
               onExportCsv={() => {
                 downloadCsvFile({
                   filename: "client-concentration-analysis",
-                  title: `Klick-Pro Client Revenue Concentration (${period.label})`,
+                  title: `Client Revenue Concentration (${period.label})`,
                   headers: [
                     "Client Name",
                     "Gross Billings (INR)",
@@ -1327,12 +1498,13 @@ export default function ProfessionalReports() {
                   <th className="p-3">Completed Jobs</th>
                   <th className="p-3">Active Jobs</th>
                   <th className="p-3 text-right">Last Engagement</th>
+                  <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {clientConcentration.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="p-8 text-center text-muted-foreground">
                       No client engagements recorded for {period.label}.
                     </td>
                   </tr>
@@ -1383,6 +1555,40 @@ export default function ProfessionalReports() {
                         </td>
                         <td className="p-3 text-right text-muted-foreground">
                           {formatDateSafely(client.lastDate)}
+                        </td>
+                        <td className="p-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              downloadCsvFile({
+                                filename: `client-${client.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-concentration`,
+                                title: `Client Concentration · ${client.name}`,
+                                headers: [
+                                  "Client Name",
+                                  "Gross Billings (INR)",
+                                  "Net Received (INR)",
+                                  "Revenue Share %",
+                                  "Completed Jobs",
+                                  "Active Jobs",
+                                  "Last Engagement",
+                                ],
+                                rows: [[
+                                  client.name,
+                                  client.grossEarned,
+                                  client.netEarned,
+                                  `${client.sharePercentage}%`,
+                                  client.completedCount,
+                                  client.activeCount,
+                                  formatDateSafely(client.lastDate),
+                                ]],
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted cursor-pointer"
+                            title="Export client concentration CSV"
+                          >
+                            <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                            <span>CSV</span>
+                          </button>
                         </td>
                       </tr>
                     );

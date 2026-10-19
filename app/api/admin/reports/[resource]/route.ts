@@ -10,8 +10,9 @@ import { fetchPaymentReceiptData } from "@/lib/reports/pdf/payment-receipt-build
 import { renderReportPdf, pdfResponse } from "@/lib/reports/pdf/render";
 import { parseReportRequest } from "@/lib/reports/pdf/request";
 import type { ReportColumn, ReportOrientation, ReportPageSize } from "@/lib/reports/pdf/types";
-import { capitalizeWords, formatReadableLabel } from "@/lib/utils";
+import { capitalizeWords, formatReadableLabel, formatProjectPdfFilename } from "@/lib/utils";
 import { maskAccountNumber, maskDestinationString } from "@/lib/account-formatting";
+import { isCommissionEnabled } from "@/lib/platform-settings";
 
 export const runtime = "nodejs";
 
@@ -374,7 +375,7 @@ export async function POST(
               typeof renderReportPdf
             >[0],
           );
-          return pdfResponse(buffer, `admin-job-${jobId}-full-dossier.pdf`);
+          return pdfResponse(buffer, formatProjectPdfFilename(dossierData.title, `job-${jobId}`));
         }
       }
     }
@@ -608,24 +609,37 @@ export async function POST(
       const totalCommission = rows.reduce((sum, r) => sum + r.commissionAmount, 0);
       const totalNet = rows.reduce((sum, r) => sum + r.netPayoutAmount, 0);
 
+      const commissionEnabled = await isCommissionEnabled();
+      const activeRevenueColumns = commissionEnabled
+        ? revenueColumns
+        : revenueColumns.filter((col) => col.key !== "commission");
+
       const summaryStats: ReportSummaryStat[] = [
         { label: "Total Settlements", value: String(rows.length) },
         { label: "Gross Volume (GMV)", value: `INR ${totalGross.toLocaleString("en-IN")}` },
-        {
-          label: "Platform Commission",
-          value: totalCommission > 0 ? `INR ${totalCommission.toLocaleString("en-IN")}` : "INR 0 (Off)",
-        },
+        ...(commissionEnabled
+          ? [
+              {
+                label: "Platform Commission",
+                value: totalCommission > 0 ? `INR ${totalCommission.toLocaleString("en-IN")}` : "INR 0 (Off)",
+              },
+            ]
+          : []),
         { label: "Net Disbursed", value: `INR ${totalNet.toLocaleString("en-IN")}` },
       ];
 
-      title = "Revenue & Platform Commission Reconciliation";
-      subtitle = "Admin Executive Oversight — Contractual Billings, Dynamic Commission & Net Payouts";
+      title = commissionEnabled
+        ? "Revenue & Platform Commission Reconciliation"
+        : "Revenue & Settlement Ledger Reconciliation";
+      subtitle = commissionEnabled
+        ? "Admin Executive Oversight — Contractual Billings, Dynamic Commission & Net Payouts"
+        : "Admin Executive Oversight — Contractual Billings & Net Professional Payouts";
       document = ReportDocument({
         title,
         subtitle,
         filterSummary: selectedOnly ? `${rows.length} selected` : `${rows.length} total`,
         summaryStats,
-        columns: revenueColumns,
+        columns: activeRevenueColumns,
         rows,
         pageSize: reportRequest.pageSize,
         orientation: "landscape",

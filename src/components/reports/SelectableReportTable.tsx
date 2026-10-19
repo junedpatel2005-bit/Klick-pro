@@ -31,17 +31,19 @@ export function SelectableReportTable<T extends { id: number | string }>({
   onToggleAll,
   rowLabel,
   getRowKey,
+  selectable = false,
 }: {
   columns: ReportTableColumn<T>[];
   rows: T[];
   loading: boolean;
   emptyMessage: string;
-  selectedIds: Set<T["id"]>;
-  onToggle: (id: T["id"]) => void;
-  allSelected: boolean;
-  onToggleAll: () => void;
-  rowLabel: (row: T) => string;
+  selectedIds?: Set<T["id"]>;
+  onToggle?: (id: T["id"]) => void;
+  allSelected?: boolean;
+  onToggleAll?: () => void;
+  rowLabel?: (row: T) => string;
   getRowKey?: (row: T, index: number) => string | number;
+  selectable?: boolean;
 }) {
   if (loading) {
     return (
@@ -55,21 +57,23 @@ export function SelectableReportTable<T extends { id: number | string }>({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-10">
-            <Checkbox
-              checked={allSelected}
-              onCheckedChange={onToggleAll}
-              disabled={!rows.length}
-              aria-label="Select all rows"
-            />
-          </TableHead>
+          {selectable && (
+            <TableHead className="w-10">
+              <Checkbox
+                checked={allSelected ?? false}
+                onCheckedChange={() => onToggleAll?.()}
+                disabled={!rows.length}
+                aria-label="Select all rows"
+              />
+            </TableHead>
+          )}
           {columns.map((column, colIdx) => (
             <TableHead
               key={column.key}
               className={cn(
                 "whitespace-nowrap px-3 sm:px-4 text-xs font-semibold tracking-wide",
                 column.align === "right" && "text-right",
-                colIdx === columns.length - 1 && "pr-5 sm:pr-6"
+                colIdx === columns.length - 1 && "pr-5 sm:pr-6",
               )}
             >
               {column.header}
@@ -83,50 +87,57 @@ export function SelectableReportTable<T extends { id: number | string }>({
             (getRowKey ? getRowKey(row, index) : null) ??
             (row as { key?: string | number }).key ??
             row.id;
+          const isSelected = selectable && selectedIds ? selectedIds.has(row.id) : false;
           return (
             <TableRow
               key={rowKey}
-              data-state={selectedIds.has(row.id) ? "selected" : undefined}
-            onClick={(e) => {
-              const target = e.target as HTMLElement | null;
-              if (
-                target &&
-                target.closest(
-                  'button, a, input[type="text"], [role="button"], select, textarea, [data-prevent-row-select]',
-                )
-              ) {
-                return;
-              }
-              onToggle(row.id);
-            }}
-            className="cursor-pointer transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/40 select-none data-[state=selected]:bg-indigo-50/40 dark:data-[state=selected]:bg-indigo-950/25"
-          >
-            <TableCell onClick={(e) => e.stopPropagation()}>
-              <Checkbox
-                checked={selectedIds.has(row.id)}
-                onCheckedChange={() => onToggle(row.id)}
-                aria-label={`Select ${rowLabel(row)}`}
-              />
-            </TableCell>
-            {columns.map((column, colIdx) => (
-              <TableCell
-                key={column.key}
-                className={cn(
-                  "px-3 sm:px-4",
-                  column.align === "right" && "text-right",
-                  colIdx === columns.length - 1 && "pr-5 sm:pr-6"
-                )}
-              >
-                {column.render(row)}
-              </TableCell>
-            ))}
-          </TableRow>
+              data-state={isSelected ? "selected" : undefined}
+              onClick={(e) => {
+                if (!selectable || !onToggle) return;
+                const target = e.target as HTMLElement | null;
+                if (
+                  target &&
+                  target.closest(
+                    'button, a, input[type="text"], [role="button"], select, textarea, [data-prevent-row-select]',
+                  )
+                ) {
+                  return;
+                }
+                onToggle(row.id);
+              }}
+              className={cn(
+                "transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/40 select-none",
+                selectable && "cursor-pointer data-[state=selected]:bg-indigo-50/40 dark:data-[state=selected]:bg-indigo-950/25",
+              )}
+            >
+              {selectable && (
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => onToggle?.(row.id)}
+                    aria-label={`Select ${rowLabel ? rowLabel(row) : String(row.id)}`}
+                  />
+                </TableCell>
+              )}
+              {columns.map((column, colIdx) => (
+                <TableCell
+                  key={column.key}
+                  className={cn(
+                    "px-3 sm:px-4",
+                    column.align === "right" && "text-right",
+                    colIdx === columns.length - 1 && "pr-5 sm:pr-6",
+                  )}
+                >
+                  {column.render(row)}
+                </TableCell>
+              ))}
+            </TableRow>
           );
         })}
         {!rows.length && (
           <TableRow>
             <TableCell
-              colSpan={columns.length + 1}
+              colSpan={selectable ? columns.length + 1 : columns.length}
               className="py-10 text-center text-muted-foreground"
             >
               {emptyMessage}

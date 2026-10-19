@@ -43,6 +43,9 @@ export type DossierMilestone = {
   dueDate?: string;
   approvedAt?: string;
   description?: string;
+  validityDays?: number;
+  releaseAt?: string;
+  paymentStatus?: string;
 };
 
 export type DossierPayment = {
@@ -63,6 +66,7 @@ export type JobDossierData = {
   timingType: string;
   urgency: string;
   postedAt: string;
+  hiredAt?: string;
   jobDate?: string;
   deadline?: string;
   budget: string;
@@ -355,6 +359,12 @@ export function JobDossierDocument({ data }: { data: JobDossierData }) {
                 <>
                   <Text style={styles.label}>Name</Text>
                   <Text style={styles.value}>{data.professional.name}</Text>
+                  {data.hiredAt ? (
+                    <>
+                      <Text style={[styles.label, { marginTop: 3 }]}>Hired Date</Text>
+                      <Text style={styles.value}>{data.hiredAt}</Text>
+                    </>
+                  ) : null}
                   {data.professional.category ? (
                     <>
                       <Text style={[styles.label, { marginTop: 3 }]}>Specialization</Text>
@@ -395,32 +405,38 @@ export function JobDossierDocument({ data }: { data: JobDossierData }) {
           {data.milestones.length > 0 ? (
             <View style={styles.table}>
               <View style={styles.tableRowHeader}>
-                <Text style={[styles.tableHeaderCell, { width: "8%" }]}>#</Text>
-                <Text style={[styles.tableHeaderCell, { width: "42%" }]}>Milestone Title</Text>
-                <Text style={[styles.tableHeaderCell, { width: "18%", textAlign: "right" }]}>
+                <Text style={[styles.tableHeaderCell, { width: "6%" }]}>#</Text>
+                <Text style={[styles.tableHeaderCell, { width: "36%" }]}>Milestone Title</Text>
+                <Text style={[styles.tableHeaderCell, { width: "16%", textAlign: "right" }]}>
                   Amount
                 </Text>
-                <Text style={[styles.tableHeaderCell, { width: "16%", textAlign: "center" }]}>
+                <Text style={[styles.tableHeaderCell, { width: "14%", textAlign: "center" }]}>
                   Status
                 </Text>
-                <Text style={[styles.tableHeaderCell, { width: "16%", textAlign: "right" }]}>
-                  Due / Done
+                <Text style={[styles.tableHeaderCell, { width: "14%", textAlign: "center" }]}>
+                  Validity Window
+                </Text>
+                <Text style={[styles.tableHeaderCell, { width: "14%", textAlign: "right" }]}>
+                  Settled / Due
                 </Text>
               </View>
               {data.milestones.map((m, idx) => (
                 <View key={idx} style={[styles.tableRow, idx % 2 === 1 ? styles.tableRowAlt : {}]}>
-                  <Text style={[styles.tableCell, { width: "8%" }]}>{m.number}</Text>
-                  <Text style={[styles.tableCell, { width: "42%", fontWeight: "bold" }]}>
+                  <Text style={[styles.tableCell, { width: "6%" }]}>{m.number}</Text>
+                  <Text style={[styles.tableCell, { width: "36%", fontWeight: "bold" }]}>
                     {m.title}
                   </Text>
-                  <Text style={[styles.tableCell, { width: "18%", textAlign: "right" }]}>
+                  <Text style={[styles.tableCell, { width: "16%", textAlign: "right" }]}>
                     {m.amount}
                   </Text>
-                  <Text style={[styles.tableCell, { width: "16%", textAlign: "center" }]}>
+                  <Text style={[styles.tableCell, { width: "14%", textAlign: "center" }]}>
                     {m.status}
                   </Text>
-                  <Text style={[styles.tableCell, { width: "16%", textAlign: "right" }]}>
-                    {m.approvedAt || m.dueDate || "—"}
+                  <Text style={[styles.tableCell, { width: "14%", textAlign: "center" }]}>
+                    {m.validityDays ? `${m.validityDays} Days hold` : "Standard"}
+                  </Text>
+                  <Text style={[styles.tableCell, { width: "14%", textAlign: "right" }]}>
+                    {m.approvedAt || m.releaseAt || m.dueDate || "—"}
                   </Text>
                 </View>
               ))}
