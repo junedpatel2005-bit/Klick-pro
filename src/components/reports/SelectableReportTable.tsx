@@ -86,7 +86,7 @@ export function SelectableReportTable<T extends { id: number | string }>({
           const rowKey =
             (getRowKey ? getRowKey(row, index) : null) ??
             (row as { key?: string | number }).key ??
-            row.id;
+            (row.id != null ? `${row.id}-${index}` : index);
           const isSelected = selectable && selectedIds ? selectedIds.has(row.id) : false;
           return (
             <TableRow

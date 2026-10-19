@@ -806,6 +806,8 @@ function EscrowReport() {
         };
 
         const escrowItems: EscrowRow[] = [];
+        const seenMilestoneIds = new Set<number>();
+        const seenPaymentIds = new Set<number>();
 
         payments.forEach((p: ApiPayment) => {
           const clientName = p.client
@@ -819,6 +821,9 @@ function EscrowReport() {
           const milestones = p.projectTracking?.milestones ?? p.milestonesList ?? [];
           if (milestones.length > 0) {
             milestones.forEach((m) => {
+              if (seenMilestoneIds.has(m.id)) return;
+              seenMilestoneIds.add(m.id);
+
               const status = m.status ?? p.status ?? "PENDING";
               const custody =
                 status === "APPROVED"
@@ -842,6 +847,9 @@ function EscrowReport() {
               });
             });
           } else {
+            if (seenPaymentIds.has(p.id)) return;
+            seenPaymentIds.add(p.id);
+
             const status = p.status ?? "PENDING";
             const custody =
               status === "COMPLETED" || status === "APPROVED"
