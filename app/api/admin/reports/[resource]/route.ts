@@ -3,9 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sessionCookie, verifySession } from "@/lib/auth";
 import { ReportDocument, type ReportSummaryStat } from "@/lib/reports/pdf/ReportDocument";
-import { JobDossierDocument } from "@/lib/reports/pdf/JobDossierDocument";
+import { JobDossierDocument, MultiJobDossierDocument } from "@/lib/reports/pdf/JobDossierDocument";
 import { InvoiceDocument } from "@/lib/reports/pdf/InvoiceDocument";
-import { fetchJobDossierData } from "@/lib/reports/pdf/job-dossier-builder";
+import {
+  fetchJobDossierData,
+  fetchBatchJobDossierData,
+  generateJobDossierCsv,
+  generateJobsBatchCsv,
+} from "@/lib/reports/pdf/job-dossier-builder";
 import { fetchPaymentReceiptData } from "@/lib/reports/pdf/payment-receipt-builder";
 import { renderReportPdf, pdfResponse } from "@/lib/reports/pdf/render";
 import { parseReportRequest } from "@/lib/reports/pdf/request";
@@ -361,23 +366,94 @@ export async function POST(
     const numericIds = ids.map(Number).filter((n) => !isNaN(n) && n > 0);
     const template = (rawBody as { template?: string } | null)?.template;
 
-    // Explicit Single Job Dossier (only if template === "dossier")
-    if (resource === "jobs" && selectedOnly && ids.length === 1 && ids[0] !== undefined && template === "dossier") {
-      const jobId = Number(ids[0]);
-      if (!isNaN(jobId) && jobId > 0) {
-        const dossierData = await fetchJobDossierData(jobId, {
+    const format = ((rawBody as { format?: string } | null)?.format || "").toLowerCase();
+
+    // =========================================================================
+    // JOBS RESOURCE: Complete Project Dossier Statement & Marketplace Audit
+    // Handles both Single & Bulk export for PDF & CSV with full details
+    // =========================================================================
+    if (resource === "jobs") {
+      const jobIds =
+        numericIds.length > 0
+          ? numericIds
+          : (
+              await db.clientJob.findMany({
+                select: { id: true },
+                orderBy: { createdAt: "desc" },
+                take: selectedOnly ? undefined : 200,
+              })
+            ).map((j) => j.id);
+
+      if (jobIds.length === 0) {
+        return NextResponse.json({ error: "No matching project records found to export." }, { status: 404 });
+      }
+
+      // Format: CSV
+      if (format === "csv") {
+        const singleJobId = jobIds[0];
+        if (jobIds.length === 1 && typeof singleJobId === "number") {
+          const dossier = await fetchJobDossierData(singleJobId, {
+            userId: session.userId,
+            role: "ADMIN",
+          });
+          if (!dossier) {
+            return NextResponse.json({ error: "Job record not found." }, { status: 404 });
+          }
+          const csvContent = generateJobDossierCsv(dossier);
+          return new NextResponse("\uFEFF" + csvContent, {
+            status: 200,
+            headers: {
+              "Content-Type": "text/csv; charset=utf-8",
+              "Content-Disposition": `attachment; filename="klick-pro-job-${singleJobId}-dossier.csv"`,
+            },
+          });
+        }
+
+        const dossiers = await fetchBatchJobDossierData(jobIds, {
           userId: session.userId,
           role: "ADMIN",
         });
-        if (dossierData) {
-          const buffer = await renderReportPdf(
-            createElement(JobDossierDocument, { data: dossierData }) as unknown as Parameters<
-              typeof renderReportPdf
-            >[0],
-          );
-          return pdfResponse(buffer, formatProjectPdfFilename(dossierData.title, `job-${jobId}`));
-        }
+        const csvContent = generateJobsBatchCsv(dossiers);
+        const dateStr = new Date().toISOString().slice(0, 10);
+        return new NextResponse("\uFEFF" + csvContent, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/csv; charset=utf-8",
+            "Content-Disposition": `attachment; filename="klick-pro-marketplace-jobs-audit-${dateStr}.csv"`,
+          },
+        });
       }
+
+      // Format: PDF
+      const singleJobId = jobIds[0];
+      if (jobIds.length === 1 && typeof singleJobId === "number") {
+        const dossier = await fetchJobDossierData(singleJobId, {
+          userId: session.userId,
+          role: "ADMIN",
+        });
+        if (!dossier) {
+          return NextResponse.json({ error: "Job record not found." }, { status: 404 });
+        }
+        const buffer = await renderReportPdf(
+          createElement(JobDossierDocument, { data: dossier }) as unknown as Parameters<
+            typeof renderReportPdf
+          >[0],
+        );
+        return pdfResponse(buffer, formatProjectPdfFilename(dossier.title, `job-${singleJobId}`));
+      }
+
+      // Multi-project full dossier PDF: each project starts on its own page
+      const dossiers = await fetchBatchJobDossierData(jobIds, {
+        userId: session.userId,
+        role: "ADMIN",
+      });
+      const buffer = await renderReportPdf(
+        createElement(MultiJobDossierDocument, { dossiers }) as unknown as Parameters<
+          typeof renderReportPdf
+        >[0],
+      );
+      const dateStr = new Date().toISOString().slice(0, 10);
+      return pdfResponse(buffer, `klick-pro-marketplace-jobs-dossier-audit-${dateStr}.pdf`);
     }
 
     // Explicit Single Finance Voucher (only if template === "voucher")
@@ -504,58 +580,6 @@ export async function POST(
         filterSummary: selectedOnly ? `${rows.length} selected` : `${rows.length} total`,
         summaryStats,
         columns: getUserColumns(false, false),
-        rows,
-        pageSize: reportRequest.pageSize,
-        orientation: "landscape",
-      });
-    }
-
-    // -------------------------------------------------------------------------
-    // Case B: Jobs & Marketplace Report
-    // -------------------------------------------------------------------------
-    else if (resource === "jobs") {
-      const jobs = await db.clientJob.findMany({
-        where: selectedOnly ? { id: { in: numericIds } } : {},
-        include: { user: { select: { id: true, firstName: true, lastName: true } } },
-        orderBy: { createdAt: "desc" },
-        take: selectedOnly ? undefined : 500,
-      });
-
-      const rows: JobRow[] = jobs.map((job) => {
-        const budgetStr =
-          job.timingType === "HOURLY"
-            ? `INR ${job.hourlyRate?.toLocaleString("en-IN") ?? 0}/hr`
-            : job.budgetMin && job.budgetMax
-              ? `INR ${job.budgetMin.toLocaleString("en-IN")} – ${job.budgetMax.toLocaleString("en-IN")}`
-              : `INR ${(job.budgetMax || job.budgetMin || 0).toLocaleString("en-IN")}`;
-
-        return {
-          id: job.id,
-          title: job.title,
-          clientName: job.user ? `${job.user.firstName} ${job.user.lastName}`.trim() : "Client",
-          category: job.category,
-          status: job.status,
-          budget: budgetStr,
-          workMode: job.workMode,
-          createdAt: job.createdAt,
-        };
-      });
-
-      const openCount = rows.filter((r) => r.status === "OPEN").length;
-      const summaryStats: ReportSummaryStat[] = [
-        { label: "Total Jobs / Projects", value: String(rows.length) },
-        { label: "Open & Hiring", value: String(openCount) },
-        { label: "Audit Status", value: "Reconciled" },
-      ];
-
-      title = "Marketplace Jobs & Projects Audit";
-      subtitle = "Admin Oversight — Active Listings & Operational Engagements";
-      document = ReportDocument({
-        title,
-        subtitle,
-        filterSummary: selectedOnly ? `${rows.length} selected` : `${rows.length} total`,
-        summaryStats,
-        columns: jobColumns,
         rows,
         pageSize: reportRequest.pageSize,
         orientation: "landscape",

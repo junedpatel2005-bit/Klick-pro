@@ -22,7 +22,7 @@ export type CsvExportOptions = {
   includeMetadataBanner?: boolean;
 };
 
-function sanitizeCell(value: unknown): string {
+export function sanitizeCell(value: unknown): string {
   if (value == null) return '""';
   if (typeof value === "number" && !isNaN(value)) {
     return String(value);

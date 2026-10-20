@@ -11,6 +11,7 @@ import {
 } from "@/lib/reports/pdf/JobDossierDocument";
 import { pdfResponse, renderReportPdf } from "@/lib/reports/pdf/render";
 import { generateCsvContent } from "@/lib/reports/csv/export-csv";
+import { generateJobDossierCsv } from "@/lib/reports/pdf/job-dossier-builder";
 import { formatProjectPdfFilename } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -277,55 +278,7 @@ export async function GET(
   const formatParam = request.nextUrl.searchParams.get("format")?.toLowerCase();
 
   if (formatParam === "csv") {
-    // Generate CSV
-    const csvHeaders = ["Field", "Value", "Additional Details"];
-
-    const csvRows = [
-      ["Job ID", `#JOB-${job.id}`, ""],
-      ["Job Title", job.title || "", ""],
-      ["Project Description", dossierData.description || "No description provided", ""],
-      ["Status", job.status, trackingProject ? `Project status: ${trackingProject.status}` : ""],
-      ["Category", job.category || "General", ""],
-      ["Work Mode", job.workMode, ""],
-      ["Timing Type", job.timingType, ""],
-      ["Urgency", job.urgency, ""],
-      ["Budget Estimate", dossierData.budget, ""],
-      ["Location", dossierData.location, ""],
-      ["Posted Date", dossierData.postedAt, ""],
-      ["Deadline", dossierData.deadline || "Flexible", ""],
-      ["Client Name", clientName, job.user.companyName || ""],
-      ["Hired Professional", proName || "Not assigned", proUser?.professionalCategory || ""],
-      ["Total Milestones", milestones.length, ""],
-      ...milestones.map((m) => [`Milestone #${m.number}`, m.title, `${m.amount} (${m.status})`]),
-      ["Total Proposals", proposals.length, ""],
-      ...proposals.map((p) => [
-        "Proposal Bid",
-        p.proName,
-        `${p.bidAmount} · Duration: ${p.duration} · Status: ${p.status}`,
-      ]),
-      ["Total Negotiations", visibleNegotiations.length, ""],
-      ...visibleNegotiations.map((n) => [
-        "Negotiation Round",
-        `${n.senderRole}: ${n.bidAmount}`,
-        n.message,
-      ]),
-      ["Total Payments", payments.length, ""],
-      ...payments.map((p) => ["Payment Record", p.title, `${p.amount} · ${p.status}`]),
-      ["Completed Date", dossierData.completedAt || "Not completed", ""],
-    ];
-
-    const csvContent = generateCsvContent({
-      filename: `klick-pro-job-${job.id}-dossier`,
-      title: `Job Dossier #${job.id} — ${job.title || "Untitled Job"}`,
-      metadata: [
-        { label: "Client", value: clientName },
-        { label: "Viewer Role", value: viewerRole },
-        { label: "Exported At", value: new Date().toISOString() },
-      ],
-      headers: csvHeaders,
-      rows: csvRows,
-    });
-
+    const csvContent = generateJobDossierCsv(dossierData);
     return new NextResponse("\uFEFF" + csvContent, {
       status: 200,
       headers: {

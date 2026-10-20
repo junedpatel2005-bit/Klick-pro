@@ -13,6 +13,7 @@ import {
   Clock,
   ArrowRight,
   Zap,
+  Percent,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -135,6 +136,28 @@ export default function AdminSettingsPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
+          {/* Platform Commission Live Status & Toggle Button */}
+          <button
+            type="button"
+            onClick={() => handleValueChange("commission_enabled", isCommissionEnabled ? "false" : "true")}
+            title="Click to toggle marketplace commission ON or OFF"
+            className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs sm:text-sm font-semibold shadow-2xs transition hover:shadow-xs active:scale-95 cursor-pointer ${
+              isCommissionEnabled
+                ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                : "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200"
+            }`}
+          >
+            <Percent
+              className={`h-4 w-4 ${isCommissionEnabled ? "text-emerald-600" : "text-slate-500"}`}
+            />
+            <span>
+              Commission:{" "}
+              <span className="font-bold underline underline-offset-2">
+                {isCommissionEnabled ? `ON (${commissionRate}%)` : "OFF (0% cut)"}
+              </span>
+            </span>
+          </button>
+
           {hasChanges && (
             <Button
               variant="outline"

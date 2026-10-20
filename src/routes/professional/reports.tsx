@@ -115,7 +115,7 @@ type WalletData = {
   commissionRate?: number;
 };
 
-type ProfessionalTab = "summary" | "projects" | "settlements" | "concentration";
+type ProfessionalTab = "projects" | "payments";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -178,7 +178,7 @@ function formatDateSafely(
 // MAIN COMPONENT: PROFESSIONAL EARNINGS INTELLIGENCE WORKSPACE
 // ===========================================================================
 export default function ProfessionalReports() {
-  const [tab, setTab] = useState<ProfessionalTab>("summary");
+  const [tab, setTab] = useState<ProfessionalTab>("projects");
   const [period, setPeriod] = useState<PeriodSelection>(getDefaultPeriodSelection);
 
   const [projects, setProjects] = useState<RunningProject[]>([]);
@@ -464,24 +464,8 @@ export default function ProfessionalReports() {
             </p>
           </div>
 
-          {/* 4 Role-Specific Tabs Switcher */}
+          {/* 2 Executive Tabs Switcher */}
           <div className="flex flex-wrap gap-1.5 rounded-2xl border border-white/20 bg-black/40 p-1.5 backdrop-blur-md">
-            <button
-              type="button"
-              onClick={() => {
-                setTab("summary");
-                setSearch("");
-                setStatusFilter("ALL");
-              }}
-              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer ${
-                tab === "summary"
-                  ? "bg-white text-slate-950 shadow-sm"
-                  : "text-slate-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Receipt className="h-4 w-4" />
-              <span>Earnings Statement</span>
-            </button>
             <button
               type="button"
               onClick={() => {
@@ -489,9 +473,9 @@ export default function ProfessionalReports() {
                 setSearch("");
                 setStatusFilter("ALL");
               }}
-              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer ${
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition cursor-pointer ${
                 tab === "projects"
-                  ? "bg-white text-slate-950 shadow-sm"
+                  ? "bg-white text-slate-950 shadow-sm font-bold"
                   : "text-slate-300 hover:text-white hover:bg-white/10"
               }`}
             >
@@ -501,34 +485,18 @@ export default function ProfessionalReports() {
             <button
               type="button"
               onClick={() => {
-                setTab("settlements");
+                setTab("payments");
                 setSearch("");
                 setStatusFilter("ALL");
               }}
-              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer ${
-                tab === "settlements"
-                  ? "bg-white text-slate-950 shadow-sm"
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition cursor-pointer ${
+                tab === "payments"
+                  ? "bg-white text-slate-950 shadow-sm font-bold"
                   : "text-slate-300 hover:text-white hover:bg-white/10"
               }`}
             >
               <Landmark className="h-4 w-4" />
-              <span>Bank & UPI Settlements</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setTab("concentration");
-                setSearch("");
-                setStatusFilter("ALL");
-              }}
-              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer ${
-                tab === "concentration"
-                  ? "bg-white text-slate-950 shadow-sm"
-                  : "text-slate-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Users className="h-4 w-4" />
-              <span>Client Concentration</span>
+              <span>Payments & Disbursements</span>
             </button>
           </div>
         </div>
@@ -626,7 +594,7 @@ export default function ProfessionalReports() {
       {/* ===================================================================== */}
       {/* TAB 1: CONSOLIDATED EARNINGS STATEMENT */}
       {/* ===================================================================== */}
-      {tab === "summary" && (
+      {(tab as string) === "summary" && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-border shadow-xs">
             {/* Search & Status Filter */}
@@ -1295,15 +1263,20 @@ export default function ProfessionalReports() {
       )}
 
       {/* ===================================================================== */}
-      {/* TAB 3: BANK & UPI SETTLEMENT AUDIT LOG */}
+      {/* TAB 2: BANK & UPI SETTLEMENT AUDIT LOG */}
       {/* ===================================================================== */}
-      {tab === "settlements" && (
+      {tab === "payments" && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-border shadow-xs">
             <div>
-              <h2 className="text-base font-bold text-foreground">Bank & UPI Settlement Audit Log</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-foreground">Payments & Bank Disbursements</h2>
+                <span className="rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2.5 py-0.5 text-[10px] font-semibold">
+                  Excludes Milestones (Tracked in Projects)
+                </span>
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Official disbursement transactions from your wallet to verified bank accounts and UPI VPAs.
+                Official withdrawal disbursements and direct payouts to your bank accounts & UPI VPAs. Project milestone payments and deliverables are tracked under the Projects tab.
               </p>
             </div>
 
@@ -1445,7 +1418,7 @@ export default function ProfessionalReports() {
       {/* ===================================================================== */}
       {/* TAB 4: CLIENT-WISE REVENUE CONCENTRATION */}
       {/* ===================================================================== */}
-      {tab === "concentration" && (
+      {(tab as string) === "concentration" && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-2xl border border-border shadow-xs">
             <div>

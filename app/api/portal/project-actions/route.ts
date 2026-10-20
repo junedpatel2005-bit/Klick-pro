@@ -1055,10 +1055,20 @@ export async function POST(request: NextRequest) {
       const currentMilestone = await db.projectMilestone.findUnique({
         where: { id: input.milestoneId },
       });
-      if (existingPayment?.status === "COMPLETED" || currentMilestone?.status === "APPROVED") {
+      if (
+        existingPayment?.status === "COMPLETED" ||
+        existingPayment?.status === "FUNDED" ||
+        currentMilestone?.status === "APPROVED"
+      ) {
+        if (currentMilestone && currentMilestone.status !== "APPROVED") {
+          await db.projectMilestone.update({
+            where: { id: currentMilestone.id },
+            data: { status: "APPROVED", approvedAt: new Date() },
+          });
+        }
         return NextResponse.json({
           ok: true,
-          status: currentMilestone?.status ?? "APPROVED",
+          status: "APPROVED",
           message: "Milestone payment is already approved and held in escrow.",
         });
       }

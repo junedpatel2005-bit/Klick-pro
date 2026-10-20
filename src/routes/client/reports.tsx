@@ -89,7 +89,7 @@ type Payment = {
   grossAmount?: number;
 };
 
-type ClientTab = "summary" | "projects" | "contractors" | "payments";
+type ClientTab = "projects" | "payments";
 
 function readableStatus(status: string) {
   if (status === "RUNNING") return "In Progress";
@@ -135,7 +135,7 @@ function formatDateSafely(
 }
 
 export default function ClientReports() {
-  const [tab, setTab] = useState<ClientTab>("summary");
+  const [tab, setTab] = useState<ClientTab>("projects");
   const [period, setPeriod] = useState<PeriodSelection>(getDefaultPeriodSelection);
 
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -189,6 +189,17 @@ export default function ClientReports() {
       return isDateWithinPeriod(p.createdAt, period.startDate, period.endDate);
     });
   }, [payments, period]);
+
+  // Non-milestone payments: Milestone payments are included inside each Project in the Projects tab
+  const nonMilestonePayments = useMemo(() => {
+    return periodFilteredPayments.filter((p) => {
+      if (p.milestoneTitle) return false;
+      const typeStr = (p.type || "").toUpperCase();
+      if (typeStr.includes("MILESTONE") || typeStr === "MILESTONE_PAYMENT") return false;
+      if (p.description && /milestone/i.test(p.description)) return false;
+      return true;
+    });
+  }, [periodFilteredPayments]);
 
 
   // Single item CSV exporters
@@ -422,192 +433,43 @@ export default function ClientReports() {
         </div>
       </div>
 
-      {/* Tab Switcher */}
-      <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-border bg-muted/60 p-1.5">
-        {[
-          { key: "summary", label: "Consolidated Expense Statement", icon: Receipt },
-          { key: "projects", label: "Projects & Cost Ledger", icon: Briefcase },
-          { key: "contractors", label: "Contractor Spend Breakdown", icon: Users },
-          { key: "payments", label: "Invoices & Payment Register", icon: FileText },
-        ].map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => {
-              setTab(t.key as ClientTab);
-              setSearch("");
-            }}
-            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-              tab === t.key
-                ? "bg-card text-foreground shadow-soft"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <t.icon className="h-4 w-4" />
-            <span>{t.label}</span>
-          </button>
-        ))}
+      {/* 2-Option Executive Tab Deck */}
+      <div className="flex items-center gap-2 rounded-2xl border border-border bg-muted/60 p-1.5 w-fit">
+        <button
+          type="button"
+          onClick={() => {
+            setTab("projects");
+            setSearch("");
+          }}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+            tab === "projects"
+              ? "bg-card text-foreground shadow-soft font-bold"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Briefcase className="h-4 w-4" />
+          <span>Projects & Engagements</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setTab("payments");
+            setSearch("");
+          }}
+          className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+            tab === "payments"
+              ? "bg-card text-foreground shadow-soft font-bold"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <ArrowDownToLine className="h-4 w-4" />
+          <span>Direct Payments & Wallet</span>
+        </button>
       </div>
 
       {/* ===================================================================== */}
-      {/* TAB 1: CONSOLIDATED EXPENSE STATEMENT */}
-      {/* ===================================================================== */}
-      {tab === "summary" && (
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
-            <div>
-              <h2 className="text-base font-bold text-foreground">
-                Consolidated Spend Statement ({period.label})
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Accounting breakdown separating cash funded into escrow from milestone releases and recognized project expense.
-              </p>
-            </div>
-            <ExportMenu
-              endpoint="/api/client/payments/export"
-              selectedIds={periodFilteredPayments.map((p) => p.id)}
-              totalCount={periodFilteredPayments.length}
-              fileBaseName={`klick-pro-spend-statement-${period.financialYear}`}
-              buttonLabel="Download Spend Statement (PDF)"
-              onExportCsv={() => {
-                downloadCsvFile({
-                  filename: `client-spend-summary-${period.financialYear}`,
-                  title: `Consolidated Spend Statement (${period.label})`,
-                  headers: [
-                    "Payment Ref #",
-                    "Date",
-                    "Recipient Professional",
-                    "Particulars / Description",
-                    "Status",
-                    "Amount (INR)",
-                  ],
-                  rows: periodFilteredPayments.map((p) => [
-                    p.id,
-                    formatDateSafely(p.createdAt),
-                    capitalizeWords(p.professionalName || "Assigned Professional"),
-                    capitalizeFirst(p.description),
-                    capitalizeWords(p.status),
-                    p.amount,
-                  ]),
-                });
-              }}
-            />
-          </div>
-
-          {/* 3 Summary Boxes */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-2">
-            <div className="rounded-xl border border-border bg-muted/30 p-4">
-              <span className="text-xs font-semibold text-muted-foreground uppercase">
-                1. Total Deposits / Funded
-              </span>
-              <p className="text-xl font-bold mt-1 text-foreground">
-                {formatINR(metrics.totalSpent + metrics.escrowHeld)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Cash deposited into project escrow</p>
-            </div>
-
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase">
-                2. Recognized Expense (Released)
-              </span>
-              <p className="text-xl font-bold mt-1 text-emerald-600 dark:text-emerald-400">
-                {formatINR(metrics.totalSpent)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Approved & delivered deliverables</p>
-            </div>
-
-            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-              <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase">
-                3. Outstanding Escrow Liability
-              </span>
-              <p className="text-xl font-bold mt-1 text-amber-600 dark:text-amber-400">
-                {formatINR(metrics.escrowHeld)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Pending milestone review & signoff</p>
-            </div>
-          </div>
-
-          {/* Detailed Statement Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-border bg-muted/40 font-semibold text-muted-foreground uppercase text-[10px]">
-                <tr>
-                  <th className="p-3">Date</th>
-                  <th className="p-3">Particulars / Milestone</th>
-                  <th className="p-3">Recipient Professional</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Amount</th>
-                  <th className="p-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {periodFilteredPayments.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="p-6 text-center text-muted-foreground">
-                      No spend transactions recorded for this reporting period.
-                    </td>
-                  </tr>
-                ) : (
-                  periodFilteredPayments.map((p) => {
-                    return (
-                      <tr
-                        key={p.id}
-                        className="hover:bg-muted/40 transition"
-                      >
-                        <td className="p-3 text-muted-foreground">{formatDateSafely(p.createdAt)}</td>
-                        <td className="p-3 font-medium text-foreground max-w-[240px] truncate">
-                          {capitalizeFirst(p.description)}
-                        </td>
-                        <td className="p-3 text-muted-foreground">
-                          {capitalizeWords(p.professionalName || "Assigned Professional")}
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${statusBadgeClass(
-                              p.status,
-                            )}`}
-                          >
-                            {capitalizeWords(p.status)}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-foreground">
-                          {formatINR(p.amount)}
-                        </td>
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <a
-                              href={`/api/portal/invoices/${p.id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted"
-                              title="Download official Tax Invoice PDF"
-                            >
-                              <FileDown className="h-3 w-3 text-primary" />
-                              <span>Invoice PDF</span>
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => exportSinglePaymentCsv(p)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted cursor-pointer"
-                              title="Export single payment CSV"
-                            >
-                              <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                              <span>CSV</span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ===================================================================== */}
-      {/* TAB 2: PROJECTS & COST LEDGER */}
+      {/* TAB 1: PROJECTS & COST LEDGER */}
       {/* ===================================================================== */}
       {tab === "projects" && (
         <div className="rounded-2xl border border-border bg-card p-5 shadow-xs space-y-4">
@@ -754,142 +616,32 @@ export default function ClientReports() {
       )}
 
       {/* ===================================================================== */}
-      {/* TAB 3: CONTRACTOR SPEND BREAKDOWN */}
-      {/* ===================================================================== */}
-      {tab === "contractors" && (
-        <div className="rounded-2xl border border-border bg-card p-5 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
-            <div>
-              <h2 className="text-base font-bold text-foreground">Contractor Expenditure Breakdown</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Spending, milestone deliveries, and performance aggregated by verified professional.
-              </p>
-            </div>
-            <ExportMenu
-              selectedIds={contractorRows.map((_, i) => i)}
-              fileBaseName="klick-pro-client-contractors"
-              onExportCsv={() => {
-                downloadCsvFile({
-                  filename: "contractor-spend-breakdown",
-                  title: `Contractor Expenditure Breakdown (${period.label})`,
-                  headers: [
-                    "Professional Name",
-                    "Total Released (INR)",
-                    "In Escrow (INR)",
-                    "Effective Cost (INR)",
-                    "Last Activity",
-                  ],
-                  rows: contractorRows.map((c) => [
-                    c.name,
-                    c.totalReleased,
-                    c.totalFunded,
-                    c.effectiveCost,
-                    formatDateSafely(c.lastDate),
-                  ]),
-                });
-              }}
-            />
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-border bg-muted/40 font-semibold text-muted-foreground uppercase text-[10px]">
-                <tr>
-                  <th className="p-3">Verified Professional</th>
-                  <th className="p-3">Released Spend</th>
-                  <th className="p-3">Currently in Escrow</th>
-                  <th className="p-3">Effective Total Cost</th>
-                  <th className="p-3 text-right">Last Engagement</th>
-                  <th className="p-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {contractorRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="p-6 text-center text-muted-foreground">
-                      No contractor expenditure recorded for this reporting period.
-                    </td>
-                  </tr>
-                ) : (
-                  contractorRows.map((c) => (
-                    <tr key={c.name} className="hover:bg-muted/40 transition">
-                      <td className="p-3 font-semibold text-foreground flex items-center gap-2">
-                        <Users className="h-3.5 w-3.5 text-primary" />
-                        <span>{c.name}</span>
-                      </td>
-                      <td className="p-3 font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
-                        {formatINR(c.totalReleased)}
-                      </td>
-                      <td className="p-3 font-mono text-muted-foreground">
-                        {formatINR(c.totalFunded)}
-                      </td>
-                      <td className="p-3 font-bold font-mono text-foreground">
-                        {formatINR(c.effectiveCost)}
-                      </td>
-                      <td className="p-3 text-right text-muted-foreground">
-                        {formatDateSafely(c.lastDate)}
-                      </td>
-                      <td className="p-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            downloadCsvFile({
-                              filename: `contractor-${c.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-spend`,
-                              title: `Contractor Spend Breakdown · ${c.name}`,
-                              headers: [
-                                "Professional Name",
-                                "Total Released (INR)",
-                                "In Escrow (INR)",
-                                "Effective Cost (INR)",
-                                "Last Activity",
-                              ],
-                              rows: [[
-                                c.name,
-                                c.totalReleased,
-                                c.totalFunded,
-                                c.effectiveCost,
-                                formatDateSafely(c.lastDate),
-                              ]],
-                            });
-                          }}
-                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted cursor-pointer"
-                          title="Export single contractor spend CSV"
-                        >
-                          <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                          <span>CSV</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ===================================================================== */}
-      {/* TAB 4: INVOICES & PAYMENT REGISTER */}
+      {/* TAB 2: DIRECT PAYMENTS & WALLET LEDGER (EXCLUDES MILESTONES) */}
       {/* ===================================================================== */}
       {tab === "payments" && (
         <div className="rounded-2xl border border-border bg-card p-5 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
             <div>
-              <h2 className="text-base font-bold text-foreground">Invoices & Payment Register</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-foreground">Direct Payments & Platform Receipts</h2>
+                <span className="rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-2.5 py-0.5 text-[10px] font-semibold">
+                  Excludes Milestones (Shown in Projects)
+                </span>
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Official invoices, gateway receipts, and milestone settlement records. Select 1 or more to download.
+                Official gateway payments, wallet top-ups, and direct service receipts. Milestone payments are tracked directly within each project under the Projects tab.
               </p>
             </div>
             <ExportMenu
               endpoint="/api/client/payments/export"
-              selectedIds={periodFilteredPayments.map((p) => p.id)}
-              totalCount={periodFilteredPayments.length}
-              fileBaseName="klick-pro-client-payments"
-              buttonLabel="Download Invoices (PDF)"
+              selectedIds={nonMilestonePayments.map((p) => p.id)}
+              totalCount={nonMilestonePayments.length}
+              fileBaseName="klick-pro-client-direct-payments"
+              buttonLabel="Download Receipts (PDF)"
               onExportCsv={() => {
                 downloadCsvFile({
-                  filename: "client-payments-register",
-                  title: `Payment Register & Invoices (${period.label})`,
+                  filename: "client-direct-payments-register",
+                  title: `Direct Payments & Gateway Receipts (${period.label})`,
                   headers: [
                     "Payment Ref #",
                     "Date",
@@ -898,7 +650,7 @@ export default function ClientReports() {
                     "Status",
                     "Amount (INR)",
                   ],
-                  rows: periodFilteredPayments.map((p) => [
+                  rows: nonMilestonePayments.map((p) => [
                     p.id,
                     formatDateSafely(p.createdAt),
                     capitalizeWords(p.professionalName || "Assigned Professional"),
@@ -925,14 +677,19 @@ export default function ClientReports() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {periodFilteredPayments.length === 0 ? (
+                {nonMilestonePayments.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-6 text-center text-muted-foreground">
-                      No invoices or payments match the selected period.
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                      <div className="max-w-md mx-auto space-y-1">
+                        <p className="font-semibold text-foreground">No direct payments found in this period</p>
+                        <p className="text-xs text-muted-foreground">
+                          All project milestone payments are tracked directly inside their respective projects in the <span className="font-semibold text-primary">Projects & Engagements</span> tab.
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
-                  periodFilteredPayments.map((p) => {
+                  nonMilestonePayments.map((p) => {
                     return (
                       <tr
                         key={p.id}

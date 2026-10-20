@@ -24,6 +24,7 @@ import {
   FileCheck,
   Percent,
   ExternalLink,
+  X,
 } from "lucide-react";
 import { SelectableReportTable, type ReportTableColumn } from "@/components/reports/SelectableReportTable";
 import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
@@ -45,7 +46,7 @@ function formatDateSafely(
   if (!dateInput) return "—";
   const d = new Date(dateInput);
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(
+  return d.toLocaleString(
     "en-IN",
     options ?? { day: "2-digit", month: "short", year: "numeric" },
   );
@@ -2462,7 +2463,9 @@ function JobsReport() {
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
   const [downloadingRowId, setDownloadingRowId] = useState<number | null>(null);
+  const [downloadingCsvRowId, setDownloadingCsvRowId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -2511,39 +2514,36 @@ function JobsReport() {
   ).length;
   const completedCount = filteredJobs.filter((j) => j.status.toUpperCase() === "COMPLETED").length;
 
-  const handleExportCsv = () => {
-    downloadCsvFile({
-      filename: "klick-pro-admin-jobs-audit",
-      title: "Marketplace Job Postings & Project Operations Audit",
-      metadata: [
-        {
-          label: "Scope",
-          value: `All Filtered (${filteredJobs.length} Jobs)`,
-        },
-        { label: "Total Listings", value: filteredJobs.length },
-        { label: "Open & Hiring", value: openCount },
-        { label: "Running Projects", value: runningCount },
-        { label: "Completed Projects", value: completedCount },
-        { label: "Active Status Filter", value: statusFilter },
-        { label: "Active Date Range", value: datePreset },
-      ],
-      headers: [
-        "Job ID",
-        "Project Title",
-        "Category",
-        "Client Name",
-        "Marketplace Status",
-        "Date Posted",
-      ],
-      rows: filteredJobs.map((j) => [
-        `#JOB-${j.id}`,
-        capitalizeWords(j.title ?? "Untitled"),
-        capitalizeWords(j.category ?? "General"),
-        capitalizeWords(`${j.user?.firstName ?? ""} ${j.user?.lastName ?? ""}`.trim() || "Client"),
-        formatReadableLabel(j.status),
-        formatDateSafely(j.createdAt),
-      ]),
-    });
+  const handleExportCsv = async () => {
+    const ids = filteredJobs.map((j) => j.id);
+    setExportingCsv(true);
+    try {
+      const res = await fetch("/api/admin/reports/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scope: "all",
+          ids,
+          format: "csv",
+        }),
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        const dateStr = new Date().toISOString().slice(0, 10);
+        link.download = `klick-pro-marketplace-jobs-audit-${dateStr}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error("Bulk Jobs CSV download failed:", err);
+    } finally {
+      setExportingCsv(false);
+    }
   };
 
   const handleExportPdf = async () => {
@@ -2556,7 +2556,7 @@ function JobsReport() {
         body: JSON.stringify({
           scope: "all",
           ids,
-          orientation: "landscape",
+          format: "pdf",
         }),
       });
       if (res.ok) {
@@ -2564,7 +2564,8 @@ function JobsReport() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `klick-pro-jobs-audit-${new Date().toISOString().slice(0, 10)}.pdf`;
+        const dateStr = new Date().toISOString().slice(0, 10);
+        link.download = `klick-pro-jobs-dossier-audit-${dateStr}.pdf`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -2577,37 +2578,29 @@ function JobsReport() {
     }
   };
 
-  const exportSingleRowCsv = (j: JobRow) => {
-    downloadCsvFile({
-      filename: `klick-pro-job-${j.id}`,
-      title: `Project Dossier Summary #JOB-${j.id}`,
-      metadata: [
-        { label: "Job Reference", value: `#JOB-${j.id}` },
-        { label: "Project Title", value: capitalizeWords(j.title ?? "Untitled") },
-        { label: "Category", value: capitalizeWords(j.category ?? "General") },
-        { label: "Client Name", value: capitalizeWords(`${j.user?.firstName ?? ""} ${j.user?.lastName ?? ""}`.trim() || "Client") },
-        { label: "Marketplace Status", value: formatReadableLabel(j.status) },
-        { label: "Date Posted", value: formatDateSafely(j.createdAt) },
-      ],
-      headers: [
-        "Job ID",
-        "Project Title",
-        "Category",
-        "Client Name",
-        "Marketplace Status",
-        "Date Posted",
-      ],
-      rows: [
-        [
-          `#JOB-${j.id}`,
-          capitalizeWords(j.title ?? "Untitled"),
-          capitalizeWords(j.category ?? "General"),
-          capitalizeWords(`${j.user?.firstName ?? ""} ${j.user?.lastName ?? ""}`.trim() || "Client"),
-          formatReadableLabel(j.status),
-          formatDateSafely(j.createdAt),
-        ],
-      ],
-    });
+  const exportSingleRowCsv = async (j: JobRow) => {
+    setDownloadingCsvRowId(j.id);
+    try {
+      const res = await fetch(`/api/portal/jobs/${j.id}/export?format=csv`, {
+        method: "GET",
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        const safeTitle = (j.title || `job-${j.id}`).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        link.download = `klick-pro-job-${j.id}-${safeTitle}-dossier.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error("Single Job CSV download failed:", err);
+    } finally {
+      setDownloadingCsvRowId(null);
+    }
   };
 
   const exportSingleRowPdf = async (j: JobRow) => {
@@ -2707,12 +2700,13 @@ function JobsReport() {
           </button>
           <button
             type="button"
-            onClick={() => exportSingleRowCsv(j)}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
-            title="Download CSV Record"
+            disabled={downloadingCsvRowId === j.id}
+            onClick={() => void exportSingleRowCsv(j)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+            title="Download CSV Dossier Record"
           >
             <FileSpreadsheet className="h-3 w-3 text-emerald-600" />
-            <span>CSV</span>
+            <span>{downloadingCsvRowId === j.id ? "..." : "CSV"}</span>
           </button>
         </div>
       ),
@@ -2839,11 +2833,12 @@ function JobsReport() {
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            onClick={handleExportCsv}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition cursor-pointer"
+            disabled={exportingCsv}
+            onClick={() => void handleExportCsv()}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
           >
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            <span>Export CSV</span>
+            <span>{exportingCsv ? "Generating..." : "Export CSV"}</span>
           </button>
           <button
             type="button"
@@ -2892,6 +2887,7 @@ type UserRow = {
   isActive: boolean;
   isVerified: boolean;
   createdAt: string;
+  lastLoginAt?: string | null;
   daysActive?: number;
   jobsCount?: number;
   proposalsCount?: number;
@@ -2989,6 +2985,7 @@ function UsersReport() {
         "Lifetime Withdrawals (INR)",
         "Account Status",
         "Registered Date",
+        "Last Login",
       ],
       rows: filteredUsers.map((u) => [
         `#USR-${u.id}`,
@@ -3001,7 +2998,22 @@ function UsersReport() {
         u.totalTopUp ?? 0,
         u.totalWithdrawals ?? 0,
         u.isActive ? "Active" : "Suspended",
-        formatDateSafely(u.createdAt),
+        formatDateSafely(u.createdAt, {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        u.lastLoginAt
+          ? formatDateSafely(u.lastLoginAt, {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "Never",
       ]),
     });
   };
@@ -3054,7 +3066,28 @@ function UsersReport() {
         { label: "Wallet Balance", value: `INR ${(u.walletBalance ?? 0).toLocaleString("en-IN")}` },
         { label: "Total Lifetime Top-Up", value: `INR ${(u.totalTopUp ?? 0).toLocaleString("en-IN")}` },
         { label: "Total Withdrawals", value: `INR ${(u.totalWithdrawals ?? 0).toLocaleString("en-IN")}` },
-        { label: "Registration Date", value: formatDateSafely(u.createdAt) },
+        {
+          label: "Registration Date",
+          value: formatDateSafely(u.createdAt, {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        },
+        {
+          label: "Last Login",
+          value: u.lastLoginAt
+            ? formatDateSafely(u.lastLoginAt, {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "Never",
+        },
       ],
       headers: [
         "User ID",
@@ -3068,6 +3101,7 @@ function UsersReport() {
         "Lifetime Withdrawals (INR)",
         "Account Status",
         "Registered Date",
+        "Last Login",
       ],
       rows: [
         [
@@ -3081,7 +3115,22 @@ function UsersReport() {
           u.totalTopUp ?? 0,
           u.totalWithdrawals ?? 0,
           u.isActive ? "Active" : "Suspended",
-          formatDateSafely(u.createdAt),
+          formatDateSafely(u.createdAt, {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          u.lastLoginAt
+            ? formatDateSafely(u.lastLoginAt, {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "Never",
         ],
       ],
     });
@@ -3226,8 +3275,37 @@ function UsersReport() {
     },
     {
       key: "created",
-      header: "Registered",
-      render: (u) => <span className="text-xs text-slate-500 whitespace-nowrap">{formatDateSafely(u.createdAt)}</span>,
+      header: "When Registered",
+      render: (u) => (
+        <span className="text-xs text-slate-600 whitespace-nowrap">
+          {formatDateSafely(u.createdAt, {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </span>
+      ),
+    },
+    {
+      key: "lastLogin",
+      header: "Last Login",
+      render: (u) => (
+        <span className="text-xs text-slate-600 whitespace-nowrap">
+          {u.lastLoginAt ? (
+            formatDateSafely(u.lastLoginAt, {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          ) : (
+            <span className="italic text-slate-400">Never</span>
+          )}
+        </span>
+      ),
     },
     {
       key: "actions",
@@ -3438,8 +3516,9 @@ function UsersReport() {
 // MAIN ADMIN REPORTS PAGE COMPONENT
 // ===========================================================================
 export default function AdminReportsPage() {
-  const [tab, setTab] = useState<
-    "revenue" | "escrow" | "withdrawals" | "disputes" | "jobs" | "users"
+  const [tab, setTab] = useState<"users" | "jobs" | "finances">("users");
+  const [financeSubTab, setFinanceSubTab] = useState<
+    "revenue" | "escrow" | "withdrawals" | "disputes"
   >("revenue");
   const [commissionEnabled, setCommissionEnabled] = useState(false);
   const [commissionRate, setCommissionRate] = useState(0.1);
@@ -3473,48 +3552,24 @@ export default function AdminReportsPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50/80 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
-              <FileText className="h-3.5 w-3.5 text-indigo-600" />
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-600" />
+              </span>
               <span>Enterprise Financial Control & Compliance</span>
+              <span className="text-indigo-300">·</span>
+              <span className="font-mono text-[11px] text-indigo-600/80">IST (UTC+5:30)</span>
             </div>
             <h1 className="mt-2 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 font-display">
               Platform Reports & Audit Ledgers
             </h1>
             <p className="mt-1 text-xs sm:text-sm text-slate-500 max-w-2xl leading-relaxed">
-              Official regulatory compliance records of verified accounts, escrow custody liabilities,
-              milestone settlement transactions, dispute arbitration, and marketplace health.
+              Official regulatory compliance records of verified accounts, marketplace job listings,
+              escrow custody liabilities, and milestone settlement transactions.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            {/* Live Commission Status Indicator Button linking to Settings */}
-            <Link
-              href="/admin/settings"
-              title="Platform Commission Rule: Click to review or modify commission rates in Admin Settings"
-              className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs sm:text-sm font-semibold shadow-2xs transition hover:shadow-xs active:scale-95 ${
-                loadingConfig
-                  ? "border-slate-200 bg-slate-50 text-slate-500"
-                  : commissionEnabled
-                    ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                    : "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200"
-              }`}
-            >
-              <Percent
-                className={`h-4 w-4 ${
-                  commissionEnabled ? "text-emerald-600" : "text-slate-500"
-                }`}
-              />
-              <span>
-                Commission:{" "}
-                <span className="font-bold underline underline-offset-2">
-                  {loadingConfig
-                    ? "Checking..."
-                    : commissionEnabled
-                      ? `ON (${activeRatePercent}%)`
-                      : "OFF (0% cut)"}
-                </span>
-              </span>
-            </Link>
-
             {/* Platform Settings Link */}
             <Link
               href="/admin/settings"
@@ -3526,66 +3581,25 @@ export default function AdminReportsPage() {
           </div>
         </div>
 
-        {/* Executive 6-Tab Navigation Bar */}
-        <div className="mt-6 flex items-center gap-1.5 overflow-x-auto pb-1 border-t border-slate-100 pt-4">
+        {/* Executive 3-Tab Primary Navigation Bar */}
+        <div className="mt-6 flex items-center gap-2 overflow-x-auto pb-1 border-t border-slate-100 pt-4">
           <button
             type="button"
-            onClick={() => setTab("revenue")}
-            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
-              tab === "revenue"
+            onClick={() => setTab("users")}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
+              tab === "users"
                 ? "bg-slate-900 text-white shadow-xs font-bold"
                 : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
             }`}
           >
-            <Landmark className="h-4 w-4" />
-            <span>
-              {commissionEnabled ? "Revenue & Commission" : "Revenue & Settlements"}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setTab("escrow")}
-            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
-              tab === "escrow"
-                ? "bg-slate-900 text-white shadow-xs font-bold"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            }`}
-          >
-            <ShieldCheck className="h-4 w-4" />
-            <span>Escrow & Treasury</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setTab("withdrawals")}
-            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
-              tab === "withdrawals"
-                ? "bg-slate-900 text-white shadow-xs font-bold"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            }`}
-          >
-            <ArrowDownToLine className="h-4 w-4" />
-            <span>Bank Withdrawals</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setTab("disputes")}
-            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
-              tab === "disputes"
-                ? "bg-slate-900 text-white shadow-xs font-bold"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            }`}
-          >
-            <Scale className="h-4 w-4" />
-            <span>Disputes & Arbitration</span>
+            <Users className="h-4 w-4" />
+            <span>User Accounts</span>
           </button>
 
           <button
             type="button"
             onClick={() => setTab("jobs")}
-            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
               tab === "jobs"
                 ? "bg-slate-900 text-white shadow-xs font-bold"
                 : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
@@ -3597,32 +3611,95 @@ export default function AdminReportsPage() {
 
           <button
             type="button"
-            onClick={() => setTab("users")}
-            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
-              tab === "users"
+            onClick={() => setTab("finances")}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
+              tab === "finances"
                 ? "bg-slate-900 text-white shadow-xs font-bold"
                 : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
             }`}
           >
-            <Users className="h-4 w-4" />
-            <span>User Accounts</span>
+            <Landmark className="h-4 w-4" />
+            <span>Finances & Treasury</span>
           </button>
         </div>
+
+        {/* Secondary Sub-Navigation for Finances */}
+        {tab === "finances" && (
+          <div className="mt-3 flex items-center gap-1.5 overflow-x-auto rounded-xl bg-slate-100/80 p-1.5">
+            <button
+              type="button"
+              onClick={() => setFinanceSubTab("revenue")}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+                financeSubTab === "revenue"
+                  ? "bg-white text-slate-900 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+              }`}
+            >
+              <CircleDollarSign className="h-3.5 w-3.5 text-indigo-600" />
+              <span>
+                {commissionEnabled ? "Revenue & Commission" : "Revenue & Settlements"}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFinanceSubTab("escrow")}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+                financeSubTab === "escrow"
+                  ? "bg-white text-slate-900 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+              }`}
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Escrow & Treasury</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFinanceSubTab("withdrawals")}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+                financeSubTab === "withdrawals"
+                  ? "bg-white text-slate-900 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+              }`}
+            >
+              <ArrowDownToLine className="h-3.5 w-3.5 text-amber-600" />
+              <span>Bank Withdrawals</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFinanceSubTab("disputes")}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+                financeSubTab === "disputes"
+                  ? "bg-white text-slate-900 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+              }`}
+            >
+              <Scale className="h-3.5 w-3.5 text-rose-600" />
+              <span>Disputes & Arbitration</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Tab Content */}
       <section>
-        {tab === "revenue" && (
-          <RevenueReport
-            commissionEnabled={commissionEnabled}
-            commissionRate={commissionRate}
-          />
-        )}
-        {tab === "escrow" && <EscrowReport />}
-        {tab === "withdrawals" && <WithdrawalsReport />}
-        {tab === "disputes" && <DisputesReport />}
-        {tab === "jobs" && <JobsReport />}
         {tab === "users" && <UsersReport />}
+        {tab === "jobs" && <JobsReport />}
+        {tab === "finances" && (
+          <>
+            {financeSubTab === "revenue" && (
+              <RevenueReport
+                commissionEnabled={commissionEnabled}
+                commissionRate={commissionRate}
+              />
+            )}
+            {financeSubTab === "escrow" && <EscrowReport />}
+            {financeSubTab === "withdrawals" && <WithdrawalsReport />}
+            {financeSubTab === "disputes" && <DisputesReport />}
+          </>
+        )}
       </section>
     </div>
   );
