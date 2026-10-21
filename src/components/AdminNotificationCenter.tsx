@@ -34,7 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { capitalizeFirst } from "@/lib/utils";
+import { capitalizeFirst, capitalizeWords } from "@/lib/utils";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 
 export type Notification = {
@@ -1184,7 +1184,7 @@ export function AdminNotificationCenter() {
                       </div>
                       <div className="flex items-center gap-1.5 font-medium">
                         <MapPin className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
-                        {timeline.job.locationAddress}
+                        {capitalizeWords(timeline.job.locationAddress)}
                       </div>
                     </div>
                   )}

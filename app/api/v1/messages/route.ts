@@ -442,7 +442,8 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const session = await getSession(request);
   if (!session) return NextResponse.json({ error: "Sign-in required." }, { status: 401 });
-  const body = (await request.json()) as { conversationId?: string; all?: boolean };
+  const rawBody = await request.json().catch(() => null);
+  const body = (rawBody || {}) as { conversationId?: string; all?: boolean };
   const allAdmins =
     session.role === "ADMIN"
       ? await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } })
@@ -515,7 +516,8 @@ export async function PATCH(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const session = await getSession(request);
   if (!session) return NextResponse.json({ error: "Sign-in required." }, { status: 401 });
-  const body = (await request.json()) as {
+  const rawBody = await request.json().catch(() => null);
+  const body = (rawBody || {}) as {
     recipientId?: number;
     text?: string;
     job?: string;
@@ -525,6 +527,9 @@ export async function POST(request: NextRequest) {
   const text = body.text?.trim() ?? "";
   if (!Number.isSafeInteger(recipientId) || !text) {
     return NextResponse.json({ error: "Recipient and message are required." }, { status: 400 });
+  }
+  if (text.length > 5000) {
+    return NextResponse.json({ error: "Message cannot exceed 5000 characters." }, { status: 400 });
   }
   const recipient = await db.user.findUnique({
     where: { id: recipientId },

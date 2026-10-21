@@ -1465,7 +1465,7 @@ function ProfessionalJobsContent() {
                                 {capitalizeWords(job.title)}
                               </h3>
                               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                <span>{job.locationAddress ?? "Remote"}</span>
+                                <span>{capitalizeWords(job.locationAddress) || "Remote"}</span>
                                 {job.distanceKm !== null && (
                                   <span className="inline-flex items-center gap-1 font-medium text-primary">
                                     <MapPin className="h-3.5 w-3.5" />

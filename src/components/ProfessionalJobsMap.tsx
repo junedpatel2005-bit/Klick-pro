@@ -4,6 +4,7 @@ import { GoogleMap, InfoWindow, Marker, Circle } from "@react-google-maps/api";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapPin, Star } from "lucide-react";
 import { useGoogleMaps } from "@/components/GoogleMapsProvider";
+import { capitalizeWords } from "@/lib/utils";
 
 type MapJob = {
   id: number;
@@ -196,15 +197,15 @@ export default function ProfessionalJobsMap({
                 </span>
               ) : null}
             </div>
-            <p className="font-semibold text-foreground">{activeJob.title}</p>
+            <p className="font-semibold text-foreground">{capitalizeWords(activeJob.title)}</p>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <MapPin className="h-3 w-3 shrink-0" />
-              {activeJob.locationAddress ?? "Remote"}
+              {capitalizeWords(activeJob.locationAddress) || "Remote"}
               {activeJob.distanceKm != null && ` · ${activeJob.distanceKm.toFixed(1)} km away`}
             </div>
             {activeJob.clientName ? (
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span>{activeJob.clientName}</span>
+                <span>{capitalizeWords(activeJob.clientName)}</span>
                 {activeJob.clientRating != null && (
                   <span className="inline-flex items-center gap-1">
                     <Star className="h-3 w-3 fill-warning text-warning" />

@@ -26,6 +26,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { capitalizeFirst, capitalizeWords } from "@/lib/utils";
 import type { MarketingItem, MarketingPageContent } from "@/lib/marketing-cms-shared";
 
 type HomeJob = {
@@ -399,16 +400,16 @@ export default function ProfessionalHome({
                     className="flex min-h-64 flex-col rounded-2xl border border-border bg-card p-5 shadow-soft transition-all hover:-translate-y-1 hover:border-primary/30 hover:shadow-elevated"
                   >
                     <p className="text-xs font-semibold uppercase tracking-wider text-primary">
-                      {job.category ?? "General"}
+                      {capitalizeWords(job.category ?? "General")}
                     </p>
                     <h3 className="mt-2 line-clamp-2 font-display text-lg font-semibold">
-                      {job.title ?? `Job #${job.id}`}
+                      {capitalizeWords(job.title ?? `Job #${job.id}`)}
                     </h3>
                     <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
-                      {job.description}
+                      {capitalizeFirst(job.description)}
                     </p>
                     <p className="mt-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                      <MapPin className="h-4 w-4" /> {job.locationAddress ?? "Remote"}
+                      <MapPin className="h-4 w-4" /> {capitalizeWords(job.locationAddress) || "Remote"}
                     </p>
                     <div className="mt-auto flex items-end justify-between border-t border-border pt-4">
                       <div>

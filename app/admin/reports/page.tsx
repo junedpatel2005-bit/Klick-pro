@@ -25,6 +25,9 @@ import {
   Percent,
   ExternalLink,
   X,
+  UserPlus,
+  LogIn,
+  Activity,
 } from "lucide-react";
 import { SelectableReportTable, type ReportTableColumn } from "@/components/reports/SelectableReportTable";
 import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
@@ -2888,6 +2891,8 @@ type UserRow = {
   isVerified: boolean;
   createdAt: string;
   lastLoginAt?: string | null;
+  loginSessions?: string[];
+  totalLogins?: number;
   daysActive?: number;
   jobsCount?: number;
   proposalsCount?: number;
@@ -2895,6 +2900,26 @@ type UserRow = {
   totalTopUp?: number;
   totalWithdrawals?: number;
 };
+
+type ActivityFocus = "ALL" | "REGISTERED" | "LOGGED_IN" | "ACTIVE";
+
+function getDatePresetLabel(preset: DatePreset, start?: string, end?: string): string {
+  if (preset === "last_10_days") return "Last 10 Days";
+  if (preset === "today") return "Today";
+  if (preset === "this_month") return "This Month";
+  if (preset === "last_month") return "Last Month";
+  if (preset === "last_30_days") return "Last 30 Days";
+  if (preset === "last_60_days") return "Last 60 Days";
+  if (preset === "last_90_days") return "Last 90 Days";
+  if (preset === "this_year") return "This Year";
+  if (preset === "custom") {
+    if (start && end) return `${start} to ${end}`;
+    if (start) return `From ${start}`;
+    if (end) return `Until ${end}`;
+    return "Custom Date Range";
+  }
+  return "All Time";
+}
 
 function UsersReport() {
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -2907,19 +2932,95 @@ function UsersReport() {
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [activityFocus, setActivityFocus] = useState<ActivityFocus>("ALL");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 15;
 
   useEffect(() => {
     void fetch("/api/v1/admin/data/users", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setUsers(Array.isArray(data?.users) ? data.users : []))
+      .then((data) => {
+        const raw = Array.isArray(data?.users) ? data.users : [];
+        // Exclude admin role accounts from customer and marketplace user directory
+        setUsers(raw.filter((u: UserRow) => u.role !== "ADMIN"));
+      })
       .catch((err) => {
         console.error("Failed to load admin users report:", err);
         setUsers([]);
       })
       .finally(() => setLoading(false));
   }, []);
+
+  const isPeriodActive = datePreset !== "all" || Boolean(startDate) || Boolean(endDate);
+  const periodLabel = getDatePresetLabel(datePreset, startDate, endDate);
+
+  // Helper check: User registered in the selected period
+  const checkUserRegisteredInPeriod = (u: UserRow): boolean => {
+    return isWithinCustomDateRange(u.createdAt, datePreset, startDate, endDate);
+  };
+
+  // Helper check: User logged in during the selected period
+  const checkUserLoggedInInPeriod = (u: UserRow): boolean => {
+    if (u.lastLoginAt && isWithinCustomDateRange(u.lastLoginAt, datePreset, startDate, endDate)) {
+      return true;
+    }
+    if (Array.isArray(u.loginSessions) && u.loginSessions.length > 0) {
+      return u.loginSessions.some((sessionTime) =>
+        isWithinCustomDateRange(sessionTime, datePreset, startDate, endDate)
+      );
+    }
+    return false;
+  };
+
+  // Helper check: Total login sessions count for a user in the selected period
+  const countUserSessionsInPeriod = (u: UserRow): number => {
+    let count = 0;
+    if (Array.isArray(u.loginSessions) && u.loginSessions.length > 0) {
+      count = u.loginSessions.filter((sessionTime) =>
+        isWithinCustomDateRange(sessionTime, datePreset, startDate, endDate)
+      ).length;
+    } else if (u.lastLoginAt && isWithinCustomDateRange(u.lastLoginAt, datePreset, startDate, endDate)) {
+      count = 1;
+    }
+    return count;
+  };
+
+  // Helper check: User was active during the selected period
+  const checkUserActiveInPeriod = (u: UserRow): boolean => {
+    if (!u.isActive) return false;
+    if (!isPeriodActive) return true;
+    return (
+      checkUserLoggedInInPeriod(u) ||
+      checkUserRegisteredInPeriod(u) ||
+      Number(u.jobsCount ?? 0) > 0 ||
+      Number(u.proposalsCount ?? 0) > 0
+    );
+  };
+
+  // Period Metrics Summary
+  const periodRegisteredUsers = useMemo(
+    () => users.filter(checkUserRegisteredInPeriod),
+    [users, datePreset, startDate, endDate]
+  );
+  const periodRegisteredCount = periodRegisteredUsers.length;
+  const periodRegisteredClients = periodRegisteredUsers.filter((u) => u.role === "CLIENT").length;
+  const periodRegisteredPros = periodRegisteredUsers.filter((u) => u.role === "PROFESSIONAL").length;
+
+  const periodLoggedInUsers = useMemo(
+    () => users.filter(checkUserLoggedInInPeriod),
+    [users, datePreset, startDate, endDate]
+  );
+  const periodLoggedInCount = periodLoggedInUsers.length;
+  const periodTotalSessionsCount = useMemo(() => {
+    return users.reduce((sum, u) => sum + countUserSessionsInPeriod(u), 0);
+  }, [users, datePreset, startDate, endDate]);
+
+  const periodActiveUsers = useMemo(
+    () => users.filter(checkUserActiveInPeriod),
+    [users, datePreset, startDate, endDate, isPeriodActive]
+  );
+  const periodActiveCount = periodActiveUsers.length;
+  const totalActiveAccountsCount = users.filter((u) => u.isActive).length;
 
   const filteredUsers = useMemo(() => {
     return users.filter((user) => {
@@ -2933,6 +3034,8 @@ function UsersReport() {
         (user.phone && user.phone.includes(q)) ||
         String(user.id).includes(q);
 
+      if (user.role === "ADMIN") return false;
+
       const matchesRole = roleFilter === "ALL" || user.role === roleFilter;
       const matchesVerification =
         verificationFilter === "ALL" ||
@@ -2942,11 +3045,30 @@ function UsersReport() {
         statusFilter === "ALL" ||
         (statusFilter === "ACTIVE" && user.isActive) ||
         (statusFilter === "SUSPENDED" && !user.isActive);
-      const matchesDate = isWithinCustomDateRange(user.createdAt, datePreset, startDate, endDate);
 
-      return matchesSearch && matchesRole && matchesVerification && matchesStatus && matchesDate;
+      let matchesActivity = true;
+      if (activityFocus === "REGISTERED") {
+        matchesActivity = checkUserRegisteredInPeriod(user);
+      } else if (activityFocus === "LOGGED_IN") {
+        matchesActivity = checkUserLoggedInInPeriod(user);
+      } else if (activityFocus === "ACTIVE") {
+        matchesActivity = checkUserActiveInPeriod(user);
+      }
+
+      return matchesSearch && matchesRole && matchesVerification && matchesStatus && matchesActivity;
     });
-  }, [users, search, roleFilter, verificationFilter, statusFilter, datePreset, startDate, endDate]);
+  }, [
+    users,
+    search,
+    roleFilter,
+    verificationFilter,
+    statusFilter,
+    activityFocus,
+    datePreset,
+    startDate,
+    endDate,
+    isPeriodActive,
+  ]);
 
   const [downloadingRowId, setDownloadingRowId] = useState<number | null>(null);
 
@@ -2962,16 +3084,23 @@ function UsersReport() {
 
   const handleExportCsv = () => {
     downloadCsvFile({
-      filename: "klick-pro-admin-users-audit",
-      title: "User Accounts & KYC Compliance Directory",
+      filename: `klick-pro-admin-users-${periodLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      title: `User Accounts & KYC Compliance Directory — ${periodLabel} Audit`,
       metadata: [
-        { label: "Scope", value: `All Filtered (${filteredUsers.length})` },
-        { label: "Total Profiles", value: filteredUsers.length },
-        { label: "KYC Verified", value: verifiedCount },
-        { label: "Professionals", value: prosCount },
-        { label: "Clients", value: clientsCount },
-        { label: "Wallet Float", value: `INR ${totalWalletFloat.toLocaleString("en-IN")}` },
-        { label: "Active Date Range", value: datePreset },
+        { label: "Reporting Period", value: periodLabel },
+        { label: "New Registrations in Period", value: periodRegisteredCount },
+        {
+          label: "Logins in Period",
+          value: `${periodLoggedInCount} unique users (${periodTotalSessionsCount} total sessions)`,
+        },
+        { label: "Active Users in Period", value: periodActiveCount },
+        { label: "Activity View Focus", value: activityFocus },
+        { label: "Filtered Profiles", value: filteredUsers.length },
+        { label: "Total Platform Profiles", value: users.length },
+        { label: "KYC Verified in Scope", value: verifiedCount },
+        { label: "Professionals in Scope", value: prosCount },
+        { label: "Clients in Scope", value: clientsCount },
+        { label: "Wallet Float in Scope", value: `INR ${totalWalletFloat.toLocaleString("en-IN")}` },
       ],
       headers: [
         "User ID",
@@ -2985,7 +3114,9 @@ function UsersReport() {
         "Lifetime Withdrawals (INR)",
         "Account Status",
         "Registered Date",
+        "Registered in Period",
         "Last Login",
+        "Logged in in Period",
       ],
       rows: filteredUsers.map((u) => [
         `#USR-${u.id}`,
@@ -3005,6 +3136,7 @@ function UsersReport() {
           hour: "2-digit",
           minute: "2-digit",
         }),
+        checkUserRegisteredInPeriod(u) ? "Yes" : "No",
         u.lastLoginAt
           ? formatDateSafely(u.lastLoginAt, {
               day: "2-digit",
@@ -3014,6 +3146,7 @@ function UsersReport() {
               minute: "2-digit",
             })
           : "Never",
+        checkUserLoggedInInPeriod(u) ? "Yes" : "No",
       ]),
     });
   };
@@ -3030,6 +3163,13 @@ function UsersReport() {
           scope: "all",
           ids,
           orientation: "landscape",
+          periodMetrics: {
+            periodLabel,
+            registeredCount: periodRegisteredCount,
+            loginsCount: periodLoggedInCount,
+            totalSessionsCount: periodTotalSessionsCount,
+            activeCount: periodActiveCount,
+          },
         }),
       });
       if (res.ok) {
@@ -3037,7 +3177,8 @@ function UsersReport() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `klick-pro-users-directory-${new Date().toISOString().slice(0, 10)}.pdf`;
+        const safeName = periodLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        link.download = `klick-pro-users-${safeName}-${new Date().toISOString().slice(0, 10)}.pdf`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -3276,36 +3417,59 @@ function UsersReport() {
     {
       key: "created",
       header: "When Registered",
-      render: (u) => (
-        <span className="text-xs text-slate-600 whitespace-nowrap">
-          {formatDateSafely(u.createdAt, {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </span>
-      ),
+      render: (u) => {
+        const isRegisteredInPeriod = checkUserRegisteredInPeriod(u) && isPeriodActive;
+        return (
+          <div className="flex flex-col gap-0.5 whitespace-nowrap">
+            <span className="text-xs text-slate-600">
+              {formatDateSafely(u.createdAt, {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+            {isRegisteredInPeriod && (
+              <span className="inline-flex items-center gap-1 w-fit rounded-md bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 text-[9px] font-bold text-indigo-700">
+                <UserPlus className="h-2.5 w-2.5" />
+                <span>New in {periodLabel}</span>
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "lastLogin",
       header: "Last Login",
-      render: (u) => (
-        <span className="text-xs text-slate-600 whitespace-nowrap">
-          {u.lastLoginAt ? (
-            formatDateSafely(u.lastLoginAt, {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          ) : (
-            <span className="italic text-slate-400">Never</span>
-          )}
-        </span>
-      ),
+      render: (u) => {
+        const isLoggedIn = checkUserLoggedInInPeriod(u) && isPeriodActive;
+        const sessionCount = countUserSessionsInPeriod(u);
+        return (
+          <div className="flex flex-col gap-0.5 whitespace-nowrap">
+            <span className="text-xs text-slate-600">
+              {u.lastLoginAt ? (
+                formatDateSafely(u.lastLoginAt, {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              ) : (
+                <span className="italic text-slate-400">Never</span>
+              )}
+            </span>
+            {isLoggedIn && (
+              <span className="inline-flex items-center gap-1 w-fit rounded-md bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
+                <LogIn className="h-2.5 w-2.5" />
+                <span>{sessionCount > 1 ? `${sessionCount} Logins in ${periodLabel}` : `Logged In (${periodLabel})`}</span>
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "actions",
@@ -3339,72 +3503,188 @@ function UsersReport() {
 
   return (
     <div className="space-y-6">
-      {/* 4 High-Density Stat Cards - Zero Charts */}
+      {/* 4 Dynamic High-Density Stat Cards featuring Period Registrations, Logins & Active Users */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {/* Card 1: Registrations in Period */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Total Accounts</span>
-            <Users className="h-4 w-4 text-indigo-600" />
+            <span className="text-xs font-semibold uppercase tracking-wider">
+              {isPeriodActive ? `Registered (${periodLabel})` : "Total Accounts"}
+            </span>
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600">
+              <UserPlus className="h-3.5 w-3.5" />
+            </div>
           </div>
           {loading ? (
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
-            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl truncate">
-              {filteredUsers.length}
+            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-indigo-600 sm:text-3xl truncate">
+              {isPeriodActive ? periodRegisteredCount : users.length}
             </div>
           )}
-          <p className="mt-1 text-xs text-slate-500">{clientsCount} clients · {prosCount} professionals</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {isPeriodActive
+              ? `${periodRegisteredClients} clients · ${periodRegisteredPros} professionals`
+              : `${clientsCount} clients · ${prosCount} professionals`}
+          </p>
         </div>
 
+        {/* Card 2: Logins in Period */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">KYC Compliance</span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            <span className="text-xs font-semibold uppercase tracking-wider">
+              {isPeriodActive ? `Logins (${periodLabel})` : "User Logins"}
+            </span>
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-600">
+              <LogIn className="h-3.5 w-3.5" />
+            </div>
           </div>
           {loading ? (
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-emerald-600 sm:text-3xl truncate">
-              {verifiedCount}
+              {periodLoggedInCount}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">
-            {filteredUsers.length > 0
-              ? `${Math.round((verifiedCount / filteredUsers.length) * 100)}% verified identity`
-              : "Zero accounts"}
+            {periodTotalSessionsCount} total session{periodTotalSessionsCount === 1 ? "" : "s"} {isPeriodActive ? `in ${periodLabel.toLowerCase()}` : "recorded"}
           </p>
         </div>
 
+        {/* Card 3: Active Users in Period */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Total Wallet Float</span>
-            <CircleDollarSign className="h-4 w-4 text-indigo-600" />
+            <span className="text-xs font-semibold uppercase tracking-wider">
+              {isPeriodActive ? `Active (${periodLabel})` : "Account Health"}
+            </span>
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-50 border border-sky-100 text-sky-600">
+              <Activity className="h-3.5 w-3.5" />
+            </div>
           </div>
           {loading ? (
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
-            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl truncate">
-              ₹{totalWalletFloat.toLocaleString()}
+            <div className="mt-2 font-display text-2xl font-bold tracking-tight text-sky-600 sm:text-3xl truncate">
+              {isPeriodActive ? periodActiveCount : totalActiveAccountsCount}
             </div>
           )}
-          <p className="mt-1 text-xs text-slate-500">Spendable user balances</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {totalActiveAccountsCount} active profiles in good standing
+          </p>
         </div>
 
+        {/* Card 4: KYC Compliance & Float */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Account Health</span>
-            <ShieldCheck className="h-4 w-4 text-indigo-600" />
+            <span className="text-xs font-semibold uppercase tracking-wider">KYC Compliance</span>
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 border border-amber-100 text-amber-600">
+              <ShieldCheck className="h-3.5 w-3.5" />
+            </div>
           </div>
           {loading ? (
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl truncate">
-              {filteredUsers.filter((u) => u.isActive).length}
+              {verifiedCount} <span className="text-xs font-normal text-slate-400">/ {users.length}</span>
             </div>
           )}
-          <p className="mt-1 text-xs text-slate-500">Active profiles in good standing</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {users.length > 0 ? `${Math.round((verifiedCount / users.length) * 100)}% verified identity` : "Zero accounts"}
+          </p>
         </div>
       </div>
+
+      {/* Period Engagement Summary Banner */}
+      {isPeriodActive && (
+        <div className="rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50/90 via-sky-50/60 to-white p-4 sm:p-5 shadow-xs">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-indigo-600 p-2 text-white shadow-xs shrink-0 mt-0.5">
+                <Users className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-slate-900">
+                    {periodLabel} Platform Activity Report
+                  </h3>
+                  <span className="inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-800">
+                    Active Period
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  In <span className="font-semibold text-slate-900">{periodLabel}</span>:{" "}
+                  <span className="font-bold text-indigo-700">{periodRegisteredCount}</span> registered,{" "}
+                  <span className="font-bold text-emerald-700">{periodLoggedInCount}</span> unique users logged in ({periodTotalSessionsCount} session{periodTotalSessionsCount === 1 ? "" : "s"}), and{" "}
+                  <span className="font-bold text-sky-700">{periodActiveCount}</span> active users engaged on Klick-Pro.
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Activity Focus Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 lg:pt-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setActivityFocus("ALL");
+                  setPage(1);
+                }}
+                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${
+                  activityFocus === "ALL"
+                    ? "bg-slate-900 text-white shadow-2xs font-bold"
+                    : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                <span>All in Period ({filteredUsers.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActivityFocus("REGISTERED");
+                  setPage(1);
+                }}
+                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${
+                  activityFocus === "REGISTERED"
+                    ? "bg-indigo-600 text-white shadow-2xs font-bold"
+                    : "bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50"
+                }`}
+              >
+                <UserPlus className="h-3 w-3" />
+                <span>Registered ({periodRegisteredCount})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActivityFocus("LOGGED_IN");
+                  setPage(1);
+                }}
+                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${
+                  activityFocus === "LOGGED_IN"
+                    ? "bg-emerald-600 text-white shadow-2xs font-bold"
+                    : "bg-white text-emerald-700 border border-emerald-200 hover:bg-emerald-50"
+                }`}
+              >
+                <LogIn className="h-3 w-3" />
+                <span>Logged In ({periodLoggedInCount})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActivityFocus("ACTIVE");
+                  setPage(1);
+                }}
+                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${
+                  activityFocus === "ACTIVE"
+                    ? "bg-sky-600 text-white shadow-2xs font-bold"
+                    : "bg-white text-sky-700 border border-sky-200 hover:bg-sky-50"
+                }`}
+              >
+                <Activity className="h-3 w-3" />
+                <span>Active ({periodActiveCount})</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filter and Action Controls Bar */}
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between">
@@ -3452,7 +3732,6 @@ function UsersReport() {
             <option value="ALL">All Roles</option>
             <option value="CLIENT">Clients</option>
             <option value="PROFESSIONAL">Professionals</option>
-            <option value="ADMIN">Admins</option>
           </select>
 
           <select
@@ -3467,6 +3746,22 @@ function UsersReport() {
             <option value="VERIFIED">KYC Verified</option>
             <option value="UNVERIFIED">Unverified</option>
           </select>
+
+          {isPeriodActive && (
+            <select
+              value={activityFocus}
+              onChange={(e) => {
+                setActivityFocus(e.target.value as ActivityFocus);
+                setPage(1);
+              }}
+              className="rounded-xl border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-xs font-semibold text-indigo-900 focus:border-indigo-500 focus:bg-white focus:outline-hidden"
+            >
+              <option value="ALL">Focus: All in Period ({filteredUsers.length})</option>
+              <option value="REGISTERED">Focus: Registered ({periodRegisteredCount})</option>
+              <option value="LOGGED_IN">Focus: Logged In ({periodLoggedInCount})</option>
+              <option value="ACTIVE">Focus: Active ({periodActiveCount})</option>
+            </select>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-2">

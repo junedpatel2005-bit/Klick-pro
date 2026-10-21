@@ -43,10 +43,11 @@ export async function PUT(request: Request) {
   if (!(await requireAdmin()))
     return NextResponse.json({ error: "Administrator access required." }, { status: 401 });
   try {
-    const body: unknown = await request.json();
+    const body: unknown = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid CMS content payload." }, { status: 400 });
+    }
     if (
-      body &&
-      typeof body === "object" &&
       marketingPageIds.includes((body as { page?: string }).page as MarketingPageId)
     ) {
       const page = (body as { page: MarketingPageId }).page;

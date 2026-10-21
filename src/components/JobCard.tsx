@@ -89,7 +89,7 @@ export function JobCard({
           <div className="mt-3 flex flex-wrap gap-3 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               <MapPin className="h-4 w-4" />
-              {locationAddress ?? "Remote"}
+              {capitalizeWords(locationAddress) || "Remote"}
             </span>
             {clientName ? (
               <span className="inline-flex items-center gap-1">

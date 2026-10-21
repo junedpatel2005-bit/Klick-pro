@@ -9,7 +9,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   try {
     if ((await verifySession(token)).role !== "ADMIN")
       return NextResponse.json({ error: "Admin access required." }, { status: 403 });
-    const body = z.object({ isActive: z.boolean() }).safeParse(await request.json());
+    const rawBody = await request.json().catch(() => null);
+    const body = z.object({ isActive: z.boolean() }).safeParse(rawBody);
     const { id } = await params;
     if (!body.success || !Number.isInteger(Number(id)))
       return NextResponse.json({ error: "Invalid account update." }, { status: 400 });

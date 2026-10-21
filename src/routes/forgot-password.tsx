@@ -169,13 +169,19 @@ function PhoneTab() {
       const result = (await response.json().catch(() => null)) as {
         error?: string;
         message?: string;
+        devHint?: string;
+        devCode?: string;
       } | null;
       if (!response.ok) {
         setError(result?.error ?? "Your phone number is not registered.");
         return;
       }
       setOtpOpen(true);
-      setMessage(result?.message ?? "Verification code sent to your phone.");
+      if (result?.devCode) {
+        const digits = result.devCode.split("").slice(0, 6);
+        setOtp(digits.concat(Array(Math.max(0, 6 - digits.length)).fill("")));
+      }
+      setMessage(result?.devHint ?? result?.message ?? "Verification code sent to your phone.");
       requestAnimationFrame(() => otpRefs.current[0]?.focus());
     } catch {
       setError("Unable to send verification code. Please check your connection.");
@@ -379,7 +385,10 @@ function PhoneTab() {
               type="button"
               className="h-11 flex-1"
               onClick={verifyCode}
-              disabled={verifying || otp.join("").length !== 4}
+              disabled={
+                verifying ||
+                (otp.join("").length !== 4 && otp.join("").length !== 6)
+              }
             >
               {verifying ? (
                 <span className="inline-flex items-center justify-center gap-2">

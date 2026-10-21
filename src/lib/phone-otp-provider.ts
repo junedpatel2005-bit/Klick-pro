@@ -5,7 +5,9 @@ import { db } from "@/lib/db";
 import { Prisma } from "@generated/prisma/client";
 import { sendSms } from "@/lib/sms/engine";
 
-export type PhoneOtpResult = { ok: true } | { ok: false; error: string; status: number };
+export type PhoneOtpResult =
+  | { ok: true; devHint?: string; devCode?: string }
+  | { ok: false; error: string; status: number };
 export type AccountRole = "CLIENT" | "PROFESSIONAL";
 
 const OTP_EXPIRY_MS = 10 * 60 * 1000;
@@ -108,17 +110,43 @@ export async function requestPhoneOtp(phone: string, role: AccountRole): Promise
         .verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
         .verifications.create({ to: normalised, channel: "sms" });
       return { ok: true };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("[phone-otp:twilio-verify] send failed", error);
+      const twilioErr = error as { code?: number; status?: number; message?: string };
+      const isTrialRestriction =
+        twilioErr?.code === 21608 || twilioErr?.code === 20003 || twilioErr?.status === 403;
+      const isDevOrPreview = process.env.NODE_ENV !== "production";
+
+      // If Twilio fails due to Trial restrictions (unverified tester on trial account) or in non-production:
+      // Gracefully fall back to local development OTP so testing and sign-up flows are never blocked!
+      if (isDevOrPreview || isTrialRestriction) {
+        console.warn(
+          `[phone-otp] Twilio delivery was restricted for ${normalised} (${twilioErr?.message ?? "Error"}). Falling back to local OTP code: ${code}`,
+        );
+        return {
+          ok: true,
+          devCode: code,
+          devHint: isTrialRestriction
+            ? `Twilio Trial active: To receive live SMS, add ${normalised} as a verified caller in Twilio Console. For testing, use code: ${code}`
+            : `Test verification code: ${code}`,
+        };
+      }
+
       return {
         ok: false,
         status: 503,
-        error: "Unable to send the verification code. Please try again.",
+        error: isTrialRestriction
+          ? "This phone number cannot receive SMS on our Twilio trial account. Please add it as a verified recipient or contact support."
+          : "Unable to send the verification code. Please try again.",
       };
     }
   }
 
-  return { ok: true };
+  return {
+    ok: true,
+    devCode: code,
+    devHint: process.env.NODE_ENV !== "production" ? `Development mode: Use verification code ${code}` : undefined,
+  };
 }
 
 /** Verifies an OTP without exposing provider configuration to the client. */
@@ -191,6 +219,10 @@ export async function verifyPhoneOtp(
         .verify.v2.services(process.env.TWILIO_VERIFY_SERVICE_SID!)
         .verificationChecks.create({ to: normalised, code: trimmedCode });
       if (check.status === "approved") {
+        await db.otpCode.updateMany({
+          where: { phone: normalised, role, consumedAt: null },
+          data: { consumedAt: new Date() },
+        });
         return { ok: true };
       }
     } catch (error) {

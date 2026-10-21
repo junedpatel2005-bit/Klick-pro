@@ -83,7 +83,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   if (!(await isAdmin(request)))
     return NextResponse.json({ error: "Admin access required." }, { status: 403 });
-  const parsed = input.safeParse(await request.json());
+  const rawBody = await request.json().catch(() => null);
+  const parsed = input.safeParse(rawBody);
   if (!parsed.success)
     return NextResponse.json({ error: "Enter a valid service name." }, { status: 400 });
   const baseSlug = slugify(parsed.data.name);
@@ -114,9 +115,10 @@ export async function PATCH(request: NextRequest) {
   if (!(await isAdmin(request)))
     return NextResponse.json({ error: "Admin access required." }, { status: 403 });
   const id = Number(request.nextUrl.searchParams.get("id"));
+  const rawBody = await request.json().catch(() => null);
   const parsed = z
     .object({ name: z.string().trim().min(2).max(80), description: z.string().trim().max(300) })
-    .safeParse(await request.json());
+    .safeParse(rawBody);
   if (!Number.isInteger(id) || !parsed.success)
     return NextResponse.json({ error: "Enter a valid category." }, { status: 400 });
   const current = await db.serviceCategory.findUnique({ where: { id } });

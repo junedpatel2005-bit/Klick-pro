@@ -489,7 +489,10 @@ export async function POST(
     // -------------------------------------------------------------------------
     if (resource === "users") {
       const rawUsers = await db.user.findMany({
-        where: selectedOnly ? { id: { in: numericIds } } : {},
+        where: {
+          ...(selectedOnly ? { id: { in: numericIds } } : {}),
+          role: { in: ["CLIENT", "PROFESSIONAL"] },
+        },
         select: {
           id: true,
           username: true,
@@ -566,8 +569,35 @@ export async function POST(
 
       const totalBalance = rows.reduce((sum, r) => sum + r.walletBalance, 0);
       const verifiedCount = rows.filter((r) => r.isVerified).length;
+
+      const periodMetrics = (rawBody as {
+        periodMetrics?: {
+          periodLabel?: string;
+          registeredCount?: number;
+          loginsCount?: number;
+          totalSessionsCount?: number;
+          activeCount?: number;
+        };
+      } | null)?.periodMetrics;
+
       const summaryStats: ReportSummaryStat[] = [
         { label: "Total Accounts", value: String(rows.length) },
+        ...(periodMetrics?.periodLabel
+          ? [
+              {
+                label: `Registered (${periodMetrics.periodLabel})`,
+                value: String(periodMetrics.registeredCount ?? 0),
+              },
+              {
+                label: `Logins (${periodMetrics.periodLabel})`,
+                value: `${periodMetrics.loginsCount ?? 0} (${periodMetrics.totalSessionsCount ?? 0} sessions)`,
+              },
+              {
+                label: `Active (${periodMetrics.periodLabel})`,
+                value: String(periodMetrics.activeCount ?? 0),
+              },
+            ]
+          : []),
         { label: "KYC Verified", value: `${verifiedCount} (${rows.length > 0 ? Math.round((verifiedCount / rows.length) * 100) : 0}%)` },
         { label: "Total Wallet Float", value: `INR ${totalBalance.toLocaleString("en-IN")}` },
       ];

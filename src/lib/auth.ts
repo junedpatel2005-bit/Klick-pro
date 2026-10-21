@@ -21,6 +21,13 @@ export async function createSession(session: Session) {
     .setExpirationTime("7d")
     .sign(secret);
   await db.session.create({ data: { id: sessionId, userId: session.userId, expiresAt } });
+  // Ensure user.lastLoginAt reflects the latest login timestamp
+  await db.user
+    .update({
+      where: { id: session.userId },
+      data: { lastLoginAt: new Date() },
+    })
+    .catch(() => {});
   return token;
 }
 // Memoized per render pass so a navigation that passes through several layouts

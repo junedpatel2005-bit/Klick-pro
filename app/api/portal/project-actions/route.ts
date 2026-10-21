@@ -241,7 +241,8 @@ export async function POST(request: NextRequest) {
     const token = request.cookies.get(sessionCookie)?.value;
     if (!token) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
     const session = await verifySession(token);
-    const parsed = bodySchema.safeParse(await request.json());
+    const rawBody = await request.json().catch(() => null);
+    const parsed = bodySchema.safeParse(rawBody);
     if (!parsed.success)
       return NextResponse.json(
         { error: "Please provide valid project information." },

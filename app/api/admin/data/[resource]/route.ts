@@ -96,6 +96,7 @@ export async function GET(
         .catch(() => [] as Array<{ clientId: number | null; professionalId: number | null; status: string }>);
 
       const rawUsers = await db.user.findMany({
+        where: { role: { in: ["CLIENT", "PROFESSIONAL"] } },
         select: {
           id: true,
           username: true,
@@ -125,6 +126,7 @@ export async function GET(
         wallets,
         topupSums,
         withdrawalSums,
+        userSessions,
       ] = await Promise.all([
         db.clientJob
           .groupBy({
@@ -162,6 +164,12 @@ export async function GET(
             _sum: { amount: true },
           })
           .catch(() => [] as Array<{ professionalId: number; _sum: { amount: number | null } }>),
+        db.session
+          .findMany({
+            select: { userId: true, createdAt: true },
+            orderBy: { createdAt: "desc" },
+          })
+          .catch(() => [] as Array<{ userId: number; createdAt: Date }>),
       ]);
 
       const trackingsByClient = new Map<
@@ -204,6 +212,13 @@ export async function GET(
       const topupByWalletId = new Map(topupSums.map((t) => [t.walletId, t._sum.amount ?? 0]));
       const withdrawalByProId = new Map(withdrawalSums.map((w) => [w.professionalId, w._sum.amount ?? 0]));
 
+      const sessionsByUserId = new Map<number, string[]>();
+      for (const s of userSessions) {
+        const list = sessionsByUserId.get(s.userId) ?? [];
+        list.push(s.createdAt.toISOString());
+        sessionsByUserId.set(s.userId, list);
+      }
+
       const users = rawUsers.map((u) => {
         const isClient = u.role === "CLIENT";
         const stats = (isClient ? trackingsByClient.get(u.id) : trackingsByPro.get(u.id)) ?? {
@@ -227,6 +242,15 @@ export async function GET(
           Math.floor((Date.now() - createdAtDate.getTime()) / (1000 * 60 * 60 * 24)),
         );
 
+        const rawSessionDates = sessionsByUserId.get(u.id) ?? [];
+        const loginSessions = [...rawSessionDates];
+        if (u.lastLoginAt) {
+          const lastIso = u.lastLoginAt.toISOString();
+          if (!loginSessions.includes(lastIso)) {
+            loginSessions.unshift(lastIso);
+          }
+        }
+
         return {
           id: u.id,
           username: u.username ?? null,
@@ -240,6 +264,8 @@ export async function GET(
           emailVerifiedAt: u.emailVerifiedAt ? u.emailVerifiedAt.toISOString() : null,
           createdAt: u.createdAt ? u.createdAt.toISOString() : new Date().toISOString(),
           lastLoginAt: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
+          loginSessions,
+          totalLogins: loginSessions.length,
           daysActive,
           jobsCount,
           proposalsCount,

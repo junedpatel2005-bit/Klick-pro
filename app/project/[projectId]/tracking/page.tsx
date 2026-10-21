@@ -64,7 +64,7 @@ import {
   DisputeData,
   DisputeMessage,
 } from "@/components/ProjectDisputeCenter";
-import { formatReadableLabel, capitalizeWords } from "@/lib/utils";
+import { formatReadableLabel, capitalizeWords, capitalizeFirst } from "@/lib/utils";
 
 type Person = { firstName: string | null; lastName: string | null } | null;
 export type DraftMilestone = {
@@ -2288,7 +2288,7 @@ export default function SharedProjectTrackingPage() {
                     </div>
                   </div>
                   {data.job?.locationAddress && (
-                    <p className="mt-2 text-sm font-medium">{data.job.locationAddress}</p>
+                    <p className="mt-2 text-sm font-medium">{capitalizeWords(data.job.locationAddress)}</p>
                   )}
                   {data.job?.locationLat != null && data.job?.locationLng != null && (
                     <iframe
@@ -2309,7 +2309,7 @@ export default function SharedProjectTrackingPage() {
                   <h2 className="text-base font-semibold">Project Description</h2>
                 </div>
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-                  {data.job.description}
+                  {capitalizeFirst(data.job.description)}
                 </p>
               </section>
             )}

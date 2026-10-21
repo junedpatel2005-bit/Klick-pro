@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { countryCodes } from "@/lib/country-codes";
 import { isValidPhoneNumber, phoneValidationMessage } from "@/lib/phone-validation";
+import { cn } from "@/lib/utils";
 
 export function PhoneVerification({
   role,
@@ -27,13 +28,16 @@ export function PhoneVerification({
   const [sent, setSent] = useState(false);
   const [verified, setVerified] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
   const [pending, setPending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const fullPhone = `${countryCode}${phone.replace(/\D/g, "")}`;
 
   async function sendCode() {
     setMessage(null);
+    setIsError(false);
     if (!isValidPhoneNumber(phone, countryCode)) {
+      setIsError(true);
       setMessage(phoneValidationMessage(countryCode));
       return;
     }
@@ -43,16 +47,31 @@ export function PhoneVerification({
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ phone: fullPhone, role }),
     });
-    const result = (await response.json()) as { error?: string };
+    const result = (await response.json()) as { error?: string; devHint?: string; devCode?: string };
     setPending(false);
-    if (!response.ok) return setMessage(result.error ?? "Unable to send the verification code.");
+    if (!response.ok) {
+      setIsError(true);
+      return setMessage(result.error ?? "Unable to send the verification code.");
+    }
     setSent(true);
+    if (result.devHint) {
+      setIsError(false);
+      setMessage(result.devHint);
+      if (result.devCode) {
+        setCode(result.devCode);
+      }
+    } else {
+      setIsError(false);
+      setMessage("Verification code sent to your phone.");
+    }
     inputRef.current?.focus();
   }
 
   async function verify() {
     setMessage(null);
+    setIsError(false);
     if (code.length !== 4 && code.length !== 6) {
+      setIsError(true);
       return setMessage("Enter the 4-digit or 6-digit verification code.");
     }
     setPending(true);
@@ -63,9 +82,14 @@ export function PhoneVerification({
     });
     const result = (await response.json()) as { error?: string };
     setPending(false);
-    if (!response.ok) return setMessage(result.error ?? "Unable to verify this phone number.");
+    if (!response.ok) {
+      setIsError(true);
+      return setMessage(result.error ?? "Unable to verify this phone number.");
+    }
+    setIsError(false);
     setVerified(true);
     setSent(false);
+    setMessage(null);
     onVerified?.();
   }
 
@@ -124,7 +148,16 @@ export function PhoneVerification({
           </Button>
         </div>
       ) : null}
-      {message && <p className="text-sm text-destructive">{message}</p>}
+      {message && (
+        <p
+          className={cn(
+            "text-sm",
+            isError ? "text-destructive font-normal" : "text-emerald-600 dark:text-emerald-400 font-medium",
+          )}
+        >
+          {message}
+        </p>
+      )}
     </div>
   );
 }

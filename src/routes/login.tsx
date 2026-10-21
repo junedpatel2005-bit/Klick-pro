@@ -159,13 +159,16 @@ export default function Login() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ phone: `${countryCode}${phone.replace(/\D/g, "")}` }),
       });
-      const result = (await response.json()) as { error?: string };
+      const result = (await response.json()) as { error?: string; devHint?: string; devCode?: string };
       if (!response.ok) {
         setError(result.error ?? "Unable to send the verification code.");
         return;
       }
       setPhoneCodeSent(true);
-      setError("Verification code sent to your phone.");
+      if (result.devCode) {
+        setPhoneCode(result.devCode);
+      }
+      setError(result.devHint ?? "Verification code sent to your phone.");
     } catch {
       setError("Unable to send verification code. Please check your connection.");
     } finally {
@@ -493,7 +496,13 @@ export default function Login() {
               <p
                 className={cn(
                   "text-sm",
-                  error.includes("sent") ? "text-primary" : "text-destructive",
+                  error.includes("sent") ||
+                    error.includes("Verification code") ||
+                    error.includes("code:") ||
+                    error.includes("OTP") ||
+                    error.includes("Trial")
+                    ? "text-emerald-600 dark:text-emerald-400 font-medium"
+                    : "text-destructive",
                 )}
               >
                 {error}

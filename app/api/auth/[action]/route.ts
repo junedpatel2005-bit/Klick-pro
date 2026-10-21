@@ -367,7 +367,11 @@ export async function POST(
       return safe("Too many code requests. Please try again later.", 429);
     const result = await requestPhoneOtp(parsed.data.phone, parsed.data.role);
     if (!result.ok) return safe(result.error, result.status);
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      ...("devHint" in result && result.devHint ? { devHint: result.devHint } : {}),
+      ...("devCode" in result && result.devCode ? { devCode: result.devCode } : {}),
+    });
   }
   if (action === "verify-phone") {
     const parsed = z
@@ -629,7 +633,11 @@ export async function POST(
       return safe("No active account was found with this phone number.", 404);
     const result = await requestPhoneOtp(parsed.data.phone, user.role);
     if (!result.ok) return safe(result.error, result.status);
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      ...("devHint" in result && result.devHint ? { devHint: result.devHint } : {}),
+      ...("devCode" in result && result.devCode ? { devCode: result.devCode } : {}),
+    });
   }
   if (action === "login-phone") {
     const parsed = z
@@ -892,7 +900,12 @@ export async function POST(
     }
     const result = await requestPhoneOtp(phone, user.role);
     if (!result.ok) return safe(result.error, result.status);
-    return NextResponse.json({ success: true, message: "Verification code sent to your phone." });
+    return NextResponse.json({
+      success: true,
+      message: "devHint" in result && result.devHint ? result.devHint : "Verification code sent to your phone.",
+      ...("devHint" in result && result.devHint ? { devHint: result.devHint } : {}),
+      ...("devCode" in result && result.devCode ? { devCode: result.devCode } : {}),
+    });
   }
   if (action === "verify-forgot-password-phone") {
     const parsed = z

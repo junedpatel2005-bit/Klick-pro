@@ -1209,7 +1209,7 @@ export default function JobDetails({
                 <MapPin className="h-3 w-3" />
                 Full address
               </dt>
-              <dd className="mt-1 font-medium text-sm">{job.locationAddress}</dd>
+              <dd className="mt-1 font-medium text-sm">{capitalizeWords(job.locationAddress)}</dd>
             </div>
           )}
         </dl>

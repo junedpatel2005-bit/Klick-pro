@@ -339,7 +339,10 @@ export default function AdminUsersPage() {
     setLoading(true);
     void fetch("/api/v1/admin/data/users", { cache: "no-store" })
       .then((response) => response.json())
-      .then((data) => setUsers(data.users ?? []))
+      .then((data) => {
+        const raw = Array.isArray(data?.users) ? data.users : [];
+        setUsers(raw.filter((u: User) => u.role !== "ADMIN"));
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   };
