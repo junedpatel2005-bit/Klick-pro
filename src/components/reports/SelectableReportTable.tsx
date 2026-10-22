@@ -47,9 +47,59 @@ export function SelectableReportTable<T extends { id: number | string }>({
 }) {
   if (loading) {
     return (
-      <div className="p-5">
-        <CardListSkeleton />
-      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {selectable && <TableHead className="w-10" />}
+            {columns.map((column, colIdx) => (
+              <TableHead
+                key={column.key}
+                className={cn(
+                  "whitespace-nowrap px-3 sm:px-4 text-xs font-semibold tracking-wide",
+                  column.align === "right" && "text-right",
+                  colIdx === columns.length - 1 && "pr-5 sm:pr-6",
+                )}
+              >
+                {column.header}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {Array.from({ length: 6 }).map((_, rIdx) => (
+            <TableRow key={rIdx} className="animate-pulse border-b border-border/40">
+              {selectable && (
+                <TableCell className="w-10 py-3.5">
+                  <div className="h-4 w-4 rounded bg-muted/60" />
+                </TableCell>
+              )}
+              {columns.map((column, colIdx) => (
+                <TableCell
+                  key={column.key}
+                  className={cn(
+                    "px-3 sm:px-4 py-3.5",
+                    column.align === "right" && "text-right",
+                    colIdx === columns.length - 1 && "pr-5 sm:pr-6",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "h-4 rounded bg-muted/60",
+                      column.align === "right"
+                        ? "ml-auto w-16"
+                        : colIdx === 0
+                        ? "w-24"
+                        : colIdx === 1
+                        ? "w-44 max-w-[85%]"
+                        : "w-28",
+                    )}
+                  />
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     );
   }
 

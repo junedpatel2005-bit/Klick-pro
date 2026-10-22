@@ -36,7 +36,14 @@ import {
   type DatePreset,
   isWithinCustomDateRange,
 } from "@/components/reports/DateRangeFilter";
-import { formatReadableLabel, capitalizeWords, capitalizeFirst } from "@/lib/utils";
+import {
+  formatReadableLabel,
+  capitalizeWords,
+  capitalizeFirst,
+  formatCurrencyNoZero,
+  formatCountNoZero,
+  formatPercentageNoZero,
+} from "@/lib/utils";
 import { AdminPagination } from "@/components/admin/AdminPagination";
 
 // ---------------------------------------------------------------------------
@@ -475,7 +482,7 @@ function RevenueReport({
       align: "right",
       render: (r) => (
         <span className="font-mono text-xs font-bold text-slate-900 whitespace-nowrap">
-          ₹{r.grossAmount.toLocaleString("en-IN")}
+          {formatCurrencyNoZero(r.grossAmount)}
         </span>
       ),
     },
@@ -492,7 +499,7 @@ function RevenueReport({
                     ₹{r.commissionAmount.toLocaleString("en-IN")}
                   </span>
                 ) : (
-                  <span className="text-slate-400">₹0 (0%)</span>
+                  <span className="text-slate-400">—</span>
                 )}
               </span>
             ),
@@ -505,7 +512,7 @@ function RevenueReport({
       align: "right",
       render: (r) => (
         <span className="font-mono text-xs font-bold text-slate-900 whitespace-nowrap">
-          ₹{r.netPayoutAmount.toLocaleString("en-IN")}
+          {formatCurrencyNoZero(r.netPayoutAmount)}
         </span>
       ),
     },
@@ -570,7 +577,7 @@ function RevenueReport({
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl truncate">
-              ₹{totalGross.toLocaleString()}
+              {formatCurrencyNoZero(totalGross)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">{filteredRows.length} client payments recorded</p>
@@ -586,7 +593,7 @@ function RevenueReport({
               <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
             ) : (
               <div className="mt-2 font-display text-2xl font-bold tracking-tight text-emerald-600 sm:text-3xl truncate">
-                ₹{totalCommission.toLocaleString()}
+                {formatCurrencyNoZero(totalCommission)}
               </div>
             )}
             <div className="mt-1 flex items-center gap-1.5">
@@ -614,7 +621,7 @@ function RevenueReport({
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl truncate">
-              ₹{totalNet.toLocaleString()}
+              {formatCurrencyNoZero(totalNet)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">Contractual funds disbursed to professionals</p>
@@ -629,7 +636,7 @@ function RevenueReport({
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl truncate">
-              {completedCount}
+              {formatCountNoZero(completedCount)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">
@@ -1117,7 +1124,7 @@ function EscrowReport() {
       align: "right",
       render: (r) => (
         <span className="font-mono text-xs font-bold text-slate-900 whitespace-nowrap">
-          ₹{r.amount.toLocaleString("en-IN")}
+          {formatCurrencyNoZero(r.amount)}
         </span>
       ),
     },
@@ -1204,7 +1211,7 @@ function EscrowReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-amber-600 sm:text-3xl truncate">
-              ₹{heldEscrow.toLocaleString()}
+              {formatCurrencyNoZero(heldEscrow)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">{heldCount} milestones currently held</p>
@@ -1219,7 +1226,7 @@ function EscrowReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-emerald-600 sm:text-3xl truncate">
-              ₹{releasedEscrow.toLocaleString()}
+              {formatCurrencyNoZero(releasedEscrow)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">Credited into professional wallets</p>
@@ -1234,7 +1241,7 @@ function EscrowReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl truncate">
-              ₹{totalEscrowVolume.toLocaleString()}
+              {formatCurrencyNoZero(totalEscrowVolume)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">Combined client milestone commitments</p>
@@ -1667,7 +1674,7 @@ function WithdrawalsReport() {
       align: "right",
       render: (r) => (
         <span className="font-mono text-xs font-bold text-slate-900 whitespace-nowrap">
-          ₹{r.amount.toLocaleString("en-IN")}
+          {formatCurrencyNoZero(r.amount)}
         </span>
       ),
     },
@@ -1742,7 +1749,7 @@ function WithdrawalsReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-emerald-600 sm:text-3xl truncate">
-              ₹{settledVolume.toLocaleString()}
+              {formatCurrencyNoZero(settledVolume)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">Credited to professional accounts</p>
@@ -1757,7 +1764,7 @@ function WithdrawalsReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-amber-600 sm:text-3xl truncate">
-              ₹{pendingVolume.toLocaleString()}
+              {formatCurrencyNoZero(pendingVolume)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">{pendingCount} requests awaiting payout</p>
@@ -1772,7 +1779,7 @@ function WithdrawalsReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl truncate">
-              ₹{totalVolume.toLocaleString()}
+              {formatCurrencyNoZero(totalVolume)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">{filteredRows.length} withdrawal filings</p>
@@ -2240,7 +2247,7 @@ function DisputesReport() {
       align: "right",
       render: (r) => (
         <span className="font-mono text-xs font-bold text-slate-900 whitespace-nowrap">
-          ₹{r.disputedAmount.toLocaleString("en-IN")}
+          {formatCurrencyNoZero(r.disputedAmount)}
         </span>
       ),
     },
@@ -2305,7 +2312,7 @@ function DisputesReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-rose-600 sm:text-3xl truncate">
-              {openCount}
+              {formatCountNoZero(openCount)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">Requiring admin arbitration</p>
@@ -2320,7 +2327,7 @@ function DisputesReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-emerald-600 sm:text-3xl truncate">
-              {resolvedCount}
+              {formatCountNoZero(resolvedCount)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">Settled cases with final decision</p>
@@ -2335,7 +2342,7 @@ function DisputesReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl truncate">
-              ₹{totalDisputedEscrow.toLocaleString()}
+              {formatCurrencyNoZero(totalDisputedEscrow)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">Total funds involved in proceedings</p>
@@ -2350,7 +2357,7 @@ function DisputesReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl truncate">
-              {filteredRows.length}
+              {formatCountNoZero(filteredRows.length)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">Marketplace dispute rate: &lt; 2%</p>
@@ -2729,7 +2736,7 @@ function JobsReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl truncate">
-              {filteredJobs.length}
+              {formatCountNoZero(filteredJobs.length)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">Marketplace postings in scope</p>
@@ -2744,7 +2751,7 @@ function JobsReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-amber-600 sm:text-3xl truncate">
-              {openCount}
+              {formatCountNoZero(openCount)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">Accepting professional proposals</p>
@@ -2759,7 +2766,7 @@ function JobsReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-indigo-600 sm:text-3xl truncate">
-              {runningCount}
+              {formatCountNoZero(runningCount)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">Active milestone delivery</p>
@@ -2774,7 +2781,7 @@ function JobsReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-emerald-600 sm:text-3xl truncate">
-              {completedCount}
+              {formatCountNoZero(completedCount)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">Successfully closed contracts</p>
@@ -3375,7 +3382,7 @@ function UsersReport() {
       align: "right",
       render: (u) => (
         <span className="font-mono text-xs font-bold text-slate-900 whitespace-nowrap">
-          ₹{(u.walletBalance ?? 0).toLocaleString("en-IN")}
+          {formatCurrencyNoZero(u.walletBalance)}
         </span>
       ),
     },
@@ -3385,7 +3392,7 @@ function UsersReport() {
       align: "right",
       render: (u) => (
         <span className="font-mono text-xs text-slate-700 whitespace-nowrap">
-          ₹{(u.totalTopUp ?? 0).toLocaleString("en-IN")}
+          {formatCurrencyNoZero(u.totalTopUp)}
         </span>
       ),
     },
@@ -3395,7 +3402,7 @@ function UsersReport() {
       align: "right",
       render: (u) => (
         <span className="font-mono text-xs text-slate-700 whitespace-nowrap">
-          ₹{(u.totalWithdrawals ?? 0).toLocaleString("en-IN")}
+          {formatCurrencyNoZero(u.totalWithdrawals)}
         </span>
       ),
     },
@@ -3519,7 +3526,7 @@ function UsersReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-indigo-600 sm:text-3xl truncate">
-              {isPeriodActive ? periodRegisteredCount : users.length}
+              {formatCountNoZero(isPeriodActive ? periodRegisteredCount : users.length)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">
@@ -3543,7 +3550,7 @@ function UsersReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-emerald-600 sm:text-3xl truncate">
-              {periodLoggedInCount}
+              {formatCountNoZero(periodLoggedInCount)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">
@@ -3565,7 +3572,7 @@ function UsersReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-sky-600 sm:text-3xl truncate">
-              {isPeriodActive ? periodActiveCount : totalActiveAccountsCount}
+              {formatCountNoZero(isPeriodActive ? periodActiveCount : totalActiveAccountsCount)}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">
@@ -3585,7 +3592,13 @@ function UsersReport() {
             <div className="mt-2 h-8 w-28 rounded-lg bg-slate-200 animate-pulse" />
           ) : (
             <div className="mt-2 font-display text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl truncate">
-              {verifiedCount} <span className="text-xs font-normal text-slate-400">/ {users.length}</span>
+              {verifiedCount > 0 ? (
+                <>
+                  {verifiedCount} <span className="text-xs font-normal text-slate-400">/ {users.length}</span>
+                </>
+              ) : (
+                "—"
+              )}
             </div>
           )}
           <p className="mt-1 text-xs text-slate-500">

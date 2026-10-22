@@ -107,3 +107,44 @@ export function formatProjectPdfFilename(
   return `${base}.pdf`;
 }
 
+/**
+ * Formats a currency amount in Indian Rupees (₹), returning an em dash ("—") if zero or empty.
+ */
+export function formatCurrencyNoZero(
+  amount: number | string | null | undefined,
+  options: { decimals?: number } = {},
+): string {
+  if (amount == null) return "—";
+  const num = typeof amount === "string" ? parseFloat(amount) : amount;
+  if (isNaN(num) || num <= 0) return "—";
+  return `₹${num.toLocaleString("en-IN", {
+    minimumFractionDigits: options.decimals ?? 0,
+    maximumFractionDigits: options.decimals ?? 0,
+  })}`;
+}
+
+/**
+ * Formats a numeric count, returning an em dash ("—") if zero or empty.
+ */
+export function formatCountNoZero(
+  count: number | string | null | undefined,
+): string {
+  if (count == null) return "—";
+  const num = typeof count === "string" ? parseInt(String(count), 10) : count;
+  if (isNaN(num) || num <= 0) return "—";
+  return num.toLocaleString("en-IN");
+}
+
+/**
+ * Formats a percentage value, returning an em dash ("—") if zero or empty.
+ */
+export function formatPercentageNoZero(
+  percent: number | string | null | undefined,
+): string {
+  if (percent == null) return "—";
+  const num = typeof percent === "string" ? parseFloat(String(percent)) : percent;
+  if (isNaN(num) || num <= 0) return "—";
+  return `${Math.round(num)}%`;
+}
+
+
