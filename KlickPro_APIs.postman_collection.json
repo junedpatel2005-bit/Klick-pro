@@ -1,0 +1,1351 @@
+{
+  "info": {
+    "name": "Klick-Pro API Collection",
+    "_postman_id": "e6b4d320-1b2c-4f5a-9d8e-7c3a1f4b5e60",
+    "description": "Verified 100% operational Postman collection for Klick-Pro with role-aware auto-login and verified live schemas.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "clientEmail",
+      "value": "seed.client@servio.example",
+      "type": "string"
+    },
+    {
+      "key": "clientPassword",
+      "value": "ServioSeed#2026",
+      "type": "string"
+    },
+    {
+      "key": "proEmail",
+      "value": "surat.pro@servio.example",
+      "type": "string"
+    },
+    {
+      "key": "proPassword",
+      "value": "ServioSeed#2026",
+      "type": "string"
+    },
+    {
+      "key": "adminUsername",
+      "value": "seed-admin",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "ServioSeed#2026",
+      "type": "string"
+    },
+    {
+      "key": "testPhone",
+      "value": "+919876543210",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "22",
+      "type": "string"
+    },
+    {
+      "key": "projectId",
+      "value": "23",
+      "type": "string"
+    },
+    {
+      "key": "professionalId",
+      "value": "5",
+      "type": "string"
+    },
+    {
+      "key": "conversationId",
+      "value": "636e925e-b4c0-48c8-95b8-9337a19f1c31",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication & Session",
+      "item": [
+        {
+          "name": "Login as Client (Auth Session)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Client login status 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{clientEmail}}\",\n  \"password\": \"{{clientPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Establishes Client session cookie in Postman automatically."
+          }
+        },
+        {
+          "name": "1.2 Get Current User (Me)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.3 Check Email Availability",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newclient8965@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/check-availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "check-availability"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.4 Register Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Auto\",\n  \"lastName\": \"Tester\",\n  \"email\": \"autotest1792676900430@example.com\",\n  \"password\": \"TestPassword123!\",\n  \"role\": \"CLIENT\",\n  \"terms\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.5 Skip Setup Wizard",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/skip-setup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "skip-setup"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Admin Portal",
+      "item": [
+        {
+          "name": "Login as Admin (Auth Session)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Admin login status 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "login"
+              ]
+            },
+            "description": "Establishes Admin session cookie in Postman automatically."
+          }
+        },
+        {
+          "name": "2.2 Database Status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/database-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "database-status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.3 Sidebar Counts",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sidebar-counts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sidebar-counts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.4 Admin Overview Analytics",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/data/overview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "data",
+                "overview"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.5 Admin Users List",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/data/users?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "data",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.6 Admin Jobs List",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/data/jobs?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "data",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.7 Admin Finance Ledger",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/data/finance?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "data",
+                "finance"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.8 Admin Support Tickets",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/data/support",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "data",
+                "support"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.9 Get Platform Settings",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "settings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.10 Update Platform Settings (POST)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"settings\": {\n    \"commission_rate\": \"10\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "settings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.11 Pending Verifications",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/verifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "verifications"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.12 Email Templates",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/email-templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "email-templates"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.13 SMS Templates",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sms-templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sms-templates"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Client APIs",
+      "item": [
+        {
+          "name": "Login as Client (Auth Session)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Client login status 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{clientEmail}}\",\n  \"password\": \"{{clientPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Establishes Client session cookie in Postman automatically."
+          }
+        },
+        {
+          "name": "3.1 Get Client Account",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/client/account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "account"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.2 Update Client Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Seed\",\n  \"lastName\": \"Client\",\n  \"address\": \"101 Marine Drive, Mumbai\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.3 Post a Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Commercial Facility Electrical Inspection\",\n  \"category\": \"Commercial electrician\",\n  \"description\": \"Need certified commercial electrician to inspect and replace distribution board in facility.\",\n  \"timingType\": \"FIXED\",\n  \"budgetMin\": 8000,\n  \"budgetMax\": 15000,\n  \"paymentMethod\": \"WALLET\",\n  \"urgency\": \"HIGH\",\n  \"workMode\": \"REMOTE\",\n  \"deadline\": \"2026-12-31\",\n  \"mode\": \"publish\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.4 List Client Jobs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.5 Get Job Details",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs",
+                "{{jobId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.6 Saved Professionals",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/client/saved-professionals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "saved-professionals"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Professional APIs",
+      "item": [
+        {
+          "name": "Login as Professional (Auth Session)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Professional login status 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{proEmail}}\",\n  \"password\": \"{{proPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Establishes Professional session cookie in Postman automatically."
+          }
+        },
+        {
+          "name": "4.1 Get Professional Profile",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.2 Update Professional Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": 165,\n  \"category\": \"Commercial electrician\",\n  \"experienceYears\": 5,\n  \"hourlyRate\": 500,\n  \"serviceRadiusKm\": 25,\n  \"state\": \"Gujarat\",\n  \"district\": \"Surat\",\n  \"city\": \"Surat\",\n  \"address\": \"Athwa, Surat, Gujarat\",\n  \"latitude\": 21.1702,\n  \"longitude\": 72.8311,\n  \"workMode\": \"on_site\",\n  \"bio\": \"Experienced certified commercial electrician.\",\n  \"skills\": [\n    \"Wiring\",\n    \"Panels\",\n    \"Commercial\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.3 Export Earnings Statement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"all\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/earnings/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "earnings",
+                "export"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.4 Get Razorpay Payout Account",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/razorpay-account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "razorpay-account"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.5 Update Razorpay Payout Account",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razorpayAccountId\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/razorpay-account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "razorpay-account"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Marketplace & Public APIs",
+      "item": [
+        {
+          "name": "5.1 Browse Open Jobs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/marketplace/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "marketplace",
+                "jobs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.2 Browse Categories",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/marketplace/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "marketplace",
+                "categories"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.3 Browse Professionals",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/marketplace/professionals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "marketplace",
+                "professionals"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.4 Get Professional Public Details",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/marketplace/professional-detail?id={{professionalId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "marketplace",
+                "professional-detail"
+              ],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{professionalId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.5 Global Search",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/search?q=electrician",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "electrician"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.6 Geocode Address Lookup",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/geocode?q=Marine Drive Mumbai",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "geocode"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "Marine Drive Mumbai"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.7 Submit Contact Form",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"janedoe@example.com\",\n  \"subject\": \"Platform Question\",\n  \"message\": \"Hello, I have a query about using Klick-Pro.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/contact",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "contact"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Wallet & Payments",
+      "item": [
+        {
+          "name": "Login as Client (Auth Session)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Client login status 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{clientEmail}}\",\n  \"password\": \"{{clientPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Establishes Client session cookie in Postman automatically."
+          }
+        },
+        {
+          "name": "6.1 Get Wallet & Ledger",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet"
+              ]
+            }
+          }
+        },
+        {
+          "name": "6.2 Create Razorpay Deposit Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/deposit/order",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "deposit",
+                "order"
+              ]
+            }
+          }
+        },
+        {
+          "name": "6.3 Verify UPI / VPA Address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vpa\": \"seedclient@okhdfcbank\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/verify-vpa",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "verify-vpa"
+              ]
+            }
+          }
+        },
+        {
+          "name": "6.4 Razorpay Config",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/razorpay/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "razorpay",
+                "config"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Portal & Project Management",
+      "item": [
+        {
+          "name": "Login as Client (Auth Session)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Client login status 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{clientEmail}}\",\n  \"password\": \"{{clientPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Establishes Client session cookie in Postman automatically."
+          }
+        },
+        {
+          "name": "7.1 Get Project Details",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project?id={{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project"
+              ],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{projectId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.2 Notifications",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "notifications"
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.3 Reviews",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/reviews?userId={{professionalId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "reviews"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{professionalId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Messages & Chat",
+      "item": [
+        {
+          "name": "Login as Client (Auth Session)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Client login status 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{clientEmail}}\",\n  \"password\": \"{{clientPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Establishes Client session cookie in Postman automatically."
+          }
+        },
+        {
+          "name": "8.1 List Conversations",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
+            }
+          }
+        },
+        {
+          "name": "8.2 Get Conversation Messages",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages?conversationId={{conversationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "conversationId",
+                  "value": "{{conversationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "8.3 Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientId\": 5,\n  \"text\": \"Hello from verified Postman test run!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Background Jobs & Cron",
+      "item": [
+        {
+          "name": "9.1 Trigger Milestone Releases Cron (GET)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-internal-loopback",
+                "value": "true"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cron/milestone-releases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cron",
+                "milestone-releases"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

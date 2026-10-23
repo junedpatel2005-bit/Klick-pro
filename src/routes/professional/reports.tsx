@@ -23,10 +23,16 @@ import {
   Percent,
   FileSpreadsheet,
   Wallet,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { ExportMenu } from "@/components/reports/ExportMenu";
 import { SelectableReportTable, type ReportTableColumn } from "@/components/reports/SelectableReportTable";
-import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
+import {
+  downloadCsvFile,
+  exportProjectDossierCsv,
+  exportPaymentReceiptCsv,
+} from "@/lib/reports/csv/export-csv";
 import {
   DateRangeFilter,
   type DatePreset,
@@ -41,6 +47,7 @@ import {
   formatCurrencyNoZero,
   formatCountNoZero,
   formatPercentageNoZero,
+  formatDateSafely,
 } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -106,6 +113,53 @@ type WalletData = {
 
 type ProfessionalTab = "projects" | "transactions";
 
+type ProjectMilestoneApiRecord = {
+  id?: number;
+  title: string;
+  percentage?: number | null;
+  amount?: number | null;
+  validityDays?: number | null;
+  status?: string | null;
+  payment?: { status?: string | null } | null;
+};
+
+type ProjectApiRecord = {
+  project?: {
+    id?: number | string;
+    title?: string | null;
+    status?: string | null;
+    createdAt?: string | null;
+  } | null;
+  job?: {
+    title?: string | null;
+    category?: string | null;
+    workMode?: string | null;
+    locationAddress?: string | null;
+    deadline?: string | null;
+    budgetMin?: number | null;
+    budgetMax?: number | null;
+    createdAt?: string | null;
+  } | null;
+  client?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    companyName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+  } | null;
+  professional?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    category?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    city?: string | null;
+  } | null;
+  milestones?: ProjectMilestoneApiRecord[] | null;
+  agreedAmount?: number | null;
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -151,19 +205,6 @@ function statusBadgeClass(status: string) {
   return "bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-500/20";
 }
 
-function formatDateSafely(
-  dateInput: string | Date | null | undefined,
-  options?: Intl.DateTimeFormatOptions,
-): string {
-  if (!dateInput) return "—";
-  const d = new Date(dateInput);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(
-    "en-IN",
-    options ?? { day: "2-digit", month: "short", year: "numeric" },
-  );
-}
-
 // ===========================================================================
 // MAIN COMPONENT: PROFESSIONAL REPORTS & AUDIT LEDGERS
 // ===========================================================================
@@ -173,6 +214,8 @@ export default function ProfessionalReports() {
   const [earnings, setEarnings] = useState<EarningsItem[]>([]);
   const [walletData, setWalletData] = useState<WalletData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingPdfId, setLoadingPdfId] = useState<string | null>(null);
+  const [loadingCsvId, setLoadingCsvId] = useState<string | null>(null);
 
   // Filters
   const [search, setSearch] = useState("");
@@ -412,6 +455,146 @@ export default function ProfessionalReports() {
   }, [filteredEarnings, walletData]);
 
   // ---------------------------------------------------------------------------
+  // ASYNC PDF & RICH CSV EXPORTERS (WITH ACTIVE LOADING FEEDBACK)
+  // ---------------------------------------------------------------------------
+  const downloadPdfWithFeedback = async (url: string, filename: string, rowKey: string) => {
+    try {
+      setLoadingPdfId(rowKey);
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Failed to generate PDF (${res.status})`);
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      toast.success("PDF downloaded successfully.");
+    } catch (err) {
+      console.error("PDF download failed:", err);
+      toast.error("Failed to generate PDF. Please try again.");
+    } finally {
+      setLoadingPdfId(null);
+    }
+  };
+
+  const exportSingleProjectCsv = async (p: RunningProject) => {
+    const rowKey = `proj-${p.id}`;
+    try {
+      setLoadingCsvId(rowKey);
+      let projectDetails: ProjectApiRecord | null = null;
+      try {
+        const res = await fetch(`/api/portal/project?id=${p.id}`);
+        if (res.ok) {
+          projectDetails = (await res.json()) as ProjectApiRecord;
+        }
+      } catch {
+        // Fall back gracefully
+      }
+
+      if (projectDetails?.project) {
+        const proj = projectDetails.project;
+        const client = projectDetails.client;
+        const pro = projectDetails.professional;
+        const milestones = projectDetails.milestones;
+        const agreedVal = projectDetails.agreedAmount ?? p.budget;
+
+        exportProjectDossierCsv({
+          projectId: proj.id || p.id,
+          projectTitle: projectDetails.job?.title || p.jobTitle || `Project #${p.id}`,
+          category: projectDetails.job?.category,
+          status: proj.status || p.status,
+          agreedAmount: agreedVal,
+          budgetMin: projectDetails.job?.budgetMin,
+          budgetMax: projectDetails.job?.budgetMax,
+          workMode: projectDetails.job?.workMode,
+          locationAddress: projectDetails.job?.locationAddress,
+          deadline: projectDetails.job?.deadline || p.deadline,
+          createdAt: proj.createdAt || p.acceptedAt,
+          client: client
+            ? {
+                name: `${client.firstName || ""} ${client.lastName || ""}`.trim(),
+                companyName: client.companyName,
+                email: client.email,
+                phone: client.phone,
+                address: client.address,
+              }
+            : { name: p.clientName },
+          professional: pro
+            ? {
+                name: `${pro.firstName || ""} ${pro.lastName || ""}`.trim(),
+                email: pro.email,
+                phone: pro.phone,
+                city: pro.city,
+              }
+            : null,
+          milestones: Array.isArray(milestones)
+            ? milestones.map((m: ProjectMilestoneApiRecord) => ({
+                id: m.id,
+                title: m.title,
+                percentage: m.percentage,
+                amount: m.amount,
+                validityDays: m.validityDays,
+                status: m.status,
+                paymentStatus: m.payment?.status,
+              }))
+            : null,
+        });
+      } else {
+        exportProjectDossierCsv({
+          projectId: p.id,
+          projectTitle: p.jobTitle || `Project #${p.id}`,
+          status: p.status,
+          agreedAmount: p.budget,
+          deadline: p.deadline,
+          createdAt: p.acceptedAt,
+          client: { name: p.clientName },
+        });
+      }
+      toast.success("CSV contract statement downloaded successfully.");
+    } catch (err) {
+      console.error("Failed to export project CSV:", err);
+      toast.error("Failed to export CSV. Please try again.");
+    } finally {
+      setLoadingCsvId(null);
+    }
+  };
+
+  const exportSingleEarningCsv = async (item: EarningsItem) => {
+    const rowKey = `earn-${item.id}`;
+    try {
+      setLoadingCsvId(rowKey);
+      exportPaymentReceiptCsv({
+        paymentId: item.invoicePaymentId || item.id,
+        invoiceNumber: item.invoiceNumber,
+        createdAt: item.createdAt,
+        status: item.status,
+        description: item.description,
+        projectTitle: item.projectTitle,
+        milestoneTitle: item.milestoneTitle,
+        amount: item.amount,
+        baseAmount: item.baseAmount,
+        feeAmount: item.feeAmount,
+        netAmount: item.netAmount,
+        paymentMethod: item.paymentMethod,
+        razorpayPaymentId: item.razorpayPaymentId,
+        clientName: item.clientName,
+        professionalName: "Registered Professional",
+      });
+      toast.success("CSV payout receipt downloaded successfully.");
+    } catch (err) {
+      console.error("Failed to export earning CSV:", err);
+      toast.error("Failed to export CSV. Please try again.");
+    } finally {
+      setLoadingCsvId(null);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
   // PROJECT TABLE COLUMNS
   // ---------------------------------------------------------------------------
   const projectColumns: ReportTableColumn<RunningProject>[] = [
@@ -489,64 +672,47 @@ export default function ProfessionalReports() {
       key: "actions",
       header: "Actions",
       align: "right",
-      render: (p) => (
-        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-          <a
-            href={`/api/portal/projects/${p.id}/export`}
-            target="_blank"
-            rel="noopener noreferrer"
-            download={formatProjectPdfFilename(p.jobTitle, `project-${p.id}`)}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition"
-            title="Download official Project Dossier PDF"
-          >
-            <FileDown className="h-3 w-3 text-primary" />
-            <span>PDF</span>
-          </a>
-          <button
-            type="button"
-            onClick={() => {
-              downloadCsvFile({
-                filename: `project-${p.id}-contract`,
-                title: `Project Contract · #PRJ-${p.id}`,
-                headers: [
-                  "Project Ref",
-                  "Job Scope",
-                  "Client Name",
-                  "Status",
-                  "Contract Amount (INR)",
-                  "Progress %",
-                  "Target Deadline",
-                  "Accepted Date",
-                ],
-                rows: [
-                  [
-                    `#PRJ-${p.id}`,
-                    capitalizeWords(p.jobTitle || `Project #${p.id}`),
-                    capitalizeWords(p.clientName || "Direct Client"),
-                    displayStatus(p.status),
-                    p.budget ?? "—",
-                    `${p.progress}%`,
-                    p.deadline ? formatDateSafely(p.deadline) : "Flexible",
-                    formatDateSafely(p.acceptedAt),
-                  ],
-                ],
-              });
-            }}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition cursor-pointer"
-            title="Export single project CSV"
-          >
-            <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-            <span>CSV</span>
-          </button>
-          <Link
-            href={`/project/${p.id}/tracking`}
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
-          >
-            <span>Tracking</span>
-            <ExternalLink className="h-2.5 w-2.5" />
-          </Link>
-        </div>
-      ),
+      render: (p) => {
+        const rowKey = `proj-${p.id}`;
+        const isPdfLoading = loadingPdfId === rowKey;
+        const isCsvLoading = loadingCsvId === rowKey;
+        const isBusy = isPdfLoading || isCsvLoading;
+        const pdfUrl = `/api/portal/projects/${p.id}/export`;
+        const pdfFilename = formatProjectPdfFilename(p.jobTitle, `project-${p.id}`);
+
+        return (
+          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => void downloadPdfWithFeedback(pdfUrl, pdfFilename, rowKey)}
+              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition cursor-pointer disabled:opacity-50"
+              title="Download official Project Dossier PDF"
+            >
+              {isPdfLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              ) : (
+                <FileDown className="h-3 w-3 text-primary" />
+              )}
+              <span>PDF</span>
+            </button>
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => void exportSingleProjectCsv(p)}
+              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition cursor-pointer disabled:opacity-50"
+              title="Export single project CSV"
+            >
+              {isCsvLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+              )}
+              <span>CSV</span>
+            </button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -647,80 +813,47 @@ export default function ProfessionalReports() {
       key: "actions",
       header: "Actions",
       align: "right",
-      render: (item) => (
-        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-          <a
-            href={`/api/portal/invoices/${item.invoicePaymentId || item.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition"
-            title="Download official Payout Receipt PDF"
-          >
-            <FileDown className="h-3 w-3 text-primary" />
-            <span>PDF</span>
-          </a>
-          <button
-            type="button"
-            onClick={() => {
-              downloadCsvFile({
-                filename: `earning-voucher-${item.id}`,
-                title: `Earning Voucher · ${item.invoiceNumber || `#EARN-${item.id}`}`,
-                headers: isCommissionOn
-                  ? [
-                      "Voucher #",
-                      "Date",
-                      "Milestone / Description",
-                      "Project Title",
-                      "Client Name",
-                      "Gross Amount (INR)",
-                      "Commission (INR)",
-                      "Net Credited (INR)",
-                      "Status",
-                    ]
-                  : [
-                      "Voucher #",
-                      "Date",
-                      "Milestone / Description",
-                      "Project Title",
-                      "Client Name",
-                      "Gross Amount (INR)",
-                      "Net Credited (INR)",
-                      "Status",
-                    ],
-                rows: [
-                  isCommissionOn
-                    ? [
-                        item.invoiceNumber || `#EARN-${item.id}`,
-                        formatDateSafely(item.createdAt),
-                        capitalizeFirst(item.description || item.milestoneTitle || "Milestone Settlement"),
-                        capitalizeWords(item.projectTitle || `Project #${item.trackingId ?? item.id}`),
-                        capitalizeWords(item.clientName || "Direct Client"),
-                        item.baseAmount ?? item.amount,
-                        item.feeAmount ?? 0,
-                        item.netAmount ?? item.amount,
-                        capitalizeWords(item.status),
-                      ]
-                    : [
-                        item.invoiceNumber || `#EARN-${item.id}`,
-                        formatDateSafely(item.createdAt),
-                        capitalizeFirst(item.description || item.milestoneTitle || "Milestone Settlement"),
-                        capitalizeWords(item.projectTitle || `Project #${item.trackingId ?? item.id}`),
-                        capitalizeWords(item.clientName || "Direct Client"),
-                        item.baseAmount ?? item.amount,
-                        item.netAmount ?? item.amount,
-                        capitalizeWords(item.status),
-                      ],
-                ],
-              });
-            }}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition cursor-pointer"
-            title="Export single earning CSV"
-          >
-            <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-            <span>CSV</span>
-          </button>
-        </div>
-      ),
+      render: (item) => {
+        const rowKey = `earn-${item.id}`;
+        const isPdfLoading = loadingPdfId === rowKey;
+        const isCsvLoading = loadingCsvId === rowKey;
+        const isBusy = isPdfLoading || isCsvLoading;
+        const pdfUrl = `/api/portal/invoices/${item.invoicePaymentId || item.id}`;
+        const pdfFilename = `klick-pro-payout-${item.invoiceNumber || item.id}.pdf`;
+
+        return (
+          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => void downloadPdfWithFeedback(pdfUrl, pdfFilename, rowKey)}
+              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition cursor-pointer disabled:opacity-50"
+              title="Download official Payout Receipt PDF"
+            >
+              {isPdfLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              ) : (
+                <FileDown className="h-3 w-3 text-primary" />
+              )}
+              <span>PDF</span>
+            </button>
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => void exportSingleEarningCsv(item)}
+              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition cursor-pointer disabled:opacity-50"
+              title="Export single earning CSV"
+            >
+              {isCsvLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+              )}
+              <span>CSV</span>
+            </button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -1075,24 +1208,47 @@ export default function ProfessionalReports() {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <a
-                              href={`/api/portal/projects/${project.id}/export`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              download={formatProjectPdfFilename(project.jobTitle, `project-${project.id}`)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground shadow-xs hover:bg-muted"
-                              title="Download official Project Dossier PDF"
-                            >
-                              <FileDown className="h-3.5 w-3.5 text-primary" />
-                              <span>PDF</span>
-                            </a>
-                            <Link
-                              href={trackingHref}
-                              className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90"
-                            >
-                              <span>Tracking</span>
-                              <ExternalLink className="h-3 w-3" />
-                            </Link>
+                            {(() => {
+                              const rowKey = `proj-card-${project.id}`;
+                              const isPdfLoading = loadingPdfId === rowKey;
+                              const isCsvLoading = loadingCsvId === rowKey;
+                              const isBusy = isPdfLoading || isCsvLoading;
+                              const pdfUrl = `/api/portal/projects/${project.id}/export`;
+                              const pdfFilename = formatProjectPdfFilename(project.jobTitle, `project-${project.id}`);
+
+                              return (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => void downloadPdfWithFeedback(pdfUrl, pdfFilename, rowKey)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground shadow-xs hover:bg-muted cursor-pointer disabled:opacity-50"
+                                    title="Download official Project Dossier PDF"
+                                  >
+                                    {isPdfLoading ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                                    ) : (
+                                      <FileDown className="h-3.5 w-3.5 text-primary" />
+                                    )}
+                                    <span>PDF</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => void exportSingleProjectCsv(project)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground shadow-xs hover:bg-muted cursor-pointer disabled:opacity-50"
+                                    title="Export single project CSV"
+                                  >
+                                    {isCsvLoading ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600 dark:text-emerald-400" />
+                                    ) : (
+                                      <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                                    )}
+                                    <span>CSV</span>
+                                  </button>
+                                </>
+                              );
+                            })()}
                           </div>
                         </div>
                       </article>

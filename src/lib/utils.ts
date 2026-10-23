@@ -147,4 +147,20 @@ export function formatPercentageNoZero(
   return `${Math.round(num)}%`;
 }
 
+/**
+ * Formats a date safely using the en-IN locale, returning an em dash ("—") if null, undefined, or invalid.
+ */
+export function formatDateSafely(
+  dateInput: string | Date | null | undefined,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  if (!dateInput) return "—";
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(
+    "en-IN",
+    options ?? { day: "2-digit", month: "short", year: "numeric" },
+  );
+}
+
 

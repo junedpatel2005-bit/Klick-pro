@@ -20,10 +20,16 @@ import {
   FileSpreadsheet,
   Building2,
   ExternalLink,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { ExportMenu } from "@/components/reports/ExportMenu";
 import { SelectableReportTable, type ReportTableColumn } from "@/components/reports/SelectableReportTable";
-import { downloadCsvFile } from "@/lib/reports/csv/export-csv";
+import {
+  downloadCsvFile,
+  exportProjectDossierCsv,
+  exportPaymentReceiptCsv,
+} from "@/lib/reports/csv/export-csv";
 import {
   DateRangeFilter,
   type DatePreset,
@@ -37,6 +43,7 @@ import {
   formatProjectPdfFilename,
   formatCurrencyNoZero,
   formatCountNoZero,
+  formatDateSafely,
 } from "@/lib/utils";
 
 type Job = {
@@ -80,6 +87,53 @@ type Payment = {
 
 type ClientTab = "projects" | "transactions";
 
+type ProjectMilestoneApiRecord = {
+  id?: number;
+  title: string;
+  percentage?: number | null;
+  amount?: number | null;
+  validityDays?: number | null;
+  status?: string | null;
+  payment?: { status?: string | null } | null;
+};
+
+type ProjectApiRecord = {
+  project?: {
+    id?: number | string;
+    title?: string | null;
+    status?: string | null;
+    createdAt?: string | null;
+  } | null;
+  job?: {
+    title?: string | null;
+    category?: string | null;
+    workMode?: string | null;
+    locationAddress?: string | null;
+    deadline?: string | null;
+    budgetMin?: number | null;
+    budgetMax?: number | null;
+    createdAt?: string | null;
+  } | null;
+  client?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    companyName?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+  } | null;
+  professional?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    category?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    city?: string | null;
+  } | null;
+  milestones?: ProjectMilestoneApiRecord[] | null;
+  agreedAmount?: number | null;
+};
+
 function readableStatus(status: string) {
   if (status === "RUNNING") return "In Progress";
   if (status === "COMPLETED") return "Completed";
@@ -112,24 +166,13 @@ function statusBadgeClass(status: string) {
   }
 }
 
-function formatDateSafely(
-  dateInput: string | Date | null | undefined,
-  options?: Intl.DateTimeFormatOptions,
-): string {
-  if (!dateInput) return "—";
-  const d = new Date(dateInput);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(
-    "en-IN",
-    options ?? { day: "2-digit", month: "short", year: "numeric" },
-  );
-}
-
 export default function ClientReports() {
   const [tab, setTab] = useState<ClientTab>("projects");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingPdfId, setLoadingPdfId] = useState<string | null>(null);
+  const [loadingCsvId, setLoadingCsvId] = useState<string | null>(null);
 
   // Filter states
   const [search, setSearch] = useState("");
@@ -295,60 +338,152 @@ export default function ClientReports() {
   }, [pendingPayments]);
 
   // ---------------------------------------------------------------------------
-  // SINGLE ROW CSV EXPORTERS
+  // ASYNC PDF & RICH CSV EXPORTERS (WITH ACTIVE LOADING FEEDBACK)
   // ---------------------------------------------------------------------------
-  const exportSingleJobCsv = (job: Job) => {
-    downloadCsvFile({
-      filename: `klick-pro-job-${job.id}`,
-      title: `Project Engagement Statement #${job.id}`,
-      headers: [
-        "Job ID",
-        "Project Title",
-        "Category",
-        "Status",
-        "Contract Value (INR)",
-        "Milestones Done",
-        "Total Milestones",
-        "Created Date",
-      ],
-      rows: [
-        [
-          job.id,
-          capitalizeWords(job.title || `Project #${job.id}`),
-          capitalizeWords(job.category || "General"),
-          capitalizeWords(job.status),
-          job.agreedAmount ? job.agreedAmount : "—",
-          job.milestoneStats?.completed ?? 0,
-          job.milestoneStats?.total ?? 0,
-          formatDateSafely(job.createdAt),
-        ],
-      ],
-    });
+  const downloadPdfWithFeedback = async (url: string, filename: string, rowKey: string) => {
+    try {
+      setLoadingPdfId(rowKey);
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Failed to generate PDF (${res.status})`);
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      toast.success("PDF downloaded successfully.");
+    } catch (err) {
+      console.error("PDF download failed:", err);
+      toast.error("Failed to generate PDF. Please try again.");
+    } finally {
+      setLoadingPdfId(null);
+    }
   };
 
-  const exportSinglePaymentCsv = (p: Payment) => {
-    downloadCsvFile({
-      filename: `klick-pro-receipt-${p.id}`,
-      title: `Transaction Receipt #${p.invoiceNumber || p.id}`,
-      headers: [
-        "Payment Ref #",
-        "Date",
-        "Recipient Professional",
-        "Particulars / Description",
-        "Status",
-        "Amount (INR)",
-      ],
-      rows: [
-        [
-          p.id,
-          formatDateSafely(p.createdAt),
-          capitalizeWords(p.professionalName || "Assigned Professional"),
-          capitalizeFirst(p.description),
-          capitalizeWords(p.status),
-          p.amount,
-        ],
-      ],
-    });
+  const exportSingleJobCsv = async (job: Job) => {
+    const rowKey = `job-${job.id}`;
+    try {
+      setLoadingCsvId(rowKey);
+      // Attempt to fetch full project details for rich milestone schedule and party breakdown
+      let projectDetails: ProjectApiRecord | null = null;
+      const targetUrl = job.projectId
+        ? `/api/portal/project?id=${job.projectId}`
+        : `/api/portal/project?jobId=${job.id}`;
+
+      try {
+        const res = await fetch(targetUrl);
+        if (res.ok) {
+          projectDetails = (await res.json()) as ProjectApiRecord;
+        }
+      } catch {
+        // Fall back gracefully to available job record
+      }
+
+      if (projectDetails?.project) {
+        const p = projectDetails.project;
+        const client = projectDetails.client;
+        const pro = projectDetails.professional;
+        const milestones = projectDetails.milestones;
+        const agreedVal = projectDetails.agreedAmount ?? job.agreedAmount;
+
+        exportProjectDossierCsv({
+          projectId: p.id || job.projectId || job.id,
+          projectTitle: job.title || p.title || `Project #${job.id}`,
+          category: job.category || projectDetails.job?.category,
+          status: p.status || job.status,
+          agreedAmount: agreedVal,
+          budgetMin: job.budgetMin,
+          budgetMax: job.budgetMax,
+          workMode: projectDetails.job?.workMode,
+          locationAddress: job.locationAddress || projectDetails.job?.locationAddress,
+          deadline: projectDetails.job?.deadline,
+          createdAt: p.createdAt || job.createdAt,
+          client: client
+            ? {
+                name: `${client.firstName || ""} ${client.lastName || ""}`.trim(),
+                companyName: client.companyName,
+                email: client.email,
+                phone: client.phone,
+                address: client.address,
+              }
+            : null,
+          professional: pro
+            ? {
+                name: `${pro.firstName || ""} ${pro.lastName || ""}`.trim(),
+                category: job.category,
+                email: pro.email,
+                phone: pro.phone,
+                city: pro.city,
+              }
+            : null,
+          milestones: Array.isArray(milestones)
+            ? milestones.map((m: ProjectMilestoneApiRecord) => ({
+                id: m.id,
+                title: m.title,
+                percentage: m.percentage,
+                amount: m.amount,
+                validityDays: m.validityDays,
+                status: m.status,
+                paymentStatus: m.payment?.status,
+              }))
+            : null,
+        });
+      } else {
+        // Fallback with available job record
+        exportProjectDossierCsv({
+          projectId: job.projectId || job.id,
+          projectTitle: job.title || `Project #${job.id}`,
+          category: job.category,
+          status: job.status,
+          agreedAmount: job.agreedAmount,
+          budgetMin: job.budgetMin,
+          budgetMax: job.budgetMax,
+          locationAddress: job.locationAddress,
+          createdAt: job.createdAt,
+        });
+      }
+      toast.success("CSV report downloaded successfully.");
+    } catch (err) {
+      console.error("Failed to export single project CSV:", err);
+      toast.error("Failed to export CSV. Please try again.");
+    } finally {
+      setLoadingCsvId(null);
+    }
+  };
+
+  const exportSinglePaymentCsv = async (p: Payment) => {
+    const rowKey = `pay-${p.id}`;
+    try {
+      setLoadingCsvId(rowKey);
+      exportPaymentReceiptCsv({
+        paymentId: p.id,
+        invoiceNumber: p.invoiceNumber,
+        createdAt: p.createdAt,
+        status: p.status,
+        description: p.description,
+        projectTitle: p.projectTitle,
+        milestoneTitle: p.milestoneTitle,
+        amount: p.amount,
+        baseAmount: p.baseAmount,
+        feeAmount: p.feeAmount,
+        netAmount: p.netAmount,
+        paymentMethod: p.paymentMethod,
+        razorpayPaymentId: p.razorpayPaymentId,
+        clientName: "Direct Client",
+        professionalName: p.professionalName,
+      });
+      toast.success("CSV receipt downloaded successfully.");
+    } catch (err) {
+      console.error("Failed to export single receipt CSV:", err);
+      toast.error("Failed to export CSV. Please try again.");
+    } finally {
+      setLoadingCsvId(null);
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -432,43 +567,49 @@ export default function ClientReports() {
       key: "actions",
       header: "Actions",
       align: "right",
-      render: (job) => (
-        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-          <a
-            href={
-              job.projectId
-                ? `/api/portal/projects/${job.projectId}/export`
-                : `/api/portal/jobs/${job.id}/export`
-            }
-            target="_blank"
-            rel="noopener noreferrer"
-            download={formatProjectPdfFilename(job.title, `project-${job.id}`)}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition"
-            title="Download official Project Dossier PDF"
-          >
-            <FileDown className="h-3 w-3 text-primary" />
-            <span>PDF</span>
-          </a>
-          <button
-            type="button"
-            onClick={() => exportSingleJobCsv(job)}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition cursor-pointer"
-            title="Export single project CSV"
-          >
-            <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-            <span>CSV</span>
-          </button>
-          {job.projectId && (
-            <Link
-              href={`/project/${job.projectId}/tracking`}
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+      render: (job) => {
+        const rowKey = `job-${job.id}`;
+        const isPdfLoading = loadingPdfId === rowKey;
+        const isCsvLoading = loadingCsvId === rowKey;
+        const isBusy = isPdfLoading || isCsvLoading;
+        const pdfUrl = job.projectId
+          ? `/api/portal/projects/${job.projectId}/export`
+          : `/api/portal/jobs/${job.id}/export`;
+        const pdfFilename = formatProjectPdfFilename(job.title, `project-${job.id}`);
+
+        return (
+          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => void downloadPdfWithFeedback(pdfUrl, pdfFilename, rowKey)}
+              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition cursor-pointer disabled:opacity-50"
+              title="Download official Project Dossier PDF"
             >
-              <span>Workspace</span>
-              <ExternalLink className="h-2.5 w-2.5" />
-            </Link>
-          )}
-        </div>
-      ),
+              {isPdfLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              ) : (
+                <FileDown className="h-3 w-3 text-primary" />
+              )}
+              <span>PDF</span>
+            </button>
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => void exportSingleJobCsv(job)}
+              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition cursor-pointer disabled:opacity-50"
+              title="Export single project CSV"
+            >
+              {isCsvLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+              )}
+              <span>CSV</span>
+            </button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -546,29 +687,47 @@ export default function ClientReports() {
       key: "actions",
       header: "Actions",
       align: "right",
-      render: (p) => (
-        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-          <a
-            href={`/api/portal/invoices/${p.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition"
-            title="Download official Tax Invoice PDF"
-          >
-            <FileDown className="h-3 w-3 text-primary" />
-            <span>PDF</span>
-          </a>
-          <button
-            type="button"
-            onClick={() => exportSinglePaymentCsv(p)}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition cursor-pointer"
-            title="Export single payment CSV"
-          >
-            <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-            <span>CSV</span>
-          </button>
-        </div>
-      ),
+      render: (p) => {
+        const rowKey = `pay-${p.id}`;
+        const isPdfLoading = loadingPdfId === rowKey;
+        const isCsvLoading = loadingCsvId === rowKey;
+        const isBusy = isPdfLoading || isCsvLoading;
+        const pdfUrl = `/api/portal/invoices/${p.id}`;
+        const pdfFilename = `klick-pro-receipt-${p.invoiceNumber || p.id}.pdf`;
+
+        return (
+          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => void downloadPdfWithFeedback(pdfUrl, pdfFilename, rowKey)}
+              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition cursor-pointer disabled:opacity-50"
+              title="Download official Tax Invoice PDF"
+            >
+              {isPdfLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              ) : (
+                <FileDown className="h-3 w-3 text-primary" />
+              )}
+              <span>PDF</span>
+            </button>
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => void exportSinglePaymentCsv(p)}
+              className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground hover:bg-muted transition cursor-pointer disabled:opacity-50"
+              title="Export single payment CSV"
+            >
+              {isCsvLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <FileSpreadsheet className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+              )}
+              <span>CSV</span>
+            </button>
+          </div>
+        );
+      },
     },
   ];
 
