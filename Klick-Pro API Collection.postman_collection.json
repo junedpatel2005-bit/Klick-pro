@@ -1,0 +1,3075 @@
+{
+  "info": {
+    "_postman_id": "e9f01234-abcd-4567-89ef-0123456789ab",
+    "name": "Klick-Pro Complete API Collection (Post Job to Review Lifecycle)",
+    "description": "Official 100% comprehensive Postman collection for Klick-Pro platform. Features full Job, Proposal, Negotiation, Escrow funding, Work submission, Milestone approval, Review lifecycle, KYC, Wallet, Admin Suite, and Webhooks.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "clientToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "proToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "requestId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "projectId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "milestoneId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "professionalId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "paymentId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "cronSecret",
+      "value": "servio-cron-internal-secret-2026",
+      "type": "string"
+    },
+    {
+      "key": "razorpayOrderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "razorpayPaymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "razorpaySignature",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Authentication & Role Sessions",
+      "item": [
+        {
+          "name": "1.1 Login as Client (Auto-set Client Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "  pm.collectionVariables.set('clientToken', res.token);",
+                  "  pm.collectionVariables.set('token', res.token);",
+                  "  console.log('Client session active. Token saved.');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"seed.client@servio.example\",\n  \"password\": \"ServioSeed#2026\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.2 Login as Professional (Auto-set Pro Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "  pm.collectionVariables.set('proToken', res.token);",
+                  "  pm.collectionVariables.set('token', res.token);",
+                  "  console.log('Professional session active. Token saved.');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"seed.pro@servio.example\",\n  \"password\": \"ServioSeed#2026\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.3 Login as Admin (Auto-set Admin Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "  pm.collectionVariables.set('adminToken', res.token);",
+                  "  pm.collectionVariables.set('token', res.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"ServioAdmin#2026\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.4 Register New Client",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"new.client@example.com\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Aarav\",\n  \"lastName\": \"Sharma\",\n  \"role\": \"CLIENT\",\n  \"terms\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.5 Register New Professional",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"new.pro@example.com\",\n  \"password\": \"Password123!\",\n  \"firstName\": \"Rohan\",\n  \"lastName\": \"Verma\",\n  \"role\": \"PROFESSIONAL\",\n  \"terms\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.6 Get Current User Profile (Me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.7 Check Email Availability",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test.check@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/check-availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "check-availability"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.8 Skip Setup Wizard (Dev/Demo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/skip-setup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "skip-setup"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.9 Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Job & Proposal Full Lifecycle (Post Job to Hiring)",
+      "item": [
+        {
+          "name": "2.1 Client: Post a New Job",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const token = pm.collectionVariables.get('clientToken') || pm.collectionVariables.get('token');",
+                  "pm.request.headers.upsert({ key: 'Authorization', value: 'Bearer ' + token });",
+                  "pm.request.headers.upsert({ key: 'Cookie', value: 'servio_session=' + token });"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.job && res.job.id) {",
+                  "  pm.collectionVariables.set('jobId', String(res.job.id));",
+                  "  console.log('Created Job ID saved to {{jobId}}:', res.job.id);",
+                  "} else if (res.id) {",
+                  "  pm.collectionVariables.set('jobId', String(res.id));",
+                  "  console.log('Created Job ID saved to {{jobId}}:', res.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Complete Office CCTV & Network Setup\",\n  \"description\": \"Need a qualified professional to install 8 IP surveillance cameras, route CAT6 cables, and configure network router.\",\n  \"category\": \"Commercial Services\",\n  \"timingType\": \"FIXED\",\n  \"budgetMin\": 8000,\n  \"budgetMax\": 12000,\n  \"deadline\": \"2026-12-31\",\n  \"locationAddress\": \"Athwa Gate, Surat, Gujarat\",\n  \"locationLat\": 21.1702,\n  \"locationLng\": 72.8311,\n  \"mode\": \"publish\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.2 Client: List My Posted Jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.3 Browse Open Marketplace Jobs (All / Professional)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/marketplace/jobs?category=Commercial%20Services&page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "marketplace",
+                "jobs"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "Commercial Services"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.4 Professional: SEND REQUEST / PROPOSAL on Job (Bid)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const proToken = pm.collectionVariables.get('proToken') || pm.collectionVariables.get('token');",
+                  "pm.request.headers.upsert({ key: 'Authorization', value: 'Bearer ' + proToken });",
+                  "pm.request.headers.upsert({ key: 'Cookie', value: 'servio_session=' + proToken });"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.proposal && res.proposal.id) {",
+                  "  pm.collectionVariables.set('requestId', String(res.proposal.id));",
+                  "  console.log('Saved Request / Proposal ID to {{requestId}}:', res.proposal.id);",
+                  "} else if (res.id) {",
+                  "  pm.collectionVariables.set('requestId', String(res.id));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobId\": \"{{jobId}}\",\n  \"bidAmount\": 9500,\n  \"duration\": \"3-5 days\",\n  \"coverLetter\": \"I am a certified network & surveillance engineer with 6 years experience. I can supply high-grade connectors and complete cabling cleanly.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/proposals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "proposals"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.5 Professional: View Proposal Status for Job",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/proposals?jobId={{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "proposals"
+              ],
+              "query": [
+                {
+                  "key": "jobId",
+                  "value": "{{jobId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.6 Client: View Received Proposals / Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/project-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "project-requests"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.7 Client: ACCEPT Professional Request / Proposal (Hire)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.projectId) {",
+                  "  pm.collectionVariables.set('projectId', String(res.projectId));",
+                  "  console.log('Project Tracking ID created & saved to {{projectId}}:', res.projectId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"accept\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/project-requests/{{requestId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "project-requests",
+                "{{requestId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.8 Client: Counter-Offer on Proposal (Optional)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"counter\",\n  \"bidAmount\": 9000,\n  \"duration\": \"3 days\",\n  \"message\": \"Can you do 9,000 INR if we supply the mounting brackets?\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/project-requests/{{requestId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "project-requests",
+                "{{requestId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.9 Professional: Accept Client Counter-Offer",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"accept\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/project-requests/{{requestId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "project-requests",
+                "{{requestId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.10 Client: Direct Hire Request to Professional",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobId\": \"{{jobId}}\",\n  \"professionalId\": \"{{professionalId}}\",\n  \"bidAmount\": 10000,\n  \"duration\": \"1 week\",\n  \"coverLetter\": \"We were impressed with your portfolio and would like to directly offer you this job.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/project-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "project-requests"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.11 Client: Update Job Details",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Complete Office CCTV & Network Setup (Updated)\",\n  \"budgetMax\": 15000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs",
+                "{{jobId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.12 Client: Reopen Completed Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workDescription\": \"Additional network cables and testing required.\",\n  \"amount\": 1500,\n  \"reason\": \"ADDITIONAL_WORK\",\n  \"assignPreviousPro\": true,\n  \"duration\": \"1-2 days\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs/{{jobId}}/reopen",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs",
+                "{{jobId}}",
+                "reopen"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.13 Professional: Bookmark / Favorite Job",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/favorite-jobs/{{jobId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "favorite-jobs",
+                "{{jobId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.14 Export Client Jobs Statement PDF / CSV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"all\",\n  \"pageSize\": \"A4\",\n  \"orientation\": \"portrait\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/jobs/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "jobs",
+                "export"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Projects, Milestones, Escrow & Work Delivery",
+      "item": [
+        {
+          "name": "3.1 Get Project Tracking Overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project?id={{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project"
+              ],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{projectId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.2 Client: Fund Milestone Escrow via Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{projectId}}\",\n  \"milestoneId\": \"{{milestoneId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/milestone",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "milestone"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.3 Professional: Start Work on Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"start-work\",\n  \"projectId\": \"{{projectId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.4 Professional: Create Project Milestone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"create-milestone\",\n  \"projectId\": \"{{projectId}}\",\n  \"title\": \"Camera Cabling & Router Configuration\",\n  \"amount\": 5000,\n  \"description\": \"Run 8 CAT6 lines and configure IP router.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.5 Professional: Update Progress Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"update-progress\",\n  \"projectId\": \"{{projectId}}\",\n  \"progress\": 75,\n  \"stage\": \"Wiring Complete\",\n  \"note\": \"Completed all 8 camera drops. Testing connectivity.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.6 Professional: Upload Work Proof File",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"{{projectId}}\",\n  \"fileName\": \"installation_photo.jpg\",\n  \"fileType\": \"image/jpeg\",\n  \"fileSize\": 204800,\n  \"description\": \"Completed camera installation and patch panel labeling.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-files",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-files"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.7 Professional: Submit Milestone Work for Approval",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"submit-milestone\",\n  \"projectId\": \"{{projectId}}\",\n  \"milestoneId\": \"{{milestoneId}}\",\n  \"note\": \"Cabling and configuration complete. Ready for client inspection.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.8 Client: Request Revision on Milestone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"request-revision\",\n  \"projectId\": \"{{projectId}}\",\n  \"milestoneId\": \"{{milestoneId}}\",\n  \"note\": \"Please adjust angle of camera 3 covering entrance.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.9 Client: APPROVE Milestone & Release Escrow Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"approve-milestone\",\n  \"projectId\": \"{{projectId}}\",\n  \"milestoneId\": \"{{milestoneId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.10 Professional: Submit Final Project Deliverable",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"submit-final-work\",\n  \"projectId\": \"{{projectId}}\",\n  \"note\": \"All tasks completed, cameras operational, network handover complete.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.11 Client: Confirm Project Completion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"confirm-project-completion\",\n  \"projectId\": \"{{projectId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.12 Client: Submit Review & Rating for Professional",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"submit-review\",\n  \"projectId\": \"{{projectId}}\",\n  \"rating\": 5,\n  \"comment\": \"Excellent work! Punctual, professional cabling, and clear handover.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.13 Professional: Respond to Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"respond-to-review\",\n  \"projectId\": \"{{projectId}}\",\n  \"response\": \"Thank you for the prompt communication and great collaboration!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.14 Raise Dispute (Instant Escrow Freeze)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"submit-dispute\",\n  \"projectId\": \"{{projectId}}\",\n  \"milestoneId\": \"{{milestoneId}}\",\n  \"issueType\": \"QUALITY_OF_WORK\",\n  \"priority\": \"MEDIUM\",\n  \"message\": \"Work submitted requires rectification and does not match agreed plan.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/project-actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "project-actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.15 Get Milestone Tax Invoice / Payment Receipt",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/portal/payment-details/{{paymentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "portal",
+                "payment-details",
+                "{{paymentId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Wallet, Razorpay Deposits & Bank Payouts",
+      "item": [
+        {
+          "name": "4.1 Get Wallet Balance & Transaction Ledger",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.2 Get Razorpay Public Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/razorpay/config",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "razorpay",
+                "config"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.3 Create Razorpay Deposit Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.orderId) {",
+                  "  pm.collectionVariables.set('razorpayOrderId', res.orderId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/deposit/order",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "deposit",
+                "order"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.4 Verify Razorpay Payment Signature",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razorpayOrderId\": \"{{razorpayOrderId}}\",\n  \"razorpayPaymentId\": \"{{razorpayPaymentId}}\",\n  \"razorpaySignature\": \"{{razorpaySignature}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/deposit/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "deposit",
+                "verify"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.5 Quick Wallet Deposit (Sandbox / Dev)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/deposit/quick",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "deposit",
+                "quick"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.6 Check Deposit Order Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/deposit/status?orderId={{razorpayOrderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "deposit",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "orderId",
+                  "value": "{{razorpayOrderId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.7 Verify Bank Account (IFSC & Penny Drop)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNumber\": \"12345678901\",\n  \"ifscCode\": \"SBIN0001234\",\n  \"accountHolder\": \"Rohan Verma\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/verify-bank-account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "verify-bank-account"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.8 Verify UPI VPA Address",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vpa\": \"rohanverma@okhdfcbank\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/verify-vpa",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet",
+                "verify-vpa"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.9 Request Wallet Withdrawal / Payout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2500,\n  \"destinationType\": \"BANK\",\n  \"destinationLabel\": \"State Bank of India - 1234\",\n  \"accountNumber\": \"12345678901\",\n  \"ifscCode\": \"SBIN0001234\",\n  \"accountHolder\": \"Rohan Verma\",\n  \"bankName\": \"State Bank of India\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wallet"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Professional Portal, KYC & Earnings",
+      "item": [
+        {
+          "name": "5.1 Get Professional Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.2 Update Professional Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Senior Electrical & Surveillance Engineer\",\n  \"bio\": \"Over 8 years experience in domestic and commercial electrical systems and CCTV surveillance.\",\n  \"hourlyRate\": 650,\n  \"skills\": [\n    \"CCTV\",\n    \"Network Cabling\",\n    \"Electrical Wiring\",\n    \"Patch Panels\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.3 Export Earnings Statement CSV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"range\": \"this_year\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/earnings/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "earnings",
+                "export"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.4 Get Linked Razorpay Payout Account",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/razorpay-account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "razorpay-account"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.5 Connect / Update Razorpay Payout Account",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNumber\": \"12345678901\",\n  \"ifsc\": \"SBIN0001234\",\n  \"accountHolderName\": \"Rohan Verma\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/razorpay-account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "razorpay-account"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.6 Get Professional KYC Verification Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/verification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "verification"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.7 Upload Professional KYC Document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{proToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{proToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentType\": \"AADHAAR\",\n  \"fileName\": \"aadhaar_front.pdf\",\n  \"fileSize\": 450000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/professional/verification/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "professional",
+                "verification",
+                "upload"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Client Workspace & Verification",
+      "item": [
+        {
+          "name": "6.1 Get Client Account Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "account"
+              ]
+            }
+          }
+        },
+        {
+          "name": "6.2 List Saved Professionals",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/saved-professionals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "saved-professionals"
+              ]
+            }
+          }
+        },
+        {
+          "name": "6.3 Save Professional Bookmark",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/saved-professionals/{{professionalId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "saved-professionals",
+                "{{professionalId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "6.4 Remove Saved Professional Bookmark",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/saved-professionals/{{professionalId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "saved-professionals",
+                "{{professionalId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "6.5 Get Client KYC Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/client/verification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "verification"
+              ]
+            }
+          }
+        },
+        {
+          "name": "6.6 Export Payment History CSV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{clientToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"range\": \"all\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/client/payments/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "client",
+                "payments",
+                "export"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Identity & KYC Verification Suite",
+      "item": [
+        {
+          "name": "7.1 Verify Indian PAN Card",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"panNumber\": \"ABCDE1234F\",\n  \"fullName\": \"Rohan Verma\",\n  \"dob\": \"1994-05-15\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/verification/indian/pan",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "verification",
+                "indian",
+                "pan"
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.2 Verify Indian Aadhaar (DigiLocker / OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"aadhaarNumber\": \"123456789012\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/verification/indian/aadhaar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "verification",
+                "indian",
+                "aadhaar"
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.3 Start Persona KYC Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/verification/persona/start",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "verification",
+                "persona",
+                "start"
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.4 Check Persona KYC Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/verification/persona/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "verification",
+                "persona",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.5 Start SpringVerify Background Check",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/verification/springverify/start",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "verification",
+                "springverify",
+                "start"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Real-Time Messages & Chat",
+      "item": [
+        {
+          "name": "8.1 List Conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
+            }
+          }
+        },
+        {
+          "name": "8.2 Get Conversation Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages?conversationId=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "conversationId",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "8.3 Send Chat Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientId\": \"{{professionalId}}\",\n  \"content\": \"Hello! When can you begin the cabling installation?\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "messages"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - Marketplace, Discovery & Search",
+      "item": [
+        {
+          "name": "9.1 Browse Categories Hierarchy",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/marketplace/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "marketplace",
+                "categories"
+              ]
+            }
+          }
+        },
+        {
+          "name": "9.2 Browse Professionals with Filters",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/marketplace/professionals?category=Commercial%20Services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "marketplace",
+                "professionals"
+              ],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "Commercial Services"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "9.3 Universal Keyword Search",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/search?q=cctv",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "cctv"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "9.4 Geocoding Address Lookup",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/geocode?q=Marine%20Drive%20Mumbai",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "geocode"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "Marine Drive Mumbai"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "9.5 Public Contact Form Submission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Rahul Mehta\",\n  \"email\": \"rahul@example.com\",\n  \"subject\": \"Enterprise Inquiry\",\n  \"message\": \"We need onboarding for our 50 regional technicians.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/contact",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "contact"
+              ]
+            }
+          }
+        },
+        {
+          "name": "9.6 Dashboard Overview Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Cookie",
+                "value": "servio_session={{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - Admin Suite & Operations",
+      "item": [
+        {
+          "name": "10.1 Admin Overview Analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/data/overview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "data",
+                "overview"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.2 Admin Sidebar Counters",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/sidebar-counts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "sidebar-counts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.3 Database & Migration Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/database-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "database-status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.4 Get Platform Settings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "settings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.5 Update Platform Settings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"commissionRate\": 5,\n  \"autoReleaseDays\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "settings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.6 List Pending KYC Verifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/verifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "verifications"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.7 Approve / Reject KYC Application",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verificationId\": 1,\n  \"status\": \"APPROVED\",\n  \"rejectionReason\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/verifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "verifications"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.8 Get Dispute Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/disputes/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "disputes",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.9 Resolve Dispute & Escrow Release",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resolution\": \"RELEASE_TO_PROFESSIONAL\",\n  \"notes\": \"Inspection verified cables were properly labeled and functional.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/disputes/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "disputes",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.10 Send Admin Message in Dispute Thread",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Admin mediation team is reviewing photographic proof submitted.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/disputes/1/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "disputes",
+                "1",
+                "messages"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.11 Get Finance & Payouts Ledger",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/payouts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "payouts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.12 Approve / Reject Withdrawal Request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"approve\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/withdrawals/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "withdrawals",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.13 Get Escrow Holdings Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/extra/escrow",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "extra",
+                "escrow"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10.14 Security Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/extra/audit-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "extra",
+                "audit-logs"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 - Webhooks & Autonomous Cron Automation",
+      "item": [
+        {
+          "name": "11.1 Razorpay Payment Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-razorpay-signature",
+                "value": "mock_signature"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"payment.captured\",\n  \"payload\": {\n    \"payment\": {\n      \"entity\": {\n        \"id\": \"pay_test123\",\n        \"order_id\": \"order_test123\",\n        \"amount\": 500000,\n        \"status\": \"captured\"\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/razorpay",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "razorpay"
+              ]
+            }
+          }
+        },
+        {
+          "name": "11.2 Persona KYC Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"attributes\": {\n      \"status\": \"completed\",\n      \"payload\": {\n        \"inquiryId\": \"inq_test123\"\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/persona",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "persona"
+              ]
+            }
+          }
+        },
+        {
+          "name": "11.3 SpringVerify Background Check Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"check.completed\",\n  \"candidateId\": \"cand_123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/springverify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "springverify"
+              ]
+            }
+          }
+        },
+        {
+          "name": "11.4 Milestone 3-Day Auto-Release Cron (15-min autonomous)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-internal-loopback",
+                "value": "true"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cronSecret}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cron/milestone-releases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cron",
+                "milestone-releases"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
